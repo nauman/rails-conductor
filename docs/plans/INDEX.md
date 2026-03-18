@@ -12,11 +12,12 @@
 
 ## Build Order
 
-1. `docs/plans/routing-caddy.md` — make native and multi-app hosting reachable
-2. `docs/plans/cloudflare.md` + `docs/plans/domains-dns.md` + `docs/plans/provisioning-hetzner.md` — complete domain, DNS, and server automation
-3. `docs/plans/monitoring-ops.md` + `docs/plans/logs-observability.md` — complete recurring checks and daily-use operations
-4. `docs/plans/backups-r2.md` + `docs/plans/data-layer.md` — complete restore, verification, and database operations
-5. `docs/plans/deployment-kamal.md` — revisit richer Docker backend support after routing and provider automation are in place
+1. `docs/plans/recurring-ops-schedule.md` — turn existing jobs into actual continuous operations
+2. `docs/plans/routing-caddy.md` — make native and multi-app hosting reachable
+3. `docs/plans/cloudflare.md` + `docs/plans/domains-dns.md` + `docs/plans/provisioning-hetzner.md` — complete domain, DNS, and server automation
+4. `docs/plans/monitoring-ops.md` + `docs/plans/logs-observability.md` — deepen daily-use operational workflows
+5. `docs/plans/backups-r2.md` + `docs/plans/data-layer.md` — complete restore, verification, and database operations
+6. `docs/plans/deployment-kamal.md` — revisit richer Docker backend support after routing and provider automation are in place
 
 ## Implemented
 
@@ -32,6 +33,7 @@
 
 | File | Covers | Main Gap | Pillar |
 | --- | --- | --- | --- |
+| `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Not yet configured in `recurring.yml` | Continuous maintenance |
 | `docs/plans/backups-r2.md` | `pg_dump` to R2 with scheduling | Restore, verification, PITR | Data and backups |
 | `docs/plans/cloudflare.md` | Cloudflare DNS and R2 credentials/setup | Actual API calls and validation | Provisioning and provider automation |
 | `docs/plans/domains-dns.md` | Domain management via Cloudflare | DNS CRUD, validation, alerts | Routing and edge |
