@@ -1,0 +1,119 @@
+<%= form_with model: app, class: "space-y-6" do |f| %>
+  <% if app.errors.any? %>
+    <div class="rounded-xl border border-rose-200 bg-rose-50 p-4">
+      <div class="text-sm font-medium text-rose-800">Please fix the following errors:</div>
+      <ul class="mt-2 list-disc list-inside text-sm text-rose-700">
+        <% app.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%# Basic Info %>
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+    <h3 class="text-sm font-semibold text-slate-900">Basic Information</h3>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :name, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "InventList" %>
+      </div>
+
+      <div>
+        <%= f.label :slug, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :slug, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "inventlist" %>
+        <p class="mt-1 text-xs text-slate-500">Auto-generated from name if blank.</p>
+      </div>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :server_id, "Server", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.collection_select :server_id, servers, :id, :name, { include_blank: "Select server" }, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm" %>
+        <p class="mt-1 text-xs text-slate-500">Only servers with SSH configured are shown.</p>
+      </div>
+
+      <div>
+        <%= f.label :status, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.select :status, App::STATUSES.map { |s| [s.titleize, s] }, {}, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm" %>
+      </div>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :domain, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :domain, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "inventlist.com" %>
+      </div>
+
+      <div>
+        <%= f.label :port, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.number_field :port, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "3000" %>
+      </div>
+    </div>
+  </div>
+
+  <%# Repository & Deployment %>
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6" data-controller="deploy-method-toggle">
+    <h3 class="text-sm font-semibold text-slate-900">Repository & Deployment</h3>
+
+    <%# Deploy Method %>
+    <div>
+      <span class="block text-sm font-medium text-slate-700 mb-2">Deploy Method</span>
+      <div class="flex items-center gap-6">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <%= f.radio_button :deploy_method, "docker", class: "border-slate-300 text-slate-900 focus:ring-slate-500", data: { action: "change->deploy-method-toggle#change" } %>
+          <span class="text-sm text-slate-700">Docker</span>
+          <span class="text-xs text-slate-400">(build & run container)</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <%= f.radio_button :deploy_method, "native", class: "border-slate-300 text-slate-900 focus:ring-slate-500", data: { action: "change->deploy-method-toggle#change" } %>
+          <span class="text-sm text-slate-700">Native</span>
+          <span class="text-xs text-slate-400">(Puma + systemd)</span>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <%= f.label :repository_url, "Repository URL", class: "block text-sm font-medium text-slate-700" %>
+      <%= f.text_field :repository_url, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm font-mono", placeholder: "git@github.com:user/repo.git" %>
+      <p class="mt-1 text-xs text-slate-500">SSH URL recommended. Ensure the server has access to the repository.</p>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :branch, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :branch, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "main" %>
+      </div>
+
+      <div data-deploy-method-toggle-target="dockerFields">
+        <%= f.label :dockerfile_path, "Dockerfile Path", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :dockerfile_path, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm font-mono", placeholder: "Dockerfile" %>
+      </div>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div data-deploy-method-toggle-target="dockerFields">
+        <%= f.label :image_name, "Docker Image Name", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :image_name, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm font-mono", placeholder: "conductor/inventlist" %>
+        <p class="mt-1 text-xs text-slate-500">Auto-generated from slug if blank.</p>
+      </div>
+
+      <div>
+        <%= f.label :health_check_path, "Health Check Path", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :health_check_path, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm font-mono", placeholder: "/up" %>
+        <p class="mt-1 text-xs text-slate-500">Endpoint to verify app is running. Leave blank to skip.</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <%= f.check_box :ssl_enabled, class: "rounded border-slate-300 text-slate-900 focus:ring-slate-500" %>
+      <%= f.label :ssl_enabled, "Enable SSL (HTTPS)", class: "text-sm text-slate-700" %>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between pt-4">
+    <%= link_to "Cancel", apps_path, class: "text-sm font-medium text-slate-600 hover:text-slate-900" %>
+    <%= f.submit app.persisted? ? "Update App" : "Create App", class: "inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 cursor-pointer" %>
+  </div>
+<% end %>

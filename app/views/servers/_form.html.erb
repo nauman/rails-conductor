@@ -1,0 +1,98 @@
+<%= form_with model: server, class: "space-y-6" do |f| %>
+  <% if server.errors.any? %>
+    <div class="rounded-xl border border-rose-200 bg-rose-50 p-4">
+      <div class="text-sm font-medium text-rose-800">Please fix the following errors:</div>
+      <ul class="mt-2 list-disc list-inside text-sm text-rose-700">
+        <% server.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :name, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "edge-hel1" %>
+      </div>
+
+      <div>
+        <%= f.label :ip_address, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :ip_address, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "192.168.1.1" %>
+      </div>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :provider, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.select :provider, Server::PROVIDERS.map { |p| [p.titleize, p] }, { include_blank: "Select provider" }, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm" %>
+      </div>
+
+      <div>
+        <%= f.label :region, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :region, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "Helsinki" %>
+      </div>
+    </div>
+
+    <div>
+      <%= f.label :status, class: "block text-sm font-medium text-slate-700" %>
+      <%= f.select :status, Server::STATUSES.map { |s| [s.titleize, s] }, {}, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm" %>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+    <h3 class="text-sm font-semibold text-slate-900">Resource Metrics</h3>
+
+    <div class="grid gap-6 sm:grid-cols-3">
+      <div>
+        <%= f.label :cpu_percent, "CPU %", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.number_field :cpu_percent, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", min: 0, max: 100 %>
+      </div>
+
+      <div>
+        <%= f.label :memory_used_mb, "Memory Used (MB)", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.number_field :memory_used_mb, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", min: 0 %>
+      </div>
+
+      <div>
+        <%= f.label :memory_total_mb, "Memory Total (MB)", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.number_field :memory_total_mb, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", min: 0 %>
+      </div>
+    </div>
+
+    <div>
+      <%= f.label :disk_percent, "Disk %", class: "block text-sm font-medium text-slate-700" %>
+      <%= f.number_field :disk_percent, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", min: 0, max: 100 %>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+    <h3 class="text-sm font-semibold text-slate-900">SSH Configuration</h3>
+
+    <div>
+      <%= f.label :ssh_key_id, "SSH Key", class: "block text-sm font-medium text-slate-700" %>
+      <%= f.collection_select :ssh_key_id, SshKey.order(:name), :id, :name, { include_blank: "Select SSH key" }, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm" %>
+      <p class="mt-1 text-xs text-slate-500">
+        <%= link_to "Manage SSH keys", ssh_keys_path, class: "text-slate-700 hover:underline" %>
+      </p>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2">
+      <div>
+        <%= f.label :ssh_user, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :ssh_user, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "root" %>
+      </div>
+
+      <div>
+        <%= f.label :ssh_port, class: "block text-sm font-medium text-slate-700" %>
+        <%= f.number_field :ssh_port, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "22", min: 1, max: 65535 %>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between pt-4">
+    <%= link_to "Cancel", servers_path, class: "text-sm font-medium text-slate-600 hover:text-slate-900" %>
+    <%= f.submit server.persisted? ? "Update Server" : "Create Server", class: "inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 cursor-pointer" %>
+  </div>
+<% end %>

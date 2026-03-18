@@ -1,0 +1,305 @@
+<% content_for :title, "#{@app.name} · Conductor" %>
+
+<section class="max-w-7xl mx-auto px-4 py-10">
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-semibold text-slate-900 dark:text-white"><%= @app.name %></h1>
+        <%= rui_badge(text: @app.status, color: @app.status == "running" ? :success : @app.status == "failed" ? :danger : :slate) %>
+      </div>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        <% if @app.domain.present? %>
+          <%= rui_link(@app.domain, url: @app.url, external: true) %> ·
+        <% end %>
+        <code class="text-xs bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded"><%= @app.slug %></code>
+        <% if @app.deployed_at.present? %>
+          · Deployed <%= time_ago_in_words(@app.deployed_at) %> ago
+        <% end %>
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <% if @app.deployable? %>
+        <% if @app.deployments.in_progress.any? %>
+          <%= rui_badge(text: "Deploying...", color: :warning, size: :lg) %>
+        <% else %>
+          <%= rui_button_to("Deploy", deploy_app_path(@app), method: :post, variant: :solid, color: :success) %>
+        <% end %>
+      <% end %>
+      <% if @app.status == "running" %>
+        <%= rui_button_to("Restart", restart_app_path(@app), method: :post, variant: :outline, color: :slate) %>
+        <%= rui_button_to("Stop", stop_app_path(@app), method: :post, variant: :outline, color: :slate, data: { turbo_confirm: "Stop this app?" }) %>
+      <% end %>
+      <%= rui_button("Edit", url: edit_app_path(@app), variant: :outline, color: :slate) %>
+      <%= rui_button("Back", url: apps_path, variant: :outline, color: :slate) %>
+    </div>
+  </div>
+
+  <% if @app.native? %>
+    <%# Service Status (Native) %>
+    <div class="mt-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Service Status</h2>
+      <div class="mt-4 grid gap-4 sm:grid-cols-4">
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</dt>
+          <dd class="mt-1 flex items-center gap-2">
+            <% if @app.status == "running" %>
+              <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span class="text-sm font-medium text-emerald-700 dark:text-emerald-400">Running</span>
+            <% elsif @app.status == "failed" %>
+              <span class="h-2 w-2 rounded-full bg-rose-500"></span>
+              <span class="text-sm font-medium text-rose-700 dark:text-rose-400">Failed</span>
+            <% else %>
+              <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400"><%= @app.status.capitalize %></span>
+            <% end %>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Service Name</dt>
+          <dd class="mt-1 text-sm text-slate-900 dark:text-white font-mono"><%= @app.service_name %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Deploy Method</dt>
+          <dd class="mt-1 text-sm text-slate-900 dark:text-white">Native (Puma + systemd)</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">App Directory</dt>
+          <dd class="mt-1 text-sm text-slate-900 dark:text-white font-mono text-xs truncate"><%= @app.app_dir %></dd>
+        </div>
+      </div>
+    </div>
+  <% else %>
+    <%# Container Status (Docker) %>
+    <div class="mt-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Container Status</h2>
+        <% if @app.can_sync_status? %>
+          <%= rui_button_to("Sync Status", sync_status_app_path(@app), method: :post, variant: :outline, size: :sm, color: :slate) %>
+        <% end %>
+      </div>
+      <div class="mt-4 grid gap-4 sm:grid-cols-4">
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Container</dt>
+          <dd class="mt-1 flex items-center gap-2">
+            <% case @app.container_status %>
+            <% when "running" %>
+              <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span class="text-sm font-medium text-emerald-700 dark:text-emerald-400">Running</span>
+            <% when "exited", "dead" %>
+              <span class="h-2 w-2 rounded-full bg-rose-500"></span>
+              <span class="text-sm font-medium text-rose-700 dark:text-rose-400"><%= @app.container_status.capitalize %></span>
+            <% when "restarting" %>
+              <span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+              <span class="text-sm font-medium text-amber-700 dark:text-amber-400">Restarting</span>
+            <% else %>
+              <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Unknown</span>
+            <% end %>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Started At</dt>
+          <dd class="mt-1 text-sm text-slate-900 dark:text-white">
+            <%= @app.container_started_at.present? ? time_ago_in_words(@app.container_started_at) + " ago" : "—" %>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Last Checked</dt>
+          <dd class="mt-1 text-sm text-slate-900 dark:text-white">
+            <%= @app.last_status_check_at.present? ? time_ago_in_words(@app.last_status_check_at) + " ago" : "Never" %>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Container Name</dt>
+          <dd class="mt-1 text-sm text-slate-900 dark:text-white font-mono"><%= @app.container_name %></dd>
+        </div>
+      </div>
+      <% if @app.status_check_error.present? %>
+        <%= rui_alert(type: :danger, class: "mt-4") do %>
+          <span class="font-medium">Error:</span> <%= @app.status_check_error %>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# Stats Grid %>
+  <div class="mt-8 grid gap-6 lg:grid-cols-4">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Server</div>
+      <div class="mt-2 text-xl font-semibold text-slate-900 dark:text-white"><%= @app.server_name %></div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Port</div>
+      <div class="mt-2 text-xl font-semibold text-slate-900 dark:text-white"><%= @app.port || "—" %></div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Branch</div>
+      <div class="mt-2 text-xl font-semibold text-slate-900 dark:text-white"><%= @app.branch || "—" %></div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">SSL</div>
+      <div class="mt-2 text-xl font-semibold text-slate-900 dark:text-white"><%= @app.ssl_enabled? ? "Enabled" : "Disabled" %></div>
+    </div>
+  </div>
+
+  <%# Repository Info %>
+  <div class="mt-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+    <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Repository</h2>
+    <% if @app.repository_url.present? %>
+      <div class="mt-3 grid gap-4 sm:grid-cols-3 text-sm">
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">URL</dt>
+          <dd class="mt-1 text-slate-900 dark:text-white truncate"><%= @app.repository_url %></dd>
+        </div>
+        <% if @app.docker? %>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Dockerfile</dt>
+            <dd class="mt-1 text-slate-900 dark:text-white"><%= @app.dockerfile_path %></dd>
+          </div>
+        <% end %>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Health Check</dt>
+          <dd class="mt-1 text-slate-900 dark:text-white"><%= @app.health_check_path || "—" %></dd>
+        </div>
+      </div>
+    <% else %>
+      <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">No repository configured. <%= rui_link("Edit app", url: edit_app_path(@app)) %> to add one.</p>
+    <% end %>
+  </div>
+
+  <%# Environment Variables %>
+  <div id="env-vars" class="mt-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Environment Variables</h3>
+      <%= rui_badge(text: pluralize(@env_variables.count, "variable"), color: :slate, size: :sm) %>
+    </div>
+
+    <%# Add new variable form %>
+    <div class="p-4 border-b border-slate-100 dark:border-slate-700">
+      <%= form_with model: [@app, EnvVariable.new], class: "flex items-end gap-3" do |f| %>
+        <div class="w-40">
+          <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Key</label>
+          <%= f.text_field :key, class: "block w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm focus:border-slate-500 focus:ring-slate-500 text-sm font-mono", placeholder: "DATABASE_URL" %>
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Value</label>
+          <%= f.text_field :value, class: "block w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm focus:border-slate-500 focus:ring-slate-500 text-sm font-mono", placeholder: "postgres://..." %>
+        </div>
+        <div class="flex items-center gap-2">
+          <%= f.check_box :secret, class: "rounded border-slate-300 dark:border-slate-600 text-slate-900 focus:ring-slate-500" %>
+          <%= f.label :secret, "Secret", class: "text-sm text-slate-600 dark:text-slate-400" %>
+        </div>
+        <%= f.rui_button(color: :primary, size: :sm) %>
+      <% end %>
+    </div>
+
+    <% if @env_variables.any? %>
+      <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700">
+        <thead class="bg-slate-50 dark:bg-slate-700/50">
+          <tr>
+            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Key</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Value</th>
+            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          <% @env_variables.each do |var| %>
+            <tr>
+              <td class="px-4 py-2 text-sm font-mono text-slate-900 dark:text-white"><%= var.key %></td>
+              <td class="px-4 py-2 text-sm font-mono text-slate-600 dark:text-slate-400">
+                <% if var.secret? %>
+                  <span class="text-slate-400 dark:text-slate-500">••••••••</span>
+                <% else %>
+                  <span class="truncate max-w-xs block"><%= var.value %></span>
+                <% end %>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <%= rui_button_to("Remove", app_env_variable_path(@app, var), method: :delete, variant: :link, color: :danger, size: :sm, data: { turbo_confirm: "Remove #{var.key}?" }) %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <div class="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+        No environment variables configured.
+      </div>
+    <% end %>
+  </div>
+
+  <%# Deployment History %>
+  <div class="mt-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Deployment History</h3>
+      <% if @app.container_id.present? || @app.native? %>
+        <%= rui_button("View Logs", url: logs_app_path(@app), variant: :link, size: :sm, color: :slate) %>
+      <% end %>
+    </div>
+
+    <% if @deployments.any? %>
+      <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700">
+        <thead class="bg-slate-50 dark:bg-slate-700/50">
+          <tr>
+            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Started</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Duration</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">By</th>
+            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Details</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          <% @deployments.each do |deployment| %>
+            <tr>
+              <td class="px-4 py-2">
+                <%= rui_badge(text: deployment.status, color: deployment.status == "completed" ? :success : deployment.status == "failed" ? :danger : :slate, size: :sm) %>
+              </td>
+              <td class="px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
+                <%= deployment.created_at.strftime("%b %d, %H:%M") %>
+              </td>
+              <td class="px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
+                <%= deployment.formatted_duration %>
+              </td>
+              <td class="px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
+                <%= deployment.user&.email || "System" %>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <%= rui_button("View", url: deployment_path(deployment), variant: :link, size: :sm, color: :slate) %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <div class="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+        No deployments yet.
+      </div>
+    <% end %>
+  </div>
+
+  <%# Backups %>
+  <% if @app.backups.any? %>
+    <div class="mt-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Recent Backups</h3>
+      </div>
+      <div class="divide-y divide-slate-100 dark:divide-slate-700">
+        <% @app.backups.recent.limit(5).each do |backup| %>
+          <div class="flex items-center justify-between px-4 py-3">
+            <div>
+              <div class="text-sm font-medium text-slate-900 dark:text-white"><%= backup.bucket_name %></div>
+              <div class="text-xs text-slate-500 dark:text-slate-400"><%= backup.formatted_size %> · <%= backup.time_ago %></div>
+            </div>
+            <div class="flex items-center gap-3">
+              <%= rui_badge(text: backup.status, color: backup.status == "completed" ? :success : backup.status == "failed" ? :danger : :slate, size: :sm) %>
+              <%= rui_button("View", url: backup_path(backup), variant: :link, size: :sm, color: :slate) %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="mt-10 pt-6 border-t border-slate-200 dark:border-slate-700">
+    <%= rui_button_to("Delete App", app_path(@app), method: :delete, variant: :link, color: :danger, data: { turbo_confirm: "Are you sure you want to delete this app?" }) %>
+  </div>
+</section>

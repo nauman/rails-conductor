@@ -1,0 +1,56 @@
+/**
+ * RapidRailsUI Theme Toggle Styles
+ * Uses CSS :has() selector for immediate icon response (like rc_mood)
+ * Tailwind handles colors, this handles animation and icon visibility
+ */
+
+/* ============================================================================
+ * Toggle Thumb Animation (checkbox-based, responds immediately)
+ * ============================================================================ */
+#rui-theme-toggle:checked + label .rui-theme-toggle__thumb {
+  transform: translateX(1.75rem); /* Move thumb to right (28px) */
+}
+
+/* ============================================================================
+ * Icon Visibility (using :has() for immediate response)
+ * ============================================================================ */
+
+/* Light mode: Show sun, hide moon */
+html:not(:has(#rui-theme-toggle:checked)) .rui-theme-toggle__sun {
+  display: block;
+}
+
+html:not(:has(#rui-theme-toggle:checked)) .rui-theme-toggle__moon {
+  display: none;
+}
+
+/* Dark mode: Hide sun, show moon */
+html:has(#rui-theme-toggle:checked) .rui-theme-toggle__sun {
+  display: none;
+}
+
+html:has(#rui-theme-toggle:checked) .rui-theme-toggle__moon {
+  display: block;
+}
+
+/* ============================================================================
+ * Focus Ring (accessibility)
+ * ============================================================================ */
+#rui-theme-toggle:focus-visible + label {
+  outline: 2px solid rgb(161 161 170); /* zinc-400 */
+  outline-offset: 2px;
+}
+
+/* Dark mode focus ring */
+.dark #rui-theme-toggle:focus-visible + label {
+  outline-color: rgb(113 113 122); /* zinc-500 */
+}
+
+/* ============================================================================
+ * Reduced Motion Support
+ * ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  #rui-theme-toggle + label .rui-theme-toggle__thumb {
+    transition: none;
+  }
+}

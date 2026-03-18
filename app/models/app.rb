@@ -1,0 +1,115 @@
+class App < ApplicationRecord
+  STATUSES = %w[running stopped deploying failed].freeze
+  CONTAINER_STATUSES = %w[unknown running exited dead restarting paused].freeze
+  DEPLOY_METHODS = %w[docker native].freeze
+
+  belongs_to :server, optional: true
+  has_many :backups, dependent: :nullify
+  has_many :env_variables, dependent: :destroy
+  has_many :deployments, dependent: :destroy
+
+  validates :name, presence: true
+  validates :slug, presence: true, uniqueness: true
+  validates :status, inclusion: { in: STATUSES }
+  validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
+
+  scope :running, -> { where(status: "running") }
+  scope :stopped, -> { where(status: "stopped") }
+  scope :deploying, -> { where(status: "deploying") }
+  scope :failed, -> { where(status: "failed") }
+  scope :deployable, -> { joins(:server).where.not(repository_url: [nil, ""]) }
+
+  # Container status scopes
+  scope :container_running, -> { where(container_status: "running") }
+  scope :container_stopped, -> { where(container_status: %w[exited dead]) }
+  scope :container_unknown, -> { where(container_status: "unknown") }
+  scope :healthy, -> { where(container_status: "running", status: "running") }
+  scope :unhealthy, -> { where.not(container_status: "running").or(where.not(status: "running")) }
+  scope :needs_status_check, -> {
+    where(last_status_check_at: nil)
+      .or(where("last_status_check_at < ?", 1.minute.ago))
+  }
+  scope :with_server_ssh, -> { joins(:server).merge(Server.with_ssh) }
+
+  before_validation :generate_slug, on: :create
+  before_validation :generate_image_name, on: :create
+
+  def url
+    return nil unless domain
+    ssl_enabled? ? "https://#{domain}" : "http://#{domain}"
+  end
+
+  def server_name
+    server&.name || "—"
+  end
+
+  def deployable?
+    server&.ssh_configured? && repository_url.present?
+  end
+
+  def last_deployment
+    deployments.order(created_at: :desc).first
+  end
+
+  def docker?
+    deploy_method == "docker"
+  end
+
+  def native?
+    deploy_method == "native"
+  end
+
+  def service_name
+    "#{slug}-server"
+  end
+
+  def app_dir
+    "/home/#{server&.ssh_user_or_default || 'deploy'}/apps/#{slug}"
+  end
+
+  def container_name
+    "conductor-#{slug}"
+  end
+
+  def env_hash
+    env_variables.each_with_object({}) { |var, hash| hash[var.key] = var.value }
+  end
+
+  def container_running?
+    container_status == "running"
+  end
+
+  def container_stopped?
+    %w[exited dead].include?(container_status)
+  end
+
+  def needs_attention?
+    container_stopped? || status == "failed" || status_check_error.present?
+  end
+
+  def can_sync_status?
+    server&.ssh_configured?
+  end
+
+  def update_container_status!(new_status, error: nil, started_at: nil)
+    attrs = {
+      container_status: new_status,
+      last_status_check_at: Time.current,
+      status_check_error: error
+    }
+    attrs[:container_started_at] = started_at if started_at
+    update!(attrs)
+  end
+
+  private
+
+  def generate_slug
+    return if slug.present?
+    self.slug = name.to_s.parameterize
+  end
+
+  def generate_image_name
+    return if image_name.present?
+    self.image_name = "conductor/#{slug}"
+  end
+end

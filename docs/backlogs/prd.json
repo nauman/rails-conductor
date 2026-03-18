@@ -1,0 +1,155 @@
+{
+  "project": "79-Conductor",
+  "version": "0.3.0",
+  "updated": "2026-03-12",
+  "vision": "Conversational infrastructure orchestration — manage servers, deploy apps, run scripts, and monitor health from a single control panel",
+  "features": {
+    "completed": [
+      {
+        "id": "FEAT-001",
+        "name": "Server Management",
+        "description": "CRUD for servers with SSH key association, provider/region tracking, and status monitoring",
+        "status": "done",
+        "files": ["app/models/server.rb", "app/controllers/servers_controller.rb"]
+      },
+      {
+        "id": "FEAT-002",
+        "name": "SSH Key Management",
+        "description": "Encrypted SSH key storage with fingerprint extraction, key type detection",
+        "status": "done",
+        "files": ["app/models/ssh_key.rb", "app/controllers/ssh_keys_controller.rb"]
+      },
+      {
+        "id": "FEAT-003",
+        "name": "SSH Connection & Execution",
+        "description": "Remote command execution via Net::SSH with streaming support for real-time output",
+        "status": "done",
+        "files": ["app/services/ssh_connection.rb"]
+      },
+      {
+        "id": "FEAT-004",
+        "name": "Script Provisioning System",
+        "description": "Built-in and custom scripts with live execution streaming via ActionCable",
+        "status": "done",
+        "files": ["app/models/script.rb", "app/models/script_run.rb", "app/services/provisioning_service.rb", "app/channels/script_run_channel.rb"]
+      },
+      {
+        "id": "FEAT-005",
+        "name": "App Deployment Pipeline",
+        "description": "Docker-based app deployment with git clone, build, health check, and real-time log streaming",
+        "status": "done",
+        "files": ["app/models/app.rb", "app/models/deployment.rb", "app/services/app_deployer.rb", "app/channels/deploy_channel.rb"]
+      },
+      {
+        "id": "FEAT-006",
+        "name": "Container Status Tracking",
+        "description": "Docker inspect-based container status sync with health indicators",
+        "status": "done",
+        "files": ["app/services/container_status.rb"]
+      },
+      {
+        "id": "FEAT-007",
+        "name": "Server Metrics Collection",
+        "description": "CPU, memory, disk metrics via SSH with freshness tracking",
+        "status": "done",
+        "files": ["app/services/server_metrics.rb"]
+      },
+      {
+        "id": "FEAT-008",
+        "name": "Database Backups to S3/R2",
+        "description": "pg_dump with gzip, upload to Cloudflare R2 or AWS S3, scheduled with retention",
+        "status": "done",
+        "files": ["app/models/backup.rb", "app/services/database_backup.rb"]
+      },
+      {
+        "id": "FEAT-009",
+        "name": "Credential Management",
+        "description": "Encrypted cloud provider credentials (Cloudflare, AWS, Hetzner, etc.)",
+        "status": "done",
+        "files": ["app/models/credential.rb", "app/controllers/credentials_controller.rb"]
+      },
+      {
+        "id": "FEAT-010",
+        "name": "AI Conversation System",
+        "description": "Claude-powered assistant for infrastructure operations with tool execution",
+        "status": "done",
+        "files": ["app/models/conversation.rb", "app/models/message.rb", "app/services/conversation_processor.rb"]
+      },
+      {
+        "id": "FEAT-011",
+        "name": "Dashboard & Issue Detection",
+        "description": "Overview dashboard with server/app stats, issue detection (high CPU, offline, failed deploys)",
+        "status": "done",
+        "files": ["app/controllers/dashboard_controller.rb"]
+      },
+      {
+        "id": "FEAT-012",
+        "name": "API & Token Auth",
+        "description": "REST API with bearer token authentication for external integrations",
+        "status": "done",
+        "files": ["app/models/api_token.rb", "app/controllers/api/"]
+      },
+      {
+        "id": "FEAT-013",
+        "name": "Production Readiness - Schema Fix",
+        "description": "Fixed schema mismatches: added ssh_key_id/metrics_updated_at to servers, app_id/started_at/completed_at to deployments, added ActionCable deploy streaming",
+        "status": "done",
+        "date": "2026-03-12",
+        "files": [
+          "db/migrate/20260312120001_add_ssh_key_and_metrics_to_servers.rb",
+          "db/migrate/20260312120002_fix_deployments_table.rb",
+          "app/models/deployment.rb",
+          "app/channels/deploy_channel.rb",
+          "app/services/app_deployer.rb",
+          "app/views/deployments/show.html.erb",
+          "db/seeds.rb"
+        ]
+      }
+    ],
+    "in_progress": [],
+    "planned": [
+      {
+        "id": "FEAT-P01",
+        "name": "Native Puma Deployment (non-Docker)",
+        "description": "Deploy Rails apps via Puma/systemd instead of Docker, using the built-in provisioning scripts",
+        "priority": "high"
+      },
+      {
+        "id": "FEAT-P02",
+        "name": "Caddy Reverse Proxy Configuration",
+        "description": "Auto-configure Caddy on remote servers for SSL termination and reverse proxy to apps",
+        "priority": "high"
+      },
+      {
+        "id": "FEAT-P03",
+        "name": "Scheduled Backup Jobs",
+        "description": "Solid Queue recurring jobs for automated backup execution based on schedule settings",
+        "priority": "medium"
+      },
+      {
+        "id": "FEAT-P04",
+        "name": "Server Health Monitoring Jobs",
+        "description": "Periodic server metrics collection and alerting via scheduled jobs",
+        "priority": "medium"
+      },
+      {
+        "id": "FEAT-P05",
+        "name": "Multi-App Server Management",
+        "description": "Port allocation, resource limits, and conflict detection for multiple apps per server",
+        "priority": "medium"
+      },
+      {
+        "id": "FEAT-P06",
+        "name": "Deployment Rollback",
+        "description": "One-click rollback to previous deployment with container/release management",
+        "priority": "low"
+      },
+      {
+        "id": "FEAT-P07",
+        "name": "Log Streaming & Aggregation",
+        "description": "Real-time log tailing from remote servers via SSH, with search and filtering",
+        "priority": "low"
+      }
+    ]
+  }
+}

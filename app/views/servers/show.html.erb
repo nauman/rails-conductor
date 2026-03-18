@@ -1,0 +1,119 @@
+<% content_for :title, "#{@server.name} · Conductor" %>
+
+<section class="max-w-7xl mx-auto px-4 py-10">
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-semibold text-slate-900"><%= @server.name %></h1>
+        <span class="<%= status_badge(@server.status) %>"><%= @server.status %></span>
+      </div>
+      <p class="mt-1 text-sm text-slate-500">
+        <%= @server.provider&.titleize %> · <%= @server.region || "No region" %>
+        <% if @server.ip_address.present? %>
+          · <code class="text-xs bg-slate-100 px-1.5 py-0.5 rounded"><%= @server.ip_address %></code>
+        <% end %>
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <% if @server.ssh_configured? %>
+        <%= button_to refresh_metrics_server_path(@server), method: :post, class: "inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700" do %>
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh Metrics
+        <% end %>
+      <% end %>
+      <%= link_to "Edit", edit_server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
+      <%= link_to "Back", servers_path, class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
+    </div>
+  </div>
+
+  <div class="mt-8 grid gap-6 lg:grid-cols-4">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">CPU</div>
+      <div class="mt-2 text-3xl font-semibold text-slate-900"><%= @server.cpu_display %></div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Memory</div>
+      <div class="mt-2 text-3xl font-semibold text-slate-900"><%= @server.formatted_memory %></div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Disk</div>
+      <div class="mt-2 text-3xl font-semibold text-slate-900"><%= @server.disk_display %></div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Uptime</div>
+      <div class="mt-2 text-3xl font-semibold text-slate-900"><%= @server.formatted_uptime %></div>
+      <% if @server.metrics_updated_at.present? %>
+        <div class="mt-1 text-xs text-slate-500">Updated <%= time_ago_in_words(@server.metrics_updated_at) %> ago</div>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">SSH Connection</h2>
+        <p class="mt-1 text-xs text-slate-500">
+          <% if @server.ssh_configured? %>
+            <span class="text-emerald-600">Configured</span> · <%= @server.ssh_user_or_default %>@<%= @server.ip_address %>:<%= @server.ssh_port_or_default %>
+          <% else %>
+            <span class="text-amber-600">Not configured</span> · Add an SSH key and IP address to enable
+          <% end %>
+        </p>
+      </div>
+      <% if @server.ssh_configured? %>
+        <%= button_to test_connection_server_path(@server), method: :post, class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" do %>
+          Test Connection
+        <% end %>
+      <% else %>
+        <%= link_to "Configure SSH", edit_server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" %>
+      <% end %>
+    </div>
+
+    <% if @server.ssh_key.present? %>
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <dl class="grid gap-4 sm:grid-cols-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">SSH Key</dt>
+            <dd class="mt-1 text-slate-900">
+              <%= link_to @server.ssh_key.name, ssh_key_path(@server.ssh_key), class: "hover:underline" %>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">User</dt>
+            <dd class="mt-1 text-slate-900"><%= @server.ssh_user_or_default %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Port</dt>
+            <dd class="mt-1 text-slate-900"><%= @server.ssh_port_or_default %></dd>
+          </div>
+        </dl>
+      </div>
+    <% end %>
+  </div>
+
+  <% if @server.apps.any? %>
+    <div class="mt-8">
+      <h2 class="text-lg font-semibold text-slate-900">Apps on this server</h2>
+      <div class="mt-4 space-y-3">
+        <% @server.apps.each do |app| %>
+          <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <div>
+              <div class="text-sm font-semibold text-slate-900"><%= app.name %></div>
+              <div class="text-xs text-slate-500"><%= app.domain || "No domain" %></div>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="<%= status_badge(app.status) %>"><%= app.status %></span>
+              <%= link_to "View", app_path(app), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="mt-10 pt-6 border-t border-slate-200">
+    <%= button_to "Delete Server", server_path(@server), method: :delete,
+        data: { turbo_confirm: "Are you sure you want to delete this server?" },
+        class: "text-sm font-medium text-rose-600 hover:text-rose-700" %>
+  </div>
+</section>

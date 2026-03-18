@@ -1,0 +1,22 @@
+<%= turbo_frame_tag "message_form" do %>
+  <%= form_with url: conversation_messages_path(conversation), method: :post,
+      data: { controller: "chat-form", action: "keydown->chat-form#submitOnEnter" } do |f| %>
+    <div class="flex items-end gap-3">
+      <div class="flex-1 relative">
+        <%= f.text_area :content,
+            placeholder: "Ask about your fleet, run scripts, deploy apps…",
+            rows: 1,
+            required: true,
+            autofocus: true,
+            data: { "chat-form-target": "input", action: "input->chat-form#resize" },
+            class: "w-full px-4 py-3 bg-slate-100 rounded-2xl text-sm text-slate-900 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 max-h-40 overflow-y-auto" %>
+      </div>
+      <%= f.button type: :submit,
+          class: "shrink-0 w-10 h-10 bg-slate-900 text-white rounded-full flex items-center justify-center hover:bg-slate-700 disabled:opacity-50 transition-colors" do %>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+        </svg>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

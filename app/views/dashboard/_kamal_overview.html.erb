@@ -1,0 +1,93 @@
+<div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Container Status</h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400">Live Docker container monitoring across your fleet</p>
+    </div>
+    <%= rui_button_to("Sync All", sync_all_apps_path, method: :post, variant: :outline, size: :sm, color: :slate) %>
+  </div>
+
+  <%# Container Status Stats %>
+  <div class="mt-4 grid grid-cols-4 gap-3">
+    <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 text-center">
+      <div class="text-2xl font-semibold text-emerald-700 dark:text-emerald-400"><%= @kamal_stats[:running_apps] %></div>
+      <div class="text-xs font-medium text-emerald-600 dark:text-emerald-500">Running</div>
+    </div>
+    <div class="rounded-xl bg-rose-50 dark:bg-rose-900/20 p-3 text-center">
+      <div class="text-2xl font-semibold text-rose-700 dark:text-rose-400"><%= @kamal_stats[:stopped_apps] %></div>
+      <div class="text-xs font-medium text-rose-600 dark:text-rose-500">Stopped</div>
+    </div>
+    <div class="rounded-xl bg-slate-100 dark:bg-slate-700 p-3 text-center">
+      <div class="text-2xl font-semibold text-slate-700 dark:text-slate-300"><%= @kamal_stats[:unknown_status] %></div>
+      <div class="text-xs font-medium text-slate-600 dark:text-slate-400">Unknown</div>
+    </div>
+    <div class="rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3 text-center">
+      <div class="text-2xl font-semibold text-slate-900 dark:text-white"><%= @kamal_stats[:total_apps] %></div>
+      <div class="text-xs font-medium text-slate-500 dark:text-slate-400">Total</div>
+    </div>
+  </div>
+
+  <%# Apps by Server %>
+  <% if @apps_by_server.any? %>
+    <div class="mt-6 space-y-4">
+      <% @apps_by_server.each do |server, apps| %>
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div class="bg-slate-50 dark:bg-slate-700/50 px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <% if server %>
+                <span class="h-2 w-2 rounded-full <%= server.status == 'online' ? 'bg-emerald-500' : server.status == 'degraded' ? 'bg-amber-500' : 'bg-rose-500' %>"></span>
+                <%= link_to server.name, server_path(server), class: "text-sm font-medium text-slate-900 dark:text-white hover:underline" %>
+              <% else %>
+                <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+                <span class="text-sm font-medium text-slate-500 dark:text-slate-400">No Server</span>
+              <% end %>
+            </div>
+            <%= rui_badge(text: pluralize(apps.count, "app"), color: :slate, size: :sm) %>
+          </div>
+          <div class="divide-y divide-slate-100 dark:divide-slate-700">
+            <% apps.each do |app| %>
+              <div class="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                <div class="flex items-center gap-3">
+                  <% case app.container_status %>
+                  <% when "running" %>
+                    <%= rui_badge(text: "", color: :success, size: :sm, class: "h-2 w-2 p-0 rounded-full") %>
+                  <% when "exited", "dead" %>
+                    <%= rui_badge(text: "", color: :danger, size: :sm, class: "h-2 w-2 p-0 rounded-full") %>
+                  <% when "restarting" %>
+                    <%= rui_badge(text: "", color: :warning, size: :sm, class: "h-2 w-2 p-0 rounded-full animate-pulse") %>
+                  <% else %>
+                    <%= rui_badge(text: "", color: :slate, size: :sm, class: "h-2 w-2 p-0 rounded-full") %>
+                  <% end %>
+                  <div>
+                    <%= link_to app.name, app_path(app), class: "text-sm font-medium text-slate-900 dark:text-white hover:underline" %>
+                    <% if app.status_check_error.present? %>
+                      <%= rui_badge(text: "Error", color: :danger, size: :sm, class: "ml-2") %>
+                    <% end %>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <%= rui_badge(text: app.container_status, color: :slate, size: :sm) %>
+                  <% if app.can_sync_status? %>
+                    <%= rui_button_to(sync_status_app_path(app), method: :post, variant: :ghost, size: :sm, color: :slate, title: "Sync Status") do %>
+                      <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <% end %>
+                    <% if app.container_running? %>
+                      <%= rui_button_to(restart_app_path(app), method: :post, variant: :ghost, size: :sm, color: :slate, title: "Restart") do %>
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                      <% end %>
+                    <% end %>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="mt-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 p-6 text-center">
+      <p class="text-sm text-slate-500 dark:text-slate-400">No apps registered yet.</p>
+      <%= rui_button("Add an app", url: new_app_path, variant: :link, color: :primary, class: "mt-2") %>
+    </div>
+  <% end %>
+</div>

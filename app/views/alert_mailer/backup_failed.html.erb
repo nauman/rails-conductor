@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; color: #1e293b; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc2626; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; }
+    .detail { margin: 10px 0; }
+    .label { font-weight: 600; color: #64748b; font-size: 12px; text-transform: uppercase; }
+    .value { color: #1e293b; }
+    .button { display: inline-block; background: #1e293b; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0; font-size: 18px;">Backup Failed</h1>
+    </div>
+    <div class="content">
+      <p>A scheduled backup has failed and needs attention.</p>
+
+      <div class="detail">
+        <div class="label">Backup</div>
+        <div class="value"><%= @backup.bucket_name %></div>
+      </div>
+
+      <div class="detail">
+        <div class="label">Provider</div>
+        <div class="value"><%= @backup.provider.titleize.gsub("_", " ") %></div>
+      </div>
+
+      <div class="detail">
+        <div class="label">Source</div>
+        <div class="value"><%= @backup.source_name %></div>
+      </div>
+
+      <% if @server %>
+        <div class="detail">
+          <div class="label">Server</div>
+          <div class="value"><%= @server.name %> (<%= @server.ip_address %>)</div>
+        </div>
+      <% end %>
+
+      <a href="<%= backup_url(@backup) %>" class="button">View Backup</a>
+    </div>
+  </div>
+</body>
+</html>

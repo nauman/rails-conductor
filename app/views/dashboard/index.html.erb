@@ -1,0 +1,294 @@
+<% content_for :title, "Conductor · Overview" %>
+
+<section class="relative overflow-hidden border-b border-slate-200 bg-gradient-to-br from-white via-white to-slate-100">
+  <div class="absolute -right-32 -top-24 h-64 w-64 rounded-full bg-slate-200/60 blur-3xl"></div>
+  <div class="absolute -left-24 bottom-0 h-56 w-56 rounded-full bg-emerald-200/40 blur-3xl"></div>
+  <div class="max-w-7xl mx-auto px-4 py-10">
+    <div class="grid gap-8 lg:grid-cols-3">
+      <div class="lg:col-span-2">
+        <span class="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+          Live Ops
+        </span>
+        <h1 class="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">Monitor the rails stack at a glance.</h1>
+        <p class="mt-3 max-w-2xl text-base text-slate-600">
+          Track VM health, backup status, and app deployments in one place. Keep everything calm, clean, and fast.
+        </p>
+        <div class="mt-6 grid gap-4 sm:grid-cols-4">
+          <%= link_to servers_path, class: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-colors" do %>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Servers</div>
+            <div class="mt-2 text-2xl font-semibold text-slate-900"><%= @stats[:servers_count] %></div>
+            <div class="mt-1 text-xs text-slate-500">
+              <% if @stats[:servers_degraded] > 0 %>
+                <%= @stats[:servers_degraded] %> degraded · <%= @stats[:servers_online] %> online
+              <% else %>
+                <%= @stats[:servers_online] %> online
+              <% end %>
+            </div>
+          <% end %>
+          <%= link_to apps_path, class: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-colors" do %>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Apps</div>
+            <div class="mt-2 text-2xl font-semibold text-slate-900"><%= @stats[:apps_count] %></div>
+            <div class="mt-1 text-xs text-slate-500"><%= @stats[:apps_running] %> running</div>
+          <% end %>
+          <%= link_to backups_path, class: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-colors" do %>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Backups</div>
+            <div class="mt-2 text-2xl font-semibold text-slate-900"><%= @stats[:backups_completed] %></div>
+            <div class="mt-1 text-xs text-slate-500">completed</div>
+          <% end %>
+          <%= link_to credentials_path, class: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-colors" do %>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Credentials</div>
+            <div class="mt-2 text-2xl font-semibold text-slate-900"><%= @stats[:credentials_count] %></div>
+            <div class="mt-1 text-xs text-slate-500"><%= @stats[:credentials_active] %> active</div>
+          <% end %>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+        <h2 class="text-sm font-semibold text-slate-900">Quick Actions</h2>
+        <ul class="mt-4 space-y-3 text-sm">
+          <li>
+            <%= link_to new_server_path, class: "flex items-center gap-3 text-slate-600 hover:text-slate-900" do %>
+              <span class="h-2 w-2 rounded-full bg-slate-300"></span>
+              Add new server
+            <% end %>
+          </li>
+          <li>
+            <%= link_to new_app_path, class: "flex items-center gap-3 text-slate-600 hover:text-slate-900" do %>
+              <span class="h-2 w-2 rounded-full bg-slate-300"></span>
+              Register an app
+            <% end %>
+          </li>
+          <li>
+            <%= link_to new_credential_path, class: "flex items-center gap-3 text-slate-600 hover:text-slate-900" do %>
+              <span class="h-2 w-2 rounded-full bg-slate-300"></span>
+              Add API credential
+            <% end %>
+          </li>
+        </ul>
+        <div class="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+          <div class="font-semibold text-slate-600">Tip</div>
+          Keep Caddy + Kamal config snapshots next to R2 backups for audit trails.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="max-w-7xl mx-auto px-4 py-10 space-y-10">
+  <%# Container Status Overview %>
+  <% if @apps.any? %>
+    <%= render "dashboard/kamal_overview" %>
+  <% end %>
+
+  <%# Issues Section - What needs attention %>
+  <% if @issues.any? %>
+    <div class="rounded-2xl border-2 border-rose-200 bg-rose-50 p-6 shadow-sm">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
+            <svg class="h-5 w-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-rose-900">Attention Required</h2>
+            <p class="text-sm text-rose-700"><%= @issues.count %> issue<%= @issues.count == 1 ? "" : "s" %> need<%= @issues.count == 1 ? "s" : "" %> your attention</p>
+          </div>
+        </div>
+      </div>
+      <div class="mt-4 space-y-2">
+        <% @issues.first(5).each do |issue| %>
+          <div class="flex items-center justify-between rounded-xl bg-white px-4 py-3 border <%= issue[:severity] == 'critical' ? 'border-rose-300' : issue[:severity] == 'warning' ? 'border-amber-300' : 'border-slate-200' %>">
+            <div class="flex items-center gap-3">
+              <% if issue[:severity] == "critical" %>
+                <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+              <% elsif issue[:severity] == "warning" %>
+                <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+              <% else %>
+                <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+              <% end %>
+              <div>
+                <span class="text-sm font-medium text-slate-900">
+                  <% if issue[:type] == "server" %>
+                    <%= issue[:resource].name %>
+                  <% elsif issue[:type] == "app" %>
+                    <%= issue[:resource].name %>
+                  <% elsif issue[:type] == "deployment" %>
+                    <%= issue[:resource].app.name %> deployment
+                  <% elsif issue[:type] == "backup" %>
+                    <%= issue[:resource].bucket_name %> backup
+                  <% end %>
+                </span>
+                <span class="text-sm text-slate-500 ml-2"><%= issue[:message] %></span>
+              </div>
+            </div>
+            <% if issue[:type] == "server" %>
+              <%= link_to "View", server_path(issue[:resource]), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
+            <% elsif issue[:type] == "app" %>
+              <%= link_to "View", app_path(issue[:resource]), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
+            <% elsif issue[:type] == "deployment" %>
+              <%= link_to "View", deployment_path(issue[:resource]), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
+            <% elsif issue[:type] == "backup" %>
+              <%= link_to "View", backup_path(issue[:resource]), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
+            <% end %>
+          </div>
+        <% end %>
+        <% if @issues.count > 5 %>
+          <p class="text-sm text-rose-600 text-center pt-2">+ <%= @issues.count - 5 %> more issues</p>
+        <% end %>
+      </div>
+    </div>
+  <% else %>
+    <div class="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+          <svg class="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold text-emerald-900">All Systems Operational</h2>
+          <p class="text-sm text-emerald-700">No issues detected across your servers and apps</p>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%# Recent Deployments %>
+  <% if @recent_deployments.any? %>
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Recent Deployments</h2>
+          <p class="text-sm text-slate-500">Latest deployment activity across your apps</p>
+        </div>
+      </div>
+      <div class="mt-4 overflow-x-auto">
+        <table class="min-w-full">
+          <thead>
+            <tr class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th class="pb-2 text-left">App</th>
+              <th class="pb-2 text-left">Status</th>
+              <th class="pb-2 text-left">Duration</th>
+              <th class="pb-2 text-left">When</th>
+              <th class="pb-2 text-right">Details</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @recent_deployments.each do |deployment| %>
+              <tr>
+                <td class="py-2 text-sm font-medium text-slate-900"><%= deployment.app.name %></td>
+                <td class="py-2"><span class="<%= status_badge(deployment.status) %>"><%= deployment.status %></span></td>
+                <td class="py-2 text-sm text-slate-600"><%= deployment.formatted_duration %></td>
+                <td class="py-2 text-sm text-slate-500"><%= time_ago_in_words(deployment.created_at) %> ago</td>
+                <td class="py-2 text-right"><%= link_to "View", deployment_path(deployment), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @servers.any? %>
+    <div>
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Server Fleet</h2>
+          <p class="text-sm text-slate-500">Health and resource usage across hosts.</p>
+        </div>
+        <%= link_to "View all", servers_path, class: "text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600" %>
+      </div>
+      <div class="mt-4 grid gap-4 lg:grid-cols-3">
+        <% @servers.limit(3).each do |server| %>
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold text-slate-900"><%= server.name %></div>
+                <div class="text-xs text-slate-500"><%= server.region || server.provider || "—" %></div>
+              </div>
+              <span class="<%= status_badge(server.status) %>"><%= server.status %></span>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+              <div class="rounded-lg bg-slate-50 p-3">
+                <div class="uppercase tracking-wide text-slate-400">CPU</div>
+                <div class="mt-1 text-sm font-semibold text-slate-900"><%= server.cpu_display %></div>
+              </div>
+              <div class="rounded-lg bg-slate-50 p-3">
+                <div class="uppercase tracking-wide text-slate-400">Memory</div>
+                <div class="mt-1 text-sm font-semibold text-slate-900"><%= server.formatted_memory %></div>
+              </div>
+              <div class="rounded-lg bg-slate-50 p-3">
+                <div class="uppercase tracking-wide text-slate-400">Disk</div>
+                <div class="mt-1 text-sm font-semibold text-slate-900"><%= server.disk_display %></div>
+              </div>
+              <div class="rounded-lg bg-slate-50 p-3">
+                <div class="uppercase tracking-wide text-slate-400">Uptime</div>
+                <div class="mt-1 text-sm font-semibold text-slate-900"><%= server.formatted_uptime %></div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <% if @backups.any? %>
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-900">Recent Backups</h2>
+            <p class="text-sm text-slate-500">Latest backup activity.</p>
+          </div>
+          <%= link_to "View all", backups_path, class: "text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600" %>
+        </div>
+        <div class="mt-4 space-y-3">
+          <% @backups.limit(4).each do |backup| %>
+            <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <div>
+                <div class="text-sm font-semibold text-slate-900"><%= backup.bucket_name %></div>
+                <div class="text-xs text-slate-500">Retention <%= backup.retention_display %> · Size <%= backup.formatted_size %></div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="text-xs text-slate-500"><%= backup.time_ago %></div>
+                <span class="<%= status_badge(backup.status) %>"><%= backup.status %></span>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
+    <% if @apps.any? %>
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-900">Deployed Apps</h2>
+            <p class="text-sm text-slate-500">Rails applications across your fleet.</p>
+          </div>
+          <%= link_to "View all", apps_path, class: "text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600" %>
+        </div>
+        <div class="mt-4 space-y-3">
+          <% @apps.limit(4).each do |app| %>
+            <div class="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-semibold text-slate-900"><%= app.name %></div>
+                  <div class="text-xs text-slate-500"><%= app.server_name %> · <%= app.domain || "No domain" %></div>
+                </div>
+                <span class="<%= status_badge(app.status) %>"><%= app.status %></span>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+
+  <% if @servers.empty? && @backups.empty? && @apps.empty? %>
+    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
+      <div class="text-lg font-medium text-slate-900">Get started with Conductor</div>
+      <p class="mt-2 text-sm text-slate-500">Add your first server, app, or credential to begin monitoring.</p>
+      <div class="mt-6 flex items-center justify-center gap-4">
+        <%= link_to "Add Server", new_server_path, class: "inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" %>
+        <%= link_to "Add App", new_app_path, class: "inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
+      </div>
+    </div>
+  <% end %>
+</section>

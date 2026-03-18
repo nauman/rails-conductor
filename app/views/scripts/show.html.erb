@@ -1,0 +1,63 @@
+<% content_for :title, @script.name %>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900"><%= @script.name %></h1>
+      <p class="text-sm text-gray-500 mt-1">Type: <%= @script.script_type %><% if @script.built_in? %> &middot; built-in<% end %></p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to "Edit", edit_script_path(@script), class: "px-3 py-1.5 text-sm rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700" %>
+      <%= link_to "All Scripts", scripts_path, class: "px-3 py-1.5 text-sm rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700" %>
+    </div>
+  </div>
+
+  <% if @script.description.present? %>
+    <p class="text-gray-600 mb-6"><%= @script.description %></p>
+  <% end %>
+
+  <div class="bg-gray-950 rounded-xl overflow-hidden shadow-lg mb-6">
+    <div class="px-4 py-2 bg-gray-900 border-b border-gray-800">
+      <span class="text-xs text-gray-500 font-mono"><%= @script.name %>.sh</span>
+    </div>
+    <pre class="text-green-400 font-mono text-xs p-4 overflow-auto max-h-[500px] whitespace-pre-wrap"><%= @script.body %></pre>
+  </div>
+
+  <% if @servers.any? %>
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Run on a Server</h2>
+      <%= form_with url: '#', method: :post, id: "run-form" do %>
+        <div class="flex items-end gap-3">
+          <div class="flex-1">
+            <label class="text-sm text-gray-600 block mb-1">Target Server</label>
+            <select id="server-select" class="w-full text-sm border border-gray-300 rounded-md px-3 py-2">
+              <% @servers.each do |server| %>
+                <option value="<%= server.id %>" data-url="<%= provision_server_path(server) %>">
+                  <%= server.name %> (<%= server.ip_address %>)
+                </option>
+              <% end %>
+            </select>
+          </div>
+          <button type="submit" class="px-4 py-2 text-sm font-medium rounded-md bg-gray-900 hover:bg-gray-800 text-white cursor-pointer">
+            Run Script
+          </button>
+        </div>
+      <% end %>
+      <script>
+        document.getElementById('run-form').addEventListener('submit', function(e) {
+          e.preventDefault();
+          const sel = document.getElementById('server-select');
+          const url = sel.selectedOptions[0].dataset.url;
+          if (confirm('Run on ' + sel.selectedOptions[0].text + '?')) {
+            const f = document.createElement('form');
+            f.method = 'POST'; f.action = url;
+            const csrf = document.querySelector('meta[name="csrf-token"]').content;
+            f.innerHTML = '<input type="hidden" name="authenticity_token" value="' + csrf + '"><input type="hidden" name="script_id" value="<%= @script.id %>">';
+            document.body.appendChild(f);
+            f.submit();
+          }
+        });
+      </script>
+    </div>
+  <% end %>
+</div>

@@ -1,0 +1,43 @@
+<% content_for :title, "Provisioning Scripts" %>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Provisioning Scripts</h1>
+    <%= link_to "New Script", new_script_path, class: "px-4 py-2 text-sm font-medium rounded-md bg-gray-900 hover:bg-gray-800 text-white" %>
+  </div>
+
+  <% Script::TYPES.each do |type| %>
+    <% group = @scripts.select { |s| s.script_type == type } %>
+    <% next if group.empty? %>
+    <div class="mb-6">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3"><%= type %></h2>
+      <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+        <% group.each do |script| %>
+          <div class="flex items-center justify-between px-5 py-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-gray-900"><%= script.name %></span>
+                <% if script.built_in? %>
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">built-in</span>
+                <% end %>
+              </div>
+              <p class="text-xs text-gray-500 mt-0.5"><%= script.description %></p>
+            </div>
+            <div class="flex items-center gap-3">
+              <%= link_to "View", script_path(script), class: "text-sm text-gray-500 hover:text-gray-700" %>
+              <%= link_to "Edit", edit_script_path(script), class: "text-sm text-gray-500 hover:text-gray-700" %>
+              <%= button_to "Delete", script_path(script), method: :delete, data: { turbo_confirm: "Delete #{script.name}?" }, class: "text-sm text-red-500 bg-transparent cursor-pointer" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @scripts.empty? %>
+    <div class="text-center py-16 bg-white rounded-xl border border-gray-200">
+      <p class="text-gray-500 mb-3">No scripts yet.</p>
+      <%= link_to "Create your first script", new_script_path, class: "text-blue-600 hover:underline text-sm" %>
+    </div>
+  <% end %>
+</div>

@@ -1,0 +1,72 @@
+# Name of your application. Used to uniquely configure containers.
+service: conductor
+
+# Name of the container image.
+image: your-user/conductor
+
+# Deploy to these servers.
+servers:
+  web:
+    - <%= ENV["DEPLOY_SERVER_IP"] || "YOUR_HETZNER_IP" %>
+
+# Enable SSL auto certification via Let's Encrypt.
+# Set Cloudflare SSL/TLS to "Full" if using Cloudflare.
+proxy:
+  ssl: true
+  host: <%= ENV["APP_HOST"] || "conductor.example.com" %>
+
+# Container registry (ghcr.io, hub.docker.com, etc.)
+registry:
+  server: ghcr.io
+  username: <%= ENV["KAMAL_REGISTRY_USERNAME"] || "your-user" %>
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+# Inject ENV variables into containers (secrets come from .kamal/secrets).
+env:
+  secret:
+    - RAILS_MASTER_KEY
+    - DATABASE_PASSWORD
+    - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
+    - ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY
+    - ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
+    - SENTRY_DSN
+  clear:
+    # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
+    SOLID_QUEUE_IN_PUMA: true
+
+    # Set number of cores available to the application on each server.
+    WEB_CONCURRENCY: 2
+
+    # Database connection
+    DATABASE_HOST: <%= ENV["DATABASE_HOST"] || "localhost" %>
+    DATABASE_USERNAME: <%= ENV["DATABASE_USERNAME"] || "conductor" %>
+    DATABASE_NAME: conductor_production
+
+    # Application host
+    APP_HOST: <%= ENV["APP_HOST"] || "conductor.example.com" %>
+
+    # Mailer
+    MAILER_FROM: <%= ENV["MAILER_FROM"] || "noreply@conductor.example.com" %>
+
+    # Storage
+    AWS_REGION: <%= ENV["AWS_REGION"] || "us-east-1" %>
+    S3_BUCKET: <%= ENV["S3_BUCKET"] || "conductor-storage" %>
+
+# Aliases are triggered with "bin/kamal <alias>".
+aliases:
+  console: app exec --interactive --reuse "bin/rails console"
+  shell: app exec --interactive --reuse "bash"
+  logs: app logs -f
+  dbc: app exec --interactive --reuse "bin/rails dbconsole --include-password"
+
+# Use a persistent storage volume for Active Storage files.
+volumes:
+  - "conductor_storage:/rails/storage"
+
+# Bridge fingerprinted assets between versions.
+asset_path: /rails/public/assets
+
+# Configure the image builder.
+builder:
+  arch: amd64

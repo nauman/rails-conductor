@@ -1,0 +1,36 @@
+<% content_for :title, "Conversations — Conductor" %>
+
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-slate-900">Chat</h1>
+    <%= button_to "New conversation", conversations_path, method: :post,
+        class: "px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700" %>
+  </div>
+
+  <% if @conversations.empty? %>
+    <div class="text-center py-16 text-slate-500">
+      <p class="text-sm mb-4">No conversations yet.</p>
+      <%= button_to "Start chatting with Conductor", conversations_path, method: :post,
+          class: "px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700" %>
+    </div>
+  <% else %>
+    <div class="space-y-2">
+      <% @conversations.each do |convo| %>
+        <%= link_to conversation_path(convo), class: "block p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-sm transition-all" do %>
+          <div class="flex items-center justify-between">
+            <div class="font-medium text-slate-900 text-sm truncate">
+              <%= convo.title.presence || "Untitled conversation" %>
+            </div>
+            <div class="text-xs text-slate-400 shrink-0 ml-3">
+              <%= time_ago_in_words(convo.created_at) %> ago
+            </div>
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            <%= pluralize(convo.messages.count, 'message') %>
+            · <%= convo.status %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+</div>

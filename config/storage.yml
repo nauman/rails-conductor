@@ -1,0 +1,17 @@
+test:
+  service: Disk
+  root: <%= Rails.root.join("tmp/storage") %>
+
+local:
+  service: Disk
+  root: <%= Rails.root.join("storage") %>
+
+# S3-compatible storage (AWS S3, Cloudflare R2, MinIO, etc.)
+amazon:
+  service: S3
+  access_key_id: <%= Rails.application.credentials.dig(:aws, :access_key_id) %>
+  secret_access_key: <%= Rails.application.credentials.dig(:aws, :secret_access_key) %>
+  region: <%= ENV.fetch("AWS_REGION", "us-east-1") %>
+  bucket: <%= ENV.fetch("S3_BUCKET", "conductor-storage") %>
+  endpoint: <%= ENV["S3_ENDPOINT"] %>
+  force_path_style: <%= ENV.fetch("S3_FORCE_PATH_STYLE", "false") %>

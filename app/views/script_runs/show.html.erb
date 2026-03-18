@@ -1,0 +1,84 @@
+<% content_for :title, "Script Run ##{@script_run.id}" %>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Script Run #<%= @script_run.id %></h1>
+      <p class="text-sm text-gray-500 mt-1">
+        <%= @script_run.script.name %> on
+        <%= link_to @script_run.server.name, server_path(@script_run.server), class: "text-blue-600 hover:underline" %>
+        &middot; started <%= time_ago_in_words(@script_run.created_at) %> ago
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="run-status-badge" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+        <%= case @script_run.status
+            when 'pending'  then 'bg-gray-100 text-gray-700'
+            when 'running'  then 'bg-blue-100 text-blue-700'
+            when 'success'  then 'bg-green-100 text-green-700'
+            when 'failed'   then 'bg-red-100 text-red-700'
+            end %>">
+        <span id="run-status-text"><%= @script_run.status.capitalize %></span>
+      </span>
+      <%= link_to "Back to server", server_path(@script_run.server), class: "text-sm text-gray-500 hover:text-gray-700" %>
+    </div>
+  </div>
+
+  <div class="bg-gray-950 rounded-xl overflow-hidden shadow-lg">
+    <div class="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 rounded-full bg-red-500/70"></div>
+        <div class="w-3 h-3 rounded-full bg-yellow-500/70"></div>
+        <div class="w-3 h-3 rounded-full bg-green-500/70"></div>
+      </div>
+      <span class="text-xs text-gray-500 font-mono"><%= @script_run.server.ip_address %></span>
+      <div id="spinner" class="<%= @script_run.done? ? 'hidden' : '' %>">
+        <svg class="animate-spin h-4 w-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4z"></path>
+        </svg>
+      </div>
+    </div>
+    <pre id="script-log"
+         class="text-green-400 font-mono text-xs p-4 overflow-auto max-h-[600px] whitespace-pre-wrap break-words"
+    ><%= @script_run.log.presence || "Waiting for output...\n" %></pre>
+  </div>
+
+  <% if @script_run.duration %>
+    <p class="mt-3 text-xs text-gray-400 text-right">Duration: <%= @script_run.duration %>s</p>
+  <% end %>
+</div>
+
+<% unless @script_run.done? %>
+<script>
+(function() {
+  const logEl   = document.getElementById('script-log');
+  const spinEl  = document.getElementById('spinner');
+  const badgeEl = document.getElementById('run-status-badge');
+  const textEl  = document.getElementById('run-status-text');
+
+  const consumer = ActionCable.createConsumer();
+  const sub = consumer.subscriptions.create(
+    { channel: "ScriptRunChannel", script_run_id: <%= @script_run.id %> },
+    {
+      received(data) {
+        if (data.line) {
+          if (logEl.textContent === "Waiting for output...\n") logEl.textContent = '';
+          logEl.textContent += data.line;
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+        if (data.status) {
+          textEl.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+          const colors = { running: 'bg-blue-100 text-blue-700', success: 'bg-green-100 text-green-700', failed: 'bg-red-100 text-red-700' };
+          badgeEl.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ' + (colors[data.status] || 'bg-gray-100 text-gray-700');
+        }
+        if (data.done) {
+          spinEl.classList.add('hidden');
+          sub.unsubscribe();
+        }
+      }
+    }
+  );
+})();
+</script>
+<% end %>

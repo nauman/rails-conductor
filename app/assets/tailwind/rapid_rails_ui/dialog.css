@@ -1,0 +1,457 @@
+/**
+ * RapidRailsUI Dialog Component Styles
+ *
+ * This file contains CSS that cannot be achieved with Tailwind utilities:
+ * - ::backdrop pseudo-element styling (not a real element, can't apply classes)
+ * - @starting-style for entry animations (CSS-only, no JavaScript)
+ * - Position overrides for native dialog centering behavior
+ *
+ * The dialog component uses the native HTML <dialog> element with showModal()
+ * which provides browser-native focus trapping, Escape key handling, and accessibility.
+ *
+ * NOTE: Wrapped in @layer base for Tailwind v4 compatibility.
+ */
+
+@layer base {
+  /* ============================================================================
+   * BACKDROP STYLING
+   * ============================================================================
+   * The ::backdrop pseudo-element appears behind the dialog when showModal() is called.
+   * It cannot be styled with Tailwind classes since it's not a real DOM element.
+   * We use data-backdrop attribute to vary the opacity.
+   * ============================================================================ */
+
+  /* Base backdrop - starts transparent for animation */
+  dialog::backdrop {
+    background-color: rgb(0 0 0 / 0);
+    transition: background-color 200ms ease-out,
+                backdrop-filter 200ms ease-out,
+                overlay 200ms allow-discrete,
+                display 200ms allow-discrete;
+  }
+
+  /* Backdrop variant: default (50% opacity) */
+  dialog[data-backdrop="default"]:open::backdrop {
+    background-color: rgb(0 0 0 / 0.5);
+  }
+
+  /* Backdrop variant: dark (75% opacity) */
+  dialog[data-backdrop="dark"]:open::backdrop {
+    background-color: rgb(0 0 0 / 0.75);
+  }
+
+  /* Backdrop variant: light (25% opacity) */
+  dialog[data-backdrop="light"]:open::backdrop {
+    background-color: rgb(0 0 0 / 0.25);
+  }
+
+  /* Backdrop variant: blur - use transparent native backdrop
+     The blur effect is handled by a custom div since ::backdrop
+     doesn't reliably support backdrop-filter across browsers */
+  dialog[data-backdrop="blur"]:open::backdrop {
+    background-color: transparent;
+  }
+
+  /* Dark mode adjustments - slightly darker overlays for better contrast */
+  @media (prefers-color-scheme: dark) {
+    dialog[data-backdrop="default"]:open::backdrop {
+      background-color: rgb(0 0 0 / 0.6);
+    }
+    dialog[data-backdrop="dark"]:open::backdrop {
+      background-color: rgb(0 0 0 / 0.85);
+    }
+    dialog[data-backdrop="light"]:open::backdrop {
+      background-color: rgb(0 0 0 / 0.35);
+    }
+    dialog[data-backdrop="blur"]:open::backdrop {
+      background-color: transparent;
+    }
+  }
+
+  /* Also support data-theme="dark" attribute for theme toggle */
+  [data-theme="dark"] dialog[data-backdrop="default"]:open::backdrop {
+    background-color: rgb(0 0 0 / 0.6);
+  }
+  [data-theme="dark"] dialog[data-backdrop="dark"]:open::backdrop {
+    background-color: rgb(0 0 0 / 0.85);
+  }
+  [data-theme="dark"] dialog[data-backdrop="light"]:open::backdrop {
+    background-color: rgb(0 0 0 / 0.35);
+  }
+  [data-theme="dark"] dialog[data-backdrop="blur"]:open::backdrop {
+    background-color: transparent;
+  }
+
+  /* Entry animation starting point - all variants start transparent */
+  @starting-style {
+    dialog[data-backdrop="default"]:open::backdrop,
+    dialog[data-backdrop="dark"]:open::backdrop,
+    dialog[data-backdrop="light"]:open::backdrop,
+    dialog[data-backdrop="blur"]:open::backdrop {
+      background-color: rgb(0 0 0 / 0);
+      backdrop-filter: blur(0);
+      -webkit-backdrop-filter: blur(0);
+    }
+  }
+
+  /* ============================================================================
+   * MODAL (CENTER) ANIMATIONS
+   * ============================================================================
+   * Centered modals use scale + fade animation for a subtle "pop" effect.
+   * ============================================================================ */
+
+  dialog[data-position="center"] {
+    opacity: 0;
+    transform: scale(0.95);
+    transition: opacity 200ms ease-out,
+                transform 200ms ease-out,
+                overlay 200ms allow-discrete,
+                display 200ms allow-discrete;
+  }
+
+  dialog[data-position="center"]:open {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  @starting-style {
+    dialog[data-position="center"]:open {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+
+  /* ============================================================================
+   * DRAWER (RIGHT) - Slide from right edge
+   * ============================================================================
+   * Override native dialog centering (margin: auto) with explicit positioning.
+   * ============================================================================ */
+
+  dialog[data-position="right"] {
+    /* Override native dialog centering */
+    position: fixed;
+    inset: 0 0 0 auto;
+    margin: 0;
+    height: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    border-top-left-radius: 0.5rem;
+    border-bottom-left-radius: 0.5rem;
+    /* Animation */
+    opacity: 0;
+    transform: translateX(100%);
+    transition: opacity 300ms ease-out,
+                transform 300ms ease-out,
+                overlay 300ms allow-discrete,
+                display 300ms allow-discrete;
+  }
+
+  dialog[data-position="right"]:open {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  @starting-style {
+    dialog[data-position="right"]:open {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+  }
+
+  /* ============================================================================
+   * DRAWER (LEFT) - Slide from left edge
+   * ============================================================================ */
+
+  dialog[data-position="left"] {
+    /* Override native dialog centering */
+    position: fixed;
+    inset: 0 auto 0 0;
+    margin: 0;
+    height: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    border-top-right-radius: 0.5rem;
+    border-bottom-right-radius: 0.5rem;
+    /* Animation */
+    opacity: 0;
+    transform: translateX(-100%);
+    transition: opacity 300ms ease-out,
+                transform 300ms ease-out,
+                overlay 300ms allow-discrete,
+                display 300ms allow-discrete;
+  }
+
+  dialog[data-position="left"]:open {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  @starting-style {
+    dialog[data-position="left"]:open {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+  }
+
+  /* ============================================================================
+   * SHEET (TOP) - Slide from top edge, full width
+   * ============================================================================ */
+
+  dialog[data-position="top"] {
+    /* Override native dialog centering - force full width at top */
+    position: fixed;
+    inset: 0 0 auto 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    border-bottom-left-radius: 0.5rem;
+    border-bottom-right-radius: 0.5rem;
+    /* Animation */
+    opacity: 0;
+    transform: translateY(-100%);
+    transition: opacity 300ms ease-out,
+                transform 300ms ease-out,
+                overlay 300ms allow-discrete,
+                display 300ms allow-discrete;
+  }
+
+  dialog[data-position="top"]:open {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @starting-style {
+    dialog[data-position="top"]:open {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+  }
+
+  /* ============================================================================
+   * SHEET (BOTTOM) - Slide from bottom edge, full width
+   * ============================================================================ */
+
+  dialog[data-position="bottom"] {
+    /* Override native dialog centering - force full width at bottom */
+    position: fixed;
+    inset: auto 0 0 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    /* Animation */
+    opacity: 0;
+    transform: translateY(100%);
+    transition: opacity 300ms ease-out,
+                transform 300ms ease-out,
+                overlay 300ms allow-discrete,
+                display 300ms allow-discrete;
+  }
+
+  dialog[data-position="bottom"]:open {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @starting-style {
+    dialog[data-position="bottom"]:open {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+  }
+
+  /* ============================================================================
+   * RESPONSIVE DIALOG - Mobile Transformation
+   * ============================================================================
+   * When data-responsive="true" is set, the dialog transforms based on
+   * data-mobile-position attribute:
+   *   - "bottom" (default): transforms to bottom sheet
+   *   - "top": transforms to top sheet
+   *   - "center": stays centered (no transformation)
+   * ============================================================================ */
+
+  @media (max-width: 767px) {
+    /* ========== MOBILE POSITION: BOTTOM (default) ========== */
+
+    /* Center modal -> bottom sheet on mobile */
+    dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="center"] {
+      position: fixed !important;
+      inset: auto 0 0 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 85vh;
+      border-radius: 0;
+      border-top-left-radius: 1rem;
+      border-top-right-radius: 1rem;
+      /* Override scale animation with slide-up */
+      opacity: 0;
+      transform: translateY(100%);
+      transition: opacity 300ms ease-out,
+                  transform 300ms ease-out,
+                  overlay 300ms allow-discrete,
+                  display 300ms allow-discrete;
+    }
+
+    dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="center"]:open {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @starting-style {
+      dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="center"]:open {
+        opacity: 0;
+        transform: translateY(100%);
+      }
+    }
+
+    /* Right drawer -> bottom sheet on mobile */
+    dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="right"] {
+      position: fixed !important;
+      inset: auto 0 0 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 85vh;
+      height: auto;
+      border-radius: 0;
+      border-top-left-radius: 1rem;
+      border-top-right-radius: 1rem;
+      opacity: 0;
+      transform: translateY(100%);
+    }
+
+    dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="right"]:open {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @starting-style {
+      dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="right"]:open {
+        opacity: 0;
+        transform: translateY(100%);
+      }
+    }
+
+    /* Left drawer -> bottom sheet on mobile */
+    dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="left"] {
+      position: fixed !important;
+      inset: auto 0 0 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 85vh;
+      height: auto;
+      border-radius: 0;
+      border-top-left-radius: 1rem;
+      border-top-right-radius: 1rem;
+      opacity: 0;
+      transform: translateY(100%);
+    }
+
+    dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="left"]:open {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @starting-style {
+      dialog[data-responsive="true"][data-mobile-position="bottom"][data-position="left"]:open {
+        opacity: 0;
+        transform: translateY(100%);
+      }
+    }
+
+    /* ========== MOBILE POSITION: TOP ========== */
+
+    /* Any position -> top sheet on mobile */
+    dialog[data-responsive="true"][data-mobile-position="top"] {
+      position: fixed !important;
+      inset: 0 0 auto 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 85vh;
+      height: auto;
+      border-radius: 0;
+      border-bottom-left-radius: 1rem;
+      border-bottom-right-radius: 1rem;
+      opacity: 0;
+      transform: translateY(-100%);
+      transition: opacity 300ms ease-out,
+                  transform 300ms ease-out,
+                  overlay 300ms allow-discrete,
+                  display 300ms allow-discrete;
+    }
+
+    dialog[data-responsive="true"][data-mobile-position="top"]:open {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @starting-style {
+      dialog[data-responsive="true"][data-mobile-position="top"]:open {
+        opacity: 0;
+        transform: translateY(-100%);
+      }
+    }
+
+    /* ========== MOBILE POSITION: CENTER ========== */
+    /* No transformation needed - dialog stays centered */
+    /* The default center styles apply, just make it full-width on mobile */
+
+    dialog[data-responsive="true"][data-mobile-position="center"] {
+      width: 90% !important;
+      max-width: 90% !important;
+      max-height: 85vh;
+    }
+  }
+
+  /* ============================================================================
+   * STATIC BACKDROP SHAKE ANIMATION
+   * ============================================================================
+   * When static_backdrop is enabled, clicking the backdrop or pressing Escape
+   * triggers a subtle shake animation to indicate the dialog won't close.
+   * ============================================================================ */
+
+  @keyframes dialog-shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+    20%, 40%, 60%, 80% { transform: translateX(2px); }
+  }
+
+  dialog.dialog-shake {
+    animation: dialog-shake 0.4s ease-out;
+  }
+
+  /* ============================================================================
+   * REDUCED MOTION SUPPORT
+   * ============================================================================
+   * Respect user preference for reduced motion by disabling animations.
+   * ============================================================================ */
+
+  @media (prefers-reduced-motion: reduce) {
+    dialog,
+    dialog::backdrop {
+      transition: none;
+    }
+
+    dialog.dialog-shake {
+      animation: none;
+    }
+  }
+
+  /* Reduced motion for responsive dialogs */
+  @media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+    dialog[data-responsive="true"],
+    dialog[data-responsive="true"][data-mobile-position="bottom"],
+    dialog[data-responsive="true"][data-mobile-position="top"],
+    dialog[data-responsive="true"][data-mobile-position="center"] {
+      transition: none;
+    }
+  }
+}

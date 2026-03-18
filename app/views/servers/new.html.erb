@@ -1,0 +1,10 @@
+<% content_for :title, "New Server · Conductor" %>
+
+<section class="max-w-2xl mx-auto px-4 py-10">
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold text-slate-900">New Server</h1>
+    <p class="mt-1 text-sm text-slate-500">Add a new VM to monitor.</p>
+  </div>
+
+  <%= render "form", server: @server %>
+</section>

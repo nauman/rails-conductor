@@ -1,0 +1,47 @@
+<div id="<%= message.dom_id %>" class="flex <%= message.user? ? 'justify-end' : 'justify-start' %>">
+  <div class="max-w-[80%]">
+    <% if message.user? %>
+      <div class="bg-slate-900 text-white px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed">
+        <%= message.content %>
+      </div>
+    <% elsif message.pending? || message.streaming? %>
+      <div class="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-bl-sm">
+        <div class="flex items-center gap-2 text-slate-400 text-sm">
+          <span class="flex gap-1">
+            <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+            <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+            <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+          </span>
+          <span>Conductor is thinking…</span>
+        </div>
+      </div>
+    <% elsif message.error? %>
+      <div class="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl rounded-bl-sm text-sm">
+        <%= message.content %>
+      </div>
+    <% else %>
+      <div class="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-bl-sm text-sm leading-relaxed text-slate-800 prose prose-sm max-w-none">
+        <%= simple_format(message.content.to_s) %>
+      </div>
+      <% if message.tool_executions.any? %>
+        <div class="mt-2 space-y-1">
+          <% message.tool_executions.each do |exec| %>
+            <div class="flex items-center gap-2 text-xs text-slate-500 px-1">
+              <% if exec.success? %>
+                <span class="text-emerald-500">✓</span>
+              <% elsif exec.failed? %>
+                <span class="text-rose-500">✗</span>
+              <% else %>
+                <span class="text-slate-400">…</span>
+              <% end %>
+              <span class="font-mono"><%= exec.tool_name %></span>
+              <% if exec.duration %>
+                <span class="text-slate-400">(<%= exec.duration %>s)</span>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+</div>

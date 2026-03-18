@@ -1,0 +1,59 @@
+@import "tailwindcss";
+/**
+ * Dark Mode Configuration (Tailwind v4)
+ * Uses data-theme attribute instead of class
+ * See: https://tailwindcss.com/docs/dark-mode
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+
+/* ============================================================================
+ * RapidRailsUI Gem Integration (Tailwind v4)
+ * ============================================================================
+ *
+ * EXPLANATION: Why are .rb and .erb files referenced in a CSS file?
+ *
+ * Tailwind v4 uses the @source directive to scan files for class names.
+ * It looks for literal strings like "bg-blue-500" or "text-red-600" in
+ * ANY file type (Ruby, ERB, HTML, JS, etc.) to know which CSS to generate.
+ *
+ * These paths point to the RapidRailsUI gem's component files, which contain
+ * Tailwind class names. Tailwind will scan them and generate the necessary CSS.
+ *
+ * The paths below are auto-updated by config/initializers/rapid_rails_ui_tailwind.rb
+ * on every Rails boot, so they stay correct even if the gem location changes.
+ * ============================================================================ */
+@source "/Users/naumantariq/.asdf/installs/ruby/3.4.3/lib/ruby/gems/3.4.0/gems/rapid_rails_ui-0.38.0/app/components/**/*.{rb,erb,js}";
+@source "/Users/naumantariq/.asdf/installs/ruby/3.4.3/lib/ruby/gems/3.4.0/gems/rapid_rails_ui-0.38.0/lib/rapid_rails_ui/helpers/**/*.{rb,erb,js}";
+
+
+
+/**
+ * RapidRailsUI Safelist - DO NOT REMOVE
+ * -------------------------------------
+ * This file explicitly tells Tailwind which color classes to generate.
+ * Required because RapidRailsUI uses dynamic color generation like "bg-#{color}-#{shade}".
+ * Without this, Tailwind can't detect these classes at build time.
+ *
+ * See app/assets/tailwind/safelist.css for details and customization options.
+ */
+@import './safelist.css';
+
+/**
+ * RapidRailsUI Dialog Component Styles
+ * -------------------------------------
+ * CSS that cannot be achieved with Tailwind utilities:
+ * - ::backdrop pseudo-element styling
+ * - @starting-style for entry animations
+ * - Position overrides for native dialog centering
+ *
+ * See app/assets/tailwind/rapid_rails_ui/dialog.css for details.
+ */
+@import './rapid_rails_ui/dialog.css';
+
+/**
+ * RapidRailsUI Theme Toggle Styles
+ * ---------------------------------
+ * CSS for dark mode toggle animation and icon visibility.
+ */
+@import './rapid_rails_ui/theme_toggle.css';

@@ -1,0 +1,36 @@
+<% content_for :title, "Sign in · Conductor" %>
+
+<section class="min-h-[80vh] flex items-center justify-center px-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <div class="inline-flex h-12 w-12 rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 text-white items-center justify-center text-lg font-semibold mb-4">
+        C
+      </div>
+      <h1 class="text-2xl font-semibold text-slate-900">Sign in to Conductor</h1>
+      <p class="mt-2 text-sm text-slate-500">Enter your email to receive a magic link</p>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <%= form_tag users_sign_in_path, method: :post, class: "space-y-4", data: { turbo: false } do %>
+        <div>
+          <label for="passwordless_email" class="block text-sm font-medium text-slate-700">Email address</label>
+          <input type="email" name="passwordless[email]" id="passwordless_email"
+                 required autofocus autocomplete="email"
+                 placeholder="you@example.com"
+                 class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm">
+        </div>
+
+        <div>
+          <button type="submit" class="w-full inline-flex justify-center items-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 cursor-pointer">
+            Send magic link
+          </button>
+        </div>
+      <% end %>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-slate-500">
+      We'll email you a secure link to sign in.<br>
+      No password required.
+    </p>
+  </div>
+</section>

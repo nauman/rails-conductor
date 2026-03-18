@@ -1,0 +1,373 @@
+/* ============================================================================
+ * RapidRailsUI Tailwind Safelist
+ * ============================================================================
+ *
+ * WHY IS THIS NEEDED?
+ * -------------------
+ * RapidRailsUI's ColorBuilder generates class names dynamically at runtime
+ * using string interpolation like "bg-#{color}-#{shade}".
+ *
+ * Tailwind v4 CANNOT detect these dynamic strings during build time, so we
+ * use this safelist to explicitly tell Tailwind which classes to generate.
+ *
+ * MINIMAL APPROACH:
+ * -----------------
+ * We only include the 7 shades actually used by current components:
+ * - Light mode: 100, 500, 600, 700, 800, 900, 950
+ * - Dark mode: 300, 400, 500, 600, 700, 800
+ *
+ * This generates ~3,000 classes (~600KB CSS) with dark mode support
+ * instead of 16,000+ (~4MB CSS) with all shades.
+ *
+ * NOTE: If you add custom components that need other shades (50, 200, etc.),
+ * add them to the patterns below. For example:
+ * @source inline("bg-{zinc,...}-{50,200}");
+ *
+ * ============================================================================ */
+
+/* ============================================================================
+ * OPTIMIZED CORE SHADES (Actually Used)
+ * ============================================================================
+ * Includes shades: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950
+ * Shade 50 is used by soft variants (accordion, textarea, dropdown)
+ * Shade 200 is used by soft variant hover states (soft_hover_bg)
+ * Shade 950 is used by dark mode soft variants and dark themes
+ * ============================================================================ */
+
+/* Background colors */
+@source inline("bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}");
+@source inline("hover:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}");
+
+/* Text colors */
+@source inline("text-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900}");
+@source inline("text-white text-black");
+
+/* Pure background colors (for :black and :white color support) */
+@source inline("bg-white bg-black");
+
+/* Border colors */
+@source inline("border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900}");
+
+/* Ring colors (focus states) */
+@source inline("focus-visible:ring-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900}");
+@source inline("focus:ring-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900}");
+
+/* ============================================================================
+ * DARK MODE VARIANTS
+ * ============================================================================
+ * These classes are used when the 'dark' class is present on <html>
+ * ColorBuilder uses lighter shades in dark mode for better contrast
+ * ============================================================================ */
+
+/* Dark mode: Background colors - shades: 100, 200, 300, 400, 500, 600, 700, 800, 900, 950 */
+@source inline("dark:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900,950}");
+@source inline("dark:hover:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900,950}");
+
+/* Dark mode: Text colors - shades: 100, 200, 300, 400, 500, 600, 700, 800, 900, 950 */
+@source inline("dark:text-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,200,300,400,500,600,700,800,900,950}");
+@source inline("dark:text-white dark:text-black");
+
+/* Dark mode: Border colors - shades: 400, 500, 700 */
+@source inline("dark:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,700}");
+
+/* Dark mode: Ring colors (focus states) - shades: 400, 500 */
+@source inline("dark:focus-visible:ring-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500}");
+
+/* ============================================================================
+ * PEER-CHECKED VARIANTS (for Checkbox Card/Pill/Button components)
+ * ============================================================================
+ * These classes are used by checkbox variants where CSS-only peer-checked
+ * styling is used. The input has class="peer" and sibling elements use
+ * peer-checked: to change appearance when the checkbox is checked.
+ *
+ * MINIMAL SHADES: Only the shades actually used by ColorBuilderHelper
+ * ============================================================================ */
+
+/* Light mode: peer-checked backgrounds and borders */
+@source inline("peer-checked:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,500,600,900}");
+@source inline("peer-checked:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,900}");
+
+/* For text colors, use explicit listings since variant patterns may not work in Tailwind v4 */
+@source inline("peer-checked:text-white peer-checked:text-black");
+@source inline("peer-checked:text-zinc-900 peer-checked:text-gray-900 peer-checked:text-neutral-900 peer-checked:text-stone-900 peer-checked:text-slate-900 peer-checked:text-red-900 peer-checked:text-orange-900 peer-checked:text-amber-900 peer-checked:text-yellow-900 peer-checked:text-lime-900 peer-checked:text-green-900 peer-checked:text-emerald-900 peer-checked:text-teal-900 peer-checked:text-cyan-900 peer-checked:text-sky-900 peer-checked:text-blue-900 peer-checked:text-indigo-900 peer-checked:text-violet-900 peer-checked:text-purple-900 peer-checked:text-fuchsia-900 peer-checked:text-pink-900 peer-checked:text-rose-900");
+
+/* Light mode: peer-checked hover states */
+@source inline("peer-checked:hover:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{100,700}");
+@source inline("peer-checked:hover:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,900}");
+@source inline("peer-checked:hover:text-white peer-checked:hover:text-black");
+
+/* Dark mode: peer-checked variants */
+@source inline("dark:peer-checked:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+@source inline("dark:peer-checked:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+
+/* For dark text colors, use explicit listings */
+@source inline("dark:peer-checked:text-white");
+@source inline("dark:peer-checked:text-zinc-100 dark:peer-checked:text-gray-100 dark:peer-checked:text-neutral-100 dark:peer-checked:text-stone-100 dark:peer-checked:text-slate-100 dark:peer-checked:text-red-100 dark:peer-checked:text-orange-100 dark:peer-checked:text-amber-100 dark:peer-checked:text-yellow-100 dark:peer-checked:text-lime-100 dark:peer-checked:text-green-100 dark:peer-checked:text-emerald-100 dark:peer-checked:text-teal-100 dark:peer-checked:text-cyan-100 dark:peer-checked:text-sky-100 dark:peer-checked:text-blue-100 dark:peer-checked:text-indigo-100 dark:peer-checked:text-violet-100 dark:peer-checked:text-purple-100 dark:peer-checked:text-fuchsia-100 dark:peer-checked:text-pink-100 dark:peer-checked:text-rose-100");
+
+@source inline("dark:peer-checked:hover:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,700}");
+@source inline("dark:peer-checked:hover:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+
+/* ============================================================================
+ * PEER-CHECKED/INDETERMINATE OPACITY (for Checkbox SVG visibility)
+ * ============================================================================
+ * The checkmark/indeterminate SVG inside checkbox wrappers uses:
+ * - opacity-0 (default hidden state)
+ * - peer-checked:opacity-100 (checkmark visible when checked)
+ * - peer-indeterminate:opacity-100 (minus icon visible when indeterminate)
+ * ============================================================================ */
+@source inline("peer-checked:opacity-100 peer-indeterminate:opacity-100 opacity-0 opacity-100");
+
+/* Direct CSS rules for checkmark/indeterminate visibility (fallback if @source doesn't work) */
+input.peer:checked ~ .peer-checked\:opacity-100 { opacity: 1; }
+input.peer:indeterminate ~ .peer-indeterminate\:opacity-100 { opacity: 1; }
+.opacity-0 { opacity: 0; }
+
+/* ============================================================================
+ * PEER-CHECKED TEXT COLOR UTILITIES
+ * ============================================================================
+ * Tailwind v4's @source inline() doesn't recognize variant modifiers.
+ * Use direct CSS sibling combinators instead of @apply with variant modifiers.
+ * ============================================================================ */
+
+/* Light mode: Apply text colors when peer input is checked */
+input.peer:checked ~ .peer-checked\:text-zinc-900 { @apply text-zinc-900; }
+input.peer:checked ~ .peer-checked\:text-gray-900 { @apply text-gray-900; }
+input.peer:checked ~ .peer-checked\:text-neutral-900 { @apply text-neutral-900; }
+input.peer:checked ~ .peer-checked\:text-stone-900 { @apply text-stone-900; }
+input.peer:checked ~ .peer-checked\:text-slate-900 { @apply text-slate-900; }
+input.peer:checked ~ .peer-checked\:text-red-900 { @apply text-red-900; }
+input.peer:checked ~ .peer-checked\:text-orange-900 { @apply text-orange-900; }
+input.peer:checked ~ .peer-checked\:text-amber-900 { @apply text-amber-900; }
+input.peer:checked ~ .peer-checked\:text-yellow-900 { @apply text-yellow-900; }
+input.peer:checked ~ .peer-checked\:text-lime-900 { @apply text-lime-900; }
+input.peer:checked ~ .peer-checked\:text-green-900 { @apply text-green-900; }
+input.peer:checked ~ .peer-checked\:text-emerald-900 { @apply text-emerald-900; }
+input.peer:checked ~ .peer-checked\:text-teal-900 { @apply text-teal-900; }
+input.peer:checked ~ .peer-checked\:text-cyan-900 { @apply text-cyan-900; }
+input.peer:checked ~ .peer-checked\:text-sky-900 { @apply text-sky-900; }
+input.peer:checked ~ .peer-checked\:text-blue-900 { @apply text-blue-900; }
+input.peer:checked ~ .peer-checked\:text-indigo-900 { @apply text-indigo-900; }
+input.peer:checked ~ .peer-checked\:text-violet-900 { @apply text-violet-900; }
+input.peer:checked ~ .peer-checked\:text-purple-900 { @apply text-purple-900; }
+input.peer:checked ~ .peer-checked\:text-fuchsia-900 { @apply text-fuchsia-900; }
+input.peer:checked ~ .peer-checked\:text-pink-900 { @apply text-pink-900; }
+input.peer:checked ~ .peer-checked\:text-rose-900 { @apply text-rose-900; }
+
+/* Dark mode: Apply text colors when peer input is checked */
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-zinc-100 { @apply dark:text-zinc-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-gray-100 { @apply dark:text-gray-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-neutral-100 { @apply dark:text-neutral-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-stone-100 { @apply dark:text-stone-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-slate-100 { @apply dark:text-slate-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-red-100 { @apply dark:text-red-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-orange-100 { @apply dark:text-orange-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-amber-100 { @apply dark:text-amber-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-yellow-100 { @apply dark:text-yellow-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-lime-100 { @apply dark:text-lime-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-green-100 { @apply dark:text-green-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-emerald-100 { @apply dark:text-emerald-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-teal-100 { @apply dark:text-teal-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-cyan-100 { @apply dark:text-cyan-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-sky-100 { @apply dark:text-sky-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-blue-100 { @apply dark:text-blue-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-indigo-100 { @apply dark:text-indigo-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-violet-100 { @apply dark:text-violet-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-purple-100 { @apply dark:text-purple-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-fuchsia-100 { @apply dark:text-fuchsia-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-pink-100 { @apply dark:text-pink-100; }
+:where([data-theme="dark"]) input.peer:checked ~ .dark\:peer-checked\:text-rose-100 { @apply dark:text-rose-100; }
+
+/* ============================================================================
+ * CHECKED/INDETERMINATE VARIANTS (for Checkbox/Radio components)
+ * ============================================================================
+ * These classes are used by checkbox/radio input elements directly.
+ * Uses @source inline() to generate checked: and indeterminate: variants.
+ *
+ * Shades based on ColorBuilderHelper#checkbox_shade_for:
+ * - Primary/neutral: 900 (light), 600 (dark)
+ * - Standard colors: 600 (light), 500 (dark)
+ * - Bright colors (amber, yellow, orange, lime): 500 (light), 400 (dark)
+ * ============================================================================ */
+
+/* Light mode: Checked backgrounds and borders */
+@source inline("checked:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,900}");
+@source inline("checked:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,900}");
+
+/* Light mode: Indeterminate (same as checked) */
+@source inline("indeterminate:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,900}");
+@source inline("indeterminate:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{500,600,900}");
+
+/* Dark mode: Checked backgrounds and borders (lighter shades) */
+@source inline("dark:checked:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+@source inline("dark:checked:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+
+/* Dark mode: Indeterminate (same as checked) */
+@source inline("dark:indeterminate:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+@source inline("dark:indeterminate:border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{400,500,600}");
+
+/* ============================================================================
+ * TOOLTIP/POPOVER ARROW CLASSES
+ * ============================================================================
+ * CSS triangle technique for arrows uses border-based triangles.
+ * Tooltip uses border-4, Popover uses border-8 for larger arrows.
+ * ============================================================================ */
+
+/* Border widths for triangles */
+@source inline("border-4 border-8");
+
+/* Directional border widths */
+@source inline("border-{l,r,t,b}-4 border-{l,r,t,b}-8");
+
+/* Transparent borders (triangle sides) */
+@source inline("border-{l,r,t,b}-transparent");
+
+/* Arrow colors - pointing direction border colors */
+@source inline("border-{t,r,b,l}-white border-{t,r,b,l}-black");
+@source inline("border-{t,r,b,l}-{zinc,gray,slate}-{800,900,950}");
+@source inline("dark:border-{t,r,b,l}-{zinc,gray,slate}-{800,950}");
+
+/* ============================================================================
+ * CIRCLE SHAPE PADDING OVERRIDES (for Badge, Button circle shapes)
+ * ============================================================================
+ * Circle shapes need to override size-based px/py padding with uniform padding.
+ * ShapeHelper uses !px-0 !py-0 to zero out, then component-specific padding
+ * like !px-1 !py-1 is added to create proper circular appearance.
+ *
+ * Using !important prefix to override size class padding.
+ * ============================================================================ */
+
+/* Important padding resets (ShapeHelper circle style) */
+@source inline("!px-0 !py-0");
+
+/* Important padding values for circle badges */
+@source inline("!px-1 !py-1 !px-1.5 !py-1.5 !px-2 !py-2 !px-2.5 !py-2.5 !px-3 !py-3");
+
+/* ============================================================================
+ * AVATAR SIZING CLASSES
+ * ============================================================================
+ * Avatar component uses specific width/height values for both standard UI
+ * sizes and platform-specific presets (Instagram, Twitter, LinkedIn, etc.).
+ *
+ * These must be safelisted because platform sizes use less common Tailwind
+ * values (w-28, w-36, w-64) that may not appear in app code, causing them
+ * to be excluded from production builds.
+ *
+ * Values breakdown:
+ * - Standard sizes (xs-xl6): 6, 8, 10, 12, 16, 20, 24, 32, 40, 48
+ * - Platform sizes: 5, 9, 14, 28, 36, 64
+ * ============================================================================ */
+
+/* All width/height values used by Avatar and LiveSearch components */
+@source inline("w-{5,6,8,9,10,11,12,14,16,20,24,28,32,36,40,48,64}");
+@source inline("h-{5,6,8,9,10,11,12,14,16,20,24,28,32,36,40,48,64}");
+
+/* ============================================================================
+ * SIZE UTILITIES (Combined width + height)
+ * ============================================================================
+ * Used by icons and other elements that need square sizing.
+ * size-3.5 = 14px, size-4 = 16px, size-5 = 20px, etc.
+ * ============================================================================ */
+
+@source inline("size-{3,3.5,4,5,6,8,10,12,16,20,24}");
+
+/* ============================================================================
+ * DATE COMPONENT CALENDAR SIZING
+ * ============================================================================
+ * Date picker calendar container needs these utilities for proper sizing
+ * on mobile and preventing overflow issues within tables.
+ * ============================================================================ */
+
+@source inline("w-max");
+@source inline("max-w-[calc(100vw-2rem)]");
+
+/* ============================================================================
+ * OPTIONAL SHADES (Uncomment if needed for custom components)
+ * ============================================================================
+ *
+ * Uncomment these lines if you need additional shades for badges, alerts,
+ * cards, or custom components. Each line adds ~88 classes to your CSS.
+ * ============================================================================ */
+
+/* Very light shades (50, 200, 300, 400) - for subtle backgrounds and borders */
+/* @source inline("bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,200,300,400}"); */
+/* @source inline("hover:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,200,300,400}"); */
+/* @source inline("text-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,200,300,400,500,700,800}"); */
+/* @source inline("border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,200,300,400}"); */
+
+/* ALL SHADES (uncomment this to enable all 11 shades - adds ~1,000 classes, ~600KB CSS) */
+/* @source inline("bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}"); */
+/* @source inline("hover:bg-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}"); */
+/* @source inline("text-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}"); */
+/* @source inline("border-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}"); */
+/* @source inline("focus-visible:ring-{zinc,gray,neutral,stone,slate,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800,900,950}"); */
+
+/* ============================================================================
+ * LIVE SEARCH MODAL COMPONENT
+ * ============================================================================
+ * Classes used by the LiveSearch component in modal mode.
+ * The dialog element uses the open: variant for styling when open.
+ * ============================================================================ */
+
+/* Dialog open state variants */
+@source inline("open:flex open:fixed open:inset-0 open:z-50");
+@source inline("open:w-screen open:h-screen open:max-w-none open:max-h-none");
+@source inline("open:items-start open:justify-center");
+@source inline("open:pt-[10vh] open:px-4 open:overflow-y-auto");
+
+/* Dialog backdrop (::backdrop pseudo-element) */
+@source inline("backdrop:bg-black/50 backdrop:backdrop-blur-sm");
+
+/* Modal panel sizing */
+@source inline("max-w-md max-w-lg max-w-2xl max-w-4xl");
+
+/* Modal structure */
+@source inline("rounded-xl shadow-2xl overflow-hidden");
+@source inline("max-h-96 overflow-y-auto");
+
+/* Modal trigger button */
+@source inline("gap-2 px-3 py-1.5");
+
+/* Keyboard hint styling */
+@source inline("min-w-[20px] h-5 text-[10px]");
+
+/* Hidden/shown states for clear button and loading */
+@source inline("hidden");
+
+/* ============================================================================
+ * LIVE SEARCH INPUT PADDING
+ * ============================================================================
+ * LiveSearch component uses dynamic padding classes for the search input
+ * to account for the search icon width. These are generated in styles.rb
+ * via INPUT_PADDING_CLASSES and not detected by Tailwind's scanner.
+ * ============================================================================ */
+
+/* Left padding for search icon space (sm: pl-8, base: pl-10, lg: pl-11) */
+@source inline("pl-8 pl-10 pl-11");
+
+/* Right padding for clear button space (sm: pr-8, base: pr-10, lg: pr-11) */
+@source inline("pr-8 pr-10 pr-11");
+/* ============================================================================
+ * TIMELINE VARIANT CUSTOM POSITIONING
+ * ============================================================================
+ * Timeline variant uses custom arbitrary values for positioning indicator circles
+ * on the timeline spine. These are not detectable by Tailwind's content scanner.
+ * ============================================================================ */
+
+/* Timeline indicator positioning - positioned absolutely on left spine */
+@source inline("-left-[17px]");
+
+
+/* ============================================================================
+ * STEPS COMPONENT CONNECTOR LINE SIZING
+ * ============================================================================
+ * Steps component uses fractional sizing for thin connector lines between
+ * step indicators. These values are not commonly used elsewhere and are
+ * easy for Tailwind scanner to miss in production builds.
+ *
+ * Used by all variants:
+ * - h-0.5: Horizontal connector lines (2px height)
+ * - w-0.5: Vertical connector lines (2px width)
+ * - h-1: Progress variant thicker connector (4px)
+ * - mt-0.5: Spacing between title and description in Timeline
+ * ============================================================================ */
+ @source inline("h-0.5 w-0.5 h-1 mt-0.5");

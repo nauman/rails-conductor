@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title><%= content_for(:title) || "Conductor" %></title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Conductor">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
+    <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body class="bg-slate-50 text-slate-900 font-sans antialiased">
+    <div class="min-h-screen flex flex-col">
+      <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
+        <div class="max-w-7xl mx-auto px-4">
+          <div class="h-14 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 text-white flex items-center justify-center text-sm font-semibold">
+                C
+              </div>
+              <div class="leading-tight">
+                <div class="text-sm font-semibold text-slate-900">Conductor</div>
+                <div class="text-xs text-slate-500">Ops control panel</div>
+              </div>
+              <div class="ml-2">
+                <%= render 'shared/theme_toggle' %>
+              </div>
+            </div>
+            <% if user_signed_in? %>
+              <nav class="flex items-center gap-1 text-sm font-medium text-slate-600">
+                <%= link_to "Overview", root_path, class: "px-3 py-1.5 rounded-full #{request.path == '/' ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Chat", conversations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/conversations') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Servers", servers_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/servers') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Apps", apps_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/apps') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Backups", backups_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/backups') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Credentials", credentials_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/credentials') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "SSH Keys", ssh_keys_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/ssh_keys') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <% if current_admin? %>
+                  <%= link_to "Users", users_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/users') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <% end %>
+                <span class="ml-2 text-slate-300">|</span>
+                <span class="ml-2 text-xs text-slate-500"><%= current_user.email %></span>
+                <% if current_admin? %>
+                  <span class="text-xs text-amber-600">(admin)</span>
+                <% end %>
+                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "ml-2 px-3 py-1.5 rounded-full text-slate-500 hover:bg-slate-100" %>
+              </nav>
+            <% else %>
+              <%= link_to "Sign in", user_sign_in_path, class: "px-3 py-1.5 rounded-full bg-slate-900 text-white text-sm font-medium" %>
+            <% end %>
+          </div>
+        </div>
+      </header>
+
+      <main class="flex-1">
+        <% if notice.present? %>
+          <div class="bg-emerald-50 border-b border-emerald-200">
+            <div class="max-w-7xl mx-auto px-4 py-3">
+              <p class="text-sm text-emerald-800"><%= notice %></p>
+            </div>
+          </div>
+        <% end %>
+        <% if alert.present? %>
+          <div class="bg-rose-50 border-b border-rose-200">
+            <div class="max-w-7xl mx-auto px-4 py-3">
+              <p class="text-sm text-rose-800"><%= alert %></p>
+            </div>
+          </div>
+        <% end %>
+        <%= yield %>
+      </main>
+
+      <footer class="border-t border-slate-200 bg-white">
+        <div class="max-w-7xl mx-auto px-4 py-6 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span>Conductor Ops · Rails 8 + Turbo</span>
+          <span>Monitoring VMs, R2 backups, and Active Storage</span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
