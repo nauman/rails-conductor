@@ -13,10 +13,10 @@
 ## Build Order
 
 1. `docs/plans/recurring-ops-schedule.md` — turn existing jobs into actual continuous operations
-2. `docs/plans/routing-caddy.md` — make native and multi-app hosting reachable
-3. `docs/plans/cloudflare.md` + `docs/plans/domains-dns.md` + `docs/plans/provisioning-hetzner.md` — complete domain, DNS, and server automation
+2. `docs/plans/caddy-client.md` + `docs/plans/routing-caddy.md` — make native and multi-app hosting reachable
+3. `docs/plans/cloudflare.md` + `docs/plans/domains-dns.md` + `docs/plans/provisioning-hetzner.md` + `docs/plans/server-bootstrap.md` — complete domain, DNS, server creation, and bootstrap automation
 4. `docs/plans/monitoring-ops.md` + `docs/plans/logs-observability.md` — deepen daily-use operational workflows
-5. `docs/plans/backups-r2.md` + `docs/plans/data-layer.md` — complete restore, verification, and database operations
+5. `docs/plans/backups-r2.md` + `docs/plans/postgres-restore.md` + `docs/plans/data-layer.md` — complete restore, verification, and database operations
 6. `docs/plans/deployment-kamal.md` — revisit richer Docker backend support after routing and provider automation are in place
 
 ## Implemented
@@ -34,14 +34,17 @@
 | File | Covers | Main Gap | Pillar |
 | --- | --- | --- | --- |
 | `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Not yet configured in `recurring.yml` | Continuous maintenance |
+| `docs/plans/caddy-client.md` | Caddy Admin API service boundary and failure model | Service does not exist yet | Routing and edge |
 | `docs/plans/backups-r2.md` | `pg_dump` to R2 with scheduling | Restore, verification, PITR | Data and backups |
 | `docs/plans/cloudflare.md` | Cloudflare DNS and R2 credentials/setup | Actual API calls and validation | Provisioning and provider automation |
 | `docs/plans/domains-dns.md` | Domain management via Cloudflare | DNS CRUD, validation, alerts | Routing and edge |
 | `docs/plans/routing-caddy.md` | Caddy Admin API route sync | Entire API client and reconciliation loop | Routing and edge |
+| `docs/plans/server-bootstrap.md` | Post-creation host bootstrap workflow | No end-to-end bootstrap automation | Provisioning and provider automation |
 | `docs/plans/ssh-keys.md` | SSH key storage and management | Hetzner key registration | Provisioning and provider automation |
 | `docs/plans/active-storage.md` | Blob tracking and cleanup per app | Cleanup workflow and automation | Data and backups |
 | `docs/plans/logs-observability.md` | Centralized log access | Storage, filters, analytics | Continuous maintenance |
 | `docs/plans/portainer-docker.md` | Docker container state from hosts | Portainer API deferred | Fleet control |
+| `docs/plans/postgres-restore.md` | Restore flow, verification, and safety model | Restore workflow does not exist | Data and backups |
 | `docs/plans/sc-001-kamal-monitoring.md` | Monitoring dashboard for Docker apps | Dashboard widgets and scheduling | Fleet control |
 
 ## Stale or Deferred
