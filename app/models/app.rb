@@ -88,7 +88,15 @@ class App < ApplicationRecord
   end
 
   def can_sync_status?
-    server&.ssh_configured?
+    docker? && server&.ssh_configured?
+  end
+
+  def status_fresh?
+    last_status_check_at.present? && last_status_check_at > 5.minutes.ago
+  end
+
+  def status_stale?
+    docker? && can_sync_status? && !status_fresh?
   end
 
   def update_container_status!(new_status, error: nil, started_at: nil)

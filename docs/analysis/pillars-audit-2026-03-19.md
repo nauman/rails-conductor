@@ -44,7 +44,7 @@ operational state across the entire fleet.
 
 | Capability | Status | Detail |
 |---|---|---|
-| Recurring metrics schedule | MISSING | `recurring.yml` has only 1 job (queue cleanup) |
+| Recurring metrics schedule | PARTIAL | Metrics, container sync, and backup dispatch are scheduled; deeper failure surfacing remains |
 | Native app status checks | MISSING | No `systemctl status` polling for systemd services |
 | Historical metrics storage | MISSING | Snapshots only, no time-series table |
 | Dashboard widgets/scheduling | MISSING | No auto-refresh, no widget framework |
@@ -64,7 +64,7 @@ operational state across the entire fleet.
 
 The fleet dashboard works and shows real data. The gap is that metrics and container status are
 not on a recurring schedule, so the data goes stale unless manually refreshed. Adding recurring
-jobs to `recurring.yml` is the lowest-effort, highest-impact fix across all pillars.
+jobs to `recurring.yml` was the lowest-effort, highest-impact fix across all pillars.
 
 ### Plan Coverage
 
@@ -364,7 +364,7 @@ and alerting. This is what makes Conductor a daily-use product, not just a deplo
 
 | Capability | Status | Detail |
 |---|---|---|
-| Recurring job scheduling | PARTIAL | Only 1 job in `recurring.yml` (queue cleanup) |
+| Recurring job scheduling | PARTIAL | Metrics, container sync, and backup dispatch are scheduled; recurring failure surfacing still missing |
 | Auto security updates | MISSING | No unattended-upgrades automation |
 | Drift detection | MISSING | Mentioned in docs, zero implementation |
 | Certificate expiry monitoring | MISSING | No cert tracking or expiry alerts |
@@ -378,7 +378,7 @@ and alerting. This is what makes Conductor a daily-use product, not just a deplo
 
 - `app/mailers/alert_mailer.rb` — 3 alert methods (backup, server, deploy)
 - `app/views/alert_mailer/` — HTML email templates
-- `config/recurring.yml` — Only `clear_solid_queue_finished_jobs` configured
+- `config/recurring.yml` — Metrics, container sync, backup dispatch, and queue cleanup configured
 - `app/jobs/refresh_server_metrics_job.rb` — Exists but not scheduled
 - `app/jobs/sync_container_status_job.rb` — Exists but not scheduled
 - `app/jobs/run_scheduled_backups_job.rb` — Exists but not scheduled
@@ -390,7 +390,7 @@ Email alerts for the three critical failure paths (backup, server offline, deplo
 end-to-end. The dashboard aggregates issues with severity levels. But the system doesn't
 run on its own — the recurring jobs that would make it a continuous monitoring product are
 not configured. This is the cheapest fix with the most impact: adding 3–4 entries to
-`recurring.yml` makes metrics, container sync, and backup scheduling automatic.
+`recurring.yml` now makes metrics, container sync, and backup scheduling automatic.
 
 ### Plan Coverage
 
@@ -525,7 +525,7 @@ Capabilities that need plans but don't have one:
 Aligned with `docs/plans/INDEX.md` and `docs/VISION.md` Phase 1–4.
 
 ### Phase 1: Make the core loop work (Deploy → Route → Live)
-1. **Recurring job scheduling** — Add metrics, container sync, and backup scheduler to `recurring.yml`
+1. **Recurring job scheduling** — Expand beyond baseline scheduling into recurring failure surfacing and queue tuning
 2. **CaddyClient service** — HTTP client for Caddy Admin API with route CRUD and sync
 3. **Postgres restore** — Download from R2/S3, run pg_restore, verify integrity
 

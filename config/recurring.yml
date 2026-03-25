@@ -9,7 +9,38 @@
 #     priority: 2
 #     schedule: at 5am every day
 
+development:
+  refresh_server_metrics:
+    class: RefreshServerMetricsJob
+    queue: ops
+    schedule: every 5 minutes
+
+  sync_container_status:
+    class: SyncContainerStatusJob
+    queue: ops
+    schedule: every 2 minutes
+
+  run_scheduled_backups:
+    class: RunScheduledBackupsJob
+    queue: ops
+    schedule: every minute
+
 production:
+  refresh_server_metrics:
+    class: RefreshServerMetricsJob
+    queue: ops
+    schedule: every 5 minutes
+
+  sync_container_status:
+    class: SyncContainerStatusJob
+    queue: ops
+    schedule: every 2 minutes
+
+  run_scheduled_backups:
+    class: RunScheduledBackupsJob
+    queue: ops
+    schedule: every minute
+
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12

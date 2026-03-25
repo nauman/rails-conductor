@@ -4,6 +4,7 @@ class ServerMetrics
     echo "MEM_USED:$(free -m | awk 'NR==2{print $3}' 2>/dev/null || echo '0')"
     echo "MEM_TOTAL:$(free -m | awk 'NR==2{print $2}' 2>/dev/null || echo '0')"
     echo "DISK:$(df -h / | awk 'NR==2{print $5}' | tr -d '%' 2>/dev/null || echo '0')"
+    echo "UPTIME:$(cut -d' ' -f1 /proc/uptime 2>/dev/null | cut -d'.' -f1 || echo '0')"
   BASH
 
   attr_reader :server, :ssh, :error
@@ -59,6 +60,8 @@ class ServerMetrics
         metrics[:memory_total_mb] = $1.to_i
       when /^DISK:(.+)/
         metrics[:disk_percent] = $1.to_i
+      when /^UPTIME:(.+)/
+        metrics[:uptime_seconds] = $1.to_i
       end
     end
 

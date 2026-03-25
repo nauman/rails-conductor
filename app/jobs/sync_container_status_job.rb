@@ -1,5 +1,5 @@
 class SyncContainerStatusJob < ApplicationJob
-  queue_as :default
+  queue_as :ops
 
   def perform(app_id = nil)
     if app_id

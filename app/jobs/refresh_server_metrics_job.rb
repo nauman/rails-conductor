@@ -1,5 +1,5 @@
 class RefreshServerMetricsJob < ApplicationJob
-  queue_as :default
+  queue_as :ops
 
   def perform(server_id = nil)
     if server_id

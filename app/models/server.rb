@@ -23,9 +23,9 @@ class Server < ApplicationRecord
   end
 
   def formatted_uptime
-    return "—" unless last_seen_at
+    return "—" if uptime_seconds.to_i.zero?
 
-    seconds = Time.current - created_at
+    seconds = uptime_seconds.to_i
     days = (seconds / 86400).to_i
     hours = ((seconds % 86400) / 3600).to_i
 
@@ -56,12 +56,17 @@ class Server < ApplicationRecord
     metrics_updated_at.present? && metrics_updated_at > 5.minutes.ago
   end
 
+  def metrics_stale?
+    ssh_configured? && !metrics_fresh?
+  end
+
   def update_metrics!(metrics)
     update!(
       cpu_percent: metrics[:cpu_percent],
       memory_used_mb: metrics[:memory_used_mb],
       memory_total_mb: metrics[:memory_total_mb],
       disk_percent: metrics[:disk_percent],
+      uptime_seconds: metrics[:uptime_seconds],
       status: "online",
       last_seen_at: Time.current,
       metrics_updated_at: Time.current

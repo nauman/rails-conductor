@@ -52,14 +52,27 @@ class DashboardController < ApplicationController
       issues << { type: "server", severity: "warning", resource: server, message: "Server is degraded" }
     end
 
+    Server.order(:name).each do |server|
+      next unless server.metrics_stale?
+      next if server.status == "offline"
+
+      issues << { type: "server", severity: "warning", resource: server, message: "Server metrics are stale" }
+    end
+
     # High CPU servers (>80%)
-    Server.where("cpu_percent > 80").each do |server|
+    Server.where("cpu_percent > 80").where("metrics_updated_at > ?", 5.minutes.ago).each do |server|
       issues << { type: "server", severity: "warning", resource: server, message: "High CPU usage (#{server.cpu_percent}%)" }
     end
 
     # High disk servers (>85%)
-    Server.where("disk_percent > 85").each do |server|
+    Server.where("disk_percent > 85").where("metrics_updated_at > ?", 5.minutes.ago).each do |server|
       issues << { type: "server", severity: "warning", resource: server, message: "High disk usage (#{server.disk_percent}%)" }
+    end
+
+    App.includes(:server).order(:name).each do |app|
+      next unless app.status_stale?
+
+      issues << { type: "app", severity: "warning", resource: app, message: "Container status is stale" }
     end
 
     # Failed apps
@@ -80,6 +93,12 @@ class DashboardController < ApplicationController
     # Failed backups
     Backup.where(status: "failed").where("created_at > ?", 7.days.ago).each do |backup|
       issues << { type: "backup", severity: "warning", resource: backup, message: "Backup failed" }
+    end
+
+    Backup.enabled.find_each do |backup|
+      next unless backup.dispatch_overdue?
+
+      issues << { type: "backup", severity: "warning", resource: backup, message: "Scheduled backup dispatch is overdue" }
     end
 
     # Sort by severity (critical first)

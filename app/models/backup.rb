@@ -73,6 +73,12 @@ class Backup < ApplicationRecord
     end
   end
 
+  def dispatch_overdue?
+    return false unless enabled? && next_run_at.present?
+
+    next_run_at < dispatch_grace_period.ago
+  end
+
   def mark_completed!
     update!(
       status: "completed",
@@ -104,5 +110,20 @@ class Backup < ApplicationRecord
     end
 
     update!(next_run_at: next_time)
+  end
+
+  private
+
+  def dispatch_grace_period
+    case schedule
+    when "hourly"
+      15.minutes
+    when "daily"
+      2.hours
+    when "weekly", "monthly"
+      6.hours
+    else
+      1.hour
+    end
   end
 end

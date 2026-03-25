@@ -33,7 +33,7 @@
 
 | File | Covers | Main Gap | Pillar |
 | --- | --- | --- | --- |
-| `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Not yet configured in `recurring.yml` | Continuous maintenance |
+| `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Recurring jobs now run; failure surfacing and queue tuning remain | Continuous maintenance |
 | `docs/plans/caddy-client.md` | Caddy Admin API service boundary and failure model | Service does not exist yet | Routing and edge |
 | `docs/plans/backups-r2.md` | `pg_dump` to R2 with scheduling | Restore, verification, PITR | Data and backups |
 | `docs/plans/cloudflare.md` | Cloudflare DNS and R2 credentials/setup | Actual API calls and validation | Provisioning and provider automation |

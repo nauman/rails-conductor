@@ -1,5 +1,5 @@
 class RunScheduledBackupsJob < ApplicationJob
-  queue_as :default
+  queue_as :ops
 
   def perform
     Backup.due.find_each do |backup|

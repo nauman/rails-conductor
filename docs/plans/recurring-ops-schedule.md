@@ -9,9 +9,9 @@ Partial
 ## Current Reality
 
 - The core jobs already exist for metrics refresh, container status sync, and scheduled backup dispatch.
-- `config/recurring.yml` only schedules queue cleanup.
-- `config/recurring.yml` currently only has a `production:` block, which makes local schedule testing awkward.
-- The dashboard and issue model depend on fresh data, but the product does not continuously collect it yet.
+- `config/recurring.yml` now schedules metrics refresh, container status sync, and scheduled backup dispatch in both development and production.
+- The dashboard now has first-pass stale-data issue detection for stale metrics, stale container status, and overdue backup dispatch.
+- Remaining gaps are recurring failure surfacing, queue concurrency tuning, and native-service freshness.
 - `RefreshServerMetricsJob` fans out into one SSH-backed job per server.
 - `SyncContainerStatusJob` fans out into one SSH-backed job per app and currently only covers Docker/container status, not native `systemctl` health.
 
