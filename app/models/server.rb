@@ -52,6 +52,10 @@ class Server < ApplicationRecord
     ssh_port.presence || 22
   end
 
+  def caddy_admin_port
+    caddy_port.presence || 2019
+  end
+
   def metrics_fresh?
     metrics_updated_at.present? && metrics_updated_at > 5.minutes.ago
   end

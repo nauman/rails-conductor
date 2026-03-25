@@ -30,14 +30,20 @@ class AddDomainTool
     server = Server.find_by(id: input['server_id'])
     return Result.fail("Server not found: #{input['server_id']}") unless server
 
-    # Caddy Admin API is on port 2019 — call via SSH tunnel or direct if accessible
-    # For now, record the intent and return instructions
+    route = CaddyClient.new(server).upsert_route(
+      domain: input['domain'],
+      upstream: input['upstream']
+    )
+
     Result.ok({
-      domain:   input['domain'],
+      domain: input['domain'],
       upstream: input['upstream'],
-      server:   server.name,
-      message:  "Domain #{input['domain']} → #{input['upstream']} on #{server.name}. " \
-                "Run the app-setup script first to ensure the socket exists, then this route will be active."
+      server: server.name,
+      route_id: route['route_id'],
+      action: route['action'],
+      message: "Domain #{input['domain']} now routes to #{input['upstream']} on #{server.name}."
     })
+  rescue CaddyClient::Error => e
+    Result.fail(e.message)
   end
 end

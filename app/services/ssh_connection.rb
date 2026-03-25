@@ -45,6 +45,56 @@ class SshConnection
     end
   end
 
+  def execute_with_status(command)
+    @error = nil
+    @output = nil
+
+    return failure_result("No SSH key configured") unless server.ssh_key.present?
+    return failure_result("No IP address configured") unless server.ip_address.present?
+
+    stdout = +""
+    stderr = +""
+    exit_code = nil
+
+    Net::SSH.start(
+      server.ip_address,
+      server.ssh_user_or_default,
+      **ssh_options
+    ) do |ssh|
+      channel = ssh.open_channel do |ch|
+        ch.exec(command) do |ch2, success|
+          raise "Could not execute command on remote" unless success
+
+          ch2.on_data { |_channel, data| stdout << data }
+          ch2.on_extended_data { |_channel, _type, data| stderr << data }
+          ch2.on_request("exit-status") { |_channel, data| exit_code = data.read_long }
+        end
+      end
+      channel.wait
+      ssh.loop
+    end
+
+    exit_code ||= 0
+    @output = stdout.presence || stderr.presence
+
+    if exit_code.zero?
+      { success: true, exit_code: exit_code, stdout: stdout, stderr: stderr, output: @output }
+    else
+      @error = stderr.presence || stdout.presence || "Remote command failed"
+      { success: false, exit_code: exit_code, stdout: stdout, stderr: stderr, output: @output }
+    end
+  rescue Net::SSH::AuthenticationFailed => e
+    failure_result("Authentication failed: #{e.message}")
+  rescue Errno::ECONNREFUSED => e
+    failure_result("Connection refused: #{e.message}")
+  rescue Errno::ETIMEDOUT, Net::SSH::ConnectionTimeout => e
+    failure_result("Connection timed out: #{e.message}")
+  rescue SocketError => e
+    failure_result("Could not resolve hostname: #{e.message}")
+  rescue => e
+    failure_result("SSH error: #{e.message}")
+  end
+
   # Execute a script body with real-time streaming. Yields [:stdout/:stderr, data] chunks.
   # Returns { success: bool, exit_code: int }
   def execute_stream(script_body, &block)
@@ -116,5 +166,10 @@ class SshConnection
   def failure(message)
     @error = message
     nil
+  end
+
+  def failure_result(message)
+    @error = message
+    { success: false, exit_code: 1, stdout: "", stderr: "", output: nil }
   end
 end

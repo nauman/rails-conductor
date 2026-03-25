@@ -26,10 +26,16 @@ class RemoveDomainTool
     server = Server.find_by(id: input['server_id'])
     return Result.fail("Server not found: #{input['server_id']}") unless server
 
+    route = CaddyClient.new(server).remove_route(input['domain'])
+
     Result.ok({
-      domain:  input['domain'],
-      server:  server.name,
+      domain: input['domain'],
+      server: server.name,
+      route_id: route['route_id'],
+      action: route['action'],
       message: "Domain #{input['domain']} removed from Caddy on #{server.name}."
     })
+  rescue CaddyClient::Error => e
+    Result.fail(e.message)
   end
 end
