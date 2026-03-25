@@ -41,9 +41,7 @@
 | `docs/plans/routing-caddy.md` | Caddy Admin API route sync | Entire API client and reconciliation loop | Routing and edge |
 | `docs/plans/server-bootstrap.md` | Post-creation host bootstrap workflow | No end-to-end bootstrap automation | Provisioning and provider automation |
 | `docs/plans/ssh-keys.md` | SSH key storage and management | Hetzner key registration | Provisioning and provider automation |
-| `docs/plans/active-storage.md` | Blob tracking and cleanup per app | Cleanup workflow and automation | Data and backups |
 | `docs/plans/logs-observability.md` | Centralized log access | Storage, filters, analytics | Continuous maintenance |
-| `docs/plans/portainer-docker.md` | Docker container state from hosts | Portainer API deferred | Fleet control |
 | `docs/plans/postgres-restore.md` | Restore flow, verification, and safety model | Restore workflow does not exist | Data and backups |
 | `docs/plans/sc-001-kamal-monitoring.md` | Monitoring dashboard for Docker apps | Dashboard widgets and scheduling | Fleet control |
 
@@ -54,6 +52,8 @@
 | `docs/plans/deployment-kamal.md` | Dynamic Kamal config generation | Current implementation uses SSH + Docker; revisit later | Runtime backends |
 | `docs/plans/provisioning-hetzner.md` | Hetzner API VM creation | Never started | Provisioning and provider automation |
 | `docs/plans/data-layer.md` | Managed Postgres strategy | Over-scoped for current product stage | Data and backups |
+| `docs/plans/active-storage.md` | Managed-app blob visibility and cleanup | Deferred until a justified, safe integration path exists | Data and backups |
+| `docs/plans/portainer-docker.md` | Docker inventory beyond managed app lifecycle | Deferred; core Docker operations already exist and Portainer is dropped | Fleet control |
 | `docs/plans/gpt-assistant.md` | AI ops helper | Deferred until core control plane is stable | Cross-cutting |
 | `docs/plans/addons-billing.md` | Tiers and billing | Deferred until core is stable | Cross-cutting |
 | `docs/plans/workspaces.md` | Multi-tenant workspace model | Placeholder only | Cross-cutting |

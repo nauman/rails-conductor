@@ -74,7 +74,7 @@ jobs to `recurring.yml` is the lowest-effort, highest-impact fix across all pill
 | `conductor-phase-2-ssh.md` | Implemented | — |
 | `monitoring-ops.md` | Implemented | Recurring schedule, trends, advanced alerts |
 | `sc-001-kamal-monitoring.md` | Partial | Dashboard widgets, scheduling |
-| `portainer-docker.md` | Partial | Portainer API deferred |
+| `portainer-docker.md` | Deferred | Core Docker operations already exist; remaining scope is optional hygiene |
 | `logs-observability.md` | Partial | Log storage, filtering, analytics |
 
 ### Missing Plans
@@ -333,7 +333,7 @@ the priority gaps. Cluster lifecycle features (replication, failover, upgrades) 
 |---|---|---|
 | `backups-r2.md` | Partial | Backup works; restore, verification, encryption missing |
 | `data-layer.md` | Stale | Over-scoped; no lightweight Postgres ops replacement |
-| `active-storage.md` | Partial | Blob tracking framework; cleanup workflow missing |
+| `active-storage.md` | Deferred | Per-app blob visibility requires invasive integration and cleanup is out of scope |
 
 ### Missing Plans
 
