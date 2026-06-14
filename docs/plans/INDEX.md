@@ -7,7 +7,7 @@
 - Strategy: `docs/VISION.md`
 - Current reality: `docs/analysis/pillars-audit-2026-03-19.md`
 - User use cases: `docs/scenarios/INDEX.md`
-- Session history: `docs/sessions/`
+- Session history: `docs/sessions/INDEX.md`
 - Legacy feature inventory: `docs/backlogs/prd.json`
 
 ## Build Order
@@ -34,11 +34,11 @@
 | File | Covers | Main Gap | Pillar |
 | --- | --- | --- | --- |
 | `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Recurring jobs now run; failure surfacing and queue tuning remain | Continuous maintenance |
-| `docs/plans/caddy-client.md` | Caddy Admin API service boundary and failure model | Service does not exist yet | Routing and edge |
+| `docs/plans/caddy-client.md` | Caddy Admin API service boundary and failure model | Baseline SSH-backed client exists; route persistence, richer validation, and cert/drift workflows remain | Routing and edge |
 | `docs/plans/backups-r2.md` | `pg_dump` to R2 with scheduling | Restore, verification, PITR | Data and backups |
 | `docs/plans/cloudflare.md` | Cloudflare DNS and R2 credentials/setup | Actual API calls and validation | Provisioning and provider automation |
 | `docs/plans/domains-dns.md` | Domain management via Cloudflare | DNS CRUD, validation, alerts | Routing and edge |
-| `docs/plans/routing-caddy.md` | Caddy Admin API route sync | Entire API client and reconciliation loop | Routing and edge |
+| `docs/plans/routing-caddy.md` | Caddy Admin API route sync | Baseline route CRUD exists; persistence, reconciliation, deploy hooks, and certificate/drift workflows remain | Routing and edge |
 | `docs/plans/server-bootstrap.md` | Post-creation host bootstrap workflow | No end-to-end bootstrap automation | Provisioning and provider automation |
 | `docs/plans/ssh-keys.md` | SSH key storage and management | Hetzner key registration | Provisioning and provider automation |
 | `docs/plans/logs-observability.md` | Centralized log access | Storage, filters, analytics | Continuous maintenance |
@@ -69,5 +69,5 @@
 
 - Treat each plan as a PRD for one capability area.
 - Update status here when a plan moves from deferred to active, or from partial to implemented.
-- Record shipped work in `docs/sessions/` and then reflect it here.
+- Record shipped work in `docs/sessions/INDEX.md` and linked session docs, then reflect it here.
 - Keep `docs/analysis/pillars-audit-2026-03-19.md` aligned with this index.

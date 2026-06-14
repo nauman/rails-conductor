@@ -35,8 +35,8 @@ operational state across the entire fleet.
 | Deployment lifecycle tracking | COMPLETE | pending → building → deploying → succeeded/failed |
 | Dashboard with fleet summary | COMPLETE | Server counts, app counts, issue aggregation |
 | Issue detection | COMPLETE | Offline servers, high CPU/disk, failed deploys/backups |
-| Server metrics collection | PARTIAL | CPU/RAM/disk via SSH — works but not on recurring schedule |
-| Container status sync | PARTIAL | `docker inspect` polling — works but not scheduled |
+| Server metrics collection | PARTIAL | CPU/RAM/disk via SSH with recurring refresh now scheduled |
+| Container status sync | PARTIAL | `docker inspect` polling with recurring sync now scheduled |
 | API token authentication | COMPLETE | External API surface with token auth |
 | Real-time streaming | COMPLETE | ActionCable for deploy logs, script output |
 
@@ -55,16 +55,16 @@ operational state across the entire fleet.
 - `app/controllers/dashboard_controller.rb` — Issue aggregation and fleet stats
 - `app/services/server_metrics.rb` — CPU, memory, disk collection via SSH
 - `app/services/container_status.rb` — Docker inspect parsing
-- `app/jobs/refresh_server_metrics_job.rb` — Metrics job (not scheduled)
-- `app/jobs/sync_container_status_job.rb` — Container polling (not scheduled)
+- `app/jobs/refresh_server_metrics_job.rb` — Metrics job scheduled via `config/recurring.yml`
+- `app/jobs/sync_container_status_job.rb` — Container polling scheduled via `config/recurring.yml`
 - `app/models/server.rb` — Server model with provider, status, metrics
 - `app/models/app.rb` — App model with deploy method, container tracking
 
 ### Verdict
 
-The fleet dashboard works and shows real data. The gap is that metrics and container status are
-not on a recurring schedule, so the data goes stale unless manually refreshed. Adding recurring
-jobs to `recurring.yml` was the lowest-effort, highest-impact fix across all pillars.
+The fleet dashboard works and now refreshes its core operational data on a recurring schedule.
+The remaining gap is not baseline freshness anymore. The remaining gap is deeper failure
+surfacing, historical trends, and richer operational views.
 
 ### Plan Coverage
 
@@ -79,7 +79,6 @@ jobs to `recurring.yml` was the lowest-effort, highest-impact fix across all pil
 
 ### Missing Plans
 
-- **Recurring job infrastructure** — No plan defines what jobs run, how often, failure handling. Every pillar depends on this.
 - **Historical metrics** — No plan for time-series storage, trend analysis, or capacity forecasting.
 - **Notification channels** — No plan for Slack, webhooks, or PagerDuty beyond email.
 
@@ -163,26 +162,27 @@ certificates, and traffic state across the fleet.
 | App domain field | COMPLETE | Stored in database per app |
 | SSL enabled flag | COMPLETE | Per-app boolean, used in URL helper |
 | Server caddy_port field | COMPLETE | Schema tracks Caddy admin port per server |
-| Add/remove domain tools | PARTIAL | AI tools exist but are stubs — no actual API calls |
+| Add/remove domain tools | PARTIAL | Tools now call `CaddyClient`, but only cover baseline route add/remove flows |
 
 ### What's Missing
 
 | Capability | Status | Detail |
 |---|---|---|
-| Caddy Admin API client | MISSING | Zero implementation |
-| Route CRUD | MISSING | Can't add/remove/list routes at runtime |
+| Caddy Admin API client | PARTIAL | SSH-backed `CaddyClient` exists for config fetch, route mutation, snapshots, and health checks |
+| Route CRUD | PARTIAL | Baseline add/remove/list flows exist through `CaddyClient`, but no persisted desired-state model exists yet |
 | Route sync/reconciliation | MISSING | No desired-state vs actual-state comparison |
-| Dynamic route management | MISSING | Domains stored but don't route traffic |
+| Dynamic route management | PARTIAL | Managed tool-driven routes can now be published, but deploy-driven routing is not integrated yet |
 | SSL/TLS certificate lifecycle | MISSING | No cert provisioning, expiry tracking, or renewal |
 | Multi-app routing on one server | MISSING | Schema supports it, Caddy not configured |
 | Port allocation | MISSING | Manual port assignment, no conflict detection |
 | Route drift detection | MISSING | No comparison of DB state vs Caddy config |
-| Certificate status queries | MISSING | Can't ask Caddy about cert state |
+| Certificate status queries | PARTIAL | Basic managed-route certificate status surface exists, but not real lifecycle visibility |
 
 ### Key Files
 
-- `app/tools/add_domain_tool.rb` — STUBBED (43 lines, returns fake success)
-- `app/tools/remove_domain_tool.rb` — STUBBED (35 lines, returns fake success)
+- `app/services/caddy_client.rb` — SSH-backed Caddy Admin API client
+- `app/tools/add_domain_tool.rb` — Baseline route publication through `CaddyClient`
+- `app/tools/remove_domain_tool.rb` — Baseline route removal through `CaddyClient`
 - `app/models/app.rb` — `domain`, `ssl_enabled`, `port` fields
 - `app/models/server.rb` — `caddy_port` field
 - `caddy_ops_ui_architecture.md` — Architecture vision (unimplemented)
@@ -190,21 +190,20 @@ certificates, and traffic state across the fleet.
 
 ### Verdict
 
-This is the single biggest gap in the system. Apps can be deployed but traffic can't reach
-them because there is no Caddy Admin API client. The `CaddyClient` service is the #1 build
-priority across all pillars. Everything downstream — native multi-app hosting, domain
-automation, certificate management — depends on this existing.
+This is still one of the biggest product gaps, but it has moved from “no routing layer exists”
+to “the routing foundation exists but the product workflow is incomplete.” Apps can publish
+baseline managed routes now, but there is still no first-class route state, deploy-hook
+integration, reconciliation loop, or certificate lifecycle.
 
 ### Plan Coverage
 
 | Plan | Status | Gap |
 |---|---|---|
-| `routing-caddy.md` | Partial | Vision exists; entire API client, sync job, and cert lifecycle unbuilt |
+| `routing-caddy.md` | Partial | Baseline client exists; sync job, deploy integration, and cert lifecycle remain unbuilt |
 | `domains-dns.md` | Partial | Domain schema exists; DNS CRUD, validation, alerts unbuilt |
 
 ### Missing Plans
 
-- **CaddyClient service spec** — `routing-caddy.md` describes the vision but doesn't spec the service: HTTP client, route data model, error handling, retry logic, SSH tunnel strategy.
 - **Certificate lifecycle** — No plan for cert expiry monitoring, renewal automation, manual cert upload, or Caddy auto-HTTPS coordination.
 - **Port allocation** — No plan for auto-assigning ports to native apps or detecting conflicts on shared servers.
 
@@ -266,12 +265,12 @@ does all of this.
 |---|---|---|
 | `cloudflare.md` | Partial | Credential storage works; API calls, validation missing |
 | `provisioning-hetzner.md` | Stale | Never started |
+| `server-bootstrap.md` | Partial | Workflow is planned, but no end-to-end automation exists |
 | `ssh-keys.md` | Partial | Key storage works; Hetzner registration missing |
 | `domains-dns.md` | Partial | Schema works; DNS CRUD missing |
 
 ### Missing Plans
 
-- **Server bootstrap flow** — No plan for the post-creation sequence: Hetzner creates VM → wait for IP → SSH in → run provision scripts → verify ready → register in Conductor.
 - **Credential validation** — No plan for testing API keys against provider APIs before saving.
 - **Provisioning wizard** — No plan for the guided UI flow: pick provider → pick plan → pick region → set domain → deploy.
 
@@ -337,7 +336,7 @@ the priority gaps. Cluster lifecycle features (replication, failover, upgrades) 
 
 ### Missing Plans
 
-- **Postgres restore** — No plan for downloading from cloud, running pg_restore, verifying integrity, or restore drills. This is the single most important gap in this pillar.
+- **Postgres restore follow-through** — The plan exists, but the workflow is still entirely unimplemented. Download, restore, verification, and drills remain the highest-risk gap in this pillar.
 - **Database health monitoring** — No plan for pg_isready checks, connection pool visibility, slow query detection, or replication lag.
 - **Backup encryption** — `backups-r2.md` asks the question but no plan answers it.
 
@@ -356,8 +355,8 @@ and alerting. This is what makes Conductor a daily-use product, not just a deplo
 | Server offline email alerts | COMPLETE | End-to-end with affected apps listed |
 | Deployment failure email alerts | COMPLETE | End-to-end with log excerpt |
 | Dashboard issue aggregation | PARTIAL | Detects offline, high CPU/disk, failed deploys/backups |
-| Server metrics collection | PARTIAL | Works via SSH but not on recurring schedule |
-| Container status polling | PARTIAL | Works via SSH but not on recurring schedule |
+| Server metrics collection | PARTIAL | Works via SSH with recurring refresh scheduled |
+| Container status polling | PARTIAL | Works via SSH with recurring sync scheduled |
 | Solid Queue framework | COMPLETE | Database-backed job runner with Puma plugin |
 
 ### What's Missing
@@ -379,18 +378,18 @@ and alerting. This is what makes Conductor a daily-use product, not just a deplo
 - `app/mailers/alert_mailer.rb` — 3 alert methods (backup, server, deploy)
 - `app/views/alert_mailer/` — HTML email templates
 - `config/recurring.yml` — Metrics, container sync, backup dispatch, and queue cleanup configured
-- `app/jobs/refresh_server_metrics_job.rb` — Exists but not scheduled
-- `app/jobs/sync_container_status_job.rb` — Exists but not scheduled
-- `app/jobs/run_scheduled_backups_job.rb` — Exists but not scheduled
+- `app/jobs/refresh_server_metrics_job.rb` — Scheduled via `config/recurring.yml`
+- `app/jobs/sync_container_status_job.rb` — Scheduled via `config/recurring.yml`
+- `app/jobs/run_scheduled_backups_job.rb` — Scheduled via `config/recurring.yml`
 - `app/controllers/dashboard_controller.rb` — `collect_issues` method
 
 ### Verdict
 
 Email alerts for the three critical failure paths (backup, server offline, deploy) work
-end-to-end. The dashboard aggregates issues with severity levels. But the system doesn't
-run on its own — the recurring jobs that would make it a continuous monitoring product are
-not configured. This is the cheapest fix with the most impact: adding 3–4 entries to
-`recurring.yml` now makes metrics, container sync, and backup scheduling automatic.
+end-to-end. The dashboard aggregates issues with severity levels. The baseline recurring
+jobs are now configured, so the system does run its core freshness loop automatically.
+The next maintenance gap is failure surfacing, drift detection, certificate monitoring,
+and broader operational automation.
 
 ### Plan Coverage
 
@@ -401,7 +400,6 @@ not configured. This is the cheapest fix with the most impact: adding 3–4 entr
 
 ### Missing Plans
 
-- **Recurring ops schedule** — No plan defines what jobs run, at what interval, with what failure handling. Needs: metrics refresh (5 min), container sync (2 min), backup scheduler (1 min), server health check (5 min).
 - **Drift detection** — No plan for comparing expected state (DB) vs actual state (server). Needs: Caddy route drift, package version drift, service status drift, file permission drift.
 - **Auto security updates** — No plan for setting up unattended-upgrades, tracking update status, or scheduling maintenance windows.
 - **Certificate monitoring** — No plan for tracking cert expiry dates, alerting before expiry, or coordinating with Caddy auto-HTTPS.
@@ -445,22 +443,21 @@ control plane.
 - Docker deploy over SSH with streaming logs
 - 5 built-in provisioning scripts
 - Backup creation and scheduling to S3/R2
+- SSH-backed Caddy route publication and removal for managed domain tooling
 - Email alerts for backup failures, server offline, deploy failures
 - Dashboard with fleet status, issue detection, server metrics
 - API token auth and external API surface
 
 ### What's stubbed/partial (needs completion)
 
-- Native Puma/systemd deployment (works but no Caddy routing)
-- Server metrics collection (works but not on recurring schedule)
-- Container status sync (works but not scheduled)
+- Native Puma/systemd deployment (works but still lacks deploy-driven routing)
+- Server metrics collection (works with recurring freshness but no trend history)
+- Container status sync (works with recurring freshness but no deeper failure surfacing)
 - R2/S3 backup uploads (CLI over SSH, no SDK)
-- Domain tools (AI tool stubs, no actual API calls)
+- Domain tools (real Caddy-backed baseline, but not yet a full routing workflow)
 
 ### What's missing entirely (needs building)
 
-- Caddy Admin API client (the routing layer — #1 priority)
-- Recurring job scheduling in `recurring.yml`
 - Postgres restore from cloud backup
 - Hetzner API client (server provisioning)
 - Cloudflare DNS API client (domain management)
@@ -482,10 +479,6 @@ Capabilities that need plans but don't have one:
 
 | Missing Plan | Pillar | Why It Matters |
 |---|---|---|
-| Recurring ops schedule | 1, 6 | Every pillar assumes jobs run automatically — none are scheduled |
-| CaddyClient service spec | 3 | routing-caddy.md has vision but no service-level spec |
-| Postgres restore | 5 | Backup without restore is a liability |
-| Server bootstrap flow | 4 | Post-creation automation doesn't exist |
 | Certificate lifecycle | 3 | No cert tracking, expiry alerts, or renewal coordination |
 | Port allocation | 3 | Native multi-app hosting needs auto-port assignment |
 | Release versioning/rollback | 2 | No image history, no way to roll back |
@@ -525,8 +518,8 @@ Capabilities that need plans but don't have one:
 Aligned with `docs/plans/INDEX.md` and `docs/VISION.md` Phase 1–4.
 
 ### Phase 1: Make the core loop work (Deploy → Route → Live)
-1. **Recurring job scheduling** — Expand beyond baseline scheduling into recurring failure surfacing and queue tuning
-2. **CaddyClient service** — HTTP client for Caddy Admin API with route CRUD and sync
+1. **Recurring job follow-through** — Expand beyond baseline scheduling into recurring failure surfacing and queue tuning
+2. **Routing productization** — Add route persistence, deploy hooks, validation, reconciliation, and drift handling on top of `CaddyClient`
 3. **Postgres restore** — Download from R2/S3, run pg_restore, verify integrity
 
 ### Phase 2: Automate infrastructure (Provider APIs)

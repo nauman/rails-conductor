@@ -9,8 +9,8 @@ Partial
 ## Current Reality
 
 - Native deploys can run, but route wiring does not exist.
-- Domain add/remove tools are stubs.
-- Caddy Admin API integration is missing.
+- Domain add/remove tools now route through `CaddyClient`.
+- Caddy Admin API integration exists as an SSH-backed baseline service.
 - SSL state is mostly metadata, not an operational system.
 
 ## Goal

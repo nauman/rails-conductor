@@ -50,10 +50,3 @@
  * See app/assets/tailwind/rapid_rails_ui/dialog.css for details.
  */
 @import './rapid_rails_ui/dialog.css';
-
-/**
- * RapidRailsUI Theme Toggle Styles
- * ---------------------------------
- * CSS for dark mode toggle animation and icon visibility.
- */
-@import './rapid_rails_ui/theme_toggle.css';

@@ -26,8 +26,9 @@ This is a compact roadmap snapshot. For the canonical plan set, use `docs/plans/
 - [ ] Surface recurring-job failure patterns and deeper freshness history
 
 ### 2. Routing and Edge
-- [ ] Build Caddy Admin API client
-- [ ] Add route CRUD, validation, and reconciliation
+- [x] Build Caddy Admin API client
+- [x] Add baseline route CRUD and validation via domain tools
+- [ ] Add route persistence, reconciliation, and deploy-hook integration
 - [ ] Make native and multi-app hosting reachable
 
 ### 3. Provisioning and Provider Automation
@@ -55,3 +56,4 @@ This is a compact roadmap snapshot. For the canonical plan set, use `docs/plans/
 - 2026-03-19: Build order prioritizes routing and provider automation before deeper runtime abstraction.
 - 2026-03-25: Active Storage and Portainer/Docker deep inventory were deferred after the full plan audit.
 - 2026-03-25: Recurring operations scheduling moved from planning into implementation.
+- 2026-03-25: The SSH-first `CaddyClient` baseline shipped; remaining routing work moved to persistence, reconciliation, and deploy integration.

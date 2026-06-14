@@ -70,6 +70,10 @@ gem "sentry-ruby"
 gem "sentry-rails"
 
 group :development, :test do
+  # Pin minitest to the 5.x line: minitest 6 changed Runnable#run's arity and
+  # breaks Rails 8.1's line_filtering test runner (silently reports "0 runs").
+  gem "minitest", "~> 5.27"
+
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
 

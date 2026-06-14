@@ -15,13 +15,16 @@ This is a compact feature snapshot. For the full capability map, use `docs/plans
 - [x] Database backups to S3/R2-compatible storage
 - [x] Dashboard issue detection and fleet summary
 - [x] API token authentication and external API surface
+- [x] Recurring ops baseline for metrics refresh, container sync, and scheduled backups
+- [x] SSH-backed Caddy route management for managed add/remove domain tooling
 
 ## Partial Capabilities
 
 - [ ] Native Puma/systemd deployment without full routing
-- [ ] Cloudflare and domain flows without working API automation
+- [ ] Cloudflare and full domain lifecycle flows without provider API automation
 - [ ] R2 backup uploads without full bucket-management workflows
 - [ ] Monitoring data with recurring freshness but without trend history or recurring-failure surfacing
+- [ ] Caddy routing without route persistence, deploy hooks, reconciliation, or certificate lifecycle
 - [ ] Log visibility without runtime log storage or deeper filtering
 - [ ] Server bootstrap and provider provisioning without full end-to-end automation
 - [ ] Postgres recovery planning without shipped restore execution

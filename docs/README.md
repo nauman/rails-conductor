@@ -14,6 +14,7 @@ Project docs for Conductor (Rails 8 + Turbo + Importmaps + Tailwind). Start with
 │   └── INDEX.md
 ├── docs/analysis/       # Audits, gap maps, and current-state research
 ├── docs/sessions/       # Session logs and implementation history
+│   └── INDEX.md
 ├── docs/dev/            # Development docs
 │   ├── INDEX.md
 │   ├── ROADMAP.md

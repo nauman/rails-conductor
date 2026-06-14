@@ -3,7 +3,7 @@
 ## Project Context
 
 - Conductor is a Rails 8 app with Turbo, Importmaps, and Tailwind.
-- The UI focuses on monitoring VMs, Cloudflare R2 backups, and Active Storage.
+- The UI focuses on fleet monitoring (servers/VMs), Docker deploys, database backups to S3/R2, and Caddy routing. Active Storage introspection is deferred (see `docs/dev/FEATURES.md`).
 - Documentation lives under `docs/` and should stay concise and actionable.
 
 ## Git Commits

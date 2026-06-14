@@ -1,0 +1,135 @@
+# Using Conductor
+
+Conductor is a Rails 8 control plane for self-hosted operations. You run it as a web app; it connects to your servers over SSH and talks to Caddy, Postgres, and (increasingly) provider APIs on your behalf. This guide covers the surfaces you actually interact with: the **web UI**, the **JSON API**, the **MCP server** for AI agents, and the built-in **chat**.
+
+> A dedicated `conductor` command-line tool is on the roadmap — not shipped yet. Until then, the JSON API below is the way to drive Conductor from scripts.
+
+---
+
+## Getting Started
+
+**Requirements:** Ruby (see `.ruby-version`), and the system dependencies in `bin/setup`. Conductor runs on Rails 8 with Turbo, Importmaps, Tailwind, and Solid Queue.
+
+```bash
+git clone https://github.com/nauman/rails-conductor.git
+cd rails-conductor
+bin/setup        # installs gems, prepares the database
+bin/dev          # boots the app (web + assets + jobs)
+```
+
+Then open http://localhost:3000.
+
+**Run the tests:**
+
+```bash
+bin/rails test
+```
+
+---
+
+## Signing In (Web UI)
+
+Conductor uses **passwordless (magic link) login**. Enter your email, click the link that's delivered, and you're in. In development, outgoing mail is captured by Letter Opener at http://localhost:3000/letter_opener.
+
+The first/admin users manage everyone else under **Users** (admin only). Admin accounts also act as the system actor for AI/MCP calls.
+
+### What you can do in the UI
+
+| Area | Path | What it does |
+|------|------|--------------|
+| Dashboard | `/` | Fleet summary, health, and detected issues |
+| Servers | `/servers` | Register hosts, test SSH, refresh metrics, provision |
+| Apps | `/apps` | Manage apps; deploy, stop, restart, view logs, sync status |
+| SSH Keys | `/ssh_keys` | Store encrypted SSH keys |
+| Credentials | `/credentials` | Store encrypted provider/API credentials |
+| Scripts | `/scripts` | Provisioning/deploy scripts, run with live output |
+| Backups | `/backups` | Create and run database backups |
+| Chat | `/conversations` | Natural-language orchestration over your fleet |
+
+Long-running operations (provision, deploy, script runs) stream their output live via ActionCable.
+
+---
+
+## JSON API
+
+For scripts and external integrations. Base path: `/api/v1`. Auth is a **Bearer API token**.
+
+**Get a token:** generate one in the web UI (the token-exchange endpoint is intentionally not enabled — tokens are issued from the UI so they're tied to a signed-in user). Then send it on every request:
+
+```bash
+curl -H "Authorization: Bearer $CONDUCTOR_TOKEN" \
+     https://your-conductor.example.com/api/v1/status
+```
+
+### Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/v1/status` | Fleet health summary |
+| `GET` | `/api/v1/servers` | List servers |
+| `GET` | `/api/v1/servers/:id` | Server detail |
+| `POST` | `/api/v1/servers` | Register a server |
+| `POST` | `/api/v1/servers/:id/provision` | Provision a server |
+| `GET` | `/api/v1/servers/:id/metrics` | Server metrics |
+| `GET` | `/api/v1/apps` | List apps |
+| `GET` | `/api/v1/apps/:id` | App detail |
+| `POST` | `/api/v1/apps/:id/deploy` | Deploy an app |
+| `POST` | `/api/v1/apps/:id/stop` / `restart` | Control an app |
+| `GET` | `/api/v1/apps/:id/logs` | App logs |
+| `GET` | `/api/v1/scripts` | List scripts |
+| `POST` | `/api/v1/scripts/run` | Run a script |
+| `GET` | `/api/v1/backups` | List backups |
+| `POST` | `/api/v1/backups/:id/run` | Run a backup |
+| `GET` | `/api/v1/tokens` | List your API tokens |
+| `DELETE` | `/api/v1/tokens/:id` | Revoke a token |
+
+Errors return JSON: `401` for a bad/missing token, `404` for unknown records, `422` for invalid input.
+
+---
+
+## MCP Server (for AI Agents)
+
+Conductor exposes its tools over the **Model Context Protocol** so any MCP-compatible agent (Claude Desktop, Cursor, the chat interface, etc.) can drive the fleet.
+
+- **Auth:** Bearer token from the `CONDUCTOR_MCP_TOKEN` environment variable. If it's unset, the endpoint returns `503` (MCP not configured).
+- **Actor:** MCP calls run as the first admin user.
+
+```bash
+# List available tools
+curl -H "Authorization: Bearer $CONDUCTOR_MCP_TOKEN" \
+     https://your-conductor.example.com/mcp/list
+
+# Call a tool
+curl -X POST -H "Authorization: Bearer $CONDUCTOR_MCP_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"fleet_status","input":{}}' \
+     https://your-conductor.example.com/mcp/call
+```
+
+### Available tools
+
+| Tool | What it does |
+|------|--------------|
+| `fleet_status` | List all servers with status, apps, and health metrics |
+| `run_script` | Run a provisioning/deployment script on a server (creates a ScriptRun, enqueues the job) |
+| `recent_logs` | Show recent script-run or deployment logs |
+| `deploy_app` | Deploy an app by running its `app-deploy` script |
+| `add_domain` | Add a domain to Caddy, routing it to an app's socket/port |
+| `remove_domain` | Remove a domain from Caddy |
+
+Tool definitions (names, descriptions, input schemas) come from `GET /mcp/list`, generated by `ToolRegistry`. These are the same tools the chat interface uses.
+
+---
+
+## Chat
+
+The **Conversations** area (`/conversations`) is a natural-language layer over the same tools. Describe what you want — "show me the fleet status", "deploy app X", "add example.com to server Y" — and it plans and runs the operation using the MCP tools above, with the same execution engine the UI and API use.
+
+---
+
+## Where to Go Next
+
+- `docs/PILLARS.md` — the six areas of the product and where help is wanted.
+- `docs/scenarios/` — end-to-end flows (publish a route, restore a backup, create a server, connect a domain, move an app, detect drift).
+- `docs/plans/INDEX.md` — capability plans (PRDs) grouped by pillar.
+- `docs/VISION.md` — the longer-term direction.

@@ -9,14 +9,14 @@ Partial
 ## Current Reality
 
 - Conductor stores app domains, ports, and Caddy-related metadata.
-- Native deploys and multi-app routing stop at the service boundary because no Caddy Admin API service exists.
-- Domain add/remove tools are placeholders and do not reach a real Caddy instance.
+- An SSH-backed `CaddyClient` now exists and reaches the host-local Caddy Admin API with remote `curl`.
+- Domain add/remove tools now call the real client for baseline route creation and removal.
 - `SshConnection` supports remote command execution and streaming, but not SSH port forwarding.
-- The higher-level routing plan exists, but the service boundary that makes it implementable is still missing.
+- The higher-level routing plan now has a usable service boundary, but route persistence, deploy hooks, and drift workflows are still missing.
 
 ## Goal
 
-Define and build the `CaddyClient` service as the operational foundation for route publication, route inspection, certificate visibility, and route drift detection.
+Extend the shipped `CaddyClient` into the full operational foundation for route publication, route inspection, certificate visibility, and route drift detection.
 
 ## Why This Plan Exists
 
@@ -292,14 +292,14 @@ Conductor behavior:
 
 ## Integration Points
 
-### Existing tool stubs
+### Existing tool entry points
 
-`add_domain_tool.rb` and `remove_domain_tool.rb` already exist as tool stubs.
+`add_domain_tool.rb` and `remove_domain_tool.rb` are now wired to `CaddyClient`.
 
-This plan should treat them as downstream integration points:
+This plan should treat them as stable downstream integration points:
 
-- replace fake success responses
-- route those tools through `CaddyClient`
+- preserve the tool names and calling convention
+- enrich their responses with persisted route and validation state
 - keep tool behavior aligned with the same ownership and validation model as the web UI
 
 ### Recurring ops
@@ -339,7 +339,7 @@ Likely additions or clarifications:
 3. Define route-state persistence and snapshot storage.
 4. Implement config fetch, route upsert, and route removal.
 5. Add validation and snapshot support.
-6. Rewire existing add/remove domain tools to the real client.
+6. Persist route state and validation results in first-class app data.
 7. Add certificate inspection and route drift support.
 8. Integrate reconciliation into recurring operations.
 
