@@ -2,12 +2,16 @@
 service: conductor
 
 # Name of the container image.
-image: your-user/conductor
+image: <%= ENV["KAMAL_REGISTRY_USERNAME"] || "your-user" %>/conductor
 
 # Deploy to these servers.
 servers:
   web:
-    - <%= ENV["DEPLOY_SERVER_IP"] || "YOUR_HETZNER_IP" %>
+    - <%= ENV["DEPLOY_SERVER_IP"] || "YOUR_SERVER_IP" %>
+
+# Connect to the host as a non-root deploy user (set up with key auth + sudo).
+ssh:
+  user: <%= ENV["DEPLOY_SSH_USER"] || "deploy" %>
 
 # Enable SSL auto certification via Let's Encrypt.
 # Set Cloudflare SSL/TLS to "Full" if using Cloudflare.
@@ -15,9 +19,9 @@ proxy:
   ssl: true
   host: <%= ENV["APP_HOST"] || "conductor.example.com" %>
 
-# Container registry (ghcr.io, hub.docker.com, etc.)
+# Container registry (Docker Hub by default; override via KAMAL_REGISTRY_SERVER).
 registry:
-  server: ghcr.io
+  server: <%= ENV["KAMAL_REGISTRY_SERVER"] || "docker.io" %>
   username: <%= ENV["KAMAL_REGISTRY_USERNAME"] || "your-user" %>
   password:
     - KAMAL_REGISTRY_PASSWORD
@@ -38,8 +42,8 @@ env:
     # Set number of cores available to the application on each server.
     WEB_CONCURRENCY: 2
 
-    # Database connection
-    DATABASE_HOST: <%= ENV["DATABASE_HOST"] || "localhost" %>
+    # Database connection (points at the Postgres accessory container below)
+    DATABASE_HOST: <%= ENV["DATABASE_HOST"] || "conductor-postgres" %>
     DATABASE_USERNAME: <%= ENV["DATABASE_USERNAME"] || "conductor" %>
     DATABASE_NAME: conductor_production
 
@@ -70,3 +74,20 @@ asset_path: /rails/public/assets
 # Configure the image builder.
 builder:
   arch: amd64
+
+# Shared Postgres on this host. This box is a multi-app server: run one cluster
+# and give each app its own database/role. Container is reachable by other
+# Kamal apps on the shared network as "conductor-postgres".
+accessories:
+  postgres:
+    image: postgres:16
+    host: <%= ENV["DEPLOY_SERVER_IP"] || "YOUR_SERVER_IP" %>
+    port: "127.0.0.1:5432:5432"
+    env:
+      clear:
+        POSTGRES_USER: <%= ENV["DATABASE_USERNAME"] || "conductor" %>
+        POSTGRES_DB: conductor_production
+      secret:
+        - POSTGRES_PASSWORD
+    volumes:
+      - conductor_postgres_data:/var/lib/postgresql/data
