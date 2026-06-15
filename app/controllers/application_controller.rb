@@ -9,8 +9,9 @@ class ApplicationController < ActionController::Base
 
   # Require authentication for all controllers except sign in
   before_action :authenticate_user!
+  before_action :set_current_organization
 
-  helper_method :current_user, :user_signed_in?, :current_admin?
+  helper_method :current_user, :user_signed_in?, :current_admin?, :current_organization
 
   rescue_from ActiveRecord::RecordNotFound do |_exception|
     respond_to do |format|
@@ -36,6 +37,22 @@ class ApplicationController < ActionController::Base
 
   def current_admin?
     current_user&.admin?
+  end
+
+  def current_organization
+    Current.organization
+  end
+
+  # Establish the active organization for the request. Self-heals users created
+  # before orgs existed by ensuring they have a personal org.
+  def set_current_organization
+    return unless current_user
+
+    Current.user = current_user
+    current_user.ensure_personal_organization!
+    Current.organization =
+      current_user.organizations.find_by(id: session[:organization_id]) ||
+      current_user.organizations.first
   end
 
   def authenticate_user!

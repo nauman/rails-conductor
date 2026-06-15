@@ -12,10 +12,18 @@ class User < ApplicationRecord
     normalized_email = email.downcase.strip
 
     if User.count.zero?
-      create!(email: normalized_email, admin: true)
+      create!(email: normalized_email, admin: true).tap(&:ensure_personal_organization!)
     else
       find_by(email: normalized_email)
     end
+  end
+
+  # Every user belongs to at least one organization. Creates a personal org
+  # (owned by the user) if they don't yet belong to any.
+  def ensure_personal_organization!
+    return organizations.first if organizations.any?
+
+    Organization.create_for(self, name: email.split("@").first)
   end
 
   has_many :memberships, dependent: :destroy

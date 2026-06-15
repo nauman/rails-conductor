@@ -55,6 +55,7 @@
                   <%= link_to "Users", users_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/users') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <% end %>
                 <span class="ml-2 text-slate-300">|</span>
+                <%= render "organizations/switcher" %>
                 <span class="ml-2 text-xs text-slate-500"><%= current_user.email %></span>
                 <% if current_admin? %>
                   <span class="text-xs text-amber-600">(admin)</span>

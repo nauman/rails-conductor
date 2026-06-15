@@ -56,6 +56,13 @@ Rails.application.routes.draw do
     end
   end
 
+  # Organizations — switch the active org (members only)
+  resources :organizations, only: [:index] do
+    member do
+      post :switch
+    end
+  end
+
   # Letter opener web (development only)
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 

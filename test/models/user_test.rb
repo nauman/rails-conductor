@@ -18,4 +18,26 @@ class UserTest < ActiveSupport::TestCase
       assert_nil User.fetch_resource_for_passwordless("stranger@example.com")
     end
   end
+
+  test "ensure_personal_organization! creates one org owned by the user" do
+    user = User.create!(email: "solo@example.com")
+    assert_difference -> { Organization.count }, 1 do
+      user.ensure_personal_organization!
+    end
+    assert user.organizations.first.owner?(user)
+  end
+
+  test "ensure_personal_organization! is idempotent" do
+    user = User.create!(email: "solo@example.com")
+    user.ensure_personal_organization!
+    assert_no_difference -> { Organization.count } do
+      user.ensure_personal_organization!
+    end
+  end
+
+  test "the bootstrapped first user gets a personal organization" do
+    user = User.fetch_resource_for_passwordless("boss@example.com")
+    assert user.organizations.any?
+    assert user.organizations.first.owner?(user)
+  end
 end
