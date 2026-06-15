@@ -5,13 +5,16 @@ class User < ApplicationRecord
 
   scope :admins, -> { where(admin: true) }
 
-  # Auto-create users on sign-in. First user becomes admin.
+  # Sign-in is invite-only. The very first user bootstraps as the platform
+  # admin (webmaster); after that, only existing users can request a magic link
+  # — unknown emails get nothing (no auto-signup, no user enumeration).
   def self.fetch_resource_for_passwordless(email)
     normalized_email = email.downcase.strip
-    is_first_user = User.count.zero?
 
-    find_or_create_by!(email: normalized_email) do |user|
-      user.admin = is_first_user
+    if User.count.zero?
+      create!(email: normalized_email, admin: true)
+    else
+      find_by(email: normalized_email)
     end
   end
 
