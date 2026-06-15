@@ -1,10 +1,5 @@
 source "https://rubygems.org"
 
-# RapidRails UI components
-source "https://gem.fury.io/rapidrailsui" do
-  gem "rapid_rails_ui"
-end
-
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.1.1"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]

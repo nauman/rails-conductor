@@ -7,29 +7,8 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 
-/* ============================================================================
- * RapidRailsUI Gem Integration (Tailwind v4)
- * ============================================================================
- *
- * EXPLANATION: Why are .rb and .erb files referenced in a CSS file?
- *
- * Tailwind v4 uses the @source directive to scan files for class names.
- * It looks for literal strings like "bg-blue-500" or "text-red-600" in
- * ANY file type (Ruby, ERB, HTML, JS, etc.) to know which CSS to generate.
- *
- * These paths point to the RapidRailsUI gem's component files, which contain
- * Tailwind class names. Tailwind will scan them and generate the necessary CSS.
- *
- * The paths below are auto-updated by config/initializers/rapid_rails_ui_tailwind.rb
- * on every Rails boot, so they stay correct even if the gem location changes.
- * ============================================================================ */
-@source "/Users/naumantariq/.asdf/installs/ruby/3.4.3/lib/ruby/gems/3.4.0/gems/rapid_rails_ui-0.38.0/app/components/**/*.{rb,erb,js}";
-@source "/Users/naumantariq/.asdf/installs/ruby/3.4.3/lib/ruby/gems/3.4.0/gems/rapid_rails_ui-0.38.0/lib/rapid_rails_ui/helpers/**/*.{rb,erb,js}";
-
-
-
 /**
- * RapidRailsUI Safelist - DO NOT REMOVE
+ * Color Safelist
  * -------------------------------------
  * This file explicitly tells Tailwind which color classes to generate.
  * Required because RapidRailsUI uses dynamic color generation like "bg-#{color}-#{shade}".
