@@ -34,6 +34,8 @@ env:
     - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
     - ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY
     - ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
+    - SES_SMTP_USERNAME
+    - SES_SMTP_PASSWORD
     - SENTRY_DSN
   clear:
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
@@ -50,8 +52,9 @@ env:
     # Application host
     APP_HOST: <%= ENV["APP_HOST"] || "conductor.example.com" %>
 
-    # Mailer
+    # Mailer (SES SMTP host; credentials come from secrets above)
     MAILER_FROM: <%= ENV["MAILER_FROM"] || "noreply@conductor.example.com" %>
+    SES_SMTP_HOST: <%= ENV["SES_SMTP_HOST"] || "email-smtp.us-east-1.amazonaws.com" %>
 
     # Storage
     AWS_REGION: <%= ENV["AWS_REGION"] || "us-east-1" %>

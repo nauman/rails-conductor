@@ -66,8 +66,8 @@ Rails.application.configure do
   config.action_mailer.smtp_settings = {
     address: ENV.fetch("SES_SMTP_HOST", "email-smtp.us-east-1.amazonaws.com"),
     port: 587,
-    user_name: Rails.application.credentials.dig(:ses, :smtp_username),
-    password: Rails.application.credentials.dig(:ses, :smtp_password),
+    user_name: ENV["SES_SMTP_USERNAME"] || Rails.application.credentials.dig(:ses, :smtp_username),
+    password: ENV["SES_SMTP_PASSWORD"] || Rails.application.credentials.dig(:ses, :smtp_password),
     authentication: :login,
     enable_starttls_auto: true
   }
