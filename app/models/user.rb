@@ -18,6 +18,8 @@ class User < ApplicationRecord
     end
   end
 
+  has_many :memberships, dependent: :destroy
+  has_many :organizations, through: :memberships
   has_many :api_tokens, dependent: :destroy
   has_many :conversations, dependent: :destroy
 

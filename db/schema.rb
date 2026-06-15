@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_25_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -131,6 +131,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_25_120000) do
     t.index ["app_id"], name: "index_env_variables_on_app_id"
   end
 
+  create_table "memberships", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "organization_id", null: false
+    t.integer "role", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["organization_id"], name: "index_memberships_on_organization_id"
+    t.index ["user_id", "organization_id"], name: "index_memberships_on_user_id_and_organization_id", unique: true
+    t.index ["user_id"], name: "index_memberships_on_user_id"
+  end
+
   create_table "messages", force: :cascade do |t|
     t.text "content"
     t.bigint "conversation_id", null: false
@@ -141,6 +152,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_25_120000) do
     t.datetime "updated_at", null: false
     t.index ["conversation_id", "sequence"], name: "index_messages_on_conversation_id_and_sequence"
     t.index ["conversation_id"], name: "index_messages_on_conversation_id"
+  end
+
+  create_table "organizations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
   end
 
   create_table "passwordless_sessions", force: :cascade do |t|
@@ -259,6 +276,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_25_120000) do
   add_foreign_key "deployments", "servers"
   add_foreign_key "deployments", "users"
   add_foreign_key "env_variables", "apps"
+  add_foreign_key "memberships", "organizations"
+  add_foreign_key "memberships", "users"
   add_foreign_key "messages", "conversations"
   add_foreign_key "script_runs", "scripts"
   add_foreign_key "script_runs", "servers"
