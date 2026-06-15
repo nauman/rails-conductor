@@ -3,6 +3,10 @@
 
 puts "Seeding database..."
 
+# Demo data is for development/test only. Production seeds just the built-in
+# provisioning Scripts (below) so the app reflects real infrastructure.
+unless Rails.env.production?
+
 # Servers
 servers = [
   {
@@ -148,7 +152,9 @@ end
 
 puts "Done seeding!"
 
-# ─── Provisioning Scripts ─────────────────────────────────────────────────────
+end # unless Rails.env.production?
+
+# ─── Provisioning Scripts (seeded in all environments) ────────────────────────
 Script.where(built_in: true).destroy_all
 
 Script.create!([
