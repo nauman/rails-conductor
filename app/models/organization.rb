@@ -1,6 +1,7 @@
 class Organization < ApplicationRecord
   has_many :memberships, dependent: :destroy
   has_many :users, through: :memberships
+  has_many :invitations, dependent: :destroy
 
   has_many :servers, dependent: :nullify
   has_many :apps, dependent: :nullify

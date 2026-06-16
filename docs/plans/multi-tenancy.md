@@ -39,10 +39,10 @@ Make Conductor a safe multi-tenant product: every tenant (organization) sees onl
 1. **Models** — `Organization`, `Membership`, roles. ✅ shipped
 2. **Auth wiring** — personal org, `Current.organization`, switcher. ✅ shipped
 3. **Resource scoping** — `organization_id` + scoped controllers + dashboard. ✅ shipped
-4. **Onboarding** — first-run org naming + empty-state guidance. ← active (`docs/plans/onboarding.md`)
-5. **Invitations** — invite by email, accept via magic link, role on join.
-6. **Admin / webmaster** — cross-org admin section to manage users and orgs.
-7. **API scoping** — scope `/api/v1/*` to the token's org(s).
+4. **Onboarding** — first-run org naming + empty-state guidance. ✅ shipped (`docs/plans/onboarding.md`)
+5. **Invitations** — invite by email, accept via tokened link, role on join. ✅ shipped
+6. **Admin / webmaster** — cross-org admin section (`/admin`) for orgs + users. ✅ shipped
+7. **API scoping** — scope `/api/v1/*` to the token's org(s). ← next
 8. **Billing** — plans, Stripe subscriptions, plan-gated limits for the hosted tier.
 
 ## Authorization

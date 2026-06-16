@@ -66,6 +66,18 @@ Rails.application.routes.draw do
   # First-run onboarding (name your organization)
   resource :onboarding, only: [:show, :update], controller: "onboarding"
 
+  # Organization members + invitations
+  resources :members, only: [:index, :destroy]
+  resources :invitations, only: [:create]
+  get "/invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
+
+  # Platform admin (webmaster) — cross-org administration
+  namespace :admin do
+    root to: "organizations#index"
+    resources :organizations, only: [:index, :show]
+    resources :users, only: [:index]
+  end
+
   # Letter opener web (development only)
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 

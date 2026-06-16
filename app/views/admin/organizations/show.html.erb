@@ -1,0 +1,16 @@
+<section class="mx-auto max-w-3xl">
+  <%= link_to "← All organizations", admin_organizations_path, class: "text-sm text-slate-500 hover:text-slate-800" %>
+  <h1 class="mt-2 text-xl font-semibold text-slate-900"><%= @organization.name %></h1>
+
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-700">Members</div>
+    <ul class="divide-y divide-slate-100">
+      <% @organization.memberships.includes(:user).each do |m| %>
+        <li class="flex items-center justify-between px-5 py-3">
+          <span class="text-sm text-slate-800"><%= m.user.email %></span>
+          <%= rui_badge(text: m.role, color: m.owner? ? :primary : :slate, size: :sm) %>
+        </li>
+      <% end %>
+    </ul>
+  </div>
+</section>
