@@ -16,6 +16,7 @@
 | Usage | `docs/USAGE.md` | Getting started and the web UI / API / MCP / chat surfaces |
 | Pillars | `docs/PILLARS.md` | Six pillars, current maturity, and contribution entry points |
 | Agents | `docs/agents/staff_engineer.md` | Engineering brief: TDD-first, vanilla-Rails/Hotwire defaults, Conductor conventions |
+| Learnings | `docs/learnings/` | Hard-won manual-ops learnings → Conductor feature blueprints (e.g. multi-app-hosting) |
 | Infrastructure | `docs/infra/INDEX.md` | VM/Kamal/Caddy/R2/Active Storage ops docs |
 | Development | `docs/dev/INDEX.md` | Roadmap, changelog, features, and spec method |
 | Plans | `docs/plans/INDEX.md` | Master PRD map and capability plans by pillar |
