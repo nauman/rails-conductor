@@ -103,6 +103,7 @@ Rails.application.routes.draw do
       post :restart
       get :logs
       post :sync_status
+      post :provision_database
     end
     collection do
       post :sync_all

@@ -8,6 +8,14 @@ class App < ApplicationRecord
   has_many :backups, dependent: :nullify
   has_many :env_variables, dependent: :destroy
   has_many :deployments, dependent: :destroy
+  has_many :databases, dependent: :nullify
+
+  # A valid Postgres identifier base derived from the app, e.g. "calm_page".
+  def database_base_name
+    raw = (slug.presence || name).to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "")
+    raw = "app_#{raw}" unless raw.match?(/\A[a-z_]/)
+    raw.presence || "app"
+  end
 
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: true

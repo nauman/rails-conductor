@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status, :provision_database]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -103,6 +103,21 @@ class AppsController < ApplicationController
   def sync_status
     SyncContainerStatusJob.perform_later(@app.id)
     redirect_back fallback_location: @app, notice: "Status sync initiated."
+  end
+
+  # Provision a Postgres database for this app on a registered cluster.
+  def provision_database
+    cluster = current_organization.database_clusters.find_by(server_id: @app.server_id) ||
+              current_organization.database_clusters.first
+    unless cluster
+      return redirect_to @app, alert: "No database cluster registered. Add one under Databases first."
+    end
+
+    base = @app.database_base_name
+    cluster.provision_database!(name: "#{base}_production", username: base, app: @app)
+    redirect_to @app, notice: "Database provisioned for #{@app.name}."
+  rescue PostgresClusterClient::Error, ActiveRecord::RecordInvalid => e
+    redirect_to @app, alert: "Could not provision database: #{e.message}"
   end
 
   def sync_all
