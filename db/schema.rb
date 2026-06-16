@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_16_002000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_16_003000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -105,6 +105,35 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_002000) do
     t.index ["active"], name: "index_credentials_on_active"
     t.index ["organization_id"], name: "index_credentials_on_organization_id"
     t.index ["provider"], name: "index_credentials_on_provider"
+  end
+
+  create_table "database_clusters", force: :cascade do |t|
+    t.text "admin_password"
+    t.string "admin_username", null: false
+    t.string "container_name", null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.bigint "organization_id", null: false
+    t.integer "port", default: 5432
+    t.bigint "server_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["organization_id"], name: "index_database_clusters_on_organization_id"
+    t.index ["server_id"], name: "index_database_clusters_on_server_id"
+  end
+
+  create_table "databases", force: :cascade do |t|
+    t.bigint "app_id"
+    t.datetime "created_at", null: false
+    t.bigint "database_cluster_id", null: false
+    t.string "name", null: false
+    t.bigint "organization_id", null: false
+    t.text "password"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "username", null: false
+    t.index ["app_id"], name: "index_databases_on_app_id"
+    t.index ["database_cluster_id"], name: "index_databases_on_database_cluster_id"
+    t.index ["organization_id"], name: "index_databases_on_organization_id"
   end
 
   create_table "deployments", force: :cascade do |t|
@@ -299,6 +328,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_002000) do
   add_foreign_key "backups", "servers"
   add_foreign_key "conversations", "users"
   add_foreign_key "credentials", "organizations"
+  add_foreign_key "database_clusters", "organizations"
+  add_foreign_key "database_clusters", "servers"
+  add_foreign_key "databases", "apps"
+  add_foreign_key "databases", "database_clusters"
+  add_foreign_key "databases", "organizations"
   add_foreign_key "deployments", "apps"
   add_foreign_key "deployments", "scripts"
   add_foreign_key "deployments", "servers"
