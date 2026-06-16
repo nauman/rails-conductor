@@ -5,8 +5,18 @@ require "minitest/mock"
 
 module ActiveSupport
   class TestCase
-    # Run tests in parallel with specified workers
-    parallelize(workers: :number_of_processors)
+    # Run tests in parallel. The pg gem segfaults in forked workers on macOS, so
+    # default to single-process there; parallelize on Linux/CI. Override with
+    # PARALLEL_WORKERS (e.g. PARALLEL_WORKERS=4 bin/rails test).
+    workers =
+      if ENV["PARALLEL_WORKERS"]
+        ENV["PARALLEL_WORKERS"].to_i
+      elsif RUBY_PLATFORM.include?("darwin")
+        1
+      else
+        :number_of_processors
+      end
+    parallelize(workers: workers)
 
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all
