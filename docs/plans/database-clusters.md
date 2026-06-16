@@ -63,5 +63,5 @@ Database
 ## Slices
 
 1. **Models + client** — `DatabaseCluster`, `Database`, `PostgresClusterClient` (SQL over SSH). ✅ shipped (test-first)
-2. **UI** — cluster page: list/create/drop databases; show connection details. ← next
-3. **Wire-in** — link a created Database to an App's deploy config; "provision DB" from the app.
+2. **UI** — clusters index, register a cluster, cluster page with create/drop databases. ✅ shipped
+3. **Wire-in** — link a created Database to an App's deploy config; "provision DB" from the app. ← next

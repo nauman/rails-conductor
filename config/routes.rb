@@ -71,6 +71,12 @@ Rails.application.routes.draw do
   resources :invitations, only: [:create]
   get "/invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
 
+  # Database clusters (Hatchbox-style) — per-app databases on a server's Postgres
+  resources :database_clusters, only: [:index, :show, :new, :create] do
+    resources :databases, only: [:create]
+  end
+  resources :databases, only: [:destroy]
+
   # Platform admin (webmaster) — cross-org administration
   namespace :admin do
     root to: "organizations#index"

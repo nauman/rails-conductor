@@ -49,6 +49,7 @@
                 <%= link_to "Servers", servers_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/servers') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Apps", apps_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/apps') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Backups", backups_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/backups') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Databases", database_clusters_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/database_clusters') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Credentials", credentials_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/credentials') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "SSH Keys", ssh_keys_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/ssh_keys') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Members", members_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/members') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>

@@ -1,0 +1,45 @@
+<section class="mx-auto max-w-xl">
+  <%= link_to "← Clusters", database_clusters_path, class: "text-sm text-slate-500 hover:text-slate-800" %>
+  <h1 class="mt-2 text-xl font-semibold text-slate-900">Register a Database Cluster</h1>
+  <p class="text-sm text-slate-500">Point Conductor at a Postgres running on one of your servers.</p>
+
+  <%= form_with model: @cluster, url: database_clusters_path, class: "mt-6 space-y-4" do |f| %>
+    <% if @cluster.errors.any? %>
+      <%= rui_alert(type: :danger) do %><%= @cluster.errors.full_messages.to_sentence %><% end %>
+    <% end %>
+
+    <div>
+      <%= f.label :server_id, "Server", class: "block text-sm font-medium text-slate-700" %>
+      <%= f.collection_select :server_id, @servers, :id, :name, { prompt: "Select a server" },
+            class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" %>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <%= f.label :name, "Display name", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :name, placeholder: "shared", class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm sm:text-sm" %>
+      </div>
+      <div>
+        <%= f.label :container_name, "Container name", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :container_name, placeholder: "conductor-postgres", class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm sm:text-sm font-mono" %>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4">
+      <div class="col-span-1">
+        <%= f.label :admin_username, "Admin role", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.text_field :admin_username, placeholder: "conductor", class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm sm:text-sm font-mono" %>
+      </div>
+      <div class="col-span-1">
+        <%= f.label :admin_password, "Admin password", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.password_field :admin_password, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm sm:text-sm" %>
+      </div>
+      <div class="col-span-1">
+        <%= f.label :port, "Port", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.number_field :port, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm sm:text-sm" %>
+      </div>
+    </div>
+
+    <%= f.submit "Register cluster", class: "cursor-pointer rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700" %>
+  <% end %>
+</section>
