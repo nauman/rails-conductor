@@ -10,6 +10,7 @@ class ApplicationController < ActionController::Base
   # Require authentication for all controllers except sign in
   before_action :authenticate_user!
   before_action :set_current_organization
+  before_action :require_onboarding
 
   helper_method :current_user, :user_signed_in?, :current_admin?, :current_organization
 
@@ -53,6 +54,15 @@ class ApplicationController < ActionController::Base
     Current.organization =
       current_user.organizations.find_by(id: session[:organization_id]) ||
       current_user.organizations.first
+  end
+
+  # Route users with an un-onboarded org through the first-run flow.
+  def require_onboarding
+    return unless current_user && current_organization
+    return if current_organization.onboarded?
+    return if request.path == onboarding_path || request.path.start_with?("/users/sign")
+
+    redirect_to onboarding_path
   end
 
   def authenticate_user!

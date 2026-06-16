@@ -12,6 +12,7 @@ class ServerScopingTest < ActionDispatch::IntegrationTest
     @mine = @org.servers.create!(name: "mine-server", status: "offline")
     @other_org = Organization.create!(name: "Other")
     @theirs = @other_org.servers.create!(name: "theirs-server", status: "offline")
+    @user.organizations.update_all(onboarded_at: Time.current)
     sign_in_as(@user)
   end
 

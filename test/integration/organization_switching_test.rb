@@ -2,6 +2,7 @@ require "test_helper"
 
 class OrganizationSwitchingTest < ActionDispatch::IntegrationTest
   def sign_in_as(user)
+    user.organizations.update_all(onboarded_at: Time.current)
     ps = Passwordless::Session.create!(authenticatable: user)
     get "/users/sign_in/#{ps.identifier}/#{ps.token}"
   end

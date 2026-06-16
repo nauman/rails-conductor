@@ -63,6 +63,9 @@ Rails.application.routes.draw do
     end
   end
 
+  # First-run onboarding (name your organization)
+  resource :onboarding, only: [:show, :update], controller: "onboarding"
+
   # Letter opener web (development only)
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 

@@ -44,6 +44,8 @@
 | `docs/plans/logs-observability.md` | Centralized log access | Storage, filters, analytics | Continuous maintenance |
 | `docs/plans/postgres-restore.md` | Restore flow, verification, and safety model | Restore workflow does not exist | Data and backups |
 | `docs/plans/sc-001-kamal-monitoring.md` | Monitoring dashboard for Docker apps | Dashboard widgets and scheduling | Fleet control |
+| `docs/plans/multi-tenancy.md` | Orgs, scoping, invitations, admin, billing | Invitations, admin, API scoping, billing remain | Cross-cutting (Tenancy) |
+| `docs/plans/onboarding.md` | First-run org naming + empty-state guidance | Building now | Cross-cutting (Tenancy) |
 
 ## Stale or Deferred
 

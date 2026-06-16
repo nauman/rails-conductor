@@ -32,4 +32,11 @@ class OrganizationTest < ActiveSupport::TestCase
     assert_includes org.users, member
     assert_not org.owner?(member)
   end
+
+  test "onboarded? reflects onboarded_at" do
+    org = Organization.new(name: "x")
+    assert_not org.onboarded?
+    org.onboarded_at = Time.current
+    assert org.onboarded?
+  end
 end

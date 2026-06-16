@@ -26,4 +26,8 @@ class Organization < ApplicationRecord
   def owner?(user)
     memberships.exists?(user: user, role: :owner)
   end
+
+  def onboarded?
+    onboarded_at.present?
+  end
 end
