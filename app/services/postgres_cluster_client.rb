@@ -1,4 +1,5 @@
 require "shellwords"
+require "base64"
 
 # Runs admin SQL on a Postgres cluster over SSH via `docker exec … psql`,
 # mirroring CaddyClient's SSH-over-server pattern. Used to create/drop a
@@ -44,21 +45,18 @@ class PostgresClusterClient
     raise Error, (@ssh.error.presence || result[:stderr].presence || "psql command failed")
   end
 
+  # Pipe the SQL to psql via base64 so no shell quoting of the SQL is needed
+  # (survives Net::SSH's `bash -c` wrapping).
   def build_command(sql)
-    "docker exec -e PGPASSWORD=#{shell_quote(cluster.admin_password.to_s)} " \
+    "echo #{Base64.strict_encode64(sql)} | base64 --decode | docker exec -i " \
+      "-e PGPASSWORD=#{Shellwords.escape(cluster.admin_password.to_s)} " \
       "#{Shellwords.escape(cluster.container_name)} " \
-      "psql -U #{Shellwords.escape(cluster.admin_username)} -d postgres -v ON_ERROR_STOP=1 -tAc " \
-      "#{shell_quote(sql)}"
+      "psql -U #{Shellwords.escape(cluster.admin_username)} -d postgres -v ON_ERROR_STOP=1 -tA"
   end
 
   # SQL string literal (doubles single quotes).
   def sql_quote(value)
     "'" + value.to_s.gsub("'", "''") + "'"
-  end
-
-  # Shell single-quote wrapper (keeps inner spaces literal).
-  def shell_quote(value)
-    "'" + value.to_s.gsub("'", "'\\''") + "'"
   end
 
   def validate_identifier!(value)

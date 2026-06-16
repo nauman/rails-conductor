@@ -33,6 +33,12 @@ class PostgresClusterClientTest < ActiveSupport::TestCase
     )
   end
 
+  # The SQL is base64-encoded into the command; decode it to assert on it.
+  def sql_in(command)
+    require "base64"
+    Base64.decode64(command[/echo (\S+) \|/, 1].to_s)
+  end
+
   test "create_database issues CREATE ROLE then CREATE DATABASE on the cluster" do
     ssh = FakeSsh.new([ { stdout: "" }, { stdout: "" } ])
     client = PostgresClusterClient.new(build_cluster, ssh_connection: ssh)
@@ -41,9 +47,9 @@ class PostgresClusterClientTest < ActiveSupport::TestCase
 
     assert_equal "created", result["action"]
     assert_equal 2, ssh.commands.size
-    assert_match(/CREATE ROLE wiseherds LOGIN PASSWORD/, ssh.commands[0])
-    assert_match(/CREATEDB/, ssh.commands[0])
-    assert_match(/CREATE DATABASE wiseherds_production OWNER wiseherds/, ssh.commands[1])
+    assert_match(/CREATE ROLE wiseherds LOGIN PASSWORD/, sql_in(ssh.commands[0]))
+    assert_match(/CREATEDB/, sql_in(ssh.commands[0]))
+    assert_match(/CREATE DATABASE wiseherds_production OWNER wiseherds/, sql_in(ssh.commands[1]))
     # runs through docker exec against the cluster's container as the admin user
     assert_match(/docker exec.*conductor-postgres.*psql -U conductor/, ssh.commands[0])
   end
@@ -54,8 +60,8 @@ class PostgresClusterClientTest < ActiveSupport::TestCase
 
     client.drop_database(name: "wiseherds_production", username: "wiseherds")
 
-    assert_match(/DROP DATABASE IF EXISTS wiseherds_production/, ssh.commands[0])
-    assert_match(/DROP ROLE IF EXISTS wiseherds/, ssh.commands[1])
+    assert_match(/DROP DATABASE IF EXISTS wiseherds_production/, sql_in(ssh.commands[0]))
+    assert_match(/DROP ROLE IF EXISTS wiseherds/, sql_in(ssh.commands[1]))
   end
 
   test "rejects invalid SQL identifiers (no injection)" do
