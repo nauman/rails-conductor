@@ -3,6 +3,7 @@ class Backup < ApplicationRecord
   STATUSES = %w[pending running completed failed warning].freeze
   SCHEDULES = %w[hourly daily weekly monthly].freeze
 
+  belongs_to :organization, optional: true
   belongs_to :server, optional: true
   belongs_to :app, optional: true
   belongs_to :credential, optional: true

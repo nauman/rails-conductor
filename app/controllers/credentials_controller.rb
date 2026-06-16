@@ -2,18 +2,18 @@ class CredentialsController < ApplicationController
   before_action :set_credential, only: [:edit, :update, :destroy]
 
   def index
-    @credentials = Credential.order(created_at: :desc)
+    @credentials = current_organization.credentials.order(created_at: :desc)
   end
 
   def new
-    @credential = Credential.new
+    @credential = current_organization.credentials.new
   end
 
   def edit
   end
 
   def create
-    @credential = Credential.new(credential_params)
+    @credential = current_organization.credentials.new(credential_params)
 
     if @credential.save
       redirect_to credentials_path, notice: "Credential created successfully."
@@ -38,7 +38,7 @@ class CredentialsController < ApplicationController
   private
 
   def set_credential
-    @credential = Credential.find(params[:id])
+    @credential = current_organization.credentials.find(params[:id])
   end
 
   def credential_params

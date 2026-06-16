@@ -3,6 +3,7 @@ class App < ApplicationRecord
   CONTAINER_STATUSES = %w[unknown running exited dead restarting paused].freeze
   DEPLOY_METHODS = %w[docker native].freeze
 
+  belongs_to :organization, optional: true
   belongs_to :server, optional: true
   has_many :backups, dependent: :nullify
   has_many :env_variables, dependent: :destroy

@@ -2,21 +2,21 @@ class ServersController < ApplicationController
   before_action :set_server, only: [:show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision]
 
   def index
-    @servers = Server.includes(:ssh_key).order(created_at: :desc)
+    @servers = current_organization.servers.includes(:ssh_key).order(created_at: :desc)
   end
 
   def show
   end
 
   def new
-    @server = Server.new
+    @server = current_organization.servers.new
   end
 
   def edit
   end
 
   def create
-    @server = Server.new(server_params)
+    @server = current_organization.servers.new(server_params)
 
     if @server.save
       redirect_to @server, notice: "Server created successfully."
@@ -74,7 +74,7 @@ class ServersController < ApplicationController
   private
 
   def set_server
-    @server = Server.find(params[:id])
+    @server = current_organization.servers.find(params[:id])
   end
 
   def server_params

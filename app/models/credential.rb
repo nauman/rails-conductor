@@ -1,6 +1,8 @@
 class Credential < ApplicationRecord
   PROVIDERS = %w[cloudflare aws hetzner digitalocean stripe sendgrid].freeze
 
+  belongs_to :organization, optional: true
+
   encrypts :api_key
   encrypts :api_secret
 

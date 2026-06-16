@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_16_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -39,6 +39,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.string "image_name"
     t.datetime "last_status_check_at"
     t.string "name", null: false
+    t.bigint "organization_id"
     t.integer "port"
     t.string "repository_url"
     t.integer "server_id"
@@ -48,6 +49,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.string "status_check_error"
     t.datetime "updated_at", null: false
     t.index ["container_status"], name: "index_apps_on_container_status"
+    t.index ["organization_id"], name: "index_apps_on_organization_id"
     t.index ["server_id"], name: "index_apps_on_server_id"
     t.index ["slug"], name: "index_apps_on_slug", unique: true
     t.index ["status"], name: "index_apps_on_status"
@@ -62,6 +64,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.boolean "enabled", default: false
     t.datetime "last_run_at"
     t.datetime "next_run_at"
+    t.bigint "organization_id"
     t.string "provider", null: false
     t.integer "retention_days", default: 7
     t.string "schedule", default: "daily"
@@ -72,6 +75,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.index ["app_id"], name: "index_backups_on_app_id"
     t.index ["credential_id"], name: "index_backups_on_credential_id"
     t.index ["enabled", "next_run_at"], name: "index_backups_on_enabled_and_next_run_at"
+    t.index ["organization_id"], name: "index_backups_on_organization_id"
     t.index ["provider"], name: "index_backups_on_provider"
     t.index ["server_id"], name: "index_backups_on_server_id"
     t.index ["status"], name: "index_backups_on_status"
@@ -95,9 +99,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.text "api_secret"
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.bigint "organization_id"
     t.string "provider", null: false
     t.datetime "updated_at", null: false
     t.index ["active"], name: "index_credentials_on_active"
+    t.index ["organization_id"], name: "index_credentials_on_organization_id"
     t.index ["provider"], name: "index_credentials_on_provider"
   end
 
@@ -215,6 +221,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.integer "memory_used_mb", default: 0
     t.datetime "metrics_updated_at"
     t.string "name", null: false
+    t.bigint "organization_id"
     t.string "provider"
     t.string "region"
     t.bigint "ssh_key_id"
@@ -224,6 +231,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.datetime "updated_at", null: false
     t.integer "uptime_seconds", default: 0, null: false
     t.bigint "user_id"
+    t.index ["organization_id"], name: "index_servers_on_organization_id"
     t.index ["ssh_key_id"], name: "index_servers_on_ssh_key_id"
     t.index ["status"], name: "index_servers_on_status"
   end
@@ -233,12 +241,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
     t.string "fingerprint"
     t.string "key_type"
     t.string "name", null: false
+    t.bigint "organization_id"
     t.text "passphrase"
     t.text "private_key", null: false
     t.text "public_key"
     t.datetime "updated_at", null: false
     t.index ["fingerprint"], name: "index_ssh_keys_on_fingerprint"
     t.index ["name"], name: "index_ssh_keys_on_name", unique: true
+    t.index ["organization_id"], name: "index_ssh_keys_on_organization_id"
   end
 
   create_table "tool_executions", force: :cascade do |t|
@@ -266,11 +276,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
   end
 
   add_foreign_key "api_tokens", "users"
+  add_foreign_key "apps", "organizations"
   add_foreign_key "apps", "servers"
   add_foreign_key "backups", "apps"
   add_foreign_key "backups", "credentials"
+  add_foreign_key "backups", "organizations"
   add_foreign_key "backups", "servers"
   add_foreign_key "conversations", "users"
+  add_foreign_key "credentials", "organizations"
   add_foreign_key "deployments", "apps"
   add_foreign_key "deployments", "scripts"
   add_foreign_key "deployments", "servers"
@@ -281,6 +294,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_234252) do
   add_foreign_key "messages", "conversations"
   add_foreign_key "script_runs", "scripts"
   add_foreign_key "script_runs", "servers"
+  add_foreign_key "servers", "organizations"
   add_foreign_key "servers", "ssh_keys"
+  add_foreign_key "ssh_keys", "organizations"
   add_foreign_key "tool_executions", "messages"
 end

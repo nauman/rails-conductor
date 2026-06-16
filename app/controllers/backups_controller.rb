@@ -2,14 +2,14 @@ class BackupsController < ApplicationController
   before_action :set_backup, only: [:show, :edit, :update, :destroy, :run]
 
   def index
-    @backups = Backup.includes(:server, :app, :credential).order(created_at: :desc)
+    @backups = current_organization.backups.includes(:server, :app, :credential).order(created_at: :desc)
   end
 
   def show
   end
 
   def new
-    @backup = Backup.new
+    @backup = current_organization.backups.new
     load_form_data
   end
 
@@ -18,7 +18,7 @@ class BackupsController < ApplicationController
   end
 
   def create
-    @backup = Backup.new(backup_params)
+    @backup = current_organization.backups.new(backup_params)
 
     if @backup.save
       redirect_to @backup, notice: "Backup configuration created."
@@ -50,13 +50,13 @@ class BackupsController < ApplicationController
   private
 
   def set_backup
-    @backup = Backup.find(params[:id])
+    @backup = current_organization.backups.find(params[:id])
   end
 
   def load_form_data
-    @servers = Server.order(:name)
-    @apps = App.order(:name)
-    @credentials = Credential.active.where(provider: %w[cloudflare aws]).order(:name)
+    @servers = current_organization.servers.order(:name)
+    @apps = current_organization.apps.order(:name)
+    @credentials = current_organization.credentials.active.where(provider: %w[cloudflare aws]).order(:name)
   end
 
   def backup_params

@@ -2,21 +2,21 @@ class SshKeysController < ApplicationController
   before_action :set_ssh_key, only: [:show, :edit, :update, :destroy]
 
   def index
-    @ssh_keys = SshKey.order(created_at: :desc)
+    @ssh_keys = current_organization.ssh_keys.order(created_at: :desc)
   end
 
   def show
   end
 
   def new
-    @ssh_key = SshKey.new
+    @ssh_key = current_organization.ssh_keys.new
   end
 
   def edit
   end
 
   def create
-    @ssh_key = SshKey.new(ssh_key_params)
+    @ssh_key = current_organization.ssh_keys.new(ssh_key_params)
 
     if @ssh_key.save
       redirect_to ssh_keys_path, notice: "SSH key added successfully."
@@ -45,7 +45,7 @@ class SshKeysController < ApplicationController
   private
 
   def set_ssh_key
-    @ssh_key = SshKey.find(params[:id])
+    @ssh_key = current_organization.ssh_keys.find(params[:id])
   end
 
   def ssh_key_params

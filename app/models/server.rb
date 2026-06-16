@@ -2,6 +2,7 @@ class Server < ApplicationRecord
   PROVIDERS = %w[hetzner digitalocean linode vultr aws gcp azure].freeze
   STATUSES = %w[online degraded offline].freeze
 
+  belongs_to :organization, optional: true
   belongs_to :ssh_key, optional: true
   has_many :apps, dependent: :nullify
   has_many :backups, dependent: :nullify

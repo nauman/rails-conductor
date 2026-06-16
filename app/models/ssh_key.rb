@@ -1,4 +1,6 @@
 class SshKey < ApplicationRecord
+  belongs_to :organization, optional: true
+
   encrypts :private_key
   encrypts :passphrase
 

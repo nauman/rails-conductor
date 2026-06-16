@@ -2,7 +2,7 @@ class AppsController < ApplicationController
   before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status]
 
   def index
-    @apps = App.includes(:server).order(created_at: :desc)
+    @apps = current_organization.apps.includes(:server).order(created_at: :desc)
   end
 
   def show
@@ -11,21 +11,21 @@ class AppsController < ApplicationController
   end
 
   def new
-    @app = App.new
-    @servers = Server.with_ssh.order(:name)
+    @app = current_organization.apps.new
+    @servers = current_organization.servers.with_ssh.order(:name)
   end
 
   def edit
-    @servers = Server.with_ssh.order(:name)
+    @servers = current_organization.servers.with_ssh.order(:name)
   end
 
   def create
-    @app = App.new(app_params)
+    @app = current_organization.apps.new(app_params)
 
     if @app.save
       redirect_to @app, notice: "App created successfully."
     else
-      @servers = Server.with_ssh.order(:name)
+      @servers = current_organization.servers.with_ssh.order(:name)
       render :new, status: :unprocessable_entity
     end
   end
@@ -34,7 +34,7 @@ class AppsController < ApplicationController
     if @app.update(app_params)
       redirect_to @app, notice: "App updated successfully."
     else
-      @servers = Server.with_ssh.order(:name)
+      @servers = current_organization.servers.with_ssh.order(:name)
       render :edit, status: :unprocessable_entity
     end
   end
@@ -117,7 +117,7 @@ class AppsController < ApplicationController
   private
 
   def set_app
-    @app = App.find(params[:id])
+    @app = current_organization.apps.find(params[:id])
   end
 
   def app_params
