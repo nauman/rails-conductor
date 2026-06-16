@@ -392,6 +392,86 @@ Script.create!([
 
       echo "Puma service $APP_NAME-server enabled."
     BASH
+  },
+  {
+    name: 'server-harden',
+    script_type: 'maintenance',
+    built_in: true,
+    description: 'Security hardening: SSH key-only (no root/password/X11), ufw (SSH/HTTP/HTTPS), fail2ban. Requires working key-based SSH for a sudo user first.',
+    body: <<~'BASH'
+      #!/bin/bash
+      set -euo pipefail
+      echo "[harden] SSH: key-only, no root login, no X11"
+      sudo install -d -m 755 /etc/ssh/sshd_config.d
+      sudo tee /etc/ssh/sshd_config.d/10-hardening.conf >/dev/null <<'CONF'
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      ChallengeResponseAuthentication no
+      PubkeyAuthentication yes
+      X11Forwarding no
+      MaxAuthTries 3
+      LoginGraceTime 30
+      CONF
+      sudo sshd -t && sudo systemctl reload ssh
+      echo "[harden] firewall + fail2ban"
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw fail2ban >/dev/null
+      sudo ufw allow OpenSSH >/dev/null; sudo ufw allow 80/tcp >/dev/null; sudo ufw allow 443/tcp >/dev/null
+      sudo ufw --force enable >/dev/null
+      sudo systemctl enable --now fail2ban >/dev/null 2>&1
+      echo "[harden] done — verify a NEW key-based SSH session before closing."
+    BASH
+  },
+  {
+    name: 'server-auto-update',
+    script_type: 'maintenance',
+    built_in: true,
+    description: 'Enable automatic security updates (unattended-upgrades) with a safe nightly auto-reboot at 04:00.',
+    body: <<~'BASH'
+      #!/bin/bash
+      set -euo pipefail
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq unattended-upgrades update-notifier-common >/dev/null
+      sudo tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null <<'CONF'
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::Download-Upgradeable-Packages "1";
+      APT::Periodic::AutocleanInterval "7";
+      CONF
+      sudo tee /etc/apt/apt.conf.d/52-conductor-unattended >/dev/null <<'CONF'
+      Unattended-Upgrade::Allowed-Origins {
+        "${distro_id}:${distro_codename}";
+        "${distro_id}:${distro_codename}-security";
+        "${distro_id}ESMApps:${distro_codename}-apps-security";
+        "${distro_id}ESM:${distro_codename}-infra-security";
+      };
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+      CONF
+      sudo systemctl enable --now unattended-upgrades >/dev/null 2>&1
+      echo "[auto-update] security auto-updates on; auto-reboot 04:00."
+    BASH
+  },
+  {
+    name: 'server-audit',
+    script_type: 'maintenance',
+    built_in: true,
+    description: 'Read-only security & maintenance audit: SSH hardening, firewall, fail2ban, auto-updates, pending reboots.',
+    body: <<~'BASH'
+      #!/bin/bash
+      set -uo pipefail
+      pass(){ echo "  PASS  $1"; }; warn(){ echo "  WARN  $1"; }
+      cfg=$(sudo sshd -T 2>/dev/null)
+      echo "$cfg" | grep -q "^permitrootlogin no" && pass "root login disabled" || warn "root login ENABLED"
+      echo "$cfg" | grep -q "^passwordauthentication no" && pass "password auth disabled" || warn "password auth ENABLED"
+      echo "$cfg" | grep -q "^x11forwarding no" && pass "X11 disabled" || warn "X11 enabled"
+      sudo ufw status 2>/dev/null | grep -q "Status: active" && pass "ufw active" || warn "ufw inactive"
+      sudo fail2ban-client status sshd >/dev/null 2>&1 && pass "sshd jail active" || warn "no sshd jail"
+      grep -q 'Unattended-Upgrade "1"' /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null && pass "unattended-upgrades on" || warn "unattended-upgrades off"
+      grep -rq 'Automatic-Reboot "true"' /etc/apt/apt.conf.d/ 2>/dev/null && pass "auto-reboot on" || warn "auto-reboot off"
+      [ -f /var/run/reboot-required ] && warn "reboot required" || pass "no reboot pending"
+    BASH
   }
 ])
 

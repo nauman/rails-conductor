@@ -1,5 +1,5 @@
 class Script < ApplicationRecord
-  TYPES = %w[provision deploy setup].freeze
+  TYPES = %w[provision deploy setup maintenance].freeze
 
   has_many :script_runs, dependent: :nullify
 
@@ -9,10 +9,12 @@ class Script < ApplicationRecord
 
   scope :provision, -> { where(script_type: 'provision') }
   scope :deploy,    -> { where(script_type: 'deploy') }
-  scope :setup,     -> { where(script_type: 'setup') }
-  scope :built_in,  -> { where(built_in: true) }
+  scope :setup,       -> { where(script_type: 'setup') }
+  scope :maintenance, -> { where(script_type: 'maintenance') }
+  scope :built_in,    -> { where(built_in: true) }
 
-  def provision? = script_type == 'provision'
-  def deploy?    = script_type == 'deploy'
-  def setup?     = script_type == 'setup'
+  def provision?   = script_type == 'provision'
+  def deploy?      = script_type == 'deploy'
+  def setup?       = script_type == 'setup'
+  def maintenance? = script_type == 'maintenance'
 end
