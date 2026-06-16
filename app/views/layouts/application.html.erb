@@ -44,7 +44,7 @@
             </div>
             <% if user_signed_in? %>
               <nav class="flex items-center gap-1 text-sm font-medium text-slate-600">
-                <%= link_to "Overview", root_path, class: "px-3 py-1.5 rounded-full #{request.path == '/' ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
+                <%= link_to "Overview", dashboard_path, class: "px-3 py-1.5 rounded-full #{request.path == dashboard_path ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Chat", conversations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/conversations') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Servers", servers_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/servers') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Apps", apps_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/apps') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>

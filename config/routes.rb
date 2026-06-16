@@ -133,6 +133,7 @@ Rails.application.routes.draw do
 
   mount ActionCable.server => '/cable'
 
-  # Defines the root path route ("/")
-  root "dashboard#index"
+  # Public landing page at "/"; the authenticated app dashboard at /dashboard.
+  get "dashboard", to: "dashboard#index", as: :dashboard
+  root "landing#index"
 end
