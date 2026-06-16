@@ -82,3 +82,15 @@ Contributions are welcome. The fastest way in:
 ## Tech
 
 Rails 8 · Turbo · Importmaps · Tailwind · Solid Queue · ActionCable · SSH-based execution (no agent to install on your servers).
+
+## License & Usage
+
+Conductor is **source-available** under the [Elastic License 2.0](LICENSE).
+
+In plain terms:
+
+- ✅ **You may** use, run, and self-host Conductor — including for your own commercial business and your own infrastructure.
+- ✅ **You may** modify it, fork it, and redistribute it (with notices intact).
+- ❌ **You may not** provide Conductor to third parties as a hosted or managed service — i.e. you can't take this code and run a competing Conductor cloud.
+
+If you want to offer Conductor as a managed service, talk to us about a commercial license.
