@@ -35,7 +35,7 @@ class ServerScopingTest < ActionDispatch::IntegrationTest
   end
 
   test "dashboard shows only the current org's servers" do
-    get root_path
+    get dashboard_path
     assert_response :success
     assert_match "mine-server", @response.body
     assert_no_match "theirs-server", @response.body
