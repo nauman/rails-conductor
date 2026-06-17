@@ -4,7 +4,12 @@ class FleetStatusTool
     description: 'List all servers in the fleet with their current status, apps, and health metrics.',
     input_schema: {
       type: 'object',
-      properties: {},
+      properties: {
+        organization_id: {
+          type: 'integer',
+          description: 'Optional: scope the fleet to a single organization (admin-global, all servers, when omitted)'
+        }
+      },
       required: []
     }
   }.freeze
@@ -13,8 +18,10 @@ class FleetStatusTool
     @user = user
   end
 
-  def call(_input)
+  def call(input = {})
     servers = Server.all.includes(:apps, :script_runs)
+    # Optional org scoping: keeps admin-global behavior by default.
+    servers = servers.where(organization_id: input['organization_id']) if input['organization_id'].present?
 
     data = servers.map do |server|
       {

@@ -72,7 +72,16 @@ class ConversationProcessor
 
       execution.start!
       result = ToolRegistry.call(tc.name, tc.arguments.stringify_keys, user: @user)
-      execution.finish!(output: result.success? ? result.value : { error: result.error }, success: result.success?)
+      # Tools may embed an internal `_organization` marker in their Hash payload
+      # (used for MCP audit logging). Strip it before exposing output to the LLM.
+      output =
+        if result.success?
+          value = result.value
+          value.is_a?(Hash) ? value.except(:_organization) : value
+        else
+          { error: result.error }
+        end
+      execution.finish!(output: output, success: result.success?)
 
       { id: tc.id, name: tc.name, output: execution.tool_output }
     end

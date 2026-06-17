@@ -33,7 +33,9 @@ class RemoveDomainTool
       server: server.name,
       route_id: route['route_id'],
       action: route['action'],
-      message: "Domain #{input['domain']} removed from Caddy on #{server.name}."
+      message: "Domain #{input['domain']} removed from Caddy on #{server.name}.",
+      # _organization: org this call touched; logged by the MCP controller, then stripped.
+      _organization: server.organization
     })
   rescue CaddyClient::Error => e
     Result.fail(e.message)
