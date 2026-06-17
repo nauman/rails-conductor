@@ -1,7 +1,7 @@
 class DeployAppTool
   DEFINITION = {
     name: 'deploy_app',
-    description: 'Deploy an app by running the app-deploy script on its server.',
+    description: "Deploy an app to its latest commit. Creates a Deployment and dispatches by the app's deploy_method (native, docker, or kamal).",
     input_schema: {
       type: 'object',
       properties: {
@@ -25,20 +25,19 @@ class DeployAppTool
   def call(input)
     app = find_app(input)
     return Result.fail("App not found. Provide app_id or app_name.") unless app
-    return Result.fail("App '#{app.name}' has no server assigned.") unless app.server
+    return Result.fail("App '#{app.name}' is not deployable (needs a server with SSH + a repository).") unless app.deployable?
+    return Result.fail("A deployment is already in progress for #{app.name}.") if app.deployments.in_progress.any?
 
-    script = Script.find_by(name: 'app-deploy')
-    return Result.fail("Script 'app-deploy' not found. Run seeds to install built-in scripts.") unless script
-
-    run = ScriptRun.create!(server: app.server, script: script, user: @user)
-    ScriptRunJob.perform_later(run.id)
+    deployment = app.deployments.create!(user: @user)
+    DeployAppJob.perform_later(deployment.id)
 
     Result.ok({
-      script_run_id: run.id,
+      deployment_id: deployment.id,
       app:           app.name,
       server:        app.server.name,
+      deploy_method: app.deploy_method,
       status:        'started',
-      message:       "Deploying #{app.name} on #{app.server.name}. ScriptRun ID: #{run.id}",
+      message:       "Deploying #{app.name} (#{app.deploy_method}) on #{app.server.name}. Deployment ID: #{deployment.id}",
       # _organization: the org this call touched. The MCP controller reads this to
       # log the affected org on the McpCall, then strips it before responding.
       _organization: app.organization || app.server.organization

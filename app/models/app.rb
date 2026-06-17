@@ -1,7 +1,7 @@
 class App < ApplicationRecord
   STATUSES = %w[running stopped deploying failed].freeze
   CONTAINER_STATUSES = %w[unknown running exited dead restarting paused].freeze
-  DEPLOY_METHODS = %w[docker native].freeze
+  DEPLOY_METHODS = %w[docker native kamal].freeze
 
   belongs_to :organization, optional: true
   belongs_to :server, optional: true
@@ -66,6 +66,10 @@ class App < ApplicationRecord
 
   def native?
     deploy_method == "native"
+  end
+
+  def kamal?
+    deploy_method == "kamal"
   end
 
   def service_name

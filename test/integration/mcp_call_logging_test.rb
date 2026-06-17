@@ -52,9 +52,11 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
 
   test "a call that acts on an app logs that app's organization" do
     org = Organization.create!(name: "Tenant Co")
-    server = Server.create!(name: "log-org-server", status: "online", organization: org)
-    app = App.create!(name: "tenant-app", slug: "tenant-app", organization: org, server: server)
-    Script.create!(name: "app-deploy", body: "echo deploy")
+    key = SshKey.create!(name: "tenant-key", private_key: valid_private_key, organization: org)
+    server = Server.create!(name: "log-org-server", status: "online", organization: org,
+                            ip_address: "10.0.0.5", ssh_key: key)
+    app = App.create!(name: "tenant-app", slug: "tenant-app", organization: org, server: server,
+                      repository_url: "https://github.com/acme/tenant-app.git")
 
     with_token do
       assert_difference -> { McpCall.count }, 1 do

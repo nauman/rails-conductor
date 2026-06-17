@@ -71,6 +71,11 @@
           <span class="text-sm text-slate-700">Native</span>
           <span class="text-xs text-slate-400">(Puma + systemd)</span>
         </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <%= f.radio_button :deploy_method, "kamal", class: "border-slate-300 text-slate-900 focus:ring-slate-500", data: { action: "change->deploy-method-toggle#change" } %>
+          <span class="text-sm text-slate-700">Kamal</span>
+          <span class="text-xs text-slate-400">(git pull + kamal deploy)</span>
+        </label>
       </div>
     </div>
 

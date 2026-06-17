@@ -4,7 +4,12 @@ class DeployAppJob < ApplicationJob
   def perform(deployment_id)
     deployment = Deployment.find(deployment_id)
     app = deployment.app
-    deployer = app.native? ? NativeDeployer.new(app, deployment) : AppDeployer.new(app, deployment)
+    deployer =
+      case app.deploy_method
+      when "native" then NativeDeployer.new(app, deployment)
+      when "kamal"  then KamalDeployer.new(app, deployment)
+      else AppDeployer.new(app, deployment)
+      end
     deployer.deploy!
   end
 end
