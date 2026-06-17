@@ -1,9 +1,12 @@
+require "base64"
+
 # Deploys a kamal-managed app by SSHing to its server, syncing a server-side
-# checkout of the repo to the target branch, and running `kamal deploy` there
-# (the build happens on the box). Mirrors NativeDeployer's stream-over-SSH +
-# broadcast pattern. The app's EnvVariables are exported before the deploy so
-# registry creds / DB passwords / APP_HOST etc. reach Kamal — feed them via the
-# `set_env_variable` MCP tool or the UI.
+# checkout of the repo to the target branch, generating `.kamal/secrets` from
+# Conductor's env vars, and running `kamal deploy` there (the build happens on
+# the box). Mirrors NativeDeployer's stream-over-SSH + broadcast pattern. The
+# app's EnvVariables are both written to `.kamal/secrets` (Kamal's secret source)
+# and exported — so Conductor's UI / `set_env_variable` are the source of truth
+# for a kamal app's secret values (e.g. SECRET_KEY_BASE, DATABASE_URL).
 class KamalDeployer
   attr_reader :app, :deployment, :ssh, :error
 
@@ -40,8 +43,9 @@ class KamalDeployer
   private
 
   # Idempotent: clones on first deploy, otherwise hard-resets to the latest
-  # commit on the branch, then runs Kamal from the repo dir. Prefers the
-  # bundled `bin/kamal`, falling back to a `kamal` on PATH.
+  # commit on the branch, generates `.kamal/secrets` from Conductor's env vars,
+  # then runs Kamal from the repo dir. Prefers the bundled `bin/kamal`, falling
+  # back to a `kamal` on PATH.
   def build_script
     dir    = app.app_dir
     branch = app.branch.presence || "main"
@@ -56,10 +60,23 @@ class KamalDeployer
       git fetch origin
       git checkout #{esc(branch)}
       git reset --hard origin/#{esc(branch)}
+      #{write_secrets_file}
       #{env_exports}
       if [ -x bin/kamal ]; then KAMAL=./bin/kamal; else KAMAL=kamal; fi
       $KAMAL deploy
     BASH
+  end
+
+  # Generate .kamal/secrets from Conductor's env vars (base64 so values survive
+  # shell quoting and aren't human-readable in the script). The deploy log streams
+  # command OUTPUT, not the script itself, so the values don't leak into the log.
+  def write_secrets_file
+    content = KamalEnvWriter.secrets_content(app)
+    return "" if content.strip.empty?
+
+    encoded = Base64.strict_encode64(content)
+    "mkdir -p .kamal\n" \
+      "echo #{esc(encoded)} | base64 --decode > .kamal/secrets"
   end
 
   def env_exports

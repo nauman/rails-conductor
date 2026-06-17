@@ -49,6 +49,21 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+  test "writes .kamal/secrets from the app's env vars (Conductor as source of truth)" do
+    @app.env_variables.create!(key: "SECRET_KEY_BASE", value: "skb_xyz")
+    ssh = FakeSsh.new(success: true)
+    deploy_with(ssh)
+
+    script = ssh.scripts.first
+    assert_includes script, "> .kamal/secrets"
+    # The secrets content is base64-encoded into the script; decode and check it.
+    encoded = script[/echo '([A-Za-z0-9+\/=]+)' \| base64 --decode > \.kamal\/secrets/, 1]
+    assert encoded, "expected a base64 secrets blob in the script"
+    decoded = Base64.decode64(encoded)
+    assert_includes decoded, "SECRET_KEY_BASE=skb_xyz"
+    assert_includes decoded, "APP_HOST=kuickr.co"
+  end
+
   test "marks the deployment failed when kamal deploy exits nonzero" do
     deploy_with(FakeSsh.new(success: false, exit_code: 1))
 
