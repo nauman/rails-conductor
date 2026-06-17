@@ -201,12 +201,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_031402) do
     t.datetime "created_at", null: false
     t.integer "duration_ms"
     t.text "error"
+    t.bigint "organization_id"
     t.text "result"
     t.string "status", default: "success", null: false
     t.string "tool_name", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.index ["created_at"], name: "index_mcp_calls_on_created_at"
+    t.index ["organization_id"], name: "index_mcp_calls_on_organization_id"
     t.index ["user_id"], name: "index_mcp_calls_on_user_id"
   end
 
@@ -373,6 +375,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_031402) do
   add_foreign_key "env_variables", "apps"
   add_foreign_key "invitations", "organizations"
   add_foreign_key "invitations", "users", column: "invited_by_id"
+  add_foreign_key "mcp_calls", "organizations"
   add_foreign_key "mcp_calls", "users"
   add_foreign_key "memberships", "organizations"
   add_foreign_key "memberships", "users"
