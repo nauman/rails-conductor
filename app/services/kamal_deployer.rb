@@ -1,91 +1,129 @@
+require "shellwords"
+require "fileutils"
 require "base64"
 
-# Deploys a kamal-managed app by SSHing to its server, syncing a server-side
-# checkout of the repo to the target branch, generating `.kamal/secrets` from
-# Conductor's env vars, and running `kamal deploy` there (the build happens on
-# the box). Mirrors NativeDeployer's stream-over-SSH + broadcast pattern. The
-# app's EnvVariables are both written to `.kamal/secrets` (Kamal's secret source)
-# and exported — so Conductor's UI / `set_env_variable` are the source of truth
-# for a kamal app's secret values (e.g. SECRET_KEY_BASE, DATABASE_URL).
+# Deploys a kamal-managed app with **Conductor's own container as the Kamal
+# control machine** (Kamal is a control-machine tool; target servers are deploy
+# targets that need only docker, not ruby/kamal).
+#
+# Flow (all local to Conductor's container):
+#   1. checkout/refresh the app repo into a workspace
+#   2. generate .kamal/secrets from the app's EnvVariables (Conductor = source of
+#      truth for secret values — see KamalEnvWriter)
+#   3. materialize the target server's SSH key so Kamal (net-ssh) can reach it
+#   4. run `kamal deploy` locally — it builds via the local docker daemon and
+#      SSHes to app.server.ip_address to boot the release
+#
+# Infra prerequisites (see docs/roadmap/plan-kamal-control-machine.html):
+#   - the `kamal` gem in Conductor's bundle
+#   - docker CLI in the image + the host's /var/run/docker.sock mounted in
+#   - the app repo reachable (public, or a deploy key/token — separate backlog item)
 class KamalDeployer
-  attr_reader :app, :deployment, :ssh, :error
+  attr_reader :app, :deployment, :error
 
-  def initialize(app, deployment)
+  def initialize(app, deployment, shell: nil)
     @app = app
     @deployment = deployment
-    @ssh = SshConnection.new(app.server)
+    @shell = shell || LocalShell.new
   end
 
   def deploy!
     deployment.start!
-    log "Starting Kamal deployment for #{app.name}"
+    log "Deploying #{app.name} via Kamal (control machine: Conductor)"
 
-    return fail_with("Server SSH not configured") unless app.server&.ssh_configured?
     return fail_with("App has no repository_url") if app.repository_url.blank?
+    return fail_with("App has no target host") if app.server&.ip_address.blank?
 
     deployment.mark_deploying!
-    result = ssh.execute_stream(build_script) do |_type, data|
-      data.each_line { |line| log(line.chomp) }
-    end
+    FileUtils.mkdir_p(workspace)
+    @key_file = write_ssh_key
 
-    if result[:success]
-      deployment.succeed!
-      log "Kamal deployment completed successfully!"
-      broadcast_status("succeeded")
-      true
-    else
-      fail_with("kamal deploy failed (exit code #{result[:exit_code]})")
-    end
-  rescue => e
+    return false unless run_step("Syncing repo", sync_repo_command)
+    write_secrets_file
+    return false unless run_step("kamal deploy", kamal_command, chdir: checkout_dir, env: deploy_env)
+
+    deployment.succeed!
+    log "Kamal deployment completed successfully!"
+    broadcast_status("succeeded")
+    true
+  rescue StandardError => e
     fail_with("Unexpected error: #{e.message}")
+  ensure
+    cleanup_key
   end
 
   private
 
-  # Idempotent: clones on first deploy, otherwise hard-resets to the latest
-  # commit on the branch, generates `.kamal/secrets` from Conductor's env vars,
-  # then runs Kamal from the repo dir. Prefers the bundled `bin/kamal`, falling
-  # back to a `kamal` on PATH.
-  def build_script
-    dir    = app.app_dir
-    branch = app.branch.presence || "main"
+  def run_step(label, command, chdir: nil, env: {})
+    log "Running: #{label}"
+    result = @shell.run(*command, chdir: chdir, env: env) { |line| log(line) }
+    return true if result.success?
 
-    <<~BASH
-      set -e
-      if [ ! -d #{esc(dir)}/.git ]; then
-        mkdir -p #{esc(dir)}
-        git clone #{esc(app.repository_url)} #{esc(dir)}
-      fi
-      cd #{esc(dir)}
-      git fetch origin
-      git checkout #{esc(branch)}
-      git reset --hard origin/#{esc(branch)}
-      #{write_secrets_file}
-      #{env_exports}
-      if [ -x bin/kamal ]; then KAMAL=./bin/kamal; else KAMAL=kamal; fi
-      $KAMAL deploy
-    BASH
+    fail_with("#{label} failed (exit #{result.exit_code})")
+    false
   end
 
-  # Generate .kamal/secrets from Conductor's env vars (base64 so values survive
-  # shell quoting and aren't human-readable in the script). The deploy log streams
-  # command OUTPUT, not the script itself, so the values don't leak into the log.
+  # Idempotent: clone on first deploy, otherwise hard-reset to the branch's head.
+  def sync_repo_command
+    branch = app.branch.presence || "main"
+    script = if Dir.exist?(File.join(checkout_dir, ".git"))
+      "cd #{esc(checkout_dir)} && git fetch origin && git checkout #{esc(branch)} && git reset --hard origin/#{esc(branch)}"
+    else
+      "git clone --branch #{esc(branch)} #{esc(app.repository_url)} #{esc(checkout_dir)}"
+    end
+    ["bash", "-lc", script]
+  end
+
+  # `kamal deploy` from the checkout; prefer the bundled binstub.
+  def kamal_command
+    kamal = File.exist?(File.join(checkout_dir, "bin", "kamal")) ? "./bin/kamal" : "kamal"
+    ["bash", "-lc", "#{kamal} deploy"]
+  end
+
+  # Conductor's env vars become Kamal's process env (deploy.yml ERB reads e.g.
+  # DEPLOY_SERVER_IP / KAMAL_REGISTRY_USERNAME), plus the SSH key for net-ssh.
+  def deploy_env
+    env = app.env_variables.each_with_object({}) { |v, h| h[v.key] = v.value }
+    env["DEPLOY_SERVER_IP"] ||= app.server.ip_address
+    env["DEPLOY_SSH_USER"]  ||= app.server.ssh_user_or_default
+    env["APP_HOST"]         ||= app.domain if app.domain.present?
+    env["SSH_KEYS"] = @key_file if @key_file # consumed by deploy.yml ssh.keys
+    env
+  end
+
+  # Write Conductor-managed .kamal/secrets (values from EnvVariables).
   def write_secrets_file
     content = KamalEnvWriter.secrets_content(app)
-    return "" if content.strip.empty?
+    return if content.strip.empty?
 
-    encoded = Base64.strict_encode64(content)
-    "mkdir -p .kamal\n" \
-      "echo #{esc(encoded)} | base64 --decode > .kamal/secrets"
+    FileUtils.mkdir_p(File.join(checkout_dir, ".kamal"))
+    File.write(File.join(checkout_dir, ".kamal", "secrets"), content)
   end
 
-  def env_exports
-    app.env_variables.map { |var| "export #{var.key}=#{esc(var.value)}" }.join("\n")
+  # Materialize the target server's private key so Kamal's net-ssh can use it.
+  def write_ssh_key
+    key = app.server.ssh_key&.private_key
+    return nil if key.blank?
+
+    path = File.join(workspace, ".ssh_#{app.slug}")
+    File.write(path, key.end_with?("\n") ? key : "#{key}\n")
+    File.chmod(0o600, path)
+    path
   end
 
-  def esc(value)
-    "'#{value.to_s.gsub("'", "'\\''")}'"
+  def cleanup_key
+    File.delete(@key_file) if @key_file && File.exist?(@key_file)
+  rescue StandardError
+    nil
   end
+
+  def checkout_dir = File.join(workspace, app.slug)
+
+  def workspace
+    ENV.fetch("KAMAL_WORKSPACE", Rails.root.join("tmp", "kamal").to_s)
+  end
+
+  def esc(value) = Shellwords.escape(value.to_s)
 
   def log(message)
     deployment.append_log(message)
