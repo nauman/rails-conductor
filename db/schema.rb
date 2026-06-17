@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_16_003000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -105,6 +105,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_003000) do
     t.index ["active"], name: "index_credentials_on_active"
     t.index ["organization_id"], name: "index_credentials_on_organization_id"
     t.index ["provider"], name: "index_credentials_on_provider"
+  end
+
+  create_table "cron_jobs", force: :cascade do |t|
+    t.text "command", null: false
+    t.datetime "created_at", null: false
+    t.string "cron_expression", null: false
+    t.string "name", null: false
+    t.bigint "organization_id", null: false
+    t.string "schedule", null: false
+    t.bigint "server_id", null: false
+    t.string "status", default: "enabled", null: false
+    t.datetime "updated_at", null: false
+    t.index ["organization_id"], name: "index_cron_jobs_on_organization_id"
+    t.index ["server_id"], name: "index_cron_jobs_on_server_id"
   end
 
   create_table "database_clusters", force: :cascade do |t|
@@ -328,6 +342,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_003000) do
   add_foreign_key "backups", "servers"
   add_foreign_key "conversations", "users"
   add_foreign_key "credentials", "organizations"
+  add_foreign_key "cron_jobs", "organizations"
+  add_foreign_key "cron_jobs", "servers"
   add_foreign_key "database_clusters", "organizations"
   add_foreign_key "database_clusters", "servers"
   add_foreign_key "databases", "apps"

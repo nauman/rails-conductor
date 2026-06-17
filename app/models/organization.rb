@@ -7,6 +7,7 @@ class Organization < ApplicationRecord
   has_many :apps, dependent: :nullify
   has_many :database_clusters, dependent: :destroy
   has_many :databases, dependent: :destroy
+  has_many :cron_jobs, dependent: :destroy
   has_many :credentials, dependent: :nullify
   has_many :backups, dependent: :nullify
   has_many :ssh_keys, dependent: :nullify

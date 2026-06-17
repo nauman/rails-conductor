@@ -94,6 +94,9 @@ Rails.application.routes.draw do
       post :refresh_metrics
       post :provision
     end
+    resources :cron_jobs, only: [:create, :update, :destroy] do
+      collection { post :schedule_script }
+    end
   end
   resources :credentials, except: [:show]
   resources :apps do

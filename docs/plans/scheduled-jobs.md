@@ -4,7 +4,10 @@
 Continuous maintenance
 
 ## Status
-Planned (spec).
+Built (slices 1–3). `CronJob` + `CronSchedule` + `CrontabClient` install a managed
+crontab block over SSH; the server page lists/creates/toggles/deletes jobs and offers
+one-click scheduling of the built-in maintenance scripts (materialized via
+`ScriptInstaller` to `/usr/local/bin/conductor-<name>`).
 
 ## Current Reality
 
