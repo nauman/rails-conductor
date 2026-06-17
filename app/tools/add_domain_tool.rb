@@ -41,7 +41,9 @@ class AddDomainTool
       server: server.name,
       route_id: route['route_id'],
       action: route['action'],
-      message: "Domain #{input['domain']} now routes to #{input['upstream']} on #{server.name}."
+      message: "Domain #{input['domain']} now routes to #{input['upstream']} on #{server.name}.",
+      # _organization: org this call touched; logged by the MCP controller, then stripped.
+      _organization: server.organization
     })
   rescue CaddyClient::Error => e
     Result.fail(e.message)

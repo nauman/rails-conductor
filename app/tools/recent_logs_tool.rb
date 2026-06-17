@@ -9,6 +9,10 @@ class RecentLogsTool
           type: 'integer',
           description: 'Filter logs by server ID'
         },
+        organization_id: {
+          type: 'integer',
+          description: 'Optional: scope logs to servers belonging to this organization (admin-global when omitted)'
+        },
         script_run_id: {
           type: 'integer',
           description: 'Get logs for a specific script run ID'
@@ -38,13 +42,19 @@ class RecentLogsTool
         status:    run.status,
         started:   run.started_at&.strftime('%Y-%m-%d %H:%M'),
         duration:  run.duration,
-        log:       run.log.to_s.last(3000)
+        log:       run.log.to_s.last(3000),
+        # _organization: org this call touched; logged by the MCP controller, then stripped.
+        _organization: run.server.organization
       })
     end
 
     limit = [ (input['limit'] || 5).to_i, 20 ].min
     runs = ScriptRun.includes(:server, :script).recent.limit(limit)
     runs = runs.where(server_id: input['server_id']) if input['server_id'].present?
+    # Optional org scoping: limit to runs on servers in the given org (admin-global otherwise).
+    if input['organization_id'].present?
+      runs = runs.joins(:server).where(servers: { organization_id: input['organization_id'] })
+    end
 
     data = runs.map do |run|
       {

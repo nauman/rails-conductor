@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_17_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_17_031402) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -18,9 +18,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_010000) do
     t.datetime "created_at", null: false
     t.datetime "last_used_at"
     t.string "name", null: false
+    t.bigint "organization_id"
     t.string "token_digest", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.index ["organization_id"], name: "index_api_tokens_on_organization_id"
     t.index ["token_digest"], name: "index_api_tokens_on_token_digest", unique: true
     t.index ["user_id"], name: "index_api_tokens_on_user_id"
   end
@@ -199,12 +201,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_010000) do
     t.datetime "created_at", null: false
     t.integer "duration_ms"
     t.text "error"
+    t.bigint "organization_id"
     t.text "result"
     t.string "status", default: "success", null: false
     t.string "tool_name", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.index ["created_at"], name: "index_mcp_calls_on_created_at"
+    t.index ["organization_id"], name: "index_mcp_calls_on_organization_id"
     t.index ["user_id"], name: "index_mcp_calls_on_user_id"
   end
 
@@ -347,6 +351,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_010000) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "api_tokens", "organizations"
   add_foreign_key "api_tokens", "users"
   add_foreign_key "apps", "organizations"
   add_foreign_key "apps", "servers"
@@ -370,6 +375,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_010000) do
   add_foreign_key "env_variables", "apps"
   add_foreign_key "invitations", "organizations"
   add_foreign_key "invitations", "users", column: "invited_by_id"
+  add_foreign_key "mcp_calls", "organizations"
   add_foreign_key "mcp_calls", "users"
   add_foreign_key "memberships", "organizations"
   add_foreign_key "memberships", "users"

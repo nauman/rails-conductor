@@ -28,6 +28,25 @@ class McpCallTest < ActiveSupport::TestCase
     assert_nil call.result
   end
 
+  test "record stores the organization when provided" do
+    org = Organization.create!(name: "Acme")
+    call = McpCall.record(
+      tool_name: "deploy_app", arguments: {},
+      result: Result.ok({ "app" => "x" }), duration_ms: 4, organization: org
+    )
+
+    assert_equal org, call.organization
+  end
+
+  test "record leaves organization nil when not provided" do
+    call = McpCall.record(
+      tool_name: "fleet_status", arguments: {},
+      result: Result.ok([]), duration_ms: 1
+    )
+
+    assert_nil call.organization
+  end
+
   test "validates status inclusion" do
     refute McpCall.new(tool_name: "x", status: "bogus").valid?
   end

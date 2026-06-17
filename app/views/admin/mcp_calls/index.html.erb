@@ -19,6 +19,7 @@
           <th class="px-5 py-3">Status</th>
           <th class="px-5 py-3">Duration</th>
           <th class="px-5 py-3">Caller</th>
+          <th class="px-5 py-3">Org</th>
           <th class="px-5 py-3">Arguments / Error</th>
         </tr>
       </thead>
@@ -32,6 +33,7 @@
             </td>
             <td class="px-5 py-3 whitespace-nowrap text-slate-500"><%= c.duration_ms ? "#{c.duration_ms} ms" : "—" %></td>
             <td class="px-5 py-3 text-slate-600"><%= c.user&.email || "system" %></td>
+            <td class="px-5 py-3 text-slate-600"><%= c.organization&.name || "—" %></td>
             <td class="px-5 py-3 text-slate-600">
               <% if c.success? %>
                 <code class="block max-w-md truncate text-xs text-slate-500"><%= c.arguments.to_json %></code>
@@ -42,7 +44,7 @@
           </tr>
         <% end %>
         <% if @mcp_calls.empty? %>
-          <tr><td colspan="6" class="px-5 py-8 text-center text-slate-400">No MCP calls recorded yet.</td></tr>
+          <tr><td colspan="7" class="px-5 py-8 text-center text-slate-400">No MCP calls recorded yet.</td></tr>
         <% end %>
       </tbody>
     </table>

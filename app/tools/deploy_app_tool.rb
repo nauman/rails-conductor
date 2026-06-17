@@ -38,7 +38,10 @@ class DeployAppTool
       app:           app.name,
       server:        app.server.name,
       status:        'started',
-      message:       "Deploying #{app.name} on #{app.server.name}. ScriptRun ID: #{run.id}"
+      message:       "Deploying #{app.name} on #{app.server.name}. ScriptRun ID: #{run.id}",
+      # _organization: the org this call touched. The MCP controller reads this to
+      # log the affected org on the McpCall, then strips it before responding.
+      _organization: app.organization || app.server.organization
     })
   rescue ActiveRecord::RecordInvalid => e
     Result.fail(e.message)

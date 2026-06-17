@@ -37,7 +37,9 @@ class RunScriptTool
       server:        server.name,
       script:        script.name,
       status:        run.status,
-      message:       "Script '#{script.name}' started on #{server.name}. ScriptRun ID: #{run.id}"
+      message:       "Script '#{script.name}' started on #{server.name}. ScriptRun ID: #{run.id}",
+      # _organization: org this call touched; logged by the MCP controller, then stripped.
+      _organization: server.organization
     })
   rescue ActiveRecord::RecordInvalid => e
     Result.fail(e.message)
