@@ -38,6 +38,7 @@ class KamalDeployer
     FileUtils.mkdir_p(workspace)
     @key_file = write_ssh_key
     @deploy_key_file = write_deploy_key
+    @ssh_home = setup_ssh_home
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     write_secrets_file
@@ -113,7 +114,36 @@ class KamalDeployer
     env["DEPLOY_SSH_USER"]  ||= app.server.ssh_user_or_default
     env["APP_HOST"]         ||= app.domain if app.domain.present?
     env["SSH_KEYS"] = @key_file if @key_file # consumed by deploy.yml ssh.keys
+    if @ssh_home
+      # Kamal's net-ssh + docker-over-ssh both read $HOME/.ssh/config; building on
+      # the target's daemon over SSH avoids mounting docker.sock into this container.
+      env["HOME"] = @ssh_home
+      env["DOCKER_HOST"] = "ssh://#{app.server.ssh_user_or_default}@#{app.server.ip_address}"
+    end
     env
+  end
+
+  # An isolated $HOME with an .ssh/config that points the target host at the
+  # materialized key, so `kamal` (net-ssh) and `docker --host ssh://…` authenticate.
+  def setup_ssh_home
+    return nil unless @key_file
+
+    home = File.join(workspace, ".sshhome_#{app.slug}")
+    ssh  = File.join(home, ".ssh")
+    FileUtils.mkdir_p(ssh)
+    keypath = File.join(ssh, "id_target")
+    FileUtils.cp(@key_file, keypath)
+    File.chmod(0o600, keypath)
+    File.write(File.join(ssh, "config"), <<~CFG)
+      Host #{app.server.ip_address}
+        User #{app.server.ssh_user_or_default}
+        IdentityFile #{keypath}
+        IdentitiesOnly yes
+        StrictHostKeyChecking accept-new
+        UserKnownHostsFile #{File.join(ssh, "known_hosts")}
+    CFG
+    File.chmod(0o600, File.join(ssh, "config"))
+    home
   end
 
   # Write Conductor-managed .kamal/secrets (values from EnvVariables).
@@ -140,6 +170,7 @@ class KamalDeployer
     [@key_file, @deploy_key_file].compact.each do |f|
       File.delete(f) if File.exist?(f)
     end
+    FileUtils.remove_entry(@ssh_home) if @ssh_home && Dir.exist?(@ssh_home)
   rescue StandardError
     nil
   end

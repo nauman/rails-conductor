@@ -69,6 +69,15 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert env["SSH_KEYS"].present?, "expected the materialized ssh key path"
   end
 
+  test "builds over SSH (DOCKER_HOST + isolated HOME), no docker.sock" do
+    shell = FakeShell.new(success: true)
+    KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+
+    env = shell.runs.find { |r| r[:command].last.include?("kamal deploy") }[:env]
+    assert_equal "ssh://deploy@10.0.0.9", env["DOCKER_HOST"]
+    assert env["HOME"].to_s.include?(".sshhome_kuickr"), "expected an isolated ssh HOME"
+  end
+
   test "materializes and then cleans up the target ssh key" do
     captured = nil
     shell = FakeShell.new(success: true)

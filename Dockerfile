@@ -59,6 +59,16 @@ RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 # Final stage for app image
 FROM base
 
+# Deploy tooling for the control-machine role (deploying MANAGED apps via Kamal
+# from Conductor's own container): git+ssh to clone repos, docker CLI + buildx to
+# build images on a remote daemon over SSH (DOCKER_HOST=ssh://…) — no docker.sock
+# mount needed, so the public web container stays off host-root.
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y git openssh-client ca-certificates && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+COPY --from=docker.io/library/docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker.io/library/docker:27-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+
 # Run and own only the runtime files as a non-root user for security
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
