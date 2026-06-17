@@ -2,17 +2,17 @@ module Api
   module V1
     class ServersController < Api::BaseController
       def index
-        servers = Server.all
+        servers = current_organization.servers
         render json: servers.map { |s| server_json(s) }
       end
 
       def show
-        server = Server.find(params[:id])
+        server = current_organization.servers.find(params[:id])
         render json: server_json(server)
       end
 
       def create
-        server = Server.new(server_params)
+        server = current_organization.servers.new(server_params)
         if server.save
           render json: server_json(server), status: :created
         else
@@ -21,12 +21,12 @@ module Api
       end
 
       def provision
-        server = Server.find(params[:id])
+        server = current_organization.servers.find(params[:id])
         render json: { message: "Provisioning started", server: server_json(server) }
       end
 
       def metrics
-        server = Server.find(params[:id])
+        server = current_organization.servers.find(params[:id])
         render json: server_json(server).merge(metrics: server_metrics(server))
       end
 

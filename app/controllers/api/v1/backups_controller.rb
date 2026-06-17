@@ -2,17 +2,17 @@ module Api
   module V1
     class BackupsController < Api::BaseController
       def index
-        backups = Backup.all
+        backups = current_organization.backups
         render json: backups.map { |b| backup_json(b) }
       end
 
       def show
-        backup = Backup.find(params[:id])
+        backup = current_organization.backups.find(params[:id])
         render json: backup_json(backup)
       end
 
       def run
-        backup = Backup.find(params[:id])
+        backup = current_organization.backups.find(params[:id])
         render json: { message: "Backup triggered", backup: backup_json(backup) }
       end
 

@@ -2,32 +2,32 @@ module Api
   module V1
     class AppsController < Api::BaseController
       def index
-        apps = App.includes(:server).all
+        apps = current_organization.apps.includes(:server)
         render json: apps.map { |a| app_json(a) }
       end
 
       def show
-        app = App.find(params[:id])
+        app = current_organization.apps.find(params[:id])
         render json: app_json(app)
       end
 
       def deploy
-        app = App.find(params[:id])
+        app = current_organization.apps.find(params[:id])
         render json: { message: "Deploy started", app: app_json(app) }
       end
 
       def stop
-        app = App.find(params[:id])
+        app = current_organization.apps.find(params[:id])
         render json: { message: "Stop requested", app: app_json(app) }
       end
 
       def restart
-        app = App.find(params[:id])
+        app = current_organization.apps.find(params[:id])
         render json: { message: "Restart requested", app: app_json(app) }
       end
 
       def logs
-        app = App.find(params[:id])
+        app = current_organization.apps.find(params[:id])
         render json: { app: app.name, logs: [] }
       end
 
