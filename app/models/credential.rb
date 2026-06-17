@@ -1,5 +1,5 @@
 class Credential < ApplicationRecord
-  PROVIDERS = %w[cloudflare aws hetzner digitalocean stripe sendgrid].freeze
+  PROVIDERS = %w[cloudflare aws hetzner digitalocean stripe sendgrid github].freeze
 
   belongs_to :organization, optional: true
 

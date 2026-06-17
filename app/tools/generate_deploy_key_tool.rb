@@ -21,14 +21,23 @@ class GenerateDeployKeyTool
     return Result.fail("App not found: #{input['app_id'] || input['app_name']}") unless app
 
     key = DeployKey.generate_for(app)
+    install = GithubDeployKeyInstaller.install(app)
+
+    message = if install[:installed]
+      "Deploy key generated AND added to #{install[:repo]} via GitHub integration. Ready to deploy."
+    else
+      "Deploy key generated for #{app.name}. Not auto-added (#{install[:reason]}) — add the public_key to the repo's GitHub deploy keys (read-only), or configure a GitHub token with set_github_token."
+    end
 
     Result.ok({
-      app:            app.name,
-      public_key:     key.public_key,
-      fingerprint:    key.fingerprint,
-      add_to:         "https://github.com/#{repo_path(app)}/settings/keys/new",
-      message:        "Deploy key generated for #{app.name}. Add the public_key to the repo's GitHub deploy keys (read-only), then deploy.",
-      _organization:  app.organization || app.server&.organization
+      app:               app.name,
+      public_key:        key.public_key,
+      fingerprint:       key.fingerprint,
+      github_installed:  install[:installed],
+      github_detail:     install[:installed] ? install[:repo] : install[:reason],
+      add_to:            "https://github.com/#{repo_path(app)}/settings/keys/new",
+      message:           message,
+      _organization:     app.organization || app.server&.organization
     })
   rescue DeployKeyGenerator::Error => e
     Result.fail("Could not generate deploy key: #{e.message}")

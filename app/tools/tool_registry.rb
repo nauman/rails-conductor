@@ -14,7 +14,8 @@ class ToolRegistry
     UpdateAppTool,
     SyncAppStatusTool,
     GenerateDeployKeyTool,
-    DeploymentLogTool
+    DeploymentLogTool,
+    SetGithubTokenTool
   ].freeze
 
   def self.definitions

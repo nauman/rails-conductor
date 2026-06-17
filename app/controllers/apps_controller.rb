@@ -108,7 +108,12 @@ class AppsController < ApplicationController
   # Generate (or regenerate) a read-only deploy key for cloning a private repo.
   def generate_deploy_key
     DeployKey.generate_for(@app)
-    redirect_to @app, notice: "Deploy key generated. Add the public key to your repo's GitHub deploy keys (read-only)."
+    install = GithubDeployKeyInstaller.install(@app)
+    if install[:installed]
+      redirect_to @app, notice: "Deploy key generated and auto-added to #{install[:repo]} via GitHub integration."
+    else
+      redirect_to @app, notice: "Deploy key generated. Add the public key to GitHub (#{install[:reason]})."
+    end
   rescue DeployKeyGenerator::Error => e
     redirect_to @app, alert: "Could not generate deploy key: #{e.message}"
   end

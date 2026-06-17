@@ -73,6 +73,12 @@ class App < ApplicationRecord
     deploy_method == "kamal"
   end
 
+  # "owner/repo" parsed from the repository URL (https or ssh form), for the
+  # GitHub API. Returns nil if it can't be parsed.
+  def github_repo
+    repository_url.to_s[%r{github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?\z}, 1]
+  end
+
   def service_name
     "#{slug}-server"
   end

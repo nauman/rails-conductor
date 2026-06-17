@@ -9,6 +9,12 @@ class Organization < ApplicationRecord
   has_many :databases, dependent: :destroy
   has_many :cron_jobs, dependent: :destroy
   has_many :credentials, dependent: :nullify
+
+  # GitHub API token (a fine-grained PAT or App installation token) for managing
+  # deploy keys / webhooks on this org's repos.
+  def github_token
+    credentials.active.for_provider("github").first&.api_key
+  end
   has_many :backups, dependent: :nullify
   has_many :ssh_keys, dependent: :nullify
 
