@@ -101,7 +101,13 @@ class App < ApplicationRecord
   end
 
   def can_sync_status?
-    docker? && server&.ssh_configured?
+    (docker? || kamal?) && server&.ssh_configured?
+  end
+
+  # The Kamal `service:` name used to label this app's containers on the host
+  # (kamal labels them `service=<name>`). Defaults to the slug.
+  def kamal_service
+    slug
   end
 
   def status_fresh?

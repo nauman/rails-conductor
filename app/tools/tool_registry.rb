@@ -10,7 +10,9 @@ class ToolRegistry
     RegisterDatabaseClusterTool,
     ProvisionDatabaseTool,
     CreateAppTool,
-    SetEnvVariableTool
+    SetEnvVariableTool,
+    UpdateAppTool,
+    SyncAppStatusTool
   ].freeze
 
   def self.definitions
