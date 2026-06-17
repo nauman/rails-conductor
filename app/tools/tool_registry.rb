@@ -5,7 +5,12 @@ class ToolRegistry
     RecentLogsTool,
     AddDomainTool,
     RemoveDomainTool,
-    DeployAppTool
+    DeployAppTool,
+    RegisterServerTool,
+    RegisterDatabaseClusterTool,
+    ProvisionDatabaseTool,
+    CreateAppTool,
+    SetEnvVariableTool
   ].freeze
 
   def self.definitions

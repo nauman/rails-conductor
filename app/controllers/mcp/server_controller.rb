@@ -37,13 +37,26 @@ module Mcp
       result = ToolRegistry.call(name, input, user: mcp_user)
 
       if result.success?
-        render json: { result: result.value }
+        render json: { result: strip_organization(name, result.value) }
       else
         render json: { error: result.error }, status: :unprocessable_entity
       end
     end
 
     private
+
+    # Resource tools embed the affected Organization under `_organization` so the
+    # call can be attributed in the audit trail. We log it for attribution and
+    # strip it from the payload so the internal record never leaks to the client.
+    def strip_organization(tool_name, value)
+      return value unless value.is_a?(Hash)
+
+      org = value[:_organization] || value["_organization"]
+      if org
+        Rails.logger.info("[MCP] #{tool_name} affected organization=#{org.id} (#{org.name}) actor=#{mcp_user&.email}")
+      end
+      value.except(:_organization, "_organization")
+    end
 
     def authenticate_mcp_token!
       token = request.headers['Authorization']&.sub(/\ABearer\s+/, '')
