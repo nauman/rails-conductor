@@ -16,6 +16,9 @@
           · Deployed <%= time_ago_in_words(@app.deployed_at) %> ago
         <% end %>
       </p>
+      <% if @app.notes.present? %>
+        <p class="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300 whitespace-pre-line"><%= @app.notes %></p>
+      <% end %>
     </div>
     <div class="flex items-center gap-2">
       <% if @app.deployable? %>

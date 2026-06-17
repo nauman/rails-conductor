@@ -34,7 +34,7 @@ class FleetStatusTool
         memory:      server.formatted_memory,
         disk:        server.disk_percent,
         last_seen:   server.last_seen_at&.strftime('%Y-%m-%d %H:%M UTC'),
-        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain } }
+        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, notes: a.notes } }
       }
     end
 

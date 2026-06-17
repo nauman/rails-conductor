@@ -92,6 +92,11 @@
       </div>
     </div>
 
+    <div>
+      <%= f.label :notes, "Deploy Notes", class: "block text-sm font-medium text-slate-700" %>
+      <%= f.text_area :notes, rows: 4, class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500 sm:text-sm", placeholder: "Anything worth remembering about deploying this app..." %>
+    </div>
+
     <div class="grid gap-6 sm:grid-cols-2">
       <div data-deploy-method-toggle-target="dockerFields">
         <%= f.label :image_name, "Docker Image Name", class: "block text-sm font-medium text-slate-700" %>

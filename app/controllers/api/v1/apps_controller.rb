@@ -45,6 +45,7 @@ module Api
           server_id: app.server_id,
           repository_url: app.repository_url,
           branch: app.branch,
+          notes: app.notes,
           deployed_at: app.deployed_at&.iso8601,
           container_status: app.container_status,
           ssl_enabled: app.ssl_enabled,
