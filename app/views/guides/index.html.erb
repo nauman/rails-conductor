@@ -1,0 +1,14 @@
+<% content_for :title, "Docs · Conductor" %>
+<article>
+  <h1>Conductor docs</h1>
+  <p class="lead">Guides for running self-hosted Rails apps and servers with Conductor.</p>
+  <ul>
+    <% @guides.each do |g| %>
+      <li style="margin:10px 0;">
+        <%= link_to g.title, guide_path(g.slug), style: "font-weight:600;" %>
+        <% if g.description.present? %><div style="color:#64748b;font-size:14px;"><%= g.description %></div><% end %>
+      </li>
+    <% end %>
+  </ul>
+  <% if @guides.empty? %><p style="color:#64748b;">No guides yet.</p><% end %>
+</article>

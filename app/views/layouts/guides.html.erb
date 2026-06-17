@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= content_for(:title) || "Docs · Conductor" %></title>
+  <meta name="description" content="<%= content_for(:description) || "Conductor documentation and guides." %>">
+  <style>
+    :root { --bg:#f8fafc; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --accent:#0369a1; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+    .top { border-bottom:1px solid var(--line); background:#fff; }
+    .top .inner { max-width:1080px; margin:0 auto; padding:16px 24px; display:flex; gap:16px; align-items:center; }
+    .brand { font-weight:700; letter-spacing:-0.02em; color:var(--ink); }
+    .top nav { margin-left:auto; display:flex; gap:18px; font-size:14px; }
+    .layout { max-width:1080px; margin:0 auto; padding:28px 24px 80px; display:grid; grid-template-columns:240px 1fr; gap:40px; }
+    aside h4 { font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin:0 0 10px; }
+    aside ul { list-style:none; margin:0; padding:0; }
+    aside li { margin:2px 0; }
+    aside a { display:block; padding:7px 12px; border-radius:8px; color:#334155; font-size:14px; }
+    aside a:hover { background:#eef2f7; text-decoration:none; }
+    aside a.active { background:var(--accent); color:#fff; }
+    main { min-width:0; }
+    article { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:36px 44px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+    article h1 { font-size:30px; letter-spacing:-0.02em; margin:0 0 8px; }
+    article h2 { font-size:21px; margin:34px 0 12px; letter-spacing:-0.01em; }
+    article h3 { font-size:16px; margin:22px 0 8px; }
+    article code { background:#f1f5f9; padding:1px 6px; border-radius:5px; font-size:14px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    article pre { background:#0f172a; color:#e2e8f0; padding:16px 18px; border-radius:10px; overflow:auto; }
+    article pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+    article table { width:100%; border-collapse:collapse; margin:14px 0; font-size:15px; }
+    article th, article td { border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top; }
+    article th { background:#f8fafc; }
+    article blockquote { margin:14px 0; padding:8px 16px; border-left:3px solid var(--accent); background:#f0f9ff; color:#334155; border-radius:0 8px 8px 0; }
+    article hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+    .lead { color:var(--muted); font-size:17px; margin:-2px 0 20px; }
+    footer { max-width:1080px; margin:0 auto; padding:0 24px 50px; color:var(--muted); font-size:13px; }
+    @media (max-width:760px){ .layout{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="top"><div class="inner">
+    <a href="/" class="brand">Conductor</a>
+    <nav>
+      <a href="/docs">Docs</a>
+      <a href="/dashboard">Dashboard</a>
+      <a href="https://github.com/nauman/rails-conductor">GitHub</a>
+    </nav>
+  </div></div>
+  <div class="layout">
+    <aside>
+      <h4>Guides</h4>
+      <ul>
+        <% (@guides || Guide.all).each do |g| %>
+          <li><%= link_to g.title, guide_path(g.slug), class: ("active" if defined?(@guide) && @guide&.slug == g.slug) %></li>
+        <% end %>
+      </ul>
+    </aside>
+    <main><%= yield %></main>
+  </div>
+  <footer>Conductor docs · self-hosted Rails fleet control plane</footer>
+</body>
+</html>

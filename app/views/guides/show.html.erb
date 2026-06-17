@@ -1,0 +1,5 @@
+<% content_for :title, "#{@guide.title} · Conductor Docs" %>
+<% content_for :description, @guide.description if @guide.description.present? %>
+<article>
+  <%= @guide.html %>
+</article>
