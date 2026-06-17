@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status, :provision_database]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status, :provision_database, :generate_deploy_key]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -103,6 +103,14 @@ class AppsController < ApplicationController
   def sync_status
     SyncContainerStatusJob.perform_later(@app.id)
     redirect_back fallback_location: @app, notice: "Status sync initiated."
+  end
+
+  # Generate (or regenerate) a read-only deploy key for cloning a private repo.
+  def generate_deploy_key
+    DeployKey.generate_for(@app)
+    redirect_to @app, notice: "Deploy key generated. Add the public key to your repo's GitHub deploy keys (read-only)."
+  rescue DeployKeyGenerator::Error => e
+    redirect_to @app, alert: "Could not generate deploy key: #{e.message}"
   end
 
   # Provision a Postgres database for this app on a registered cluster.

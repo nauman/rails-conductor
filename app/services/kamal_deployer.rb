@@ -37,8 +37,9 @@ class KamalDeployer
     deployment.mark_deploying!
     FileUtils.mkdir_p(workspace)
     @key_file = write_ssh_key
+    @deploy_key_file = write_deploy_key
 
-    return false unless run_step("Syncing repo", sync_repo_command)
+    return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     write_secrets_file
     return false unless run_step("kamal deploy", kamal_command, chdir: checkout_dir, env: deploy_env)
 
@@ -69,9 +70,33 @@ class KamalDeployer
     script = if Dir.exist?(File.join(checkout_dir, ".git"))
       "cd #{esc(checkout_dir)} && git fetch origin && git checkout #{esc(branch)} && git reset --hard origin/#{esc(branch)}"
     else
-      "git clone --branch #{esc(branch)} #{esc(app.repository_url)} #{esc(checkout_dir)}"
+      "git clone --branch #{esc(branch)} #{esc(repo_url)} #{esc(checkout_dir)}"
     end
     ["bash", "-lc", script]
+  end
+
+  # Use the SSH form of the repo URL when a deploy key is present, so the private
+  # key (a read-only GitHub deploy key) authenticates the clone of a private repo.
+  def repo_url
+    app.deploy_key ? DeployKey.ssh_url(app.repository_url) : app.repository_url
+  end
+
+  # Git env pointing git at the materialized deploy key (if any).
+  def git_env
+    return {} unless @deploy_key_file
+
+    { "GIT_SSH_COMMAND" => "ssh -i #{@deploy_key_file} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" }
+  end
+
+  # Materialize the repo deploy key (separate from the target-host ssh key).
+  def write_deploy_key
+    key = app.deploy_key&.private_key
+    return nil if key.blank?
+
+    path = File.join(workspace, ".deploykey_#{app.slug}")
+    File.write(path, key.end_with?("\n") ? key : "#{key}\n")
+    File.chmod(0o600, path)
+    path
   end
 
   # `kamal deploy` from the checkout; prefer the bundled binstub.
@@ -112,7 +137,9 @@ class KamalDeployer
   end
 
   def cleanup_key
-    File.delete(@key_file) if @key_file && File.exist?(@key_file)
+    [@key_file, @deploy_key_file].compact.each do |f|
+      File.delete(f) if File.exist?(f)
+    end
   rescue StandardError
     nil
   end

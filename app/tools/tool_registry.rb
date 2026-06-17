@@ -12,7 +12,8 @@ class ToolRegistry
     CreateAppTool,
     SetEnvVariableTool,
     UpdateAppTool,
-    SyncAppStatusTool
+    SyncAppStatusTool,
+    GenerateDeployKeyTool
   ].freeze
 
   def self.definitions

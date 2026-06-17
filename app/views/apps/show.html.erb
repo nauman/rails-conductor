@@ -168,6 +168,27 @@
     <% else %>
       <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">No repository configured. <%= rui_link("Edit app", url: edit_app_path(@app)) %> to add one.</p>
     <% end %>
+
+    <%# Deploy key (for cloning a private repo) %>
+    <% if @app.repository_url.present? %>
+      <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Deploy Key</h3>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Read-only key Conductor uses to clone a private repo. Add the public key to the repo's GitHub deploy keys.</p>
+          </div>
+          <%= button_to (@app.deploy_key ? "Regenerate" : "Generate"), generate_deploy_key_app_path(@app), method: :post,
+                data: { turbo_confirm: @app.deploy_key ? "Regenerate the deploy key? You'll need to re-add the new public key on GitHub." : nil },
+                class: "rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600" %>
+        </div>
+        <% if @app.deploy_key %>
+          <div class="mt-3">
+            <code class="block w-full overflow-x-auto rounded-lg bg-slate-900 text-slate-100 px-3 py-2 text-xs"><%= @app.deploy_key.public_key %></code>
+            <p class="mt-1 text-xs text-slate-400">Add at <span class="font-mono">github.com/&lt;owner&gt;/&lt;repo&gt;/settings/keys/new</span> (read-only). Fingerprint: <%= @app.deploy_key.fingerprint %></p>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
   </div>
 
   <%# Database %>

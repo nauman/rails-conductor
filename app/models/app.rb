@@ -9,6 +9,7 @@ class App < ApplicationRecord
   has_many :env_variables, dependent: :destroy
   has_many :deployments, dependent: :destroy
   has_many :databases, dependent: :nullify
+  has_one :deploy_key, dependent: :destroy
 
   # A valid Postgres identifier base derived from the app, e.g. "calm_page".
   def database_base_name

@@ -108,6 +108,7 @@ Rails.application.routes.draw do
       get :logs
       post :sync_status
       post :provision_database
+      post :generate_deploy_key
     end
     collection do
       post :sync_all

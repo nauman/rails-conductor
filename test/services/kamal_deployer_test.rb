@@ -79,6 +79,26 @@ class KamalDeployerTest < ActiveSupport::TestCase
     refute File.exist?(key_path), "ssh key file should be cleaned up after deploy"
   end
 
+  test "clones via the deploy key (ssh url + GIT_SSH_COMMAND) for a private repo" do
+    DeployKey.create!(app: @app, public_key: "ssh-ed25519 AAAA k", private_key: valid_private_key)
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
+    assert_includes sync[:command].last, "git@github.com:pavelabs/kuickr.git"
+    assert_includes sync[:env]["GIT_SSH_COMMAND"].to_s, "ssh -i "
+    assert_includes sync[:env]["GIT_SSH_COMMAND"].to_s, "IdentitiesOnly=yes"
+  end
+
+  test "uses the https url and no GIT_SSH_COMMAND when there is no deploy key" do
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
+    assert_includes sync[:command].last, "https://github.com/pavelabs/kuickr.git"
+    assert_nil sync[:env]["GIT_SSH_COMMAND"]
+  end
+
   test "marks the deployment failed when kamal deploy exits nonzero" do
     deploy_with(FakeShell.new(success: false))
     assert_equal "failed", @deployment.reload.status
