@@ -99,6 +99,21 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_includes sync[:env]["GIT_SSH_COMMAND"].to_s, "IdentitiesOnly=yes"
   end
 
+  test "clones via a GitHub App installation token (https + GIT_ASKPASS) when configured" do
+    fake_app = Object.new
+    def fake_app.clone_token_for(repo) = "ghs_installtoken"
+    shell = FakeShell.new(success: true)
+
+    GithubApp.stub(:from_config, fake_app) do
+      KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+    end
+
+    sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
+    assert_includes sync[:command].last, "https://x-access-token@github.com/pavelabs/kuickr.git"
+    assert sync[:env]["GIT_ASKPASS"].present?
+    refute_includes sync[:command].last, "ghs_installtoken" # token never in the command
+  end
+
   test "uses the https url and no GIT_SSH_COMMAND when there is no deploy key" do
     shell = FakeShell.new(success: true)
     deploy_with(shell)

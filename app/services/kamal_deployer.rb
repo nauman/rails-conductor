@@ -38,6 +38,8 @@ class KamalDeployer
     FileUtils.mkdir_p(workspace)
     @key_file = write_ssh_key
     @deploy_key_file = write_deploy_key
+    @clone_token = resolve_clone_token
+    @askpass_file = @clone_token ? write_askpass(@clone_token) : nil
     @ssh_home = setup_ssh_home
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
@@ -76,17 +78,47 @@ class KamalDeployer
     ["bash", "-lc", script]
   end
 
-  # Use the SSH form of the repo URL when a deploy key is present, so the private
-  # key (a read-only GitHub deploy key) authenticates the clone of a private repo.
+  # Clone auth precedence: GitHub App installation token (https) → deploy key
+  # (ssh) → plain url.
   def repo_url
-    app.deploy_key ? DeployKey.ssh_url(app.repository_url) : app.repository_url
+    if @clone_token && app.github_repo
+      "https://x-access-token@github.com/#{app.github_repo}.git"
+    elsif app.deploy_key
+      DeployKey.ssh_url(app.repository_url)
+    else
+      app.repository_url
+    end
   end
 
-  # Git env pointing git at the materialized deploy key (if any).
   def git_env
-    return {} unless @deploy_key_file
+    if @askpass_file
+      { "GIT_ASKPASS" => @askpass_file, "GIT_TERMINAL_PROMPT" => "0" }
+    elsif @deploy_key_file
+      { "GIT_SSH_COMMAND" => "ssh -i #{@deploy_key_file} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" }
+    else
+      {}
+    end
+  end
 
-    { "GIT_SSH_COMMAND" => "ssh -i #{@deploy_key_file} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" }
+  # A short-lived GitHub App installation token for cloning, or nil.
+  def resolve_clone_token
+    return nil unless app.github_repo
+
+    gh = GithubApp.from_config
+    return nil unless gh
+
+    gh.clone_token_for(app.github_repo)
+  rescue GithubApp::Error => e
+    log "GitHub App token unavailable (#{e.message}); falling back to deploy key / plain url"
+    nil
+  end
+
+  # Askpass script feeds the token as the git password (never in a logged command).
+  def write_askpass(token)
+    path = File.join(workspace, ".askpass_#{app.slug}")
+    File.write(path, "#!/bin/sh\nexec echo #{Shellwords.escape(token)}\n")
+    File.chmod(0o700, path)
+    path
   end
 
   # Materialize the repo deploy key (separate from the target-host ssh key).
@@ -167,7 +199,7 @@ class KamalDeployer
   end
 
   def cleanup_key
-    [@key_file, @deploy_key_file].compact.each do |f|
+    [@key_file, @deploy_key_file, @askpass_file].compact.each do |f|
       File.delete(f) if File.exist?(f)
     end
     FileUtils.remove_entry(@ssh_home) if @ssh_home && Dir.exist?(@ssh_home)
