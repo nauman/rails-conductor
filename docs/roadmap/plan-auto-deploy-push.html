@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auto-deploy on git push · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Auto-deploy on git push</h1>
+  <p class="sub">Receive GitHub/GitLab push webhooks and deploy the matching app automatically — Hatchbox's signature push-to-deploy flow.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime Backends</span>
+    <span class="badge p0">Priority: P0</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor only deploys when a human pulls the trigger: a button in the UI or an explicit MCP call. Hatchbox's entire value proposition is the opposite — you <code>git push</code> and your app ships. Until Conductor reacts to pushes on its own, it can't honestly be sold as a Hatchbox replacement; every deploy still needs a person in the loop.</p>
+
+  <h2>Current state</h2>
+  <p>Deploys today have exactly two entry points, both manual:</p>
+  <ul>
+    <li><strong>Web UI</strong> — <code>POST /apps/:id/deploy</code> routed to <code>AppsController#deploy</code> (<code>app/controllers/apps_controller.rb:47</code>). It guards on <code>@app.deployable?</code> and on no in-progress deployment, then does <code>deployment = @app.deployments.create!(user: current_user)</code> and <code>DeployAppJob.perform_later(deployment.id)</code>.</li>
+    <li><strong>MCP tool</strong> — <code>DeployAppTool#call</code> (<code>app/tools/deploy_app_tool.rb</code>) resolves an app by id/name and runs the same <code>deployments.create!</code> + <code>DeployAppJob.perform_later</code> pair.</li>
+  </ul>
+  <p><code>DeployAppJob</code> (<code>app/jobs/deploy_app_job.rb</code>) is already backend-agnostic — it dispatches on <code>app.deploy_method</code> to <code>NativeDeployer</code>, <code>KamalDeployer</code>, or the default <code>AppDeployer</code>. So the deploy machinery is ready; what's missing is an automatic trigger.</p>
+  <p>There is <strong>no inbound webhook receiver</strong> anywhere in <code>config/routes.rb</code> (the closest thing is the <code>mcp</code> namespace and the API <code>v1</code> namespace, neither of which accepts SCM push events). On the data side, <code>App</code> (<code>app/models/app.rb</code>) carries <code>repository_url</code> and <code>branch</code> but has <strong>no <code>auto_deploy</code> flag and no <code>webhook_secret</code></strong> — there is nothing to verify a payload signature against and nothing to gate on.</p>
+
+  <h2>Proposed design</h2>
+  <p>Add a public <code>WebhooksController</code> that SCM providers post to. Each app gets a unique <code>webhook_secret</code>; the controller verifies the provider's HMAC signature header (e.g. <code>X-Hub-Signature-256</code> for GitHub) against that secret, extracts the repo and ref from the payload, matches them to an <code>App</code> by <code>repository_url</code> + <code>branch</code>, and — if <code>auto_deploy</code> is on — enqueues the existing <code>DeployAppJob</code>. No new deploy path is introduced; we reuse the manual one.</p>
+  <pre><code># config/routes.rb
+post "webhooks/:provider/:app_id", to: "webhooks#receive", as: :webhook
+
+# app/controllers/webhooks_controller.rb
+class WebhooksController &lt; ActionController::Base
+  skip_forgery_protection
+
+  def receive
+    app = App.find(params[:app_id])
+    head :unauthorized and return unless valid_signature?(app)
+    head :ok and return unless app.auto_deploy?
+    head :ok and return unless ref_matches_branch?(app)
+
+    return if app.deployments.in_progress.any? # debounce
+    deployment = app.deployments.create!
+    DeployAppJob.perform_later(deployment.id)
+    head :accepted
+  end
+
+  private
+
+  def valid_signature?(app)
+    expected = "sha256=" + OpenSSL::HMAC.hexdigest(
+      "SHA256", app.webhook_secret, request.raw_post)
+    ActiveSupport::SecurityUtils.secure_compare(
+      expected, request.headers["X-Hub-Signature-256"].to_s)
+  end
+end</code></pre>
+  <p>The signature check must run against the <em>raw</em> request body, before parsing. Branch matching reads <code>refs/heads/&lt;branch&gt;</code> from the payload and compares to <code>app.branch.presence || "main"</code> (the same default both <code>NativeDeployer</code> and <code>KamalDeployer</code> already use).</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>Migration + model: add <code>auto_deploy:boolean</code> (default false) and <code>webhook_secret:string</code> to <code>apps</code>; generate the secret on create (alongside the existing <code>generate_slug</code>/<code>generate_image_name</code> before_validation hooks) and expose a "regenerate secret" action.</li>
+    <li><code>WebhooksController#receive</code> + route: provider-aware HMAC verification (GitHub <code>X-Hub-Signature-256</code>, GitLab <code>X-Gitlab-Token</code>), repo/branch extraction, and app matching by <code>repository_url</code> + <code>branch</code>.</li>
+    <li>UI + MCP surface: an <code>auto_deploy</code> toggle and the webhook URL/secret on the app edit page (add <code>:auto_deploy</code> to <code>app_params</code> in <code>AppsController</code>); mirror the toggle in <code>UpdateAppTool</code> so agents can flip it.</li>
+    <li>Concurrency/debounce: reuse the existing <code>deployments.in_progress.any?</code> guard and coalesce bursts of pushes so a rapid series of commits results in one deploy of the latest ref.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A push to an app's configured branch, with a valid signature, creates a <code>Deployment</code> and enqueues <code>DeployAppJob</code> within seconds.</li>
+    <li>A request with a missing or wrong signature is rejected with <code>401</code> and never enqueues a deploy.</li>
+    <li>With <code>auto_deploy = false</code>, a valid signed push is acknowledged (<code>200</code>) but triggers no deployment.</li>
+    <li>A push to a non-matching branch is ignored.</li>
+    <li>While a deployment is in progress, additional pushes do not stack up duplicate concurrent deploys.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Closely paired with <a href="plan-github-app.html">GitHub App &amp; deploy keys</a>: the same GitHub App can both <em>deliver</em> these webhooks (and supply the shared secret) and <em>authorize</em> the private-repo clone that the resulting deploy performs, plus post commit-status updates back. Builds directly on the existing <code>DeployAppJob</code> dispatch (<code>app/jobs/deploy_app_job.rb</code>) and the <code>Deployment</code> lifecycle in <code>app/models/deployment.rb</code>; no deployer changes required.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

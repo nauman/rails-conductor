@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kamal control machine · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Deploy Kamal apps through Conductor (control machine)</h1>
+  <p class="sub">Run <code>kamal</code> from Conductor's own container so managed Kamal apps deploy through Conductor — not just out-of-band from a laptop.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime Backends</span>
+    <span class="badge p0">Priority: P0</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge progress">Status: In progress — code redesigned, infra pending</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor can <em>trigger</em> a Kamal deploy (the <code>deploy_app</code> MCP tool and <code>apps#deploy</code> dispatch to <code>KamalDeployer</code> via <code>DeployAppJob</code>), but the first version SSHed to the target server and ran <code>kamal</code> there. Proving the path against the live fleet box showed why that can't work:</p>
+  <pre><code>fleet box 135.181.114.59:
+  git: /usr/bin/git    docker: ok    buildx: ok    docker group: yes
+  ruby:   MISSING      bundle: MISSING      kamal: MISSING</code></pre>
+  <p>Kamal is a <strong>control-machine</strong> tool — the target only needs Docker. Running <code>kamal</code> on the box would die at <code>kamal: command not found</code>, and the box also has no git credentials to clone a private repo.</p>
+
+  <h2>Current state</h2>
+  <p>Redesign landed (commit <code>a46b24e</code>): <code>KamalDeployer</code> now treats <strong>Conductor's own container as the control machine</strong>. Conductor already bundles the <code>kamal</code> gem (<code>Gemfile</code>, kamal 2.10.1). The deployer:</p>
+  <ul>
+    <li>checks out the app repo into a workspace (<code>tmp/kamal/&lt;slug&gt;</code> or <code>KAMAL_WORKSPACE</code>);</li>
+    <li>generates <code>.kamal/secrets</code> from the app's <code>EnvVariables</code> via <code>KamalEnvWriter</code> (Conductor = source of truth for secret values);</li>
+    <li>materializes the target server's SSH key (from <code>SshKey#private_key</code>) so Kamal's net-ssh can reach the box, and cleans it up afterward;</li>
+    <li>runs <code>kamal deploy</code> as a local subprocess via <code>LocalShell</code> (Open3, streamed to the deploy log), with Conductor's env injected (<code>DEPLOY_SERVER_IP</code>, registry creds, …).</li>
+  </ul>
+  <p>Orchestration is unit-tested (<code>test/services/kamal_deployer_test.rb</code>, <code>local_shell_test.rb</code>) with an injected shell. <strong>What's not yet validated is the runtime environment</strong> inside Conductor's deployed container.</p>
+
+  <h2>Proposed design — remaining infra</h2>
+  <p>To make a real through-Conductor Kamal deploy succeed in production:</p>
+  <pre><code># config/deploy.yml (Conductor itself)
+volumes:
+  - "/var/run/docker.sock:/var/run/docker.sock"   # build/push from the container
+  - "conductor_kamal_workspace:/rails/tmp/kamal"   # persist checkouts between deploys</code></pre>
+  <ul>
+    <li><strong>Docker access:</strong> mount the host's <code>/var/run/docker.sock</code> so <code>kamal</code> can build/push (the host already has buildx). The deploy user is in the docker group.</li>
+    <li><strong>kamal on PATH:</strong> confirm <code>kamal</code> resolves in the app checkout (it runs from the app dir; fall back to the app's <code>bin/kamal</code> or invoke via Conductor's bundle).</li>
+    <li><strong>Repo auth:</strong> private repos need a deploy key / token at clone time — see <a href="plan-github-app.html">GitHub App &amp; deploy keys</a>.</li>
+    <li><strong>SSH to target:</strong> the materialized key must be wired into Kamal's net-ssh (deploy.yml <code>ssh.keys</code> / an ssh-config / ssh-agent). This is the main integration point to validate.</li>
+    <li><strong>Registry:</strong> Conductor's container logs into Docker Hub using <code>KAMAL_REGISTRY_PASSWORD</code> from the app's env.</li>
+  </ul>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>Done —</strong> control-machine redesign: <code>LocalShell</code> + <code>KamalDeployer</code> run kamal locally; generate secrets; materialize/cleanup the SSH key; stream logs. Unit-tested.</li>
+    <li>Mount <code>docker.sock</code> + a persistent workspace volume into Conductor's container; redeploy Conductor.</li>
+    <li>Wire the target SSH key into Kamal's net-ssh and confirm <code>kamal</code> resolves from the app checkout.</li>
+    <li>Validate end-to-end: deploy <code>kuickr</code> via the <code>deploy_app</code> MCP tool; confirm the deploy log streams and the release boots; status-sync flips to <code>running</code>.</li>
+    <li>Add a <code>deployment_log</code> MCP tool / API so deploy progress is observable over MCP (today only <code>recent_logs</code> reads ScriptRuns).</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>Triggering <code>deploy_app</code> on a <code>kamal</code> app deploys its latest commit through Conductor, with live log streaming.</li>
+    <li>No <code>ruby</code>/<code>kamal</code> required on target servers — only Docker.</li>
+    <li>Secrets set in Conductor's UI (e.g. <code>SECRET_KEY_BASE</code>) reach the container; the target SSH key is materialized for the deploy and removed afterward.</li>
+    <li>A failed deploy marks the <code>Deployment</code> failed with the error in the log; a successful one flips status to <code>running</code>.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on the <strong>Kamal-env bridge</strong> (<code>KamalEnvWriter</code>) and the <strong>kamal-aware status sync</strong> (both shipped). Unblocked private-repo deploys depend on <a href="plan-github-app.html">GitHub App &amp; deploy keys</a>. Pairs with <a href="plan-auto-deploy-push.html">auto-deploy on push</a> to deliver the full “push → deploy” loop.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17 · proven against the live fleet box this session</footer>
+</div></body></html>

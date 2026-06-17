@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live app log streaming in the UI · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Live app log streaming in the UI</h1>
+  <p class="sub">Tail a running managed app's logs in the browser — docker/kamal container logs or native journald — the way Hatchbox surfaces app logs, reusing Conductor's existing ActionCable streaming plumbing.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Fleet Control</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor already streams <em>deploy</em> and <em>script</em> output live, but once an app is running there is no way to see what it is doing. To read a managed app's logs you have to SSH to the box and run <code>kamal logs</code> or <code>docker logs</code> / <code>journalctl</code> by hand. Hatchbox shows live app logs in its UI; Conductor has no app-log tailing surface at all.</p>
+
+  <h2>Current state</h2>
+  <p>Conductor has a working browser-streaming pattern, but only for ephemeral run output. Script runs stream over an ActionCable channel keyed by id: <code>ScriptRun#append_log</code> persists each line and broadcasts it via <code>ActionCable.server.broadcast("script_run_#{id}", { line: line })</code>, with <code>start!</code>/<code>finish!</code> broadcasting status transitions (<code>app/models/script_run.rb:21,26,32</code>). The job side runs the command through <code>SshConnection#execute_stream</code>, which opens a channel and yields <code>:stdout</code>/<code>:stderr</code> chunks (<code>app/services/ssh_connection.rb</code>). Deployers broadcast the same way: <code>app_deployer.rb:53,79</code>, <code>native_deployer.rb:111,125</code>, and <code>kamal_deployer.rb:136,150</code> all call <code>ActionCable.server.broadcast</code> as deploy logs accumulate (with lines persisted via <code>Deployment#append_log</code>).</p>
+  <p>For live app state, Conductor relies on SSH-backed docker commands in <code>ContainerStatus</code> (<code>app/services/container_status.rb</code>): docker/native apps are inspected by container name (<code>docker inspect --format '{{json .State}}' &lt;container&gt;</code>), and kamal apps are detected by the <code>label=service=&lt;kamal_service&gt;</code> filter on <code>docker ps</code>. Native apps run under systemd (the <code>systemd-setup</code> unit seeded in <code>db/seeds.rb</code>). Crucially, all of this is point-in-time status — there is <strong>no app-log tailing endpoint</strong>. <code>kamal logs</code> / <code>docker logs</code> exist only via the CLI on the box, never piped to the browser.</p>
+
+  <h2>Proposed design</h2>
+  <p>Add an SSH-backed <strong>follow</strong> stream that runs a long-lived tail command on the remote host and pushes lines to the browser over a dedicated ActionCable channel, reusing the exact <code>execute_stream</code> + <code>broadcast</code> pattern already used for scripts and deploys. The remote command is chosen per deploy method: for docker/kamal apps, <code>docker logs -f</code> against the container resolved by the same label/name logic <code>ContainerStatus</code> already uses (<code>label=service=&lt;kamal_service&gt;</code> for kamal, container name for native-docker); for native systemd apps, <code>journalctl -fu &lt;unit&gt;</code>. The UI gets a per-app <strong>Logs</strong> tab with a follow toggle and a bounded in-browser buffer so memory stays flat, plus a recent-N preload.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>LogStream job + channel.</strong> A <code>LogStreamJob</code> (or stream-scoped channel) runs a follow command through <code>SshConnection#execute_stream</code> and broadcasts each line on an <code>app_logs_&lt;app_id&gt;</code> ActionCable channel, mirroring <code>ScriptRun#append_log</code>; the follow process is torn down when the subscriber unsubscribes.</li>
+    <li><strong>Per-deploy-method log source.</strong> Resolve the right command per app: <code>docker logs -f</code> by container name/label for docker &amp; kamal (reusing <code>ContainerStatus</code>'s resolution), <code>journalctl -fu &lt;unit&gt;</code> for native systemd.</li>
+    <li><strong>UI Logs tab.</strong> Add a Logs tab to the app show page with a follow start/stop toggle that subscribes/unsubscribes from the channel.</li>
+    <li><strong>Recent-N + search.</strong> Preload the last N lines (<code>--tail</code> / <code>-n</code>) on open and add a client-side filter over the buffered lines.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>Opening an app's Logs tab shows a live tail for docker, kamal, and native (systemd/journald) apps.</li>
+    <li>The user can stop and restart following without reloading; stopping ends the remote follow process.</li>
+    <li>The browser buffer is bounded (recent-N) so a long-lived tail does not grow memory without limit.</li>
+    <li>Streaming reuses the existing ActionCable + <code>execute_stream</code> plumbing rather than a new transport.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Reuses <code>SshConnection#execute_stream</code> (<code>app/services/ssh_connection.rb</code>), the ActionCable broadcast pattern from <code>ScriptRun</code> (<code>app/models/script_run.rb</code>) and the deployers (<code>app_deployer.rb</code>, <code>native_deployer.rb</code>, <code>kamal_deployer.rb</code>), and the container/unit resolution logic in <code>ContainerStatus</code> (<code>app/services/container_status.rb</code>). Related to the background worker plan (<code>plan-background-workers.html</code>), whose workers will want their own per-process log source.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

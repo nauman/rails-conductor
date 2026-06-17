@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy hooks (pre/post commands) · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Deploy hooks (pre/post commands)</h1>
+  <p class="sub">Let each app define ordered commands to run around its deploy — migrations beyond the defaults, cache warmups, asset syncs, notifications.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime Backends</span>
+    <span class="badge p2">Priority: P2</span>
+    <span class="badge">Effort: S</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Real apps need to run app-specific commands around a deploy: extra migration or seeding steps beyond the defaults, cache warmups, asset/CDN syncs, search-index rebuilds, or a notification to Slack when the release goes live. Conductor offers no place to hang any of this — the deploy is a fixed pipeline, so operators end up SSHing in by hand after every release, which defeats the point of a control plane.</p>
+
+  <h2>Current state</h2>
+  <p>Every deployer runs a hard-coded sequence with no user-defined extension points. <code>NativeDeployer#deploy!</code> (<code>app/services/native_deployer.rb</code>) runs a fixed <code>run_script</code> chain — on first deploy <code>app-setup</code> ("Setting up app directory") then <code>systemd-setup</code> ("Configuring systemd service"), and always <code>app-deploy</code> ("Deploying release"), followed by <code>health_check</code>. Each <code>run_script</code> loads a built-in <code>Script</code> by name, prepends <code>env_exports</code>, and streams output into the deploy log; there is no way to insert a command before or after any of these phases.</p>
+  <p>The Docker path (<code>app/services/app_deployer.rb</code>) is likewise a fixed <code>steps</code> array (<code>ensure_docker → clone_or_pull_repo → build_image → stop_old_container → start_container → health_check → cleanup</code>), and the Kamal path (<code>app/services/kamal_deployer.rb</code>) is just sync-repo + <code>kamal deploy</code>. <code>App</code> (<code>app/models/app.rb</code>) carries deploy config (<code>deploy_method</code>, <code>branch</code>, <code>env_variables</code>, <code>health_check_path</code>) but has no association for user hooks. Notably, Kamal apps <em>do</em> already support <code>.kamal/hooks</code> natively — but Conductor never generates them.</p>
+
+  <h2>Proposed design</h2>
+  <p>Add per-app, ordered <strong>deploy hooks</strong>, each with a <em>phase</em> (<code>before_deploy</code> / <code>after_deploy</code> / <code>before_migrate</code>), a <em>command</em>, and a <em>run-on</em> target (<code>server</code> — over SSH on the app server — or <code>control</code> — locally on Conductor). The deployer executes the relevant hooks between its existing steps. Storage can reuse the existing <code>Script</code>/<code>ScriptRun</code> machinery or a lighter dedicated <code>Hook</code> model belonging to <code>App</code>; given hooks are per-app and ordered, a dedicated <code>Hook</code> model is the cleaner fit, executed via the same SSH/LocalShell streaming the deployers already use so output lands in the deploy log. For Kamal apps, Conductor should <em>generate</em> <code>.kamal/hooks</code> scripts from the configured hooks rather than running them itself, so they run inside Kamal's own lifecycle — note the interplay so a hook isn't run twice.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><code>Hook</code> model (<code>belongs_to :app</code>; phase, command, run-on, position) with UI and MCP CRUD.</li>
+    <li>Execute hooks in <code>NativeDeployer</code> at the right phases — <code>before_deploy</code>/<code>before_migrate</code> ahead of <code>app-deploy</code>, <code>after_deploy</code> after the health check passes — using the existing SSH streaming path.</li>
+    <li>Surface hook output in the deploy log (same <code>append_log</code>/broadcast channel as built-in steps) so it's visible live and in history.</li>
+    <li>Generate <code>.kamal/hooks</code> scripts for Kamal apps from the configured hooks (instead of Conductor-side execution), reconciling with Kamal's own hook lifecycle.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A configured <code>before_deploy</code> hook runs before the release step, and a configured <code>after_deploy</code> hook runs after the health check — each at the correct phase.</li>
+    <li>Hook output appears inline in the deploy log alongside the built-in steps.</li>
+    <li>A failing hook aborts the deploy: the deployment is marked failed and subsequent steps do not run.</li>
+    <li>Hooks are creatable/editable/deletable from both the UI and an MCP tool, with stable ordering.</li>
+    <li>For Kamal apps, configured hooks materialize as <code>.kamal/hooks</code> scripts and are not also run twice by Conductor.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Touches the same deployer step sequences as the rollbacks plan (<code>plan-rollbacks.html</code>) — both edit where <code>NativeDeployer</code> runs its phases. Reuses the SSH/streaming-log plumbing in <code>app/services/native_deployer.rb</code> and the <code>Deployment#append_log</code>/ActionCable broadcast in <code>app/models/deployment.rb</code>. The Kamal slice depends on the control-machine workspace generation in <code>app/services/kamal_deployer.rb</code> (alongside its <code>.kamal/secrets</code> writing). The MCP CRUD parallels the existing app-management tools.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

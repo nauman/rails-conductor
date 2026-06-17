@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web console (rails console / shell) · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Web console (rails console / shell)</h1>
+  <p class="sub">In-browser interactive terminal for an app — run <code>rails console</code>, <code>kamal app exec</code>, a host shell, or <code>docker exec</code> without leaving Conductor.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Fleet Control</span>
+    <span class="badge p2">Priority: P2</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>To open a Rails console, run a one-off shell command, or poke at a running container, an operator today has to drop to a terminal and remember the right incantation (<code>kamal console</code>, <code>kamal app exec</code>, <code>docker exec -it …</code>, or an SSH session into the box). Hatchbox offers in-browser console access as a first-class feature; Conductor has no interactive shell at all, which breaks the "manage the fleet entirely from the UI" promise the moment something needs hands-on debugging.</p>
+
+  <h2>Current state</h2>
+  <p>Conductor can already reach every box over SSH, but only in a <em>one-shot</em>, non-interactive way. <code>SshConnection</code> (<code>app/services/ssh_connection.rb</code>) opens a fresh <code>Net::SSH.start</code> per call with <code>non_interactive: true</code> and exposes three modes: <code>execute</code> (<code>ssh.exec!</code>, returns a single string), <code>execute_with_status</code> (captures stdout/stderr/exit code), and <code>execute_stream</code> (lines 100–135, opens a channel and yields <code>[:stdout|:stderr, data]</code> chunks one-way). None of these allocate a PTY or accept input back from the client — they run a command and stream output until it exits.</p>
+  <p>Real-time output today is one-directional over ActionCable: deploy logs are pushed from the deployers (<code>app/services/app_deployer.rb</code>, <code>kamal_deployer.rb</code>, <code>native_deployer.rb</code>) and script output from <code>ScriptRun</code> (<code>app/models/script_run.rb</code>) via <code>ActionCable.server.broadcast(...)</code>, consumed by <code>ActionCable.createConsumer()</code> in <code>app/views/deployments/show.html.erb</code> and <code>app/views/script_runs/show.html.erb</code>. The cable endpoint is already mounted (<code>config/routes.rb:138</code>, <code>mount ActionCable.server =&gt; '/cable'</code>), and the channel base classes exist under <code>app/channels/application_cable/</code> — but there is no console route, no interactive channel, and no terminal UI. Apps carry a <code>deploy_method</code> of <code>docker</code> / <code>native</code> / <code>kamal</code> (<code>App::DEPLOY_METHODS</code> in <code>app/models/app.rb</code>) and helpers like <code>container_name</code> (<code>conductor-&lt;slug&gt;</code>), <code>kamal_service</code>, and <code>app_dir</code> that a console bridge can target.</p>
+
+  <h2>Proposed design</h2>
+  <p>Add a browser terminal backed by <a href="https://xtermjs.org">xterm.js</a> that talks to a new ActionCable channel, which in turn bridges to an <em>interactive</em> SSH session running a PTY on the target box. Unlike <code>SshConnection</code>'s fire-and-forget channels, the bridge keeps the SSH channel open, requests a PTY (<code>ch.request_pty</code>), forwards keystrokes from the browser to the channel's stdin, and streams the channel's output back to xterm. The exact remote command is chosen per <code>deploy_method</code>: <code>kamal app exec --interactive --reuse "bin/rails console"</code> (or a plain shell) for Kamal apps, <code>docker exec -it &lt;container_name&gt; …</code> for docker/native containers, and a raw login shell on the host for box-level work. Access is locked to webmaster/owner roles only, every command (or the full session transcript) is persisted to an audit log modeled on the existing <code>McpCall</code> record (<code>app/models/mcp_call.rb</code>), and idle sessions are torn down by a timeout.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>PTY bridge: a new ActionCable channel that opens an interactive <code>Net::SSH</code> session with a requested PTY, pumps browser→stdin and channel→browser, and closes cleanly on disconnect (extend or sit alongside <code>SshConnection</code>).</li>
+    <li>xterm.js UI: a "Console" action on each app's page that mounts a terminal, subscribes to the channel, and wires resize/keystroke events.</li>
+    <li>Per-method command selection: resolve the remote command from <code>app.deploy_method</code> — <code>kamal app exec</code>, <code>docker exec -it &lt;container_name&gt;</code>, host shell / <code>journalctl</code> — reusing <code>container_name</code>, <code>kamal_service</code>, and <code>app_dir</code>.</li>
+    <li>Authorization + audit + lifecycle: gate on webmaster/owner, record each session and command to a <code>McpCall</code>-style audit table, and enforce an idle session timeout that closes the PTY.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>From an app's page, an authorized operator can open a console and get an interactive prompt (e.g. a live <code>rails console</code>) in the browser.</li>
+    <li>Typed input is sent to the remote process and its output streams back in real time via the new channel.</li>
+    <li>A user without webmaster/owner role cannot open a console; the attempt is rejected.</li>
+    <li>Every console session and the commands run in it are recorded in the audit log.</li>
+    <li>An idle session is automatically closed after the timeout, tearing down the SSH PTY.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on the existing SSH layer (<code>app/services/ssh_connection.rb</code>) and the ActionCable plumbing already used for deploy/script log streaming (<code>config/routes.rb:138</code>, <code>app/channels/application_cable/</code>). Reuses <code>App</code> deploy-method helpers (<code>app/models/app.rb</code>) and the <code>McpCall</code> audit pattern (<code>app/models/mcp_call.rb</code>, <code>app/controllers/admin/mcp_calls_controller.rb</code>). Related roadmap items: <a href="plan-auto-deploy-push.html">auto-deploy on push</a> and <a href="plan-rollbacks.html">rollbacks</a>.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

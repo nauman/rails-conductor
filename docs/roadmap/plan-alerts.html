@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alerts &amp; notifications · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Alerts &amp; notifications</h1>
+  <p class="sub">A proper event/alert pipeline — notify operators on deploy failure, app/container down, cert expiry, and failed maintenance, over per-org email and webhook channels with de-duplication.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Continuous Maintenance</span>
+    <span class="badge p2">Priority: P2</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>When a deploy fails, an app or container goes down, a TLS cert is about to expire, or a scheduled maintenance/audit job fails, operators currently find out by <em>checking</em> — opening the dashboard and noticing red. There is no proactive notification, no per-organization routing, and no way to send to Slack/Discord. Hatchbox notifies on deploy status out of the box; Conductor needs at least parity, plus the maintenance-oriented alerts that fit its "continuous maintenance" positioning.</p>
+
+  <h2>Current state</h2>
+  <p>The state needed to fire alerts already exists, but notification is thin and hard-wired. <code>Deployment</code> tracks status through <code>STATUSES</code> including <code>succeeded</code> / <code>failed</code> (<code>app/models/deployment.rb</code>); <code>fail!</code> already calls <code>AlertMailer.deployment_failed(self).deliver_later</code> (line 79), and <code>Server#mark_offline!</code> calls <code>AlertMailer.server_offline</code> only on the online→offline transition (<code>app/models/server.rb:82–88</code>). <code>ContainerStatus#sync!</code> (<code>app/services/container_status.rb</code>) already <em>detects</em> down containers — it sets <code>container_status</code> to <code>exited</code>/<code>dead</code>/<code>unknown</code> and flips <code>App.status</code> to <code>stopped</code>/<code>failed</code> (and <code>App#needs_attention?</code> in <code>app/models/app.rb</code> encodes "this is unhealthy") — but nothing emits a notification when that happens.</p>
+  <p>Delivery is email-only and global: <code>AlertMailer</code> (<code>app/mailers/alert_mailer.rb</code>) has just three actions — <code>backup_failed</code>, <code>deployment_failed</code>, <code>server_offline</code> — and every one sends <code>to: admin_emails</code>, i.e. <code>User.admins.pluck(:email)</code> across the whole instance, with no per-org scoping and no de-duplication. Email goes out over AWS SES SMTP, configured in <code>config/environments/production.rb</code> (<code>delivery_method = :smtp</code>, <code>smtp_settings</code> pointing at <code>SES_SMTP_HOST</code> / <code>email-smtp.us-east-1.amazonaws.com</code> with SES credentials, lines 63–76). There is no alerts/events model, no container-down or cert-expiry notification, and no webhook/Slack/Discord channel.</p>
+
+  <h2>Proposed design</h2>
+  <p>Introduce an event/alert pipeline that decouples "something happened" from "who gets told, and how." Sources emit typed ops events — <code>deploy_failed</code>, <code>container_down</code>, <code>cert_expiring</code>, <code>audit_failed</code> — each carrying a severity and a stable dedup key. An <code>Organization</code> configures one or more notification channels (email via the existing SES setup, plus Slack/Discord-style incoming webhooks). A dispatcher resolves the org's channels for an event, applies de-duplication and rate-limiting (e.g. one alert per container-down incident, not per status-sync tick), and delivers. Events are emitted from the points that already know the truth: <code>Deployment#fail!</code>, the container <code>ContainerStatus</code> status-sync path, and the cron/maintenance jobs. This generalizes today's hard-wired <code>AlertMailer</code> calls into routed, per-org, de-duplicated alerts while keeping SES as one channel among several.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>Per-org notification channels: a model + UI for configuring email and webhook (Slack/Discord) channels on an <code>Organization</code>, with a delivery adapter per type (email reusing SES SMTP, webhook via HTTP POST).</li>
+    <li>Event emission: define ops event types and emit them from the deploy path (<code>Deployment#fail!</code>) and the status-sync path (<code>ContainerStatus</code> / <code>App#needs_attention?</code>) for <code>deploy_failed</code> and <code>container_down</code>.</li>
+    <li>Delivery + dedup/rate-limit: a dispatcher that fans an event out to the org's channels, with a dedup key + cooldown so a single incident notifies once, not on every poll.</li>
+    <li>Maintenance alerts: add <code>cert_expiring</code> (from cert/TLS checks) and <code>audit_failed</code> (from the cron/maintenance jobs) event sources.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A failed deploy (<code>Deployment#fail!</code>) emits a <code>deploy_failed</code> event that notifies the deploying app's organization on its configured channel(s).</li>
+    <li>A container transitioning to down (detected by <code>ContainerStatus</code>) alerts exactly once per incident — repeated status syncs while it stays down do not re-notify.</li>
+    <li>Channels are scoped per organization: an org only receives alerts for its own apps/servers, on the channels it configured.</li>
+    <li>At least two channel types work end to end: email via SES and an outgoing webhook (Slack/Discord).</li>
+    <li>Cert-expiry and failed-maintenance events fire alerts through the same pipeline.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Generalizes the existing <code>AlertMailer</code> (<code>app/mailers/alert_mailer.rb</code>) and the hard-wired calls in <code>Deployment#fail!</code> (<code>app/models/deployment.rb</code>) and <code>Server#mark_offline!</code> (<code>app/models/server.rb</code>). Consumes container-health signals from <code>ContainerStatus</code> (<code>app/services/container_status.rb</code>) and <code>App#needs_attention?</code> (<code>app/models/app.rb</code>), and relies on the SES SMTP delivery configured in <code>config/environments/production.rb</code>. Needs the org's cron/maintenance jobs as the source for <code>audit_failed</code>, and a TLS/cert check as the source for <code>cert_expiring</code>. Related: any rollback/auto-recovery work that might act on a <code>container_down</code> event.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis &amp; MySQL accessories · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Redis &amp; MySQL accessories</h1>
+  <p class="sub">Extend Conductor's shared-cluster provisioning beyond PostgreSQL to the Redis and MySQL accessories that most Rails apps depend on, matching Hatchbox's data offering.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Data &amp; Backups</span>
+    <span class="badge p2">Priority: P2</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor can provision a per-app PostgreSQL database on a shared cluster, but Hatchbox also offers Redis (for Rails cache and Sidekiq queues) and MySQL. The overwhelming majority of Rails apps need Redis for caching and background jobs, and a meaningful share still run on MySQL. Without these, an operator who moves a Rails app onto Conductor still has to hand-provision its cache and queue store outside the platform, which breaks the &ldquo;UI-driven fleet control plane&rdquo; promise.</p>
+
+  <h2>Current state</h2>
+  <p>The data layer is Postgres-only and hard-wired to one engine. <code>DatabaseCluster</code> (<code>app/models/database_cluster.rb</code>) belongs to a <code>Server</code>, encrypts an <code>admin_password</code>, and exposes <code>provision_database!</code>, which generates a 24-byte password, creates a pending <code>Database</code> record, and delegates to <code>PostgresClusterClient</code>. <code>PostgresClusterClient</code> (<code>app/services/postgres_cluster_client.rb</code>) runs admin SQL over SSH by base64-piping a statement into <code>docker exec -i &lt;container&gt; psql -U &lt;admin&gt; -d postgres</code>; <code>create_database</code> issues <code>CREATE ROLE … LOGIN PASSWORD … CREATEDB</code> followed by <code>CREATE DATABASE … OWNER …</code>, and <code>drop_database</code> issues the matching <code>DROP DATABASE</code>/<code>DROP ROLE</code>. The resulting <code>Database</code> (<code>app/models/database.rb</code>) builds a fixed <code>postgres://</code> connection URL from <code>username</code>, <code>password</code>, the cluster's <code>container_name</code>, <code>port</code>, and <code>name</code>. The MCP surface is equally Postgres-specific: <code>RegisterDatabaseClusterTool</code> (<code>app/tools/register_database_cluster_tool.rb</code>) registers &ldquo;a running postgres container&rdquo;, and <code>ProvisionDatabaseTool</code> (<code>app/tools/provision_database_tool.rb</code>) is described as &ldquo;Provision a Postgres database&rdquo; and rescues <code>PostgresClusterClient::Error</code>. The web UI (<code>app/controllers/database_clusters_controller.rb</code>) defaults <code>port</code> to <code>5432</code> on new clusters. There is no Redis or MySQL client, model field, or tool anywhere in the codebase, and no <code>engine</code> concept to distinguish them. See also <code>docs/plans/database-clusters.md</code> and <code>docs/plans/data-layer.md</code>.</p>
+
+  <h2>Proposed design</h2>
+  <p>Generalize the cluster/accessory concept around an <code>engine</code> attribute (<code>postgres|mysql|redis</code>) on <code>DatabaseCluster</code> (or a renamed <code>Accessory</code>/<code>Cluster</code>), and introduce a per-engine client behind a common interface (<code>create_database</code>/<code>drop_database</code>, or more neutrally <code>provision</code>/<code>deprovision</code>). The existing <code>PostgresClusterClient</code> becomes the postgres implementation. <code>MysqlClusterClient</code> mirrors it closely &mdash; <code>docker exec -i &lt;container&gt; mysql</code> running <code>CREATE DATABASE</code>, <code>CREATE USER … IDENTIFIED BY …</code>, and <code>GRANT ALL ON db.* TO user</code>, with matching <code>DROP</code> on deprovision &mdash; and yields a <code>mysql2://</code> URL. <code>RedisAccessoryClient</code> is conceptually different: rather than per-app databases it runs one shared Redis container per cluster and hands out an isolated logical handle, either a numbered logical DB index (<code>redis://host:6379/3</code>) or, preferably, a key-namespaced URL/ACL user so apps don't collide on the 16-DB limit. <code>Database</code> (renamed <code>Accessory</code> where natural) gains an engine-aware <code>connection_url</code> so each engine emits the right scheme. The provisioning UI and the two MCP tools accept and branch on <code>engine</code> so a single &ldquo;Add accessory&rdquo; flow covers all three.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>Engine column + client interface.</strong> Add <code>engine</code> (default <code>postgres</code>) to clusters/accessories, define a thin client interface with a registry that maps engine&rarr;client, and refactor <code>PostgresClusterClient</code> to implement it. Make <code>provision_database!</code> resolve its client by engine instead of hard-coding <code>PostgresClusterClient</code>.</li>
+    <li><strong>Redis accessory.</strong> Register a shared Redis container as a cluster; <code>RedisAccessoryClient</code> allocates a per-app logical DB index (or namespaced ACL user) and surfaces a <code>redis://</code> URL. Track the allocated index on the accessory record so allocation/release is idempotent.</li>
+    <li><strong>MySQL client.</strong> Implement <code>MysqlClusterClient</code> (<code>CREATE DATABASE</code>/<code>CREATE USER</code>/<code>GRANT</code>, and the inverse on drop) over the same <code>docker exec</code> SSH path, emitting a <code>mysql2://</code> URL.</li>
+    <li><strong>Generalize tools + UI.</strong> Teach <code>RegisterDatabaseClusterTool</code> and <code>ProvisionDatabaseTool</code> (and the clusters controller/views) about <code>engine</code>: per-engine defaults (port 5432/3306/6379), engine-aware copy, and a unified rescue across the client error types.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>An operator can register a Redis cluster and provision a Redis handle for an app via both the web UI and the <code>provision_database</code> MCP tool, receiving a working <code>redis://</code> URL scoped to that app.</li>
+    <li>An operator can register a MySQL cluster and provision a MySQL database + user for an app, receiving a working <code>mysql2://</code> connection string.</li>
+    <li>The PostgreSQL flow is unchanged in behavior and still emits a <code>postgres://</code> URL.</li>
+    <li>Each engine surfaces its connection string on the accessory record and in the MCP/tool result payload.</li>
+    <li>Deprovisioning (drop) cleans up the underlying resource: dropped MySQL db/user, released Redis index/namespace, and the accessory record is removed or marked accordingly.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds directly on the existing cluster pipeline (<code>app/models/database_cluster.rb</code>, <code>app/services/postgres_cluster_client.rb</code>, <code>app/tools/{register_database_cluster,provision_database}_tool.rb</code>). Connection URLs feed app deploy config, so it pairs with deployment/Kamal work (<code>docs/plans/deployment-kamal.md</code>). Redis/MySQL containers themselves are typically stood up by server bootstrap/provisioning (<code>docs/plans/server-bootstrap.md</code>), and backups should eventually cover the new engines (<code>docs/plans/backups-r2.md</code>, <code>docs/plans/postgres-restore.md</code>). See <code>docs/plans/database-clusters.md</code> and <code>docs/plans/data-layer.md</code> for the data-layer baseline.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

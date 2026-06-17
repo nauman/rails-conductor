@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Background worker management · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Background worker management</h1>
+  <p class="sub">Define, run, scale, and restart a managed app's background worker processes (Sidekiq and friends) from Conductor — the way Hatchbox does — instead of leaving them to manual SSH.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime Backends</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Hatchbox treats background workers as first-class processes: you declare a worker (e.g. <code>bundle exec sidekiq</code>), pick a process count, and Hatchbox starts/stops/scales them and restarts them on every deploy. Conductor has no equivalent. A managed app today gets a web process and nothing else, so any Sidekiq, Solid Queue, or custom worker has to be wired up by hand over SSH and is invisible to the UI and to deploys. There is no model, no UI, and no MCP surface for an app's worker processes.</p>
+
+  <h2>Current state</h2>
+  <p>Conductor runs <em>its own</em> background jobs through Solid Queue inside Puma (<code>SOLID_QUEUE_IN_PUMA</code>), with recurring tasks declared in <code>config/recurring.yml</code> (<code>SyncContainerStatusJob</code>, <code>RefreshServerMetricsJob</code>, <code>RunScheduledBackupsJob</code>). That is Conductor's own runtime — it is unrelated to the worker processes of the <em>managed</em> apps it deploys.</p>
+  <p>For managed apps, deployment goes through three deployers in <code>app/services/</code>: <code>native_deployer.rb</code>, <code>kamal_deployer.rb</code>, and <code>app_deployer.rb</code>. On a native app's first deploy, <code>NativeDeployer#deploy!</code> runs a built-in <code>app-setup</code> script and then <code>systemd-setup</code> (<code>app/services/native_deployer.rb:21</code>). That <code>systemd-setup</code> script (seeded in <code>db/seeds.rb:354</code>) writes a single systemd unit whose <code>ExecStart</code> is <code>bundle exec puma -C .../config/puma.rb</code> (<code>db/seeds.rb:377</code>) — i.e. one web service per app and <strong>no worker unit at all</strong>. Kamal apps similarly get only the web role; <code>ContainerStatus#sync_kamal</code> (<code>app/services/container_status.rb</code>) detects liveness by the <code>service=&lt;kamal_service&gt;</code> label on the web container, so workers would not even be reflected in status.</p>
+  <p>All remote work is performed over <code>SshConnection</code> (<code>app/services/ssh_connection.rb</code>): <code>execute</code> for one-shots, <code>execute_with_status</code> for exit codes, and <code>execute_stream</code> for streamed output. Status is reconciled on a schedule by <code>SyncContainerStatusJob</code> calling <code>ContainerStatus#sync!</code>. There is no <code>WorkerProcess</code> model and nothing that generates worker units or roles.</p>
+
+  <h2>Proposed design</h2>
+  <p>Introduce per-app <strong>worker process definitions</strong> — each with a command, a process/replica count, and a target queue (and optional env). From those definitions, generate the right runtime artifacts per deploy method: for native apps, additional systemd units (one per worker, templated like the existing <code>systemd-setup</code> output but with the worker <code>ExecStart</code> and <code>@</code>-instance scaling); for kamal apps, a <code>workers</code> role (or accessory) in the Kamal config so Kamal manages worker containers alongside web. Lifecycle actions (start/stop/restart) run over <code>SshConnection</code> using <code>systemctl</code> (native) or <code>kamal app boot/stop</code> for the workers role (kamal). Workers are restarted automatically at the end of every deploy, and their status is surfaced through the existing status-sync pattern (extend <code>ContainerStatus</code> to also probe worker units / worker-labelled containers).</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>WorkerProcess model + surfaces.</strong> Add a <code>WorkerProcess</code> belonging to <code>App</code> (command, count, queue, enabled). Expose CRUD in the app UI (a Workers tab) and via an MCP tool so workers can be declared from the agent.</li>
+    <li><strong>Native: generate systemd worker units.</strong> Extend the native deploy path to template one systemd unit per worker (mirroring the <code>systemd-setup</code> seed at <code>db/seeds.rb:354</code>), using templated instances for <code>count</code>, then <code>daemon-reload</code> + <code>enable</code> over <code>SshConnection</code>.</li>
+    <li><strong>Kamal: map to a <code>workers</code> role.</strong> Emit a <code>workers</code> role (command + replicas + queue env) into the app's Kamal config so <code>kamal_deployer.rb</code> boots them with the web role.</li>
+    <li><strong>Status + restart-on-deploy.</strong> Restart workers as the final deploy step in each deployer, and extend <code>ContainerStatus</code> / <code>SyncContainerStatusJob</code> to report each worker's running state back into the UI.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>An operator can define a Sidekiq worker for an app (command, count, queue) from the UI and via MCP.</li>
+    <li>The worker actually runs on the box as a managed process — a systemd unit for native apps, a Kamal <code>workers</code> role for kamal apps.</li>
+    <li>Deploying the app restarts the workers automatically, with no manual SSH.</li>
+    <li>Worker run/stopped status is visible in the app's UI via the existing status-sync pattern.</li>
+    <li>Start / stop / restart actions on a worker take effect on the remote host.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on the deployers (<code>app/services/native_deployer.rb</code>, <code>kamal_deployer.rb</code>, <code>app_deployer.rb</code>), the <code>systemd-setup</code> seed (<code>db/seeds.rb</code>), <code>SshConnection</code> (<code>app/services/ssh_connection.rb</code>), and the status-sync loop (<code>ContainerStatus</code> + <code>SyncContainerStatusJob</code>, <code>config/recurring.yml</code>). Related to the live app log streaming plan (<code>plan-app-logs.html</code>), which will want a per-worker log source.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

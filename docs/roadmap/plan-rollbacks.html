@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rollbacks &amp; release history · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Rollbacks &amp; release history</h1>
+  <p class="sub">Give every deploy method a retained release history and a one-click (or one-tool) rollback to the previous good version.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime Backends</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>When a deploy ships a bad release, there is currently no way to get back to the version that was running a minute ago. The operator's only recourse is to push a revert commit and run a full fresh deploy — slow, and useless when the repo is fine but the release is broken (bad migration, bad asset build, bad env). Hatchbox, the tool Conductor aims to replace, retains a stack of releases and offers one-click rollback. Conductor needs parity here before it can be trusted with production fleets.</p>
+
+  <h2>Current state</h2>
+  <p>Conductor records deploys but keeps no rollback-able artifact. <code>app/models/deployment.rb</code> persists <code>status</code>, <code>log</code>, timing (<code>started_at</code>/<code>completed_at</code>) and a <code>commit_sha</code> column, with a <code>STATUSES</code> lifecycle (<code>pending → building → deploying → succeeded/failed</code>) and a <code>successful</code> scope — but there is no <em>release version</em>, no retained build, and no rollback action anywhere on the model.</p>
+  <p>The native path is destructive by design: <code>NativeDeployer#deploy!</code> (<code>app/services/native_deployer.rb</code>) runs the built-in <code>app-deploy</code> script in-place, and the analogous Docker path (<code>app/services/app_deployer.rb</code>) does <code>git fetch origin &amp;&amp; git reset --hard origin/#{app.branch}</code> straight into a single <code>app_dir</code> (<code>/opt/conductor/apps/#{slug}</code>). There is one working tree and one image tag (<code>#{app.image_name}:latest</code>) — the prior release is overwritten, so there is nothing to roll back <em>to</em>.</p>
+  <p>The Kamal path is the exception worth calling out: <code>KamalDeployer#deploy!</code> (<code>app/services/kamal_deployer.rb</code>) shells out to <code>kamal deploy</code>, and Kamal itself keeps prior versioned container images on the target host. So for <code>kamal?</code> apps the release history effectively already exists on the host — Conductor just never surfaces or invokes it. The deployer routing lives in <code>app/jobs/deploy_app_job.rb</code>, which switches on <code>app.deploy_method</code> (<code>native</code> / <code>kamal</code> / else Docker), so any rollback dispatch must branch the same way.</p>
+
+  <h2>Proposed design</h2>
+  <p>Treat rollback as a per-<code>deploy_method</code> capability, recording a release identifier on every successful <code>Deployment</code> so history is queryable regardless of backend.</p>
+  <ul>
+    <li><strong>Kamal apps:</strong> lean on Kamal's existing versioned images. Rollback dispatches <code>kamal rollback [version]</code> from the same checkout/control-machine setup <code>KamalDeployer</code> already builds (workspace, SSH key, secrets), targeting the version recorded on the chosen prior <code>Deployment</code>.</li>
+    <li><strong>Native apps:</strong> adopt a Capistrano-style layout — deploy into timestamped <code>releases/&lt;version&gt;</code> directories with a <code>current</code> symlink, instead of resetting one working tree in place. Rollback = repoint <code>current</code> at the prior release dir and restart the service. Requires reworking the built-in <code>app-deploy</code>/<code>app-setup</code> scripts to be release-dir aware.</li>
+    <li><strong>Shared:</strong> store the released version/ref on <code>Deployment</code> (extend the existing <code>commit_sha</code> with a <code>release_version</code>), expose a <strong>Rollback</strong> action in the UI on the app's deployment history, and add a <code>rollback_app</code> MCP tool mirroring the existing <code>deploy_app</code> tool so agents can roll back too.</li>
+  </ul>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>Record a release version/ref per <code>Deployment</code> on success (column + populated by each deployer; Kamal stores the Kamal version, native stores the timestamped release id).</li>
+    <li>Native release-dir support: rework deploy scripts to build into <code>releases/&lt;ts&gt;</code> and switch the <code>current</code> symlink atomically; restart systemd service against <code>current</code>.</li>
+    <li>Rollback action dispatching by <code>deploy_method</code> — UI button on deployment history plus a <code>rollback_app</code> MCP tool, routed like <code>DeployAppJob</code> (native → symlink switch, kamal → <code>kamal rollback</code>).</li>
+    <li>Prune old releases (keep N most recent native release dirs; document Kamal's own retention).</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>Triggering a rollback on a native app restores the previously running release (symlink repointed, service restarted) without a fresh git pull/build.</li>
+    <li>Triggering a rollback on a Kamal app invokes <code>kamal rollback</code> against the prior version and the previous container is serving traffic again.</li>
+    <li>Each successful deploy records a release version/ref, and the app's deployment history shows the rollback-able releases in order.</li>
+    <li>Rollback is invokable from both the UI and the <code>rollback_app</code> MCP tool.</li>
+    <li>Old native releases are pruned to a bounded count.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on the deployer routing in <code>app/jobs/deploy_app_job.rb</code> and the <code>Deployment</code> lifecycle in <code>app/models/deployment.rb</code>. The native slice requires reworking the built-in <code>app-deploy</code>/<code>app-setup</code> scripts that <code>NativeDeployer#run_script</code> loads. The Kamal slice depends on the control-machine setup in <code>app/services/kamal_deployer.rb</code> (see <code>plan-kamal-control-machine.html</code>). The MCP tool parallels the existing <code>deploy_app</code> tool, and the per-app deploy-hooks plan (<code>plan-deploy-hooks.html</code>) shares the same deployer step-sequence touchpoints.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

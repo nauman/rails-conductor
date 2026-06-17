@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server provisioning via provider APIs · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>Server provisioning via provider APIs</h1>
+  <p class="sub">Move Conductor from registering pre-existing boxes to creating and bootstrapping VMs directly through cloud-provider APIs, closing the biggest gap against Hatchbox's one-click server flow.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Provisioning &amp; Provider Automation</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: L</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor can <em>register</em> a server that already exists, but it cannot <em>create</em> one. Hatchbox's core onboarding flow is &ldquo;pick a provider, pick a size, click &mdash; you get a hardened, provisioned box.&rdquo; Conductor instead requires the operator to go to DigitalOcean/Hetzner/etc., spin up a VM by hand, copy its IP and SSH details back into Conductor, and only then run provisioning. The Provisioning &amp; Provider Automation pillar audited at roughly 32% precisely because the &ldquo;create the server&rdquo; half is missing entirely. This is the single biggest friction point in standing up a new app on the fleet.</p>
+
+  <h2>Current state</h2>
+  <p>Server creation is fully manual. <code>Server</code> (<code>app/models/server.rb</code>) is a registration record: it declares <code>PROVIDERS = %w[hetzner digitalocean linode vultr aws gcp azure]</code> and validates that <code>provider</code> is one of them, but <code>provider</code> is purely descriptive metadata &mdash; the model stores <code>name</code>, <code>ip_address</code>, SSH details (<code>ssh_user</code>, <code>ssh_port</code>, <code>ssh_key</code>), and live metrics, and nothing in it talks to a provider API. The closest thing to provisioning is <code>ProvisioningService</code> (<code>app/services/provisioning_service.rb</code>), which takes a <code>script_run</code>, opens an <code>SshConnection</code> to an <strong>already-existing</strong> <code>@server</code>, and streams a <code>Script</code> body over SSH while logging output &mdash; i.e. it runs setup/hardening commands on a box that must already be reachable. There is a Hetzner spec at <code>docs/plans/provisioning-hetzner.md</code> and a bootstrap spec at <code>docs/plans/server-bootstrap.md</code>, plus related <code>docs/plans/ssh-keys.md</code>, but no provider-API code that calls out to create a VM. In short: Conductor has the &ldquo;configure the box&rdquo; half (SSH + Scripts) and none of the &ldquo;summon the box&rdquo; half.</p>
+
+  <h2>Proposed design</h2>
+  <p>Introduce provider adapters that wrap each cloud's compute API behind a uniform interface (<code>create_server</code>, <code>destroy_server</code>, <code>list_servers</code>, <code>list_sizes</code>/<code>list_regions</code>). Start with a <code>HetznerCloudAdapter</code>, then add <code>DigitalOceanAdapter</code>. A one-click &ldquo;Create server&rdquo; action runs a pipeline: call the adapter to create a VM with the fleet SSH key injected at boot, poll until the VM is running and its IP is assigned, create the corresponding <code>Server</code> record (capturing <code>provider</code>, <code>ip_address</code>, and the <code>ssh_key</code> used), then drive the existing <code>ProvisioningService</code> to run the standard hardening/bootstrap <code>Script</code>s (server-harden, base bootstrap) against the new box. Destroy reverses it: call the adapter to delete the VM and reconcile the <code>Server</code> record. Provider tokens are sensitive, so they live in a per-organization encrypted credential model (mirroring how <code>DatabaseCluster</code> uses <code>encrypts :admin_password</code>) rather than in plaintext config. The whole flow is exposed both in the web UI and as an MCP tool so the GPT assistant can create infrastructure.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>Provider-credential model.</strong> A per-org, encrypted store for provider API tokens (e.g. <code>ProviderCredential</code> with <code>provider</code>, encrypted <code>token</code>), scoped through <code>organization</code> like other resources.</li>
+    <li><strong>Hetzner adapter.</strong> <code>HetznerCloudAdapter</code> implementing <code>create_server</code> (with SSH key injection), <code>destroy_server</code>, and <code>list_servers</code>/sizes/regions against the Hetzner Cloud API, with retry/poll-until-ready logic.</li>
+    <li><strong>Create&rarr;register&rarr;bootstrap pipeline.</strong> An orchestrating service that creates the VM, waits for boot + IP, persists a <code>Server</code> with the fleet <code>ssh_key</code>, then invokes <code>ProvisioningService</code> for the existing hardening/bootstrap <code>Script</code>s &mdash; surfacing live progress like the current provisioning logs.</li>
+    <li><strong>DigitalOcean adapter + UI/MCP.</strong> Add <code>DigitalOceanAdapter</code> behind the same interface, a &ldquo;Create server&rdquo; UI flow (provider/region/size selection), and a <code>create_server_from_provider</code> MCP tool mirroring the existing tool patterns.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A single UI action (and the <code>create_server_from_provider</code> MCP tool) creates a Hetzner Cloud VM, registers it as a <code>Server</code> with provider, IP, and SSH key populated, and runs the existing hardening Scripts against it &mdash; with streamed progress.</li>
+    <li>The created server is immediately reachable over SSH using the injected fleet key and reports metrics like any registered server.</li>
+    <li>A destroy action deletes the underlying VM via the provider API and reconciles/removes the <code>Server</code> record.</li>
+    <li>DigitalOcean works through the same interface and UI/tool.</li>
+    <li>Provider API tokens are stored encrypted per organization and are never written to logs or plaintext config.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Consumes the existing SSH + Scripts machinery: <code>ProvisioningService</code> (<code>app/services/provisioning_service.rb</code>), <code>SshConnection</code>, and the <code>Server</code> registration model (<code>app/models/server.rb</code>, including its <code>PROVIDERS</code> list). Requires the fleet SSH key plumbing in <code>docs/plans/ssh-keys.md</code> and the hardening/bootstrap definitions in <code>docs/plans/server-bootstrap.md</code>. Directly advances the Hetzner spec at <code>docs/plans/provisioning-hetzner.md</code>. Newly created servers are the substrate for database clusters and accessories, so it precedes/enables that data-layer work (<code>docs/plans/database-clusters.md</code>). The encrypted-credential pattern can later be reused for DNS/Cloudflare tokens (<code>docs/plans/cloudflare.md</code>, <code>docs/plans/domains-dns.md</code>).</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>

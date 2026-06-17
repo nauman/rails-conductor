@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub App &amp; deploy keys (private repo access) · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.html">← Back to backlog</a>
+<header class="page">
+  <h1>GitHub App &amp; deploy keys (private repo access)</h1>
+  <p class="sub">Give Conductor real git credentials — a GitHub App or per-repo deploy keys — so it can clone private repos wherever the checkout happens.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Provisioning &amp; Provider Automation</span>
+    <span class="badge p0">Priority: P0</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Deploying a private repo requires git authentication at the point where the code is checked out — and Conductor has none. The redesigned <code>KamalDeployer</code> clones <em>inside Conductor's own container</em>; <code>NativeDeployer</code> clones <em>on the target box</em>. Neither location has credentials for a private repo today (and we've proven the fleet box has no git auth configured at all). Public repos work; the moment a customer has a private app, every deploy fails at <code>git clone</code>.</p>
+
+  <h2>Current state</h2>
+  <p><code>App#repository_url</code> (<code>app/models/app.rb</code>) is a plain string with no associated credential. Both deployers run an unauthenticated clone:</p>
+  <ul>
+    <li><strong>KamalDeployer</strong> (<code>app/services/kamal_deployer.rb</code>, <code>sync_repo_command</code>) builds <code>git clone --branch &lt;branch&gt; &lt;repository_url&gt; &lt;checkout_dir&gt;</code> on first deploy and <code>git fetch origin && git reset --hard origin/&lt;branch&gt;</code> thereafter, run via <code>LocalShell</code> inside Conductor's container. No token, no SSH key for git — the header comment even flags this: <em>"the app repo reachable (public, or a deploy key/token — separate backlog item)."</em></li>
+    <li><strong>NativeDeployer</strong> (<code>app/services/native_deployer.rb</code>) exports <code>REPO_URL</code> / <code>BRANCH</code> into the environment (<code>env_exports</code>) and hands them to the built-in <code>app-setup</code> / <code>app-deploy</code> shell scripts run over SSH on the box. Those scripts clone with whatever git auth exists on the box — which is none.</li>
+  </ul>
+  <p>The only SSH key Conductor manages is the <em>server's</em> key (<code>app.server.ssh_key.private_key</code>, materialized by <code>KamalDeployer#write_ssh_key</code> for net-ssh to reach the host) — that's for connecting to the box, not for authenticating to GitHub. There is no model, field, or flow for a git credential anywhere.</p>
+
+  <h2>Proposed design</h2>
+  <p>Introduce a git-credential layer with two interchangeable strategies, injected into the clone step in both deployers:</p>
+  <ul>
+    <li><strong>Deploy key (per repo)</strong> — Conductor generates an SSH keypair, stores the private half, and the user adds the public half as a read-only deploy key on the repo. The clone uses an SSH URL with <code>GIT_SSH_COMMAND="ssh -i &lt;key&gt;"</code>.</li>
+    <li><strong>GitHub App (per org)</strong> — Conductor is installed as a GitHub App; per clone it mints a short-lived installation access token and clones over HTTPS via <code>GIT_ASKPASS</code> (or <code>x-access-token:&lt;token&gt;@github.com</code>). This also unlocks the shared webhook secret and commit-status / checks API used by <a href="plan-auto-deploy-push.html">auto-deploy</a>.</li>
+  </ul>
+  <pre><code># KamalDeployer — clone with an injected credential (deploy-key variant)
+def sync_repo_env
+  return {} unless (key = app.git_deploy_key&amp;.private_key_path)
+  { "GIT_SSH_COMMAND" =&gt; "ssh -i #{key} -o IdentitiesOnly=yes" }
+end
+
+# NativeDeployer — credential reaches the box as a scoped token, not a stored secret
+exports &lt;&lt; "export GIT_ASKPASS=#{askpass_helper}"  # echoes a short-lived token</code></pre>
+  <p>For the GitHub App path, tokens are minted at deploy time and expire (~1h), so nothing long-lived sits on the box; deploy keys are revocable from the repo settings and scoped to a single repo.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>Deploy-key model + generation</strong>: a <code>GitDeployKey</code> belonging to an <code>App</code> (or repo), with keypair generation and exposure of the public key in the UI for the user to paste into GitHub.</li>
+    <li><strong>Inject into clone</strong>: thread the credential into both deploy paths — <code>GIT_SSH_COMMAND</code> in <code>KamalDeployer#sync_repo_command</code> (local clone) and a <code>GIT_ASKPASS</code>/key export in <code>NativeDeployer#env_exports</code> so the on-box scripts can authenticate.</li>
+    <li><strong>GitHub App OAuth/installation flow</strong>: register the App, handle the installation callback, store installation id per org, and mint short-lived installation tokens on demand.</li>
+    <li><strong>Commit status / checks</strong>: post deploy start/success/failure back to the commit via the App token, tying <code>Deployment</code> outcomes to the GitHub UI.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>An app pointing at a private repo deploys successfully through both <code>NativeDeployer</code> and <code>KamalDeployer</code>.</li>
+    <li>GitHub App installation tokens are short-lived and scoped to the installed repos; no long-lived token is written to the target box.</li>
+    <li>Revoking the deploy key (or uninstalling the App) causes subsequent clones to fail cleanly with a clear error in the deployment log.</li>
+    <li>The credential is never logged or echoed into the <code>Deployment#log</code> stream.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Direct prerequisite for <a href="plan-auto-deploy-push.html">Auto-deploy on git push</a> — the GitHub App that authorizes clones is also the natural source of the webhook delivery and signing secret, and enables commit-status updates once auto-deploy is live. Touches the clone steps in <code>app/services/kamal_deployer.rb</code> and <code>app/services/native_deployer.rb</code>, and adds a credential association to <code>app/models/app.rb</code>. Distinct from the existing server SSH key (<code>Server#ssh_key</code>), which authenticates to the box, not to GitHub.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-17</footer>
+</div></body></html>
