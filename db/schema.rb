@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_17_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -194,6 +194,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
     t.index ["token"], name: "index_invitations_on_token", unique: true
   end
 
+  create_table "mcp_calls", force: :cascade do |t|
+    t.jsonb "arguments", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.integer "duration_ms"
+    t.text "error"
+    t.text "result"
+    t.string "status", default: "success", null: false
+    t.string "tool_name", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["created_at"], name: "index_mcp_calls_on_created_at"
+    t.index ["user_id"], name: "index_mcp_calls_on_user_id"
+  end
+
   create_table "memberships", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "organization_id", null: false
@@ -356,6 +370,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
   add_foreign_key "env_variables", "apps"
   add_foreign_key "invitations", "organizations"
   add_foreign_key "invitations", "users", column: "invited_by_id"
+  add_foreign_key "mcp_calls", "users"
   add_foreign_key "memberships", "organizations"
   add_foreign_key "memberships", "users"
   add_foreign_key "messages", "conversations"

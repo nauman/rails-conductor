@@ -34,7 +34,11 @@ module Mcp
       name  = params[:name].to_s
       input = (params[:input] || {}).to_unsafe_h.stringify_keys
 
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       result = ToolRegistry.call(name, input, user: mcp_user)
+      duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
+
+      McpCall.record(tool_name: name, arguments: input, result: result, duration_ms: duration_ms, user: mcp_user)
 
       if result.success?
         render json: { result: result.value }

@@ -1,0 +1,50 @@
+<section class="mx-auto max-w-5xl">
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-semibold text-slate-900">Admin · MCP Activity</h1>
+    <nav class="flex gap-1 text-sm">
+      <%= link_to "Organizations", admin_organizations_path, class: "px-3 py-1.5 rounded-full hover:bg-slate-100 text-slate-600" %>
+      <%= link_to "Users", admin_users_path, class: "px-3 py-1.5 rounded-full hover:bg-slate-100 text-slate-600" %>
+      <%= link_to "MCP Activity", admin_mcp_calls_path, class: "px-3 py-1.5 rounded-full bg-slate-900 text-white" %>
+    </nav>
+  </div>
+
+  <p class="mt-2 text-sm text-slate-500">Tool calls made by agents through the MCP endpoint (<code>POST /mcp/call</code>). Most recent first.</p>
+
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="text-left text-xs uppercase tracking-wide text-slate-400">
+        <tr class="border-b border-slate-100">
+          <th class="px-5 py-3">When</th>
+          <th class="px-5 py-3">Tool</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3">Duration</th>
+          <th class="px-5 py-3">Caller</th>
+          <th class="px-5 py-3">Arguments / Error</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <% @mcp_calls.each do |c| %>
+          <tr class="align-top">
+            <td class="px-5 py-3 whitespace-nowrap text-slate-500"><%= time_ago_in_words(c.created_at) %> ago</td>
+            <td class="px-5 py-3 font-mono text-slate-800"><%= c.tool_name %></td>
+            <td class="px-5 py-3">
+              <span class="<%= c.success? ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700" %> rounded-full px-2 py-0.5 text-xs font-medium"><%= c.status %></span>
+            </td>
+            <td class="px-5 py-3 whitespace-nowrap text-slate-500"><%= c.duration_ms ? "#{c.duration_ms} ms" : "—" %></td>
+            <td class="px-5 py-3 text-slate-600"><%= c.user&.email || "system" %></td>
+            <td class="px-5 py-3 text-slate-600">
+              <% if c.success? %>
+                <code class="block max-w-md truncate text-xs text-slate-500"><%= c.arguments.to_json %></code>
+              <% else %>
+                <span class="text-xs text-rose-600"><%= truncate(c.error, length: 120) %></span>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @mcp_calls.empty? %>
+          <tr><td colspan="6" class="px-5 py-8 text-center text-slate-400">No MCP calls recorded yet.</td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</section>

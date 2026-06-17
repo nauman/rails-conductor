@@ -82,6 +82,7 @@ Rails.application.routes.draw do
     root to: "organizations#index"
     resources :organizations, only: [:index, :show]
     resources :users, only: [:index]
+    resources :mcp_calls, only: [:index]
   end
 
   # Letter opener web (development only)

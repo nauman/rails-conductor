@@ -37,6 +37,7 @@ env:
     - SES_SMTP_USERNAME
     - SES_SMTP_PASSWORD
     - SENTRY_DSN
+    - CONDUCTOR_MCP_TOKEN
   clear:
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
     SOLID_QUEUE_IN_PUMA: true
