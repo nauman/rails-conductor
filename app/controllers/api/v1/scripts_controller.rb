@@ -13,7 +13,7 @@ module Api
 
       def run
         script = Script.find(params[:script_id])
-        server = Server.find(params[:server_id])
+        server = current_organization.servers.find(params[:server_id])
         script_run = ScriptRun.create!(
           script: script,
           server: server,
