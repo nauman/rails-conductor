@@ -166,16 +166,28 @@ class KamalDeployer
     keypath = File.join(ssh, "id_target")
     FileUtils.cp(@key_file, keypath)
     File.chmod(0o600, keypath)
+    known_hosts = File.join(ssh, "known_hosts")
     File.write(File.join(ssh, "config"), <<~CFG)
       Host #{app.server.ip_address}
         User #{app.server.ssh_user_or_default}
         IdentityFile #{keypath}
         IdentitiesOnly yes
         StrictHostKeyChecking accept-new
-        UserKnownHostsFile #{File.join(ssh, "known_hosts")}
+        UserKnownHostsFile #{known_hosts}
     CFG
     File.chmod(0o600, File.join(ssh, "config"))
+    seed_known_hosts(known_hosts)
     home
+  end
+
+  # Pre-trust the target's SSH host key. The build runs on the target's docker
+  # daemon over SSH (DOCKER_HOST=ssh://…), and docker's buildx connection — like
+  # Kamal's net-ssh — verifies the host key but does NOT honor `accept-new`, so a
+  # first-ever deploy dies with "Host key verification failed". Seeding the key
+  # here (and net-ssh reads $HOME/.ssh/known_hosts too) makes both paths trust it.
+  def seed_known_hosts(path)
+    ip = app.server.ip_address
+    @shell.run("bash", "-lc", "ssh-keyscan -t rsa,ecdsa,ed25519 #{esc(ip)} 2>/dev/null >> #{esc(path)} || true")
   end
 
   # Write Conductor-managed .kamal/secrets (values from EnvVariables).

@@ -78,6 +78,16 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert env["HOME"].to_s.include?(".sshhome_kuickr"), "expected an isolated ssh HOME"
   end
 
+  test "pre-seeds the target host key so docker-over-ssh build doesn't fail host-key verification" do
+    shell = FakeShell.new(success: true)
+    KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+
+    seed = shell.runs.find { |r| r[:command].last.to_s.include?("ssh-keyscan") }
+    assert seed, "expected an ssh-keyscan step to pre-trust the target host"
+    assert_includes seed[:command].last, @server.ip_address
+    assert_includes seed[:command].last, ".sshhome_kuickr", "should append into the isolated known_hosts"
+  end
+
   test "materializes and then cleans up the target ssh key" do
     captured = nil
     shell = FakeShell.new(success: true)
