@@ -199,10 +199,16 @@ class KamalDeployer
   def log_ssh_diagnostics
     return unless @ssh_home
 
+    user = esc(app.server.ssh_user_or_default)
+    host = esc(app.server.ip_address)
     script = <<~SH
-      echo "HOME=$HOME"
-      echo "known_hosts:"; (wc -l "$HOME/.ssh/known_hosts" 2>&1 || echo "  (missing)")
-      echo "ssh probe:"; ssh -o BatchMode=yes -o ConnectTimeout=8 #{esc(app.server.ssh_user_or_default)}@#{esc(app.server.ip_address)} 'echo ssh-ok' 2>&1 | tail -3
+      echo "HOME=$HOME (id: $(id -un):$(id -gn))"
+      echo "ls .ssh:"; ls -la "$HOME/.ssh" 2>&1
+      echo "config:"; cat "$HOME/.ssh/config" 2>&1
+      echo "known_hosts head:"; cut -c1-50 "$HOME/.ssh/known_hosts" 2>&1 | head -3
+      echo "probe A (rely on config):"; ssh -o BatchMode=yes -o ConnectTimeout=8 #{user}@#{host} 'echo ssh-ok' 2>&1 | tail -3
+      echo "probe B (explicit opts):"; ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" #{user}@#{host} 'echo ssh-ok' 2>&1 | tail -3
+      echo "probe C (verbose tail):"; ssh -vvv -o BatchMode=yes -o ConnectTimeout=8 #{user}@#{host} 'echo ssh-ok' 2>&1 | grep -iE 'known_hosts|/config|bad owner|permission|strict|matching host key|authenticating|no matching' | head -8
       echo "docker-over-ssh probe:"; docker version --format '{{.Server.Version}}' 2>&1 | tail -3
     SH
     log "Running: SSH/Docker diagnostics"
