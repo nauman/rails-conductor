@@ -44,6 +44,7 @@ class KamalDeployer
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     write_secrets_file
+    log_ssh_diagnostics
     return false unless run_step("kamal deploy", kamal_command, chdir: checkout_dir, env: deploy_env)
 
     deployment.succeed!
@@ -188,6 +189,26 @@ class KamalDeployer
   def seed_known_hosts(path)
     ip = app.server.ip_address
     @shell.run("bash", "-lc", "ssh-keyscan -t rsa,ecdsa,ed25519 #{esc(ip)} 2>/dev/null >> #{esc(path)} || true")
+  end
+
+  # Diagnostics for the build-over-SSH host-key path. The build runs on the
+  # target daemon via DOCKER_HOST=ssh://… and buildx's connection must trust the
+  # host key. This probes the EXACT connection (same env as `kamal deploy`) so a
+  # failure here localizes the problem to the docker-over-ssh handshake rather
+  # than buildx internals. Never fails the deploy.
+  def log_ssh_diagnostics
+    return unless @ssh_home
+
+    script = <<~SH
+      echo "HOME=$HOME"
+      echo "known_hosts:"; (wc -l "$HOME/.ssh/known_hosts" 2>&1 || echo "  (missing)")
+      echo "ssh probe:"; ssh -o BatchMode=yes -o ConnectTimeout=8 #{esc(app.server.ssh_user_or_default)}@#{esc(app.server.ip_address)} 'echo ssh-ok' 2>&1 | tail -3
+      echo "docker-over-ssh probe:"; docker version --format '{{.Server.Version}}' 2>&1 | tail -3
+    SH
+    log "Running: SSH/Docker diagnostics"
+    @shell.run("bash", "-lc", script, env: deploy_env) { |line| log(line) }
+  rescue StandardError => e
+    log "diagnostics error: #{e.message}"
   end
 
   # Write Conductor-managed .kamal/secrets (values from EnvVariables).
