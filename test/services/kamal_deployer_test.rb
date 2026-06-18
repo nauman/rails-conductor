@@ -20,6 +20,10 @@ class KamalDeployerTest < ActiveSupport::TestCase
   setup do
     @workspace = Dir.mktmpdir("kamal-test")
     ENV["KAMAL_WORKSPACE"] = @workspace
+    # Redirect the deployer's ~/.ssh writes into a tmp dir so tests never touch
+    # the real ~/.ssh. (ssh resolves ~ from passwd; the deployer writes there.)
+    @ssh_root = Dir.mktmpdir("kamal-sshhome")
+    ENV["CONDUCTOR_SSH_HOME"] = @ssh_root
     user = User.create!(email: "kd@example.com")
     @org = Organization.create_for(user, name: "Acme")
     @key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
@@ -32,7 +36,9 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
   teardown do
     ENV.delete("KAMAL_WORKSPACE")
+    ENV.delete("CONDUCTOR_SSH_HOME")
     FileUtils.remove_entry(@workspace) if @workspace && Dir.exist?(@workspace)
+    FileUtils.remove_entry(@ssh_root) if @ssh_root && Dir.exist?(@ssh_root)
   end
 
   def deploy_with(shell)
@@ -69,23 +75,46 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert env["SSH_KEYS"].present?, "expected the materialized ssh key path"
   end
 
-  test "builds over SSH (DOCKER_HOST + isolated HOME), no docker.sock" do
+  test "builds over SSH (DOCKER_HOST), no docker.sock, and does not override HOME" do
     shell = FakeShell.new(success: true)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
 
     env = shell.runs.find { |r| r[:command].last.include?("kamal deploy") }[:env]
     assert_equal "ssh://deploy@10.0.0.9", env["DOCKER_HOST"]
-    assert env["HOME"].to_s.include?(".sshhome_kuickr"), "expected an isolated ssh HOME"
+    # ssh ignores $HOME (resolves ~ from passwd), so we must NOT fake HOME — the
+    # ssh config/known_hosts go into the real ~/.ssh instead.
+    assert_nil env["HOME"], "must not override HOME; ssh would ignore it anyway"
   end
 
-  test "pre-seeds the target host key so docker-over-ssh build doesn't fail host-key verification" do
+  test "writes an ssh config Host stanza + identity into the real ~/.ssh (what ssh reads)" do
+    shell = FakeShell.new(success: true)
+    KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+
+    config = File.read(File.join(@ssh_root, ".ssh", "config"))
+    assert_includes config, "Host #{@server.ip_address}"
+    assert_includes config, "StrictHostKeyChecking accept-new"
+    assert_includes config, "UserKnownHostsFile #{File.join(@ssh_root, ".ssh", "known_hosts")}"
+    assert_includes config, "conductor_kuickr", "expected the per-app IdentityFile"
+  end
+
+  test "config Host stanza is idempotent across repeat deploys (no duplicate blocks)" do
+    KamalDeployer.new(@app, @deployment, shell: FakeShell.new(success: true)).deploy!
+    second = @app.deployments.create!(user: @app.organization.users.first)
+    KamalDeployer.new(@app, second, shell: FakeShell.new(success: true)).deploy!
+
+    config = File.read(File.join(@ssh_root, ".ssh", "config"))
+    assert_equal 1, config.scan("Host #{@server.ip_address}").size, "should upsert, not append duplicates"
+  end
+
+  test "pre-seeds the target host key into the real ~/.ssh/known_hosts (skip if already trusted)" do
     shell = FakeShell.new(success: true)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
 
     seed = shell.runs.find { |r| r[:command].last.to_s.include?("ssh-keyscan") }
     assert seed, "expected an ssh-keyscan step to pre-trust the target host"
     assert_includes seed[:command].last, @server.ip_address
-    assert_includes seed[:command].last, ".sshhome_kuickr", "should append into the isolated known_hosts"
+    assert_includes seed[:command].last, File.join(@ssh_root, ".ssh", "known_hosts")
+    assert_includes seed[:command].last, "ssh-keygen -F", "should skip re-seeding if already trusted"
   end
 
   test "materializes and then cleans up the target ssh key" do

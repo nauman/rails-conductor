@@ -148,47 +148,73 @@ class KamalDeployer
     env["APP_HOST"]         ||= app.domain if app.domain.present?
     env["SSH_KEYS"] = @key_file if @key_file # consumed by deploy.yml ssh.keys
     if @ssh_home
-      # Kamal's net-ssh + docker-over-ssh both read $HOME/.ssh/config; building on
-      # the target's daemon over SSH avoids mounting docker.sock into this container.
-      env["HOME"] = @ssh_home
+      # Build on the target's docker daemon over SSH (avoids mounting docker.sock
+      # into this container). The host key + identity live in the real ~/.ssh that
+      # docker's ssh connhelper reads — NOT an env $HOME, which ssh ignores (it
+      # resolves ~ from the passwd database, not $HOME).
       env["DOCKER_HOST"] = "ssh://#{app.server.ssh_user_or_default}@#{app.server.ip_address}"
     end
     env
   end
 
-  # An isolated $HOME with an .ssh/config that points the target host at the
-  # materialized key, so `kamal` (net-ssh) and `docker --host ssh://…` authenticate.
+  # The ssh dir that OpenSSH actually reads. ssh resolves `~` from the passwd
+  # database (getpwuid), ignoring $HOME, so we must write into the real home —
+  # not an isolated one. Overridable in tests so they never touch the real ~/.ssh.
+  def ssh_dir
+    File.join(ENV.fetch("CONDUCTOR_SSH_HOME") { Dir.home }, ".ssh")
+  end
+
+  # Prepare the real ~/.ssh so `docker --host ssh://…` (buildx, over SSH) and
+  # `kamal` (net-ssh) can both reach the target: a per-app identity key, a Host
+  # stanza pointing at it, and the pre-trusted host key. Returns the dir.
   def setup_ssh_home
     return nil unless @key_file
 
-    home = File.join(workspace, ".sshhome_#{app.slug}")
-    ssh  = File.join(home, ".ssh")
+    ssh = ssh_dir
     FileUtils.mkdir_p(ssh)
-    keypath = File.join(ssh, "id_target")
-    FileUtils.cp(@key_file, keypath)
-    File.chmod(0o600, keypath)
+    File.chmod(0o700, ssh)
+
+    @managed_identity = File.join(ssh, "conductor_#{app.slug}")
+    FileUtils.cp(@key_file, @managed_identity)
+    File.chmod(0o600, @managed_identity)
+
     known_hosts = File.join(ssh, "known_hosts")
-    File.write(File.join(ssh, "config"), <<~CFG)
+    write_ssh_config_block(File.join(ssh, "config"), @managed_identity, known_hosts)
+    seed_known_hosts(known_hosts)
+    ssh
+  end
+
+  # Idempotently upsert a marked Host stanza in ~/.ssh/config for this app's
+  # target, so repeat deploys don't accumulate duplicate blocks.
+  def write_ssh_config_block(config_path, identity, known_hosts)
+    b = "# >>> conductor #{app.slug} >>>"
+    e = "# <<< conductor #{app.slug} <<<"
+    block = <<~CFG
+      #{b}
       Host #{app.server.ip_address}
         User #{app.server.ssh_user_or_default}
-        IdentityFile #{keypath}
+        IdentityFile #{identity}
         IdentitiesOnly yes
         StrictHostKeyChecking accept-new
         UserKnownHostsFile #{known_hosts}
+      #{e}
     CFG
-    File.chmod(0o600, File.join(ssh, "config"))
-    seed_known_hosts(known_hosts)
-    home
+    existing = File.exist?(config_path) ? File.read(config_path) : ""
+    existing = existing.gsub(/#{Regexp.escape(b)}.*?#{Regexp.escape(e)}\n/m, "")
+    File.write(config_path, existing + block)
+    File.chmod(0o600, config_path)
   end
 
   # Pre-trust the target's SSH host key. The build runs on the target's docker
   # daemon over SSH (DOCKER_HOST=ssh://…), and docker's buildx connection — like
-  # Kamal's net-ssh — verifies the host key but does NOT honor `accept-new`, so a
-  # first-ever deploy dies with "Host key verification failed". Seeding the key
-  # here (and net-ssh reads $HOME/.ssh/known_hosts too) makes both paths trust it.
+  # Kamal's net-ssh — verifies the host key but does NOT honor `accept-new` on
+  # first contact, so a first-ever deploy dies with "Host key verification failed".
+  # Seed it into the real ~/.ssh/known_hosts (skip if already trusted).
   def seed_known_hosts(path)
     ip = app.server.ip_address
-    @shell.run("bash", "-lc", "ssh-keyscan -t rsa,ecdsa,ed25519 #{esc(ip)} 2>/dev/null >> #{esc(path)} || true")
+    @shell.run("bash", "-lc",
+      "touch #{esc(path)}; ssh-keygen -F #{esc(ip)} -f #{esc(path)} >/dev/null 2>&1 || " \
+      "ssh-keyscan -t rsa,ecdsa,ed25519 #{esc(ip)} 2>/dev/null >> #{esc(path)}; true")
   end
 
   # Diagnostics for the build-over-SSH host-key path. The build runs on the
@@ -202,14 +228,8 @@ class KamalDeployer
     user = esc(app.server.ssh_user_or_default)
     host = esc(app.server.ip_address)
     script = <<~SH
-      echo "HOME=$HOME (id: $(id -un):$(id -gn))"
-      echo "ls .ssh:"; ls -la "$HOME/.ssh" 2>&1
-      echo "config:"; cat "$HOME/.ssh/config" 2>&1
-      echo "known_hosts head:"; cut -c1-50 "$HOME/.ssh/known_hosts" 2>&1 | head -3
-      echo "probe A (rely on config):"; ssh -o BatchMode=yes -o ConnectTimeout=8 #{user}@#{host} 'echo ssh-ok' 2>&1 | tail -3
-      echo "probe B (explicit opts):"; ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" #{user}@#{host} 'echo ssh-ok' 2>&1 | tail -3
-      echo "probe C (verbose tail):"; ssh -vvv -o BatchMode=yes -o ConnectTimeout=8 #{user}@#{host} 'echo ssh-ok' 2>&1 | grep -iE 'known_hosts|/config|bad owner|permission|strict|matching host key|authenticating|no matching' | head -8
-      echo "docker-over-ssh probe:"; docker version --format '{{.Server.Version}}' 2>&1 | tail -3
+      echo "ssh probe:"; ssh -o BatchMode=yes -o ConnectTimeout=8 #{user}@#{host} 'echo ssh-ok' 2>&1 | tail -2
+      echo "docker-over-ssh probe:"; docker version --format 'server={{.Server.Version}}' 2>&1 | tail -2
     SH
     log "Running: SSH/Docker diagnostics"
     @shell.run("bash", "-lc", script, env: deploy_env) { |line| log(line) }
@@ -237,11 +257,13 @@ class KamalDeployer
     path
   end
 
+  # Remove the materialized secrets. @ssh_home is the real ~/.ssh — never delete
+  # it; only the per-app identity key we copied in. The known_hosts/config block
+  # are left in place (host trust persists; the block is re-upserted next deploy).
   def cleanup_key
-    [@key_file, @deploy_key_file, @askpass_file].compact.each do |f|
+    [@key_file, @deploy_key_file, @askpass_file, @managed_identity].compact.each do |f|
       File.delete(f) if File.exist?(f)
     end
-    FileUtils.remove_entry(@ssh_home) if @ssh_home && Dir.exist?(@ssh_home)
   rescue StandardError
     nil
   end
