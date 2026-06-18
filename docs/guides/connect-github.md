@@ -41,17 +41,15 @@ On the App's page, scroll to **Private keys → Generate a private key**. A `.pe
 
 ## 4. Give Conductor the credentials (once)
 
-In Conductor, store the App so it can mint tokens. Either:
-
-**From the UI:** Settings → Integrations → GitHub App → paste the **App ID** and **private key**.
-
-**Or via an agent / MCP:**
+In Conductor, store the App so it can mint tokens — via an agent / MCP:
 
 ```
 set_github_app  app_id=<APP_ID>  private_key=<contents of the .pem>
 ```
 
 Conductor validates the key and stores it encrypted. (The value is redacted from the audit log.)
+
+> A **Settings → Integrations** UI to paste these in the browser is on the roadmap; today the App is configured through the MCP tool above.
 
 ## 5. Verify access
 
