@@ -54,6 +54,7 @@
                 <%= link_to "SSH Keys", ssh_keys_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/ssh_keys') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <%= link_to "Members", members_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/members') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <% if current_admin? %>
+                  <%= link_to "Integrations", integrations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/integrations') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                   <%= link_to "Admin", admin_organizations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/admin') ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'}" %>
                 <% end %>
                 <span class="ml-2 text-slate-300">|</span>

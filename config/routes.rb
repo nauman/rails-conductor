@@ -89,6 +89,13 @@ Rails.application.routes.draw do
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 
   resources :ssh_keys
+
+  # Settings → Integrations: Conductor-wide integrations (GitHub App). Singular
+  # resource (one config per instance); admin-gated in the controller.
+  resource :integrations, only: [:show, :update], controller: :integrations do
+    post :verify
+  end
+
   resources :servers do
     member do
       post :test_connection
