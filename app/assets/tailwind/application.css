@@ -6,6 +6,84 @@
  */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/**
+ * Conductor "warm paper" design tokens (mirrors docs/design/tokens.css).
+ * Additive namespaces → utilities like bg-surface, text-ink, border-border,
+ * font-display, rounded-card, shadow-soft, tracking-label. Existing slate
+ * utilities are untouched. The dark theme overrides these vars under
+ * [data-theme="dark"] below — components reference token names only.
+ */
+@theme {
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --text-2xs: 11px;
+
+  /* neutrals (warm paper) */
+  --color-bg: #fafaf8;
+  --color-bg-alt: #faf9f6;
+  --color-surface: #ffffff;
+  --color-surface-2: #f6f6f4;
+  --color-fill: #f1f0ec;
+  --color-fill-strong: #ececea;
+  --color-border: #e4e3de;
+  --color-border-strong: #d6d4cd;
+
+  /* text */
+  --color-ink: #15161a;
+  --color-body: #3a3633;
+  --color-muted: #6b7280;
+  --color-faint: #9ca3af;
+
+  /* primary — forest green */
+  --color-primary: #3a5a3f;
+  --color-primary-strong: #2c7a4d;
+  --color-primary-sage: #6e8a72;
+  --color-primary-tint: #e7f0e9;
+
+  /* danger — terracotta */
+  --color-danger-deep: #7a1f1a;
+  --color-danger: #a8443c;
+  --color-danger-bright: #d74b4b;
+  --color-danger-tint: #f7efee;
+
+  /* warning — amber/gold */
+  --color-warning: #8a6a1f;
+  --color-warning-bright: #e8a53b;
+  --color-warning-tint: #f5ebd3;
+
+  /* info — slate blue */
+  --color-info: #3a4f7a;
+  --color-info-bright: #7d97c4;
+  --color-info-tint: #e2e7f1;
+
+  /* accent — violet */
+  --color-accent: #8b5cf6;
+  --color-accent-tint: #ece6fb;
+
+  /* radius */
+  --radius-chip: 4px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-large: 16px;
+  --radius-pill: 999px;
+
+  /* elevation (whisper-quiet; borders carry structure) */
+  --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.12);
+
+  /* tracking */
+  --tracking-display: -0.01em;
+  --tracking-label: 0.1em;
+  --tracking-kicker: 0.14em;
+}
+
+/* Dark theme — TODO: fill from the dark variant; overrides the same names. */
+[data-theme="dark"] {
+  /* --color-bg: …; --color-surface: …; --color-border: …; --color-ink: …; */
+}
+
 
 /**
  * Color Safelist

@@ -20,11 +20,11 @@
   --color-border:        #e4e3de;  /* hairline border (dominant line) */
   --color-border-strong: #d6d4cd;  /* emphasized border */
 
-  /* ---- Text ---- */
-  --color-ink:        #15161a;  /* headings / max contrast (#1f1f22 = warm twin) */
-  --color-text:       #3a3633;  /* body */
-  --color-text-muted: #6b7280;  /* secondary / labels */
-  --color-text-faint: #9ca3af;  /* tertiary / placeholders / pending */
+  /* ---- Text ---- (utilities: text-ink / text-body / text-muted / text-faint) */
+  --color-ink:   #15161a;  /* headings / max contrast (#1f1f22 = warm twin) */
+  --color-body:  #3a3633;  /* body */
+  --color-muted: #6b7280;  /* secondary / labels */
+  --color-faint: #9ca3af;  /* tertiary / placeholders / pending */
 
   /* ---- Primary: forest green ---- */
   --color-primary:        #3a5a3f;  /* brand / healthy / done */
@@ -57,7 +57,7 @@
   --status-down:    var(--color-danger-bright);
   --status-warn:    var(--color-warning-bright);
   --status-info:    var(--color-info);
-  --status-pending: var(--color-text-faint);
+  --status-pending: var(--color-faint);
 
   /* ---- Radius ---- */
   --radius-chip:    4px;    /* chips / inline code */

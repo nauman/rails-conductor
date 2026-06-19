@@ -1,29 +1,29 @@
-<div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+<div class="rounded-large border border-border bg-surface p-6 shadow-soft">
   <div class="flex items-center justify-between">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Container Status</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400">Live Docker container monitoring across your fleet</p>
+      <h2 class="font-display text-xl text-ink">Container Status</h2>
+      <p class="text-sm text-muted">Live Docker container monitoring across your fleet</p>
     </div>
     <%= rui_button_to("Sync All", sync_all_apps_path, method: :post, variant: :outline, size: :sm, color: :slate) %>
   </div>
 
   <%# Container Status Stats %>
   <div class="mt-4 grid grid-cols-4 gap-3">
-    <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 text-center">
-      <div class="text-2xl font-semibold text-emerald-700 dark:text-emerald-400"><%= @kamal_stats[:running_apps] %></div>
-      <div class="text-xs font-medium text-emerald-600 dark:text-emerald-500">Running</div>
+    <div class="rounded-card bg-primary-tint p-3 text-center">
+      <div class="font-mono text-2xl font-semibold text-primary"><%= @kamal_stats[:running_apps] %></div>
+      <div class="text-2xs font-medium uppercase tracking-label text-primary-strong">Running</div>
     </div>
-    <div class="rounded-xl bg-rose-50 dark:bg-rose-900/20 p-3 text-center">
-      <div class="text-2xl font-semibold text-rose-700 dark:text-rose-400"><%= @kamal_stats[:stopped_apps] %></div>
-      <div class="text-xs font-medium text-rose-600 dark:text-rose-500">Stopped</div>
+    <div class="rounded-card bg-danger-tint p-3 text-center">
+      <div class="font-mono text-2xl font-semibold text-danger-deep"><%= @kamal_stats[:stopped_apps] %></div>
+      <div class="text-2xs font-medium uppercase tracking-label text-danger">Stopped</div>
     </div>
-    <div class="rounded-xl bg-slate-100 dark:bg-slate-700 p-3 text-center">
-      <div class="text-2xl font-semibold text-slate-700 dark:text-slate-300"><%= @kamal_stats[:unknown_status] %></div>
-      <div class="text-xs font-medium text-slate-600 dark:text-slate-400">Unknown</div>
+    <div class="rounded-card bg-fill p-3 text-center">
+      <div class="font-mono text-2xl font-semibold text-body"><%= @kamal_stats[:unknown_status] %></div>
+      <div class="text-2xs font-medium uppercase tracking-label text-muted">Unknown</div>
     </div>
-    <div class="rounded-xl bg-slate-50 dark:bg-slate-700/50 p-3 text-center">
-      <div class="text-2xl font-semibold text-slate-900 dark:text-white"><%= @kamal_stats[:total_apps] %></div>
-      <div class="text-xs font-medium text-slate-500 dark:text-slate-400">Total</div>
+    <div class="rounded-card bg-bg-alt p-3 text-center">
+      <div class="font-mono text-2xl font-semibold text-ink"><%= @kamal_stats[:total_apps] %></div>
+      <div class="text-2xs font-medium uppercase tracking-label text-muted">Total</div>
     </div>
   </div>
 
@@ -31,22 +31,22 @@
   <% if @apps_by_server.any? %>
     <div class="mt-6 space-y-4">
       <% @apps_by_server.each do |server, apps| %>
-        <div class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div class="bg-slate-50 dark:bg-slate-700/50 px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div class="rounded-card border border-border overflow-hidden">
+          <div class="bg-fill px-4 py-2 border-b border-border flex items-center justify-between">
             <div class="flex items-center gap-2">
               <% if server %>
-                <span class="h-2 w-2 rounded-full <%= server.status == 'online' ? 'bg-emerald-500' : server.status == 'degraded' ? 'bg-amber-500' : 'bg-rose-500' %>"></span>
-                <%= link_to server.name, server_path(server), class: "text-sm font-medium text-slate-900 dark:text-white hover:underline" %>
+                <span class="h-2 w-2 rounded-pill <%= server.status == 'online' ? 'bg-primary' : server.status == 'degraded' ? 'bg-warning-bright' : 'bg-danger-bright' %>"></span>
+                <%= link_to server.name, server_path(server), class: "text-sm font-medium text-ink hover:underline" %>
               <% else %>
-                <span class="h-2 w-2 rounded-full bg-slate-400"></span>
-                <span class="text-sm font-medium text-slate-500 dark:text-slate-400">No Server</span>
+                <span class="h-2 w-2 rounded-pill bg-faint"></span>
+                <span class="text-sm font-medium text-muted">No Server</span>
               <% end %>
             </div>
             <%= rui_badge(text: pluralize(apps.count, "app"), color: :slate, size: :sm) %>
           </div>
-          <div class="divide-y divide-slate-100 dark:divide-slate-700">
+          <div class="divide-y divide-border">
             <% apps.each do |app| %>
-              <div class="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+              <div class="flex items-center justify-between px-4 py-2.5 hover:bg-fill">
                 <div class="flex items-center gap-3">
                   <% case app.container_status %>
                   <% when "running" %>
@@ -59,7 +59,7 @@
                     <%= rui_badge(text: "", color: :slate, size: :sm, class: "h-2 w-2 p-0 rounded-full") %>
                   <% end %>
                   <div>
-                    <%= link_to app.name, app_path(app), class: "text-sm font-medium text-slate-900 dark:text-white hover:underline" %>
+                    <%= link_to app.name, app_path(app), class: "text-sm font-medium text-ink hover:underline" %>
                     <% if app.status_check_error.present? %>
                       <%= rui_badge(text: "Error", color: :danger, size: :sm, class: "ml-2") %>
                     <% end %>
@@ -85,8 +85,8 @@
       <% end %>
     </div>
   <% else %>
-    <div class="mt-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 p-6 text-center">
-      <p class="text-sm text-slate-500 dark:text-slate-400">No apps registered yet.</p>
+    <div class="mt-6 rounded-card border border-dashed border-border bg-fill p-6 text-center">
+      <p class="text-sm text-muted">No apps registered yet.</p>
       <%= rui_button("Add an app", url: new_app_path, variant: :link, color: :primary, class: "mt-2") %>
     </div>
   <% end %>

@@ -26,7 +26,9 @@ Warm off-white neutrals + five semantic families, each `deep → default → bri
 | Info (slate blue) | `--color-info` #3a4f7a | — | `--color-info-bright` #7d97c4 | `--color-info-tint` #e2e7f1 |
 | Accent (violet) | `--color-accent` #8b5cf6 | — | — | `--color-accent-tint` #ece6fb |
 
-Neutrals: `--color-bg` #fafaf8 · `--color-surface` #fff · `--color-fill` #f1f0ec · `--color-border` #e4e3de (hairline) · text `--color-ink` #15161a / `--color-text` #3a3633 / `--color-text-muted` #6b7280 / `--color-text-faint` #9ca3af.
+Neutrals: `--color-bg` #fafaf8 · `--color-surface` #fff · `--color-fill` #f1f0ec · `--color-border` #e4e3de (hairline) · text `--color-ink` #15161a / `--color-body` #3a3633 / `--color-muted` #6b7280 / `--color-faint` #9ca3af.
+
+> **Wired into Tailwind v4** — these tokens are mirrored in `app/assets/tailwind/application.css` (`@theme`), generating utilities `bg-surface`, `text-ink`, `border-border`, `font-display`, `font-mono`, `rounded-card/large`, `shadow-soft`, `text-2xs`, `tracking-label`, plus the semantic families (`bg-primary-tint`, `text-danger-deep`, …). The Overview page (`app/views/dashboard/`) is the first adopter.
 
 ### Shape & elevation
 - Radius: `--radius-control` 8 · `--radius-card` 12 · `--radius-large` 16 · `--radius-pill` 999 (50% for dots) · `--radius-chip` 4.
