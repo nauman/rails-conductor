@@ -3,48 +3,48 @@
 <section class="max-w-7xl mx-auto px-4 py-10">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-semibold text-slate-900">SSH Keys</h1>
-      <p class="mt-1 text-sm text-slate-500">Manage SSH keys for server connections.</p>
+      <h1 class="font-display text-2xl text-ink tracking-display">SSH Keys</h1>
+      <p class="mt-1 text-sm text-muted">Manage SSH keys for server connections.</p>
     </div>
-    <%= link_to new_ssh_key_path, class: "inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" do %>
+    <%= link_to new_ssh_key_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       Add SSH Key
     <% end %>
   </div>
 
   <% if @ssh_keys.any? %>
-    <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <table class="min-w-full divide-y divide-slate-200">
-        <thead class="bg-slate-50">
+    <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+      <table class="min-w-full divide-y divide-border">
+        <thead class="bg-fill">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Name</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Type</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Fingerprint</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Servers</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Name</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Type</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Fingerprint</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Servers</th>
+            <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-200">
+        <tbody class="divide-y divide-border">
           <% @ssh_keys.each do |ssh_key| %>
             <tr>
               <td class="px-6 py-4">
-                <%= link_to ssh_key.name, ssh_key_path(ssh_key), class: "text-sm font-medium text-slate-900 hover:underline" %>
+                <%= link_to ssh_key.name, ssh_key_path(ssh_key), class: "text-sm font-medium text-ink hover:underline" %>
               </td>
-              <td class="px-6 py-4 text-sm text-slate-500">
-                <code class="bg-slate-100 px-2 py-1 rounded text-xs"><%= ssh_key.key_type || "unknown" %></code>
+              <td class="px-6 py-4 text-sm text-muted">
+                <code class="bg-fill-strong px-2 py-1 rounded text-xs"><%= ssh_key.key_type || "unknown" %></code>
               </td>
-              <td class="px-6 py-4 text-sm text-slate-500">
+              <td class="px-6 py-4 text-sm text-muted">
                 <code class="text-xs"><%= ssh_key.fingerprint&.truncate(30) || "—" %></code>
               </td>
-              <td class="px-6 py-4 text-sm text-slate-500">
+              <td class="px-6 py-4 text-sm text-muted">
                 <%= ssh_key.servers.count %> server<%= ssh_key.servers.count == 1 ? "" : "s" %>
               </td>
               <td class="px-6 py-4 text-right text-sm">
-                <%= link_to "Edit", edit_ssh_key_path(ssh_key), class: "font-medium text-slate-600 hover:text-slate-900" %>
-                <span class="text-slate-300 mx-2">·</span>
+                <%= link_to "Edit", edit_ssh_key_path(ssh_key), class: "font-medium text-body hover:text-ink" %>
+                <span class="text-faint mx-2">·</span>
                 <%= button_to "Delete", ssh_key_path(ssh_key), method: :delete,
                     data: { turbo_confirm: "Are you sure? This cannot be undone." },
-                    class: "font-medium text-rose-600 hover:text-rose-700" %>
+                    class: "font-medium text-danger hover:text-danger-deep" %>
               </td>
             </tr>
           <% end %>
@@ -52,21 +52,21 @@
       </table>
     </div>
   <% else %>
-    <div class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
-      <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="mt-6 rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <svg class="mx-auto h-12 w-12 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
       </svg>
-      <div class="mt-4 text-sm text-slate-500">No SSH keys yet.</div>
-      <p class="mt-1 text-xs text-slate-400">Add an SSH key to connect to your servers.</p>
-      <%= link_to "Add your first SSH key", new_ssh_key_path, class: "mt-4 inline-block text-sm font-medium text-slate-900 hover:underline" %>
+      <div class="mt-4 text-sm text-muted">No SSH keys yet.</div>
+      <p class="mt-1 text-xs text-faint">Add an SSH key to connect to your servers.</p>
+      <%= link_to "Add your first SSH key", new_ssh_key_path, class: "mt-4 inline-block text-sm font-medium text-ink hover:underline" %>
     </div>
   <% end %>
 
-  <div class="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <h3 class="text-sm font-semibold text-slate-700">How to use</h3>
-    <ol class="mt-2 text-sm text-slate-600 space-y-1 list-decimal list-inside">
-      <li>Generate an SSH key: <code class="bg-white px-1.5 py-0.5 rounded text-xs">ssh-keygen -t ed25519 -C "conductor"</code></li>
-      <li>Add the public key to your server's <code class="bg-white px-1.5 py-0.5 rounded text-xs">~/.ssh/authorized_keys</code></li>
+  <div class="mt-8 rounded-card border border-border bg-fill p-4">
+    <h3 class="text-sm font-semibold text-body">How to use</h3>
+    <ol class="mt-2 text-sm text-body space-y-1 list-decimal list-inside">
+      <li>Generate an SSH key: <code class="bg-surface px-1.5 py-0.5 rounded text-xs">ssh-keygen -t ed25519 -C "conductor"</code></li>
+      <li>Add the public key to your server's <code class="bg-surface px-1.5 py-0.5 rounded text-xs">~/.ssh/authorized_keys</code></li>
       <li>Paste the private key here</li>
       <li>Assign the key to servers in their settings</li>
     </ol>

@@ -3,16 +3,16 @@
 <section class="max-w-7xl mx-auto px-4 py-10">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-semibold text-slate-900">Backups</h1>
-      <p class="mt-1 text-sm text-slate-500">Database backups to cloud storage.</p>
+      <h1 class="font-display text-2xl text-ink tracking-display">Backups</h1>
+      <p class="mt-1 text-sm text-muted">Database backups to cloud storage.</p>
     </div>
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-2 text-sm">
-        <span class="text-slate-500"><%= Backup.completed.count %> completed</span>
-        <span class="text-slate-300">·</span>
-        <span class="text-slate-500"><%= Backup.failed.count %> failed</span>
+        <span class="text-muted"><%= Backup.completed.count %> completed</span>
+        <span class="text-faint">·</span>
+        <span class="text-muted"><%= Backup.failed.count %> failed</span>
       </div>
-      <%= link_to new_backup_path, class: "inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" do %>
+      <%= link_to new_backup_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Backup
       <% end %>
@@ -20,36 +20,36 @@
   </div>
 
   <% if @backups.any? %>
-    <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <table class="min-w-full divide-y divide-slate-200">
-        <thead class="bg-slate-50">
+    <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+      <table class="min-w-full divide-y divide-border">
+        <thead class="bg-fill">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Bucket</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Source</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Provider</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Run</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Next Run</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Bucket</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Source</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Provider</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Schedule</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Last Run</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Next Run</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Status</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-200">
+        <tbody class="divide-y divide-border">
           <% @backups.each do |backup| %>
             <tr>
               <td class="px-6 py-4">
-                <%= link_to backup.bucket_name, backup_path(backup), class: "text-sm font-medium text-slate-900 hover:underline" %>
+                <%= link_to backup.bucket_name, backup_path(backup), class: "text-sm font-medium text-ink hover:underline" %>
               </td>
-              <td class="px-6 py-4 text-sm text-slate-500"><%= backup.source_name %></td>
-              <td class="px-6 py-4 text-sm text-slate-500"><%= backup.provider.titleize.gsub("_", " ") %></td>
-              <td class="px-6 py-4 text-sm text-slate-500">
+              <td class="px-6 py-4 text-sm text-muted"><%= backup.source_name %></td>
+              <td class="px-6 py-4 text-sm text-muted"><%= backup.provider.titleize.gsub("_", " ") %></td>
+              <td class="px-6 py-4 text-sm text-muted">
                 <% if backup.enabled? %>
-                  <span class="text-emerald-600"><%= backup.schedule_display %></span>
+                  <span class="text-primary-strong"><%= backup.schedule_display %></span>
                 <% else %>
-                  <span class="text-slate-400">Manual</span>
+                  <span class="text-faint">Manual</span>
                 <% end %>
               </td>
-              <td class="px-6 py-4 text-sm text-slate-500"><%= backup.time_ago %></td>
-              <td class="px-6 py-4 text-sm text-slate-500"><%= backup.next_run_display %></td>
+              <td class="px-6 py-4 text-sm text-muted"><%= backup.time_ago %></td>
+              <td class="px-6 py-4 text-sm text-muted"><%= backup.next_run_display %></td>
               <td class="px-6 py-4">
                 <span class="<%= status_badge(backup.status) %>"><%= backup.status %></span>
               </td>
@@ -59,9 +59,9 @@
       </table>
     </div>
   <% else %>
-    <div class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
-      <div class="text-sm text-slate-500">No backups recorded yet.</div>
-      <p class="mt-2 text-xs text-slate-400">Backups will appear here when they run.</p>
+    <div class="mt-6 rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <div class="text-sm text-muted">No backups recorded yet.</div>
+      <p class="mt-2 text-xs text-faint">Backups will appear here when they run.</p>
     </div>
   <% end %>
 </section>

@@ -3,43 +3,43 @@
 <section class="max-w-5xl mx-auto px-4 py-10">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Container Logs</h1>
-      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <h1 class="font-display text-2xl text-ink tracking-display dark:text-white">Container Logs</h1>
+      <p class="mt-1 text-sm text-muted dark:text-faint">
         <%= link_to @app.name, app_path(@app), class: "hover:underline" %> ·
         Last 100 lines
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <label class="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
-        <input type="checkbox" id="auto-refresh" class="rounded border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-slate-500">
+      <label class="inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint cursor-pointer hover:bg-fill dark:hover:bg-fill">
+        <input type="checkbox" id="auto-refresh" class="rounded border-border-strong dark:border-border-strong text-ink dark:text-white focus:ring-primary">
         <span>Auto-refresh</span>
       </label>
-      <%= link_to "Refresh", logs_app_path(@app), id: "manual-refresh", class: "inline-flex items-center gap-2 rounded-lg bg-slate-900 dark:bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 dark:hover:bg-slate-600" %>
-      <%= link_to "Back to App", app_path(@app), class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700" %>
+      <%= link_to "Refresh", logs_app_path(@app), id: "manual-refresh", class: "inline-flex items-center gap-2 rounded-lg bg-ink dark:bg-fill px-4 py-2 text-sm font-medium text-white hover:bg-body dark:hover:bg-fill-strong" %>
+      <%= link_to "Back to App", app_path(@app), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
     </div>
   </div>
 
-  <div class="mt-8 rounded-2xl border border-slate-700 bg-slate-900 shadow-sm overflow-hidden" id="log-container">
-    <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+  <div class="mt-8 rounded-large border border-border-strong bg-ink shadow-soft overflow-hidden" id="log-container">
+    <div class="p-4 border-b border-border-strong flex items-center justify-between">
       <div class="flex items-center gap-3">
         <h3 class="text-sm font-semibold text-white font-mono">docker logs <%= @app.container_name %></h3>
         <span id="refresh-indicator" class="hidden">
-          <svg class="h-4 w-4 text-slate-400 animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg class="h-4 w-4 text-faint animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
         </span>
       </div>
       <div class="flex items-center gap-3">
-        <span id="last-updated" class="text-xs text-slate-400">Updated just now</span>
+        <span id="last-updated" class="text-xs text-faint">Updated just now</span>
         <%= rui_badge(text: @app.container_status || "unknown", color: @app.container_running? ? :success : :slate, size: :sm) %>
       </div>
     </div>
     <div class="p-4 max-h-[700px] overflow-y-auto" id="log-content">
       <% if @logs.present? %>
-        <pre class="text-sm text-slate-300 font-mono whitespace-pre-wrap"><%= @logs %></pre>
+        <pre class="text-sm text-faint font-mono whitespace-pre-wrap"><%= @logs %></pre>
       <% else %>
-        <p class="text-sm text-slate-500">No logs available.</p>
+        <p class="text-sm text-muted">No logs available.</p>
       <% end %>
     </div>
   </div>
@@ -60,9 +60,9 @@
         .then(response => response.json())
         .then(data => {
           if (data.logs) {
-            logContent.innerHTML = '<pre class="text-sm text-slate-300 font-mono whitespace-pre-wrap">' + escapeHtml(data.logs) + '</pre>';
+            logContent.innerHTML = '<pre class="text-sm text-faint font-mono whitespace-pre-wrap">' + escapeHtml(data.logs) + '</pre>';
           } else {
-            logContent.innerHTML = '<p class="text-sm text-slate-500">No logs available.</p>';
+            logContent.innerHTML = '<p class="text-sm text-muted">No logs available.</p>';
           }
           lastUpdated.textContent = 'Updated just now';
           refreshIndicator.classList.add('hidden');

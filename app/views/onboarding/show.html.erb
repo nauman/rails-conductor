@@ -1,9 +1,9 @@
 <div class="mx-auto max-w-md py-12">
-  <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft">
     <div class="text-center">
-      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white">C</div>
-      <h1 class="text-xl font-semibold text-slate-900">Welcome to Conductor</h1>
-      <p class="mt-1 text-sm text-slate-500">
+      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-card bg-primary text-lg font-bold text-white">C</div>
+      <h1 class="font-display text-xl text-ink">Welcome to Conductor</h1>
+      <p class="mt-1 text-sm text-muted">
         Your control plane for self-hosted Rails. First, name your organization —
         it's your workspace for servers, apps, and backups.
       </p>
@@ -17,13 +17,13 @@
       <% end %>
 
       <div class="text-left">
-        <%= f.label :name, "Organization name", class: "block text-sm font-medium text-slate-700" %>
+        <%= f.label :name, "Organization name", class: "block text-sm font-medium text-body" %>
         <%= f.text_field :name, autofocus: true, placeholder: "e.g. pavelabs",
-              class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" %>
-        <p class="mt-1 text-xs text-slate-400">You can rename this anytime in settings.</p>
+              class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary-tint0 focus:ring-primary-tint0 sm:text-sm" %>
+        <p class="mt-1 text-xs text-faint">You can rename this anytime in settings.</p>
       </div>
 
-      <%= f.submit "Continue", class: "w-full cursor-pointer rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700" %>
+      <%= f.submit "Continue", class: "w-full cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary" %>
     <% end %>
   </div>
 </div>

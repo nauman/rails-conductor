@@ -1,34 +1,34 @@
 <section class="mx-auto max-w-3xl">
-  <%= link_to "← Clusters", database_clusters_path, class: "text-sm text-slate-500 hover:text-slate-800" %>
+  <%= link_to "← Clusters", database_clusters_path, class: "text-sm text-muted hover:text-ink" %>
   <div class="mt-2 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-slate-900"><%= @cluster.name %></h1>
-      <p class="text-sm text-slate-500"><%= @cluster.server&.name %> · <%= @cluster.container_name %> · admin <%= @cluster.admin_username %> · :<%= @cluster.port %></p>
+      <h1 class="font-display text-xl text-ink"><%= @cluster.name %></h1>
+      <p class="text-sm text-muted"><%= @cluster.server&.name %> · <%= @cluster.container_name %> · admin <%= @cluster.admin_username %> · :<%= @cluster.port %></p>
     </div>
   </div>
 
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-sm font-semibold text-slate-900">Create a database</h2>
+  <div class="mt-6 rounded-large border border-border bg-surface p-5 shadow-soft">
+    <h2 class="text-sm font-semibold text-ink">Create a database</h2>
     <%= form_with url: database_cluster_databases_path(@cluster), method: :post, scope: :database, class: "mt-3 flex flex-wrap items-end gap-3" do |f| %>
       <div class="flex-1 min-w-48">
-        <%= f.label :name, "Database name", class: "block text-xs font-medium text-slate-600" %>
+        <%= f.label :name, "Database name", class: "block text-xs font-medium text-body" %>
         <%= f.text_field :name, required: true, placeholder: "myapp_production",
-              class: "mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono" %>
-        <p class="mt-1 text-xs text-slate-400">Role + database are created; a password is generated.</p>
+              class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary-tint0 focus:ring-primary-tint0 sm:text-sm font-mono" %>
+        <p class="mt-1 text-xs text-faint">Role + database are created; a password is generated.</p>
       </div>
-      <%= f.submit "Create", class: "cursor-pointer rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700" %>
+      <%= f.submit "Create", class: "cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary" %>
     <% end %>
   </div>
 
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-700">Databases</div>
+  <div class="mt-6 rounded-large border border-border bg-surface shadow-soft">
+    <div class="border-b border-border px-5 py-3 text-sm font-semibold text-body">Databases</div>
     <% if @databases.any? %>
-      <ul class="divide-y divide-slate-100">
+      <ul class="divide-y divide-border">
         <% @databases.each do |db| %>
           <li class="flex items-center justify-between px-5 py-3">
             <div>
-              <div class="font-mono text-sm text-slate-800"><%= db.name %></div>
-              <div class="text-xs text-slate-500">role <%= db.username %><%= " · #{db.app.name}" if db.app %></div>
+              <div class="font-mono text-sm text-ink"><%= db.name %></div>
+              <div class="text-xs text-muted">role <%= db.username %><%= " · #{db.app.name}" if db.app %></div>
             </div>
             <div class="flex items-center gap-3">
               <%= rui_badge(text: db.status, color: db.status == "active" ? :success : db.status == "error" ? :danger : :warning, size: :sm) %>
@@ -39,7 +39,7 @@
         <% end %>
       </ul>
     <% else %>
-      <div class="px-5 py-6 text-center text-sm text-slate-500">No databases on this cluster yet.</div>
+      <div class="px-5 py-6 text-center text-sm text-muted">No databases on this cluster yet.</div>
     <% end %>
   </div>
 </section>

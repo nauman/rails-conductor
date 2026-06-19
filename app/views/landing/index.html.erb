@@ -1,20 +1,20 @@
 <div class="mx-auto max-w-5xl px-6">
   <!-- Hero -->
   <section class="py-20 text-center">
-    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 text-2xl font-bold text-white">C</div>
-    <h1 class="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-large bg-primary text-2xl font-bold text-white">C</div>
+    <h1 class="text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
       The control plane for<br>self-hosted Rails operations
     </h1>
-    <p class="mx-auto mt-5 max-w-2xl text-lg text-slate-500">
+    <p class="mx-auto mt-5 max-w-2xl text-lg text-muted">
       Conductor runs, monitors, and maintains your apps across your own servers — deploys, routing,
       Postgres, backups, and security — one place instead of five dashboards and a pile of SSH.
     </p>
     <div class="mt-8 flex items-center justify-center gap-3">
-      <%= link_to "Sign in", user_sign_in_path, class: "rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700" %>
-      <%= link_to "Docs", "/docs", class: "rounded-md border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
-      <%= link_to "View on GitHub", "https://github.com/nauman/rails-conductor", class: "rounded-md border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
+      <%= link_to "Sign in", user_sign_in_path, class: "rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary" %>
+      <%= link_to "Docs", "/docs", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
+      <%= link_to "View on GitHub", "https://github.com/nauman/rails-conductor", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
     </div>
-    <p class="mt-3 text-xs text-slate-400">Source-available · run it on your own infrastructure</p>
+    <p class="mt-3 text-xs text-faint">Source-available · run it on your own infrastructure</p>
   </section>
 
   <!-- Pillars -->
@@ -27,9 +27,9 @@
       ["Backups & data", "Scheduled database backups to S3/R2."],
       ["Maintenance", "Hardening, auto-updates, and drift checks across the fleet."]
     ].each do |title, body| %>
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 class="text-sm font-semibold text-slate-900"><%= title %></h3>
-        <p class="mt-1 text-sm text-slate-500"><%= body %></p>
+      <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+        <h3 class="text-sm font-semibold text-ink"><%= title %></h3>
+        <p class="mt-1 text-sm text-muted"><%= body %></p>
       </div>
     <% end %>
   </section>

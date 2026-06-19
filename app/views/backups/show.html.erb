@@ -4,58 +4,58 @@
   <div class="flex items-center justify-between">
     <div>
       <div class="flex items-center gap-3">
-        <h1 class="text-2xl font-semibold text-slate-900"><%= @backup.bucket_name %></h1>
+        <h1 class="font-display text-2xl text-ink tracking-display"><%= @backup.bucket_name %></h1>
         <span class="<%= status_badge(@backup.status) %>"><%= @backup.status %></span>
       </div>
-      <p class="mt-1 text-sm text-slate-500">
+      <p class="mt-1 text-sm text-muted">
         <%= @backup.provider.titleize.gsub("_", " ") %> · <%= @backup.source_name %>
       </p>
     </div>
     <div class="flex items-center gap-2">
       <% if @backup.credential.present? %>
-        <%= button_to run_backup_path(@backup), method: :post, class: "inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700" do %>
+        <%= button_to run_backup_path(@backup), method: :post, class: "inline-flex items-center gap-2 rounded-lg bg-primary-strong px-4 py-2 text-sm font-medium text-white hover:bg-primary" do %>
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Run Now
         <% end %>
       <% end %>
-      <%= link_to "Edit", edit_backup_path(@backup), class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
-      <%= link_to "Back", backups_path, class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
+      <%= link_to "Edit", edit_backup_path(@backup), class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
+      <%= link_to "Back", backups_path, class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
     </div>
   </div>
 
   <div class="mt-8 grid gap-6 lg:grid-cols-4">
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Size</div>
-      <div class="mt-2 text-3xl font-semibold text-slate-900"><%= @backup.formatted_size %></div>
+    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Size</div>
+      <div class="mt-2 text-3xl font-semibold text-ink"><%= @backup.formatted_size %></div>
     </div>
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Retention</div>
-      <div class="mt-2 text-3xl font-semibold text-slate-900"><%= @backup.retention_display %></div>
+    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Retention</div>
+      <div class="mt-2 text-3xl font-semibold text-ink"><%= @backup.retention_display %></div>
     </div>
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Run</div>
-      <div class="mt-2 text-xl font-semibold text-slate-900"><%= @backup.time_ago %></div>
+    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Last Run</div>
+      <div class="mt-2 font-display text-xl text-ink"><%= @backup.time_ago %></div>
     </div>
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</div>
+    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Status</div>
       <div class="mt-2"><span class="<%= status_badge(@backup.status) %> text-base"><%= @backup.status %></span></div>
     </div>
   </div>
 
-  <div class="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-    <h2 class="text-lg font-semibold text-slate-900">Backup Details</h2>
+  <div class="mt-10 rounded-large border border-border bg-surface p-6 shadow-soft">
+    <h2 class="font-display text-lg text-ink">Backup Details</h2>
     <dl class="mt-4 grid gap-4 sm:grid-cols-2">
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Provider</dt>
-        <dd class="mt-1 text-sm text-slate-900"><%= @backup.provider.titleize.gsub("_", " ") %></dd>
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Provider</dt>
+        <dd class="mt-1 text-sm text-ink"><%= @backup.provider.titleize.gsub("_", " ") %></dd>
       </div>
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Bucket Name</dt>
-        <dd class="mt-1 text-sm text-slate-900"><%= @backup.bucket_name %></dd>
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Bucket Name</dt>
+        <dd class="mt-1 text-sm text-ink"><%= @backup.bucket_name %></dd>
       </div>
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Source Server</dt>
-        <dd class="mt-1 text-sm text-slate-900">
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Source Server</dt>
+        <dd class="mt-1 text-sm text-ink">
           <% if @backup.server %>
             <%= link_to @backup.server.name, server_path(@backup.server), class: "hover:underline" %>
           <% else %>
@@ -64,8 +64,8 @@
         </dd>
       </div>
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Source App</dt>
-        <dd class="mt-1 text-sm text-slate-900">
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Source App</dt>
+        <dd class="mt-1 text-sm text-ink">
           <% if @backup.app %>
             <%= link_to @backup.app.name, app_path(@backup.app), class: "hover:underline" %>
           <% else %>
@@ -74,29 +74,29 @@
         </dd>
       </div>
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Created At</dt>
-        <dd class="mt-1 text-sm text-slate-900"><%= @backup.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") %></dd>
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Created At</dt>
+        <dd class="mt-1 text-sm text-ink"><%= @backup.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") %></dd>
       </div>
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Completed At</dt>
-        <dd class="mt-1 text-sm text-slate-900"><%= @backup.completed_at&.strftime("%Y-%m-%d %H:%M:%S UTC") || "—" %></dd>
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Completed At</dt>
+        <dd class="mt-1 text-sm text-ink"><%= @backup.completed_at&.strftime("%Y-%m-%d %H:%M:%S UTC") || "—" %></dd>
       </div>
       <div>
-        <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Credential</dt>
-        <dd class="mt-1 text-sm text-slate-900">
+        <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Credential</dt>
+        <dd class="mt-1 text-sm text-ink">
           <% if @backup.credential %>
             <%= @backup.credential.name %> (<%= @backup.credential.provider %>)
           <% else %>
-            <span class="text-amber-600">Not configured</span>
+            <span class="text-warning">Not configured</span>
           <% end %>
         </dd>
       </div>
     </dl>
   </div>
 
-  <div class="mt-10 pt-6 border-t border-slate-200">
+  <div class="mt-10 pt-6 border-t border-border">
     <%= button_to "Delete Backup", backup_path(@backup), method: :delete,
         data: { turbo_confirm: "Are you sure you want to delete this backup configuration?" },
-        class: "text-sm font-medium text-rose-600 hover:text-rose-700" %>
+        class: "text-sm font-medium text-danger hover:text-danger-deep" %>
   </div>
 </section>

@@ -14,7 +14,7 @@
         <div class="mt-6 grid gap-4 sm:grid-cols-4">
           <%= link_to servers_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
             <div class="text-2xs font-semibold uppercase tracking-label text-muted">Servers</div>
-            <div class="mt-2 font-mono text-2xl font-semibold text-ink"><%= @stats[:servers_count] %></div>
+            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:servers_count] %></div>
             <div class="mt-1 text-2xs text-muted">
               <% if @stats[:servers_degraded] > 0 %>
                 <%= @stats[:servers_degraded] %> degraded · <%= @stats[:servers_online] %> online
@@ -25,17 +25,17 @@
           <% end %>
           <%= link_to apps_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
             <div class="text-2xs font-semibold uppercase tracking-label text-muted">Apps</div>
-            <div class="mt-2 font-mono text-2xl font-semibold text-ink"><%= @stats[:apps_count] %></div>
+            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:apps_count] %></div>
             <div class="mt-1 text-2xs text-muted"><%= @stats[:apps_running] %> running</div>
           <% end %>
           <%= link_to backups_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
             <div class="text-2xs font-semibold uppercase tracking-label text-muted">Backups</div>
-            <div class="mt-2 font-mono text-2xl font-semibold text-ink"><%= @stats[:backups_completed] %></div>
+            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:backups_completed] %></div>
             <div class="mt-1 text-2xs text-muted">completed</div>
           <% end %>
           <%= link_to credentials_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
             <div class="text-2xs font-semibold uppercase tracking-label text-muted">Credentials</div>
-            <div class="mt-2 font-mono text-2xl font-semibold text-ink"><%= @stats[:credentials_count] %></div>
+            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:credentials_count] %></div>
             <div class="mt-1 text-2xs text-muted"><%= @stats[:credentials_active] %> active</div>
           <% end %>
         </div>

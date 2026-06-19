@@ -5,18 +5,18 @@
 
 <div class="flex flex-col h-[calc(100vh-3.5rem)]">
   <%# Header %>
-  <div class="border-b border-slate-200 bg-white px-4 py-3 flex items-center gap-3 shrink-0">
-    <%= link_to conversations_path, class: "text-slate-400 hover:text-slate-600" do %>
+  <div class="border-b border-border bg-surface px-4 py-3 flex items-center gap-3 shrink-0">
+    <%= link_to conversations_path, class: "text-faint hover:text-body" do %>
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
       </svg>
     <% end %>
-    <h1 class="text-sm font-medium text-slate-900 flex-1 truncate">
+    <h1 class="text-sm font-medium text-ink flex-1 truncate">
       <%= @conversation.title.presence || "Conductor chat" %>
     </h1>
     <%= button_to conversation_path(@conversation), method: :delete,
         data: { turbo_confirm: "Delete this conversation?" },
-        class: "text-xs text-slate-400 hover:text-rose-500 px-2 py-1 rounded" do %>
+        class: "text-xs text-faint hover:text-danger-tint0 px-2 py-1 rounded" do %>
       Delete
     <% end %>
   </div>
@@ -25,11 +25,11 @@
   <div id="messages" class="flex-1 overflow-y-auto px-4 py-6 space-y-4"
        data-controller="autoscroll">
     <% if @messages.empty? %>
-      <div class="text-center text-slate-400 text-sm py-12">
+      <div class="text-center text-faint text-sm py-12">
         <div class="text-2xl mb-2">⚡</div>
-        <p class="font-medium text-slate-600 mb-1">Conductor is ready</p>
+        <p class="font-medium text-body mb-1">Conductor is ready</p>
         <p>Ask me about your fleet, run scripts, or deploy apps.</p>
-        <div class="mt-4 text-xs text-slate-400 space-y-1">
+        <div class="mt-4 text-xs text-faint space-y-1">
           <p>"What servers do I have?"</p>
           <p>"Run server-provision on server 1"</p>
           <p>"Deploy platepose on the production server"</p>
@@ -40,7 +40,7 @@
   </div>
 
   <%# Input form %>
-  <div class="border-t border-slate-200 bg-white px-4 py-3 shrink-0">
+  <div class="border-t border-border bg-surface px-4 py-3 shrink-0">
     <%= render 'messages/form', conversation: @conversation %>
   </div>
 </div>

@@ -3,10 +3,10 @@
 <section class="max-w-7xl mx-auto px-4 py-10">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-semibold text-slate-900">Apps</h1>
-      <p class="mt-1 text-sm text-slate-500">Deployed Rails applications.</p>
+      <h1 class="font-display text-2xl text-ink tracking-display">Apps</h1>
+      <p class="mt-1 text-sm text-muted">Deployed Rails applications.</p>
     </div>
-    <%= link_to new_app_path, class: "inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" do %>
+    <%= link_to new_app_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       Add App
     <% end %>
@@ -15,11 +15,11 @@
   <% if @apps.any? %>
     <div class="mt-6 grid gap-4 lg:grid-cols-2">
       <% @apps.each do |app| %>
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
           <div class="flex items-center justify-between">
             <div>
-              <div class="text-sm font-semibold text-slate-900"><%= app.name %></div>
-              <div class="text-xs text-slate-500">
+              <div class="text-sm font-semibold text-ink"><%= app.name %></div>
+              <div class="text-xs text-muted">
                 <% if app.domain.present? %>
                   <a href="<%= app.url %>" target="_blank" class="hover:underline"><%= app.domain %></a>
                 <% else %>
@@ -29,32 +29,32 @@
             </div>
             <span class="<%= status_badge(app.status) %>"><%= app.status %></span>
           </div>
-          <div class="mt-4 grid grid-cols-3 gap-3 text-xs text-slate-500">
-            <div class="rounded-lg bg-slate-50 p-3">
-              <div class="uppercase tracking-wide text-slate-400">Server</div>
-              <div class="mt-1 text-sm font-semibold text-slate-900"><%= app.server_name %></div>
+          <div class="mt-4 grid grid-cols-3 gap-3 text-xs text-muted">
+            <div class="rounded-lg bg-fill p-3">
+              <div class="uppercase tracking-wide text-faint">Server</div>
+              <div class="mt-1 text-sm font-semibold text-ink"><%= app.server_name %></div>
             </div>
-            <div class="rounded-lg bg-slate-50 p-3">
-              <div class="uppercase tracking-wide text-slate-400">Port</div>
-              <div class="mt-1 text-sm font-semibold text-slate-900"><%= app.port || "—" %></div>
+            <div class="rounded-lg bg-fill p-3">
+              <div class="uppercase tracking-wide text-faint">Port</div>
+              <div class="mt-1 text-sm font-semibold text-ink"><%= app.port || "—" %></div>
             </div>
-            <div class="rounded-lg bg-slate-50 p-3">
-              <div class="uppercase tracking-wide text-slate-400">Slug</div>
-              <div class="mt-1 text-sm font-semibold text-slate-900"><%= app.slug %></div>
+            <div class="rounded-lg bg-fill p-3">
+              <div class="uppercase tracking-wide text-faint">Slug</div>
+              <div class="mt-1 text-sm font-semibold text-ink"><%= app.slug %></div>
             </div>
           </div>
           <div class="mt-4 flex items-center gap-2">
-            <%= link_to "View", app_path(app), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
-            <span class="text-slate-300">·</span>
-            <%= link_to "Edit", edit_app_path(app), class: "text-xs font-medium text-slate-600 hover:text-slate-900" %>
+            <%= link_to "View", app_path(app), class: "text-xs font-medium text-body hover:text-ink" %>
+            <span class="text-faint">·</span>
+            <%= link_to "Edit", edit_app_path(app), class: "text-xs font-medium text-body hover:text-ink" %>
           </div>
         </div>
       <% end %>
     </div>
   <% else %>
-    <div class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
-      <div class="text-sm text-slate-500">No apps yet.</div>
-      <%= link_to "Add your first app", new_app_path, class: "mt-2 inline-block text-sm font-medium text-slate-900 hover:underline" %>
+    <div class="mt-6 rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <div class="text-sm text-muted">No apps yet.</div>
+      <%= link_to "Add your first app", new_app_path, class: "mt-2 inline-block text-sm font-medium text-ink hover:underline" %>
     </div>
   <% end %>
 </section>

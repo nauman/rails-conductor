@@ -1,8 +1,8 @@
 <section class="mx-auto max-w-4xl">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-slate-900">Database Clusters</h1>
-      <p class="text-sm text-slate-500">Postgres clusters and the per-app databases on them.</p>
+      <h1 class="font-display text-xl text-ink">Database Clusters</h1>
+      <p class="text-sm text-muted">Postgres clusters and the per-app databases on them.</p>
     </div>
     <%= rui_button "Register cluster", url: new_database_cluster_path, color: :primary %>
   </div>
@@ -10,21 +10,21 @@
   <% if @clusters.any? %>
     <div class="mt-6 grid gap-4 lg:grid-cols-2">
       <% @clusters.each do |cluster| %>
-        <%= link_to database_cluster_path(cluster), class: "block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-300" do %>
+        <%= link_to database_cluster_path(cluster), class: "block rounded-large border border-border bg-surface p-5 shadow-soft hover:border-border-strong" do %>
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold text-slate-900"><%= cluster.name %></div>
+            <div class="text-sm font-semibold text-ink"><%= cluster.name %></div>
             <%= rui_badge(text: pluralize(cluster.databases.size, "database"), color: :slate, size: :sm) %>
           </div>
-          <div class="mt-1 text-xs text-slate-500">
+          <div class="mt-1 text-xs text-muted">
             <%= cluster.server&.name %> · <%= cluster.container_name %> · admin <%= cluster.admin_username %>
           </div>
         <% end %>
       <% end %>
     </div>
   <% else %>
-    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm">
-      <h2 class="text-lg font-semibold text-slate-900">No clusters yet</h2>
-      <p class="mx-auto mt-1 max-w-sm text-sm text-slate-500">Register a Postgres cluster running on one of your servers, then create a database per app — no manual psql.</p>
+    <div class="mt-6 rounded-large border border-border bg-surface p-12 text-center shadow-soft">
+      <h2 class="font-display text-lg text-ink">No clusters yet</h2>
+      <p class="mx-auto mt-1 max-w-sm text-sm text-muted">Register a Postgres cluster running on one of your servers, then create a database per app — no manual psql.</p>
       <%= rui_button "Register your first cluster", url: new_database_cluster_path, color: :primary, class: "mt-5" %>
     </div>
   <% end %>

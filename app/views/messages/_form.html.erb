@@ -9,10 +9,10 @@
             required: true,
             autofocus: true,
             data: { "chat-form-target": "input", action: "input->chat-form#resize" },
-            class: "w-full px-4 py-3 bg-slate-100 rounded-2xl text-sm text-slate-900 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 max-h-40 overflow-y-auto" %>
+            class: "w-full px-4 py-3 bg-fill-strong rounded-large text-sm text-ink placeholder-faint resize-none focus:outline-none focus:ring-2 focus:ring-border-strong max-h-40 overflow-y-auto" %>
       </div>
       <%= f.button type: :submit,
-          class: "shrink-0 w-10 h-10 bg-slate-900 text-white rounded-full flex items-center justify-center hover:bg-slate-700 disabled:opacity-50 transition-colors" do %>
+          class: "shrink-0 w-10 h-10 bg-ink text-white rounded-full flex items-center justify-center hover:bg-body disabled:opacity-50 transition-colors" do %>
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
         </svg>

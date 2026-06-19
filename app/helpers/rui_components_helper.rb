@@ -30,7 +30,7 @@ module RuiComponentsHelper
   # rui_link("Text", url:, external:)
   def rui_link(text, url:, external: false, **opts)
     html = opts.except(:class)
-    html[:class] = [ "text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400", opts[:class] ].compact.join(" ")
+    html[:class] = [ "text-primary hover:text-primary-strong hover:underline", opts[:class] ].compact.join(" ")
     html.merge!(target: "_blank", rel: "noopener") if external
     link_to(text, url, **html)
   end
@@ -47,36 +47,36 @@ module RuiComponentsHelper
 
     if variant.to_sym == :link
       link_colors = {
-        primary: "text-indigo-600 hover:text-indigo-700 dark:text-indigo-400",
-        success: "text-green-600 hover:text-green-700",
-        danger:  "text-red-600 hover:text-red-700",
-        warning: "text-amber-600 hover:text-amber-700",
-        slate:   "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+        primary: "text-primary hover:text-primary-strong",
+        success: "text-primary-strong hover:text-primary",
+        danger:  "text-danger hover:text-danger-deep",
+        warning: "text-warning hover:text-warning",
+        slate:   "text-muted hover:text-ink"
       }
       return [ "inline-flex items-center gap-1 font-medium hover:underline", link_colors[color] || link_colors[:primary], extra ].compact.join(" ")
     end
 
     variants = {
       solid: {
-        primary: "bg-indigo-600 hover:bg-indigo-700 text-white",
-        success: "bg-green-600 hover:bg-green-700 text-white",
-        danger:  "bg-red-600 hover:bg-red-700 text-white",
-        warning: "bg-amber-500 hover:bg-amber-600 text-white",
-        slate:   "bg-slate-700 hover:bg-slate-800 text-white"
+        primary: "bg-primary hover:bg-primary-strong text-white",
+        success: "bg-primary-strong hover:bg-primary text-white",
+        danger:  "bg-danger hover:bg-danger-deep text-white",
+        warning: "bg-warning-bright hover:bg-warning text-white",
+        slate:   "bg-ink hover:bg-body text-white"
       },
       outline: {
-        primary: "border border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-950",
-        success: "border border-green-300 text-green-700 hover:bg-green-50",
-        danger:  "border border-red-300 text-red-700 hover:bg-red-50",
-        warning: "border border-amber-300 text-amber-700 hover:bg-amber-50",
-        slate:   "border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+        primary: "border border-primary/40 text-primary hover:bg-primary-tint",
+        success: "border border-primary/40 text-primary-strong hover:bg-primary-tint",
+        danger:  "border border-danger/40 text-danger hover:bg-danger-tint",
+        warning: "border border-warning/40 text-warning hover:bg-warning-tint",
+        slate:   "border border-border-strong text-body hover:bg-fill"
       },
       ghost: {
-        primary: "text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950",
-        success: "text-green-700 hover:bg-green-50",
-        danger:  "text-red-700 hover:bg-red-50",
-        warning: "text-amber-700 hover:bg-amber-50",
-        slate:   "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        primary: "text-primary hover:bg-primary-tint",
+        success: "text-primary-strong hover:bg-primary-tint",
+        danger:  "text-danger hover:bg-danger-tint",
+        warning: "text-warning hover:bg-warning-tint",
+        slate:   "text-muted hover:bg-fill-strong"
       }
     }
     vmap = variants[variant.to_sym] || variants[:solid]
@@ -86,11 +86,11 @@ module RuiComponentsHelper
 
   def rui_badge_classes(color, size)
     soft = {
-      primary: "bg-indigo-100 text-indigo-800",
-      success: "bg-green-100 text-green-800",
-      danger:  "bg-red-100 text-red-800",
-      warning: "bg-amber-100 text-amber-800",
-      slate:   "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+      primary: "bg-primary-tint text-primary",
+      success: "bg-primary-tint text-primary",
+      danger:  "bg-danger-tint text-danger-deep",
+      warning: "bg-warning-tint text-warning",
+      slate:   "bg-fill text-muted"
     }
     sizes = { sm: "text-xs px-2 py-0.5", md: "text-xs px-2.5 py-0.5", lg: "text-sm px-3 py-1" }
     [ "inline-flex items-center font-medium rounded-full", soft[color] || soft[:slate], sizes[size] || sizes[:md] ].join(" ")
@@ -98,10 +98,10 @@ module RuiComponentsHelper
 
   def rui_alert_classes(type)
     styles = {
-      info:    "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-900 dark:text-blue-200",
-      success: "bg-green-50 border-green-200 text-green-800",
-      danger:  "bg-red-50 border-red-200 text-red-800 dark:bg-red-950 dark:border-red-900 dark:text-red-200",
-      warning: "bg-amber-50 border-amber-200 text-amber-800"
+      info:    "bg-info-tint border-info/30 text-info",
+      success: "bg-primary-tint border-primary/30 text-primary",
+      danger:  "bg-danger-tint border-danger/30 text-danger-deep",
+      warning: "bg-warning-tint border-warning/30 text-warning"
     }
     [ "rounded-md border px-4 py-3 text-sm", styles[type] || styles[:info] ].join(" ")
   end

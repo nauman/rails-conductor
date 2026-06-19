@@ -3,69 +3,69 @@
 <section class="max-w-7xl mx-auto px-4 py-10">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-semibold text-slate-900"><%= @ssh_key.name %></h1>
-      <p class="mt-1 text-sm text-slate-500">
-        <code class="bg-slate-100 px-2 py-1 rounded text-xs"><%= @ssh_key.key_type || "unknown" %></code>
+      <h1 class="font-display text-2xl text-ink tracking-display"><%= @ssh_key.name %></h1>
+      <p class="mt-1 text-sm text-muted">
+        <code class="bg-fill-strong px-2 py-1 rounded text-xs"><%= @ssh_key.key_type || "unknown" %></code>
         key added <%= time_ago_in_words(@ssh_key.created_at) %> ago
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <%= link_to "Edit", edit_ssh_key_path(@ssh_key), class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
-      <%= link_to "Back", ssh_keys_path, class: "inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" %>
+      <%= link_to "Edit", edit_ssh_key_path(@ssh_key), class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
+      <%= link_to "Back", ssh_keys_path, class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
     </div>
   </div>
 
   <div class="mt-8 grid gap-6 lg:grid-cols-2">
-    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 class="text-sm font-semibold text-slate-900">Key Details</h2>
+    <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
+      <h2 class="text-sm font-semibold text-ink">Key Details</h2>
       <dl class="mt-4 space-y-4">
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Fingerprint</dt>
-          <dd class="mt-1 text-sm text-slate-900 font-mono"><%= @ssh_key.fingerprint || "—" %></dd>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Fingerprint</dt>
+          <dd class="mt-1 text-sm text-ink font-mono"><%= @ssh_key.fingerprint || "—" %></dd>
         </div>
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Type</dt>
-          <dd class="mt-1 text-sm text-slate-900"><%= @ssh_key.key_type || "Unknown" %></dd>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Key Type</dt>
+          <dd class="mt-1 text-sm text-ink"><%= @ssh_key.key_type || "Unknown" %></dd>
         </div>
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Has Passphrase</dt>
-          <dd class="mt-1 text-sm text-slate-900"><%= @ssh_key.passphrase.present? ? "Yes" : "No" %></dd>
+          <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Has Passphrase</dt>
+          <dd class="mt-1 text-sm text-ink"><%= @ssh_key.passphrase.present? ? "Yes" : "No" %></dd>
         </div>
       </dl>
     </div>
 
-    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 class="text-sm font-semibold text-slate-900">Public Key</h2>
+    <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
+      <h2 class="text-sm font-semibold text-ink">Public Key</h2>
       <% if @ssh_key.public_key.present? %>
-        <div class="mt-4 rounded-lg bg-slate-50 p-3 font-mono text-xs text-slate-600 break-all">
+        <div class="mt-4 rounded-lg bg-fill p-3 font-mono text-xs text-body break-all">
           <%= @ssh_key.public_key %>
         </div>
-        <p class="mt-2 text-xs text-slate-500">Add this to your server's <code>~/.ssh/authorized_keys</code></p>
+        <p class="mt-2 text-xs text-muted">Add this to your server's <code>~/.ssh/authorized_keys</code></p>
       <% else %>
-        <p class="mt-4 text-sm text-slate-500">Public key not available.</p>
+        <p class="mt-4 text-sm text-muted">Public key not available.</p>
       <% end %>
     </div>
   </div>
 
   <% if @ssh_key.servers.any? %>
     <div class="mt-8">
-      <h2 class="text-lg font-semibold text-slate-900">Servers using this key</h2>
-      <div class="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <table class="min-w-full divide-y divide-slate-200">
-          <thead class="bg-slate-50">
+      <h2 class="font-display text-lg text-ink">Servers using this key</h2>
+      <div class="mt-4 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+        <table class="min-w-full divide-y divide-border">
+          <thead class="bg-fill">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Server</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">IP Address</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Server</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">IP Address</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Status</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-200">
+          <tbody class="divide-y divide-border">
             <% @ssh_key.servers.each do |server| %>
               <tr>
                 <td class="px-6 py-4">
-                  <%= link_to server.name, server_path(server), class: "text-sm font-medium text-slate-900 hover:underline" %>
+                  <%= link_to server.name, server_path(server), class: "text-sm font-medium text-ink hover:underline" %>
                 </td>
-                <td class="px-6 py-4 text-sm text-slate-500"><%= server.ip_address || "—" %></td>
+                <td class="px-6 py-4 text-sm text-muted"><%= server.ip_address || "—" %></td>
                 <td class="px-6 py-4">
                   <span class="<%= status_badge(server.status) %>"><%= server.status %></span>
                 </td>
@@ -77,9 +77,9 @@
     </div>
   <% end %>
 
-  <div class="mt-10 pt-6 border-t border-slate-200">
+  <div class="mt-10 pt-6 border-t border-border">
     <%= button_to "Delete SSH Key", ssh_key_path(@ssh_key), method: :delete,
         data: { turbo_confirm: "Are you sure you want to delete this SSH key?" },
-        class: "text-sm font-medium text-rose-600 hover:text-rose-700" %>
+        class: "text-sm font-medium text-danger hover:text-danger-deep" %>
   </div>
 </section>
