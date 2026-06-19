@@ -1,0 +1,101 @@
+/*
+ * Conductor design tokens — "warm paper" ops aesthetic.
+ * Extracted from the Conductor Ops + Conductor Signal mockups (2026-06-20).
+ *
+ * Source of truth for the redesign. Components reference these var names only;
+ * the dark theme (coming) overrides the SAME names under [data-theme="dark"],
+ * so component CSS never changes — only the values flip.
+ *
+ * Fonts to load: Instrument Serif (display), Inter (UI), JetBrains Mono (data).
+ */
+
+:root {
+  /* ---- Neutrals (warm paper) ---- */
+  --color-bg:            #fafaf8;  /* page */
+  --color-bg-alt:        #faf9f6;  /* alt page / striped */
+  --color-surface:       #ffffff;  /* raised cards */
+  --color-surface-2:     #f6f6f4;  /* secondary surface */
+  --color-fill:          #f1f0ec;  /* subtle fill */
+  --color-fill-strong:   #ececea;  /* stronger fill */
+  --color-border:        #e4e3de;  /* hairline border (dominant line) */
+  --color-border-strong: #d6d4cd;  /* emphasized border */
+
+  /* ---- Text ---- */
+  --color-ink:        #15161a;  /* headings / max contrast (#1f1f22 = warm twin) */
+  --color-text:       #3a3633;  /* body */
+  --color-text-muted: #6b7280;  /* secondary / labels */
+  --color-text-faint: #9ca3af;  /* tertiary / placeholders / pending */
+
+  /* ---- Primary: forest green ---- */
+  --color-primary:        #3a5a3f;  /* brand / healthy / done */
+  --color-primary-strong: #2c7a4d;  /* success / positive delta */
+  --color-primary-sage:   #6e8a72;  /* muted green */
+  --color-primary-tint:   #e7f0e9;  /* green badge/bg */
+
+  /* ---- Danger: terracotta ---- */
+  --color-danger-deep:   #7a1f1a;  /* deepest (text on tint) */
+  --color-danger:        #a8443c;  /* default danger */
+  --color-danger-bright: #d74b4b;  /* alert / down dot */
+  --color-danger-tint:   #f7efee;  /* red badge/bg */
+
+  /* ---- Warning: amber / gold ---- */
+  --color-warning:        #8a6a1f;  /* deep (text on tint) */
+  --color-warning-bright: #e8a53b;  /* amber dot / accent */
+  --color-warning-tint:   #f5ebd3;  /* amber badge/bg */
+
+  /* ---- Info: slate blue ---- */
+  --color-info:        #3a4f7a;
+  --color-info-bright: #7d97c4;
+  --color-info-tint:   #e2e7f1;
+
+  /* ---- Accent: violet ---- */
+  --color-accent:      #8b5cf6;
+  --color-accent-tint: #ece6fb;
+
+  /* ---- Semantic status aliases (use these in status UI) ---- */
+  --status-healthy: var(--color-primary);
+  --status-down:    var(--color-danger-bright);
+  --status-warn:    var(--color-warning-bright);
+  --status-info:    var(--color-info);
+  --status-pending: var(--color-text-faint);
+
+  /* ---- Radius ---- */
+  --radius-chip:    4px;    /* chips / inline code */
+  --radius-control: 8px;    /* buttons / inputs */
+  --radius-card:    12px;   /* cards */
+  --radius-large:   16px;   /* large cards / modals */
+  --radius-pill:    999px;  /* pills / status dots (50% for circles) */
+
+  /* ---- Elevation (borders do the work; elevation is whisper-quiet) ---- */
+  --shadow-sm:   0 1px 4px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.12);
+
+  /* ---- Typography ---- */
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-sans:    'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* dense, ops-grade scale */
+  --text-2xs:  10px;
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   19px;
+  --display-sm: 24px;
+  --display-md: 34px;
+  --display-lg: 46px;
+
+  --tracking-display: -0.01em;  /* serif headings */
+  --tracking-label:   0.1em;    /* uppercase micro-labels */
+  --tracking-kicker:  0.14em;   /* uppercase section kickers */
+}
+
+/*
+ * Dark theme — TODO: fill from the dark variant mockup when provided.
+ * Override the SAME variable names here; components stay untouched.
+ */
+[data-theme="dark"] {
+  /* --color-bg: …; --color-surface: …; --color-border: …; --color-ink: …; etc. */
+}
