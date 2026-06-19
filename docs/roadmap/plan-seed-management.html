@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seed management &amp; idempotency check · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Seed management &amp; idempotency check</h1>
+  <p class="sub">Run an app's seeds as part of deploy (opt-in), and verify those seeds are <strong>idempotent</strong> — flag any that create duplicates or fail on re-run.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime Backends</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: S</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>A Conductor deploy runs <code>db:prepare</code> on boot (migrations), but <strong>never <code>db:seed</code></strong>. For an app whose runtime behaviour depends on seeded rows — reference data, a demo/tenant account, role users — the app deploys "successfully" and then breaks at runtime with no signal. This bit us live: a deployed app's role-based demo login 500'd because the <code>demo</code> account it looks up is only created by seeds, which had never run. The operator has no UI affordance to run seeds, and no way to know seeds were needed.</p>
+  <p>The second half of the problem is <em>safety</em>: seeds are only safe to run repeatedly if they're idempotent (<code>find_or_create_by</code>, upserts). Many real seed files mix idempotent reference data with non-idempotent demo generators that insert duplicate rows every run. Running such a seed on every deploy would silently bloat the database.</p>
+
+  <h2>Current state</h2>
+  <p>The Kamal entrypoint runs <code>./bin/rails db:prepare</code> only; seeds are out of band. Conductor has no concept of an app's seed step, no per-app toggle, and no exec path into the app container (see <a href="plan-app-task-runner.html">in-container task runner</a>). Today running seeds means an operator dropping to a terminal and remembering <code>kamal app exec --reuse "… bin/rails db:seed"</code> with the right env flags.</p>
+
+  <h2>Proposed design</h2>
+  <p>Two coupled features:</p>
+  <ul>
+    <li><strong>Run-seeds-on-deploy toggle</strong> — a per-app boolean (with optional env, e.g. <code>SEED_DEMO=1</code>) that, when set, runs <code>db:seed</code> as a post-migrate deploy step via the task runner, with the output streamed into the deployment log.</li>
+    <li><strong>Idempotency check</strong> — a one-click (and pre-deploy) verification that runs the seed twice inside a throwaway/transactional context and diffs row counts per table. If the second run changes any counts (or errors), the seed is flagged <em>non-idempotent</em> with the offending tables, and on-deploy seeding is blocked until acknowledged.</li>
+  </ul>
+  <p>The check leans on the same in-container exec used for the task runner, so it runs against the app's real schema and seed code, not a guess.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>Per-app <code>run_seeds_on_deploy</code> flag + optional seed env; surface it on the app page and via MCP/<code>update_app</code>.</li>
+    <li>Deploy step: after migrations, if enabled, invoke the task runner's <code>db:seed</code> and stream output to the deployment log.</li>
+    <li>Idempotency probe: run seeds twice in a transaction (rolled back), capture per-table row-count deltas, return a pass/fail report with offending tables.</li>
+    <li>UI + gate: show the idempotency verdict on the app page; block on-deploy seeding for non-idempotent seeds until the operator overrides.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>An app can be configured to run its seeds on every deploy; the seed output appears in the deployment log.</li>
+    <li>Conductor can report whether an app's seeds are idempotent, naming any tables that change on a second run.</li>
+    <li>A non-idempotent seed cannot be silently attached to on-deploy seeding without an explicit override.</li>
+    <li>Running seeds is possible from the UI/MCP without an operator hand-crafting a <code>kamal app exec</code> command.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Built on the <a href="plan-app-task-runner.html">in-container task runner</a> (executes <code>db:seed</code> against the running app) and the <a href="plan-kamal-control-machine.html">Kamal control machine</a> (deploy pipeline that gains the post-migrate seed step). Related: <a href="plan-deploy-hooks.html">deploy hooks</a>.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-19</footer>
+</div></body></html>

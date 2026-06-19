@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In-container task runner (db:seed / rake / migrate) · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>In-container task runner (db:seed / rake / migrate)</h1>
+  <p class="sub">Run a one-off, <strong>non-interactive</strong> task inside a deployed app's container — <code>db:seed</code>, a rake task, a data migration, a maintenance script — from the UI and over MCP, with streamed output.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Agent-native</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor can deploy an app and run host-level provisioning scripts, but it has <strong>no way to run an app-level task in the running container</strong>. Anything like <code>db:seed</code>, a backfill rake task, a one-off data fix, or <code>db:migrate</code> out of band requires an operator to drop to a terminal and run <code>kamal app exec --reuse "bin/rails …"</code> with the right env. That breaks the "manage the fleet from the UI / via an agent" promise and — critically — means an AI agent driving Conductor over MCP cannot finish jobs that need a task run (it surfaced when a deploy needed <code>db:seed</code> and there was no tool for it).</p>
+
+  <h2>Current state</h2>
+  <p>The closest tool is <code>run_script</code> (<code>app/tools/run_script_tool.rb</code>), which runs a predefined provisioning <code>Script</code> on a <em>server</em> (host shell), not a command in an app container. <code>KamalDeployer</code> (<code>app/services/kamal_deployer.rb</code>) already knows how to reach the target and run <code>kamal</code> with the app's env from Conductor's container, and <code>App</code> carries <code>deploy_method</code> (<code>kamal</code>/<code>docker</code>/<code>native</code>) plus <code>container_name</code> / <code>kamal_service</code> / <code>app_dir</code> helpers — so the addressing exists; only the exec entrypoint is missing. This is the non-interactive sibling of the <a href="plan-web-console.html">web console</a> (interactive PTY); they can share the command-resolution layer.</p>
+
+  <h2>Proposed design</h2>
+  <p>Add a <strong>TaskRun</strong> (modeled on <code>ScriptRun</code>/<code>Deployment</code>) that runs one command in the app container and streams output over ActionCable, plus an MCP tool <code>run_app_task</code>. The remote command is resolved per <code>deploy_method</code>: <code>kamal app exec --reuse "&lt;cmd&gt;"</code> for Kamal apps, <code>docker exec &lt;container_name&gt; &lt;cmd&gt;</code> for docker/native. Tasks are chosen from a small allow-list of safe verbs (<code>db:seed</code>, <code>db:migrate</code>, <code>rails runner</code>, named rake tasks) rather than arbitrary shell, every run is recorded for audit (like <code>McpCall</code>), and access is gated to webmaster/owner.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><code>TaskRun</code> model + job that execs one command in the app container via Conductor's control-machine path, streaming stdout/stderr to the deployment-log UI.</li>
+    <li>Per-method command resolution (<code>kamal app exec</code> vs <code>docker exec</code>) reusing <code>App</code> deploy-method helpers.</li>
+    <li>MCP tool <code>run_app_task</code> (allow-listed verbs: <code>db:seed</code>, <code>db:migrate</code>, rake, <code>rails runner</code>) + a UI "Run task" action on the app page.</li>
+    <li>Authorization + audit: gate to webmaster/owner, record each task run; redact secrets in output like the MCP audit log.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>From an app's page (and over MCP), an authorized operator can run <code>db:seed</code> / a rake task in the running container and watch output stream live.</li>
+    <li>The same tool works for Kamal and docker/native apps via per-method command resolution.</li>
+    <li>Only allow-listed verbs run; arbitrary shell is not exposed through this tool.</li>
+    <li>Every task run is recorded in an audit log; a non-privileged user cannot run tasks.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Built on the <a href="plan-kamal-control-machine.html">Kamal control machine</a> exec path and the ActionCable log-streaming used by deploys/script runs. Powers <a href="plan-seed-management.html">seed management</a> (which calls <code>db:seed</code> through it). Interactive counterpart: <a href="plan-web-console.html">web console</a>.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-19</footer>
+</div></body></html>
