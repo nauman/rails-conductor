@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP wire-protocol transport · Conductor Roadmap</title>
+<style>
+  :root{
+    --bg:#fafaf8; --card:#fff; --ink:#15161a; --body:#3a3633; --muted:#6b7280;
+    --line:#e4e3de; --line-2:#d6d4cd; --accent:#3a5a3f; --accent-ink:#3a5a3f;
+    --p0:#a8443c; --p1:#8a6a1f; --p2:#c79a4a; --p3:#2c7a4d;
+    --done:#2c7a4d; --progress:#3a4f7a; --planned:#9ca3af;
+    --serif:"Instrument Serif",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  h3{font-size:11px;margin:20px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  pre{background:var(--ink);color:#e7e3da;padding:14px 16px;border-radius:12px;overflow:auto;font-size:13px;font-family:var(--mono)}
+  pre code{background:none;color:inherit;padding:0}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p0{background:#f7efee;color:var(--p0);border-color:#eccaca}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.p2{background:#f5ebd3;color:var(--p2);border-color:#ecdcb8}
+  .badge.p3{background:#e7f0e9;color:var(--p3);border-color:#cce6d5}
+  .badge.done{background:#e7f0e9;color:var(--done);border-color:#cce6d5}
+  .badge.progress{background:#e2e7f1;color:var(--progress);border-color:#cdd7e8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  tr:hover td{background:var(--bg)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>MCP wire-protocol transport</h1>
+  <p class="sub">Make Conductor's MCP server speak the real Model Context Protocol so Claude Desktop, Cursor, and any MCP client connect natively — not just shell-capable agents.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Agent-native</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor exposes a <strong>custom HTTP API</strong> at <code>/mcp/list</code> + <code>/mcp/call</code> (<code>{name, input} → {result}</code>). It's perfect for a shell-capable agent (Claude Code) hitting it with <code>curl</code>, and that's how every deploy so far has run. But it is <strong>not the MCP wire protocol</strong> — no JSON-RPC 2.0 envelope, no <code>initialize</code> / <code>tools/list</code> / <code>tools/call</code> methods, no SSE / streamable-HTTP transport. So <strong>Claude Desktop and Cursor can't connect to it natively</strong> as an MCP server; "anyone can deploy from their agent" only holds for agents that can run a shell.</p>
+
+  <h2>Current state</h2>
+  <p><code>Mcp::ServerController</code> (<code>app/controllers/mcp/server_controller.rb</code>) renders plain JSON for <code>list</code>/<code>call</code>/<code>skill</code>, with per-user/per-org bearer auth (slot 14) and a redacted audit log (<code>McpCall</code>). The tool set + schemas already come from <code>ToolRegistry</code>, and the judgment layer is served at <code>/mcp/skill</code>. Everything needed is present except the protocol envelope and transport.</p>
+
+  <h2>Proposed design</h2>
+  <p>Add a spec-compliant MCP endpoint alongside the existing custom API (keep the latter for curl/CI). Implement the <strong>Streamable HTTP transport</strong>: a single <code>POST /mcp</code> accepting JSON-RPC 2.0, handling <code>initialize</code>, <code>tools/list</code> (map <code>ToolRegistry.definitions</code> → MCP tool descriptors), and <code>tools/call</code> (dispatch to <code>ToolRegistry.call</code>, wrap the result as MCP content), with SSE for streaming/notifications. Reuse the slot-14 bearer auth + org scoping unchanged. Expose the skill via an MCP <code>resource</code> (or a prompt) so connected clients pull it automatically.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>JSON-RPC 2.0 envelope + <code>initialize</code> handshake (capabilities, serverInfo).</li>
+    <li><code>tools/list</code> from <code>ToolRegistry.definitions</code>; <code>tools/call</code> → <code>ToolRegistry.call</code>, result wrapped as MCP <code>content</code>; errors as JSON-RPC errors.</li>
+    <li>Streamable-HTTP transport (POST + SSE) at <code>POST /mcp</code>; reuse bearer auth + Current org/scope.</li>
+    <li>Expose <code>/mcp/skill</code> as an MCP resource/prompt; document the one-line Claude Desktop / Cursor connect config in the <a href="/docs/mcp">MCP guide</a>.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>Claude Desktop / Cursor connect to Conductor with a per-user token and see the tools natively (no shell, no curl).</li>
+    <li><code>tools/list</code> matches <code>ToolRegistry</code>; <code>tools/call</code> deploys an app end-to-end via a real MCP client.</li>
+    <li>Org scoping + read-only scope (slot 14) apply identically over the new transport.</li>
+    <li>The existing <code>/mcp/call</code> custom API keeps working for curl/CI.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds directly on <a href="14-multi-tenant-mcp.html">slot 14</a> (per-user/org tokens + scoping) and <code>ToolRegistry</code>/<code>/mcp/skill</code>. Completes the agent-native pillar: <em>any</em> MCP client, not just shell agents. See the <a href="/docs/mcp">MCP guide</a>.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-20</footer>
+</div></body></html>

@@ -1,4 +1,4 @@
-# 00 · Conductor delivery sequence — 14 slots, 4 waves
+# 00 · Conductor delivery sequence — 15 slots, 4 waves
 
 **Decision surface:** [`00-delivery-sequence.html`](./00-delivery-sequence.html) — interactive: foundation-audit donut, wave gantt, per-wave bar chart, dependency graph, 14-entry filterable table. **Open this to scan or sequence.**
 
@@ -23,7 +23,7 @@ Without an overlay, an engineer builds seed-management before the task runner it
 | **2** | Operational parity (depends on W1) | 04 · 05 · 06 · 08 · 10 |
 | **3** | Breadth & scale | 07 · 11 · 12 · 13 · 14 |
 
-**Graph plots 14 entries** — all 14 plan slots (01–14). Each wave is a **dependency tier**, not a sprint; slots inside a wave can be built in parallel.
+**Graph plots 15 entries** — all 15 plan slots (01–15). Each wave is a **dependency tier**, not a sprint; slots inside a wave can be built in parallel.
 
 ## Wave 0 close-out — done
 

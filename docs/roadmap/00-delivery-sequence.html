@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Conductor delivery sequence — 14 slots, 4 waves</title>
+<title>Conductor delivery sequence — 15 slots, 4 waves</title>
 <style>
   :root{
     --bg:#fafaf8; --surface:#fff; --fill:#f1f0ec; --border:#e4e3de; --border-2:#d6d4cd;
@@ -114,6 +114,7 @@ const ITEMS = [
   {id:'12', title:'Alerts & notifications', status:'spec', wave:3, deps:['06'], plan:'12-alerts.html'},
   {id:'13', title:'Redis & MySQL accessories', status:'spec', wave:3, deps:['01'], plan:'13-accessories.html'},
   {id:'14', title:'Multi-tenant MCP (anyone deploys)', status:'shipped', wave:3, deps:['02'], plan:'14-multi-tenant-mcp.html'},
+  {id:'15', title:'MCP wire-protocol transport', status:'spec', wave:3, deps:['14'], plan:'15-mcp-wire-protocol.html'},
 ];
 const byId = Object.fromEntries(ITEMS.map(i=>[i.id,i]));
 const STC = {shipped:"#2c7a4d", spec:"#9ca3af", partial:"#e8a53b"};
