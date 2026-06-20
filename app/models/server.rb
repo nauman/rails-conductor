@@ -7,6 +7,7 @@ class Server < ApplicationRecord
   has_many :apps, dependent: :nullify
   has_many :backups, dependent: :nullify
   has_many :script_runs, dependent: :destroy
+  has_many :database_pulls, dependent: :destroy
   has_many :cron_jobs, dependent: :destroy
 
   validates :name, presence: true, uniqueness: true

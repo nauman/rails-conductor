@@ -17,6 +17,7 @@ class Organization < ApplicationRecord
   end
   has_many :backups, dependent: :nullify
   has_many :ssh_keys, dependent: :nullify
+  has_many :database_pulls, dependent: :nullify
 
   validates :name, presence: true
 

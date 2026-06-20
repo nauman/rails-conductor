@@ -1,0 +1,55 @@
+<% content_for :title, "Database pulls" %>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-ink">Database pulls</h1>
+      <p class="text-sm text-muted mt-1">Dumps pulled from your servers down to this Conductor host.</p>
+    </div>
+    <%= link_to "New pull", new_database_pull_path, class: "px-4 py-2 text-sm font-medium rounded-md bg-ink hover:bg-body text-white" %>
+  </div>
+
+  <% if @pulls.any? %>
+    <div class="bg-white rounded-card border border-border overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-fill-strong text-left text-muted">
+          <tr>
+            <th class="px-4 py-2 font-medium">#</th>
+            <th class="px-4 py-2 font-medium">Source</th>
+            <th class="px-4 py-2 font-medium">Server</th>
+            <th class="px-4 py-2 font-medium">Restore target</th>
+            <th class="px-4 py-2 font-medium">Size</th>
+            <th class="px-4 py-2 font-medium">Status</th>
+            <th class="px-4 py-2 font-medium">When</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          <% @pulls.each do |pull| %>
+            <tr class="hover:bg-fill-strong/50">
+              <td class="px-4 py-2"><%= link_to "##{pull.id}", database_pull_path(pull), class: "text-info hover:underline" %></td>
+              <td class="px-4 py-2"><%= pull.source_label %></td>
+              <td class="px-4 py-2"><%= pull.server&.name %></td>
+              <td class="px-4 py-2 font-mono text-xs"><%= pull.restore_target.presence || "—" %></td>
+              <td class="px-4 py-2"><%= pull.formatted_size %></td>
+              <td class="px-4 py-2">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                  <%= case pull.status
+                      when 'pending' then 'bg-fill-strong text-body'
+                      when 'running' then 'bg-info-tint text-info'
+                      when 'success' then 'bg-primary-tint text-primary'
+                      when 'failed'  then 'bg-danger-tint text-danger-deep'
+                      end %>"><%= pull.status.capitalize %></span>
+              </td>
+              <td class="px-4 py-2 text-muted"><%= time_ago_in_words(pull.created_at) %> ago</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <div class="bg-white rounded-card border border-border px-6 py-12 text-center">
+      <p class="text-muted">No database pulls yet.</p>
+      <%= link_to "Pull a database", new_database_pull_path, class: "inline-block mt-3 text-info hover:underline" %>
+    </div>
+  <% end %>
+</div>

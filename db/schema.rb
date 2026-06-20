@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_17_040000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_20_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -136,6 +136,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_040000) do
     t.datetime "updated_at", null: false
     t.index ["organization_id"], name: "index_database_clusters_on_organization_id"
     t.index ["server_id"], name: "index_database_clusters_on_server_id"
+  end
+
+  create_table "database_pulls", force: :cascade do |t|
+    t.bigint "app_id"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.string "local_dump_path"
+    t.text "log"
+    t.bigint "organization_id"
+    t.string "restore_target"
+    t.bigint "server_id", null: false
+    t.bigint "size_bytes", default: 0, null: false
+    t.string "source_database"
+    t.string "source_database_url_var", default: "DATABASE_URL", null: false
+    t.string "source_env_file"
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["app_id"], name: "index_database_pulls_on_app_id"
+    t.index ["created_at"], name: "index_database_pulls_on_created_at"
+    t.index ["organization_id"], name: "index_database_pulls_on_organization_id"
+    t.index ["server_id"], name: "index_database_pulls_on_server_id"
+    t.index ["status"], name: "index_database_pulls_on_status"
+    t.index ["user_id"], name: "index_database_pulls_on_user_id"
   end
 
   create_table "databases", force: :cascade do |t|
@@ -376,6 +401,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_040000) do
   add_foreign_key "cron_jobs", "servers"
   add_foreign_key "database_clusters", "organizations"
   add_foreign_key "database_clusters", "servers"
+  add_foreign_key "database_pulls", "apps"
+  add_foreign_key "database_pulls", "organizations"
+  add_foreign_key "database_pulls", "servers"
+  add_foreign_key "database_pulls", "users"
   add_foreign_key "databases", "apps"
   add_foreign_key "databases", "database_clusters"
   add_foreign_key "databases", "organizations"

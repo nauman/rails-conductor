@@ -132,6 +132,10 @@ Rails.application.routes.draw do
   resources :scripts
   resources :script_runs, only: [:show]
 
+  # Database pulls — pg_dump a remote DB down to the Conductor host (SCP) and
+  # optionally restore it into a local Postgres database.
+  resources :database_pulls, only: [:index, :show, :new, :create]
+
   # Chat (conversations + nested messages)
   resources :conversations, only: [:index, :show, :create, :destroy] do
     resources :messages, only: [:create]

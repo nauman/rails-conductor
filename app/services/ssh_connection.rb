@@ -1,3 +1,5 @@
+require "net/scp"
+
 class SshConnection
   TIMEOUT = 10
 
@@ -132,6 +134,36 @@ class SshConnection
     block.call(:stderr, "SSH error: #{e.message}\n") if block
     failure(e.message)
     { success: false, exit_code: 1 }
+  end
+
+  # Download a remote file to a local path via SCP (same key/auth as execute).
+  # Returns true on success, false on failure (with @error set).
+  def download(remote_path, local_path)
+    @error = nil
+
+    unless server.ssh_key.present?
+      failure("No SSH key configured")
+      return false
+    end
+    unless server.ip_address.present?
+      failure("No IP address configured")
+      return false
+    end
+
+    Net::SSH.start(
+      server.ip_address,
+      server.ssh_user_or_default,
+      **ssh_options
+    ) do |ssh|
+      ssh.scp.download!(remote_path, local_path)
+    end
+    true
+  rescue Net::SSH::AuthenticationFailed => e
+    failure("Authentication failed: #{e.message}")
+    false
+  rescue => e
+    failure("Download failed: #{e.message}")
+    false
   end
 
   def success?

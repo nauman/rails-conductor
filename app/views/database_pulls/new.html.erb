@@ -1,0 +1,64 @@
+<% content_for :title, "Pull database" %>
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-ink">Pull a database</h1>
+    <p class="text-sm text-muted mt-1">
+      Runs <code class="font-mono">pg_dump</code> on a server over SSH, downloads the dump
+      to this Conductor host, and (optionally) restores it into a local Postgres database.
+    </p>
+  </div>
+
+  <%= form_with(model: @pull, url: database_pulls_path, class: "space-y-5") do |f| %>
+    <% if @pull.errors.any? %>
+      <div class="bg-danger-tint border border-danger/30 rounded-md px-4 py-3 text-sm text-danger-deep">
+        <ul class="list-disc list-inside"><% @pull.errors.each do |e| %><li><%= e.full_message %></li><% end %></ul>
+      </div>
+    <% end %>
+
+    <div>
+      <%= f.label :server_id, "Source server", class: "block text-sm font-medium text-body mb-1" %>
+      <% if @servers.any? %>
+        <%= f.select :server_id,
+              @servers.map { |s| ["#{s.name} (#{s.ip_address})", s.id] },
+              { selected: @pull.server_id },
+              class: "w-full text-sm border border-border-strong rounded-md px-3 py-2" %>
+      <% else %>
+        <p class="text-sm text-muted">No servers with SSH access. <%= link_to "Add one", servers_path, class: "text-info hover:underline" %>.</p>
+      <% end %>
+    </div>
+
+    <div>
+      <%= f.label :source_env_file, "Env file to source (optional)", class: "block text-sm font-medium text-body mb-1" %>
+      <%= f.text_field :source_env_file, placeholder: "/home/deploy/mademysite/.asdf-vars",
+            class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
+      <p class="text-xs text-faint mt-1">Sourced before <code>pg_dump</code> so <code>$DATABASE_URL</code> is set (Hatchbox keeps it here). Leave blank if the variable is already in the shell environment.</p>
+    </div>
+
+    <div>
+      <%= f.label :source_database_url_var, "DATABASE_URL variable", class: "block text-sm font-medium text-body mb-1" %>
+      <%= f.text_field :source_database_url_var, value: @pull.source_database_url_var.presence || "DATABASE_URL",
+            class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
+    </div>
+
+    <div>
+      <%= f.label :source_database, "Source label (optional)", class: "block text-sm font-medium text-body mb-1" %>
+      <%= f.text_field :source_database, placeholder: "mademysite_production",
+            class: "w-full text-sm border border-border-strong rounded-md px-3 py-2" %>
+      <p class="text-xs text-faint mt-1">Informational only — for display in the pulls list.</p>
+    </div>
+
+    <div>
+      <%= f.label :restore_target, "Restore into local database (optional)", class: "block text-sm font-medium text-body mb-1" %>
+      <%= f.text_field :restore_target, placeholder: "int_mademysite_development",
+            class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
+      <p class="text-xs text-danger-deep mt-1">⚠ If set, this <strong>drops and recreates</strong> that local database on the Conductor host before restoring. Leave blank to only download the dump.</p>
+    </div>
+
+    <div class="flex items-center justify-between">
+      <%= f.submit "Start pull", class: "px-4 py-2 text-sm font-medium rounded-md bg-ink hover:bg-body text-white cursor-pointer",
+            data: { confirm: "Start the pull now? A restore target will overwrite that local database." } %>
+      <%= link_to "Cancel", database_pulls_path, class: "text-sm text-muted" %>
+    </div>
+  <% end %>
+</div>
