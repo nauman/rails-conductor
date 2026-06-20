@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conductor delivery sequence — 14 slots, 4 waves</title>
+<style>
+  :root{
+    --bg:#fafaf8; --surface:#fff; --fill:#f1f0ec; --border:#e4e3de; --border-2:#d6d4cd;
+    --ink:#15161a; --body:#3a3633; --muted:#6b7280; --faint:#9ca3af;
+    --w0:#3a5a3f; --w1:#3a4f7a; --w2:#8a6a1f; --w3:#8b5cf6;
+    --shipped:#2c7a4d; --spec:#9ca3af; --partial:#e8a53b;
+    --serif:"Instrument Serif",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:14px/1.5 "Inter",system-ui,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 20px 80px}
+  a{color:var(--w0)}
+  h1{font-family:var(--serif);font-size:42px;line-height:1.05;letter-spacing:-.01em;color:var(--ink);margin:0 0 6px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 8px}
+  .note{background:var(--fill);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--body);margin:18px 0 28px}
+  .section-mark{font-family:var(--serif);font-size:26px;color:var(--ink);margin:40px 0 14px;letter-spacing:-.01em}
+  .kicker{text-transform:uppercase;letter-spacing:.14em;font-size:10.5px;font-weight:600;color:var(--faint)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+  .grid{display:grid;gap:14px}
+  /* foundation audit */
+  .fcards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .fcard{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface)}
+  .fcard .id{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .fcard .t{font-weight:600;color:var(--ink);margin:2px 0 8px}
+  /* gantt */
+  .gantt{display:flex;flex-direction:column;gap:8px}
+  .grow{display:flex;align-items:center;gap:10px}
+  .glabel{width:120px;flex:none;font-size:12px;color:var(--muted)}
+  .gbar{height:26px;border-radius:7px;display:flex;align-items:center;padding:0 10px;color:#fff;font-size:11px;font-weight:600;white-space:nowrap}
+  /* bar chart */
+  .bars{display:flex;align-items:flex-end;gap:18px;height:160px;padding-top:10px}
+  .bcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px}
+  .bbar{width:100%;border-radius:8px 8px 0 0;min-height:6px}
+  .bcap{font-size:11px;color:var(--muted)}
+  .bnum{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+  /* dep graph */
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+  .chip{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--border-2);background:var(--surface);color:var(--body);cursor:pointer;user-select:none}
+  .chip.active{color:#fff;border-color:transparent}
+  .graph{position:relative;display:grid;gap:18px;grid-template-columns:repeat(4,1fr)}
+  .gcol{display:flex;flex-direction:column;gap:10px}
+  .gcolhead{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;text-align:center;padding-bottom:4px}
+  .node{position:relative;z-index:2;border:1px solid var(--border-2);border-left-width:3px;border-radius:9px;background:var(--surface);padding:8px 10px;transition:opacity .2s}
+  .node .id{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .node .t{font-size:12px;font-weight:600;color:var(--ink);line-height:1.25}
+  .node .st{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+  .node.dim{opacity:.18}
+  svg.edges{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:9px 10px;border-bottom:1px solid var(--border)}
+  td.id,td.deps{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  tr.hide{display:none}
+  .pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:999px}
+  /* TOC */
+  .toc-toggle{position:fixed;top:14px;right:16px;z-index:60;font-family:var(--mono);font-size:12px;background:var(--ink);color:#fff;border:none;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .toc-panel{position:fixed;top:50px;right:16px;z-index:60;width:300px;max-height:76vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 22px 54px -26px rgba(0,0,0,.4);padding:10px 8px;display:none}
+  .toc-panel.open{display:block}
+  .toc-link{display:block;font-size:12px;color:var(--body);text-decoration:none;padding:4px 10px;border-radius:6px}
+  .toc-link:hover{background:var(--fill)}
+  .toc-link.l1{font-weight:600;color:var(--ink);margin-top:4px}
+</style></head>
+<body>
+<button class="toc-toggle" id="toc-toggle" aria-label="Contents">☰ Contents</button>
+<nav class="toc-panel" id="toc-panel" aria-label="Table of contents"></nav>
+<div class="wrap">
+  <p class="kicker">Conductor · Roadmap overlay</p>
+  <h1>Delivery sequence</h1>
+  <p class="sub"><span id="count-slots"></span> slots · <span id="count-waves"></span> waves · build-order overlay on <a href="backlog.html">the backlog</a>. Filed 2026-06-20.</p>
+  <div class="note"><strong>An overlay, not a renumber.</strong> The <code>plan-*.html</code> pages are authoring order (when each gap got specced) — not delivery order. This groups them into dependency <strong>waves</strong> so an engineer builds foundations first. Plan IDs stay stable; waves are an overlay.</div>
+
+  <div class="section-mark">Foundation audit · Wave 0</div>
+  <div class="grid fcards" id="foundation"></div>
+
+  <div class="section-mark">Wave gantt</div>
+  <div class="card"><div class="gantt" id="gantt"></div></div>
+
+  <div class="section-mark">Slots per wave</div>
+  <div class="card"><div class="bars" id="bars"></div></div>
+
+  <div class="section-mark">Dependency graph</div>
+  <p class="sub">Arrows point from a slot to what it depends on. Click a wave to focus it.</p>
+  <div class="chips" id="chips"></div>
+  <div class="card"><div class="graph" id="graph"><svg class="edges" id="edges"></svg></div></div>
+
+  <div class="section-mark">All slots</div>
+  <div class="chips" id="tchips"></div>
+  <div class="card" style="padding:6px 10px"><table><thead><tr><th>Slot</th><th>Title</th><th>Wave</th><th>Status</th><th>Depends on</th></tr></thead><tbody id="tbody"></tbody></table></div>
+</div>
+
+<script>
+const WAVES = [
+  {w:0, theme:"Foundation — must ship first", color:"var(--w0)", c:"#3a5a3f"},
+  {w:1, theme:"Close the push → deploy loop", color:"var(--w1)", c:"#3a4f7a"},
+  {w:2, theme:"Operational parity", color:"var(--w2)", c:"#8a6a1f"},
+  {w:3, theme:"Breadth & scale", color:"var(--w3)", c:"#8b5cf6"},
+];
+const ITEMS = [
+  {id:'01', title:'Kamal control machine', status:'shipped', wave:0, deps:[], plan:'plan-kamal-control-machine.html'},
+  {id:'02', title:'GitHub App & deploy keys', status:'shipped', wave:0, deps:[], plan:'plan-github-app.html'},
+  {id:'03', title:'Auto-deploy on git push', status:'spec', wave:1, deps:['02','01'], plan:'plan-auto-deploy-push.html'},
+  {id:'09', title:'In-container task runner', status:'spec', wave:1, deps:['01'], plan:'plan-app-task-runner.html'},
+  {id:'04', title:'Rollbacks & release history', status:'spec', wave:2, deps:['01'], plan:'plan-rollbacks.html'},
+  {id:'05', title:'Background worker management', status:'spec', wave:2, deps:['01'], plan:'plan-background-workers.html'},
+  {id:'06', title:'Live app log streaming', status:'spec', wave:2, deps:['01'], plan:'plan-app-logs.html'},
+  {id:'08', title:'Seed management & idempotency', status:'spec', wave:2, deps:['09','01'], plan:'plan-seed-management.html'},
+  {id:'10', title:'Deploy hooks (pre/post)', status:'spec', wave:2, deps:['01','03'], plan:'plan-deploy-hooks.html'},
+  {id:'07', title:'Server provisioning (provider APIs)', status:'spec', wave:3, deps:[], plan:'plan-server-provisioning.html'},
+  {id:'11', title:'Web console (rails console / shell)', status:'spec', wave:3, deps:['01'], plan:'plan-web-console.html'},
+  {id:'12', title:'Alerts & notifications', status:'spec', wave:3, deps:['06'], plan:'plan-alerts.html'},
+  {id:'13', title:'Redis & MySQL accessories', status:'spec', wave:3, deps:['01'], plan:'plan-accessories.html'},
+  {id:'14', title:'Multi-tenant MCP (anyone deploys)', status:'spec', wave:3, deps:['02'], plan:'plan-multi-tenant-mcp.html'},
+];
+const byId = Object.fromEntries(ITEMS.map(i=>[i.id,i]));
+const STC = {shipped:"#2c7a4d", spec:"#9ca3af", partial:"#e8a53b"};
+const waveColor = w => WAVES[w].c;
+
+document.getElementById('count-slots').textContent = ITEMS.length;
+document.getElementById('count-waves').textContent = WAVES.length;
+
+// Foundation audit
+document.getElementById('foundation').innerHTML = ITEMS.filter(i=>i.wave===0).map(i=>`
+  <div class="fcard" style="border-left:3px solid ${STC[i.status]}">
+    <div class="id">${i.id}</div><div class="t">${i.title}</div>
+    <span class="pill" style="background:#e7f0e9;color:#2c7a4d">${i.status} ✓</span>
+  </div>`).join('');
+
+// Gantt
+document.getElementById('gantt').innerHTML = WAVES.map((wv,idx)=>{
+  const n = ITEMS.filter(i=>i.wave===wv.w).length;
+  const width = 28 + idx*22;
+  return `<div class="grow"><div class="glabel">W${wv.w} · ${wv.theme.split('—')[0].trim()}</div>
+    <div class="gbar" style="background:${wv.c};margin-left:${idx*8}%;width:${width}%">${n} slot${n!==1?'s':''}</div></div>`;
+}).join('');
+
+// Per-wave bar chart
+const maxN = Math.max(...WAVES.map(wv=>ITEMS.filter(i=>i.wave===wv.w).length));
+document.getElementById('bars').innerHTML = WAVES.map(wv=>{
+  const n = ITEMS.filter(i=>i.wave===wv.w).length;
+  return `<div class="bcol"><div class="bnum">${n}</div>
+    <div class="bbar" style="height:${(n/maxN)*120}px;background:${wv.c}"></div>
+    <div class="bcap">W${wv.w}</div></div>`;
+}).join('');
+
+// Dependency graph (columns by wave) + SVG edges
+const graph = document.getElementById('graph');
+WAVES.forEach(wv=>{
+  const col = document.createElement('div'); col.className='gcol';
+  col.innerHTML = `<div class="gcolhead" style="color:${wv.c}">Wave ${wv.w}</div>`;
+  ITEMS.filter(i=>i.wave===wv.w).forEach(i=>{
+    const el = document.createElement('a');
+    el.href = i.plan; el.className='node'; el.id='node-'+i.id; el.dataset.wave=i.wave; el.style.borderLeftColor=waveColor(i.wave); el.style.textDecoration='none';
+    el.innerHTML = `<div class="id">${i.id}</div><div class="t">${i.title}</div><div class="st" style="color:${STC[i.status]}">${i.status}</div>`;
+    col.appendChild(el);
+  });
+  graph.appendChild(col);
+});
+const svg = document.getElementById('edges');
+function drawEdges(){
+  const box = graph.getBoundingClientRect();
+  let p = '';
+  ITEMS.forEach(i=>i.deps.forEach(d=>{
+    const a = document.getElementById('node-'+i.id), b = document.getElementById('node-'+d);
+    if(!a||!b) return;
+    const ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect();
+    const x1=ra.left-box.left, y1=ra.top-box.top+ra.height/2;
+    const x2=rb.right-box.left, y2=rb.top-box.top+rb.height/2;
+    const mx=(x1+x2)/2;
+    p += `<path d="M${x2},${y2} C${mx},${y2} ${mx},${y1} ${x1},${y1}" fill="none" stroke="${waveColor(i.wave)}" stroke-width="1.5" opacity=".4"/>`;
+    p += `<circle cx="${x1}" cy="${y1}" r="2.5" fill="${waveColor(i.wave)}"/>`;
+  }));
+  svg.innerHTML = p;
+}
+// wave focus chips
+const chips = document.getElementById('chips');
+chips.innerHTML = `<span class="chip active" data-w="all" style="background:var(--ink);color:#fff">All</span>` +
+  WAVES.map(wv=>`<span class="chip" data-w="${wv.w}" style="border-color:${wv.c};color:${wv.c}">Wave ${wv.w}</span>`).join('');
+chips.addEventListener('click', e=>{
+  const c = e.target.closest('.chip'); if(!c) return;
+  [...chips.children].forEach(x=>{x.classList.remove('active'); x.style.background=''; x.style.color = x.dataset.w==='all'?'var(--body)':waveColor(+x.dataset.w);});
+  c.classList.add('active');
+  const w = c.dataset.w;
+  c.style.background = w==='all'?'var(--ink)':waveColor(+w); c.style.color='#fff';
+  document.querySelectorAll('.node').forEach(n=>n.classList.toggle('dim', w!=='all' && n.dataset.wave!==w));
+});
+window.addEventListener('load', drawEdges);
+window.addEventListener('resize', ()=>requestAnimationFrame(drawEdges));
+
+// Table + filter
+const tbody = document.getElementById('tbody');
+tbody.innerHTML = ITEMS.slice().sort((a,b)=>a.wave-b.wave || a.id.localeCompare(b.id)).map(i=>`
+  <tr data-wave="${i.wave}">
+    <td class="id"><a href="${i.plan}">${i.id}</a></td>
+    <td>${i.title}</td>
+    <td><span class="pill" style="background:${waveColor(i.wave)}1a;color:${waveColor(i.wave)}">W${i.wave}</span></td>
+    <td><span class="pill" style="background:${STC[i.status]}1a;color:${STC[i.status]}">${i.status}</span></td>
+    <td class="deps">${i.deps.join(' · ')||'—'}</td>
+  </tr>`).join('');
+const tchips = document.getElementById('tchips');
+tchips.innerHTML = `<span class="chip active" data-w="all" style="background:var(--ink);color:#fff">All</span>` +
+  WAVES.map(wv=>`<span class="chip" data-w="${wv.w}" style="border-color:${wv.c};color:${wv.c}">W${wv.w}</span>`).join('');
+tchips.addEventListener('click', e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  [...tchips.children].forEach(x=>{x.classList.remove('active'); x.style.background=''; x.style.color = x.dataset.w==='all'?'var(--body)':waveColor(+x.dataset.w);});
+  c.classList.add('active'); const w=c.dataset.w;
+  c.style.background = w==='all'?'var(--ink)':waveColor(+w); c.style.color='#fff';
+  document.querySelectorAll('#tbody tr').forEach(tr=>tr.classList.toggle('hide', w!=='all' && tr.dataset.wave!==w));
+});
+</script>
+<script>
+(function(){
+  const els=[...document.querySelectorAll('.section-mark, h2.h2, [data-toc]')].filter(e=>!e.hasAttribute('data-toc-skip'));
+  const panel=document.getElementById('toc-panel'), btn=document.getElementById('toc-toggle');
+  if(!els.length||!panel||!btn)return;
+  const used={};
+  const slug=t=>{let b=(t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,48))||'s';let id=b,n=2;while(used[id])id=b+'-'+n++;used[id]=1;return id;};
+  els.forEach(el=>{ if(!el.id)el.id=slug(el.textContent);
+    const a=document.createElement('a'); a.href='#'+el.id; a.className='toc-link l1';
+    a.textContent=el.textContent.trim().slice(0,58);
+    a.addEventListener('click',()=>panel.classList.remove('open')); panel.appendChild(a); });
+  btn.addEventListener('click',()=>panel.classList.toggle('open'));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')panel.classList.remove('open');});
+})();
+</script>
+</body></html>

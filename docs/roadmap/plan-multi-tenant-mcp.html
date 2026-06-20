@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-tenant MCP (anyone can deploy) · Conductor Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Multi-tenant MCP — "anyone can deploy"</h1>
+  <p class="sub">Per-user / per-org MCP tokens scoped to an org's own apps, so any member (or their agent) can deploy <strong>their</strong> apps over MCP — not the whole fleet as admin.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Agent-native</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor's MCP server is live and fully drives deploys (see the <a href="/docs/mcp">MCP guide</a>), but auth is single-tenant: there is <strong>one shared <code>CONDUCTOR_MCP_TOKEN</code></strong>, and every call runs as <code>User.admins.first</code>. So "anyone can deploy" today means "anyone holding the root token, acting as admin across every org." That's fine for a single operator; it blocks handing MCP access to other members/customers, which is the point of the multi-tenant model already in the app (Organizations + Memberships + org-scoped <code>/api/v1</code>).</p>
+
+  <h2>Current state</h2>
+  <p>The MCP endpoint (<code>app/controllers/mcp/server_controller.rb</code>) authenticates a single env token and sets <code>mcp_user = User.admins.first</code>; tools run with that actor. Meanwhile the REST API (<code>/api/v1</code>) already does per-token, org-scoped auth (<code>Api::V1::BaseController</code> + a tokens resource) and the MCP audit log (<code>McpCall</code>) already records the affected org. The pieces exist; MCP just doesn't use per-user tokens yet.</p>
+
+  <h2>Proposed design</h2>
+  <p>Reuse the existing API-token model for MCP: a bearer token resolves to a <strong>user + org</strong>, and every tool call is authorized and scoped to that org's resources.</p>
+  <ul>
+    <li><strong>Token → actor.</strong> Look up the bearer in the API-token store (hashed), set <code>mcp_user</code> = that user and the active org = the token's org. Keep <code>CONDUCTOR_MCP_TOKEN</code> working as a legacy admin token (deprecation path).</li>
+    <li><strong>Scope every tool.</strong> Resource tools (<code>deploy_app</code>, <code>set_env_variable</code>, <code>update_app</code>, <code>provision_database</code>, …) resolve apps/servers through the token's org only; cross-org access is denied, not silently global.</li>
+    <li><strong>Per-token capabilities (optional).</strong> A read-only vs deploy scope on the token, so an org can hand out an inspect-only token.</li>
+    <li><strong>Self-serve issuance.</strong> A "MCP tokens" section (mirroring the API tokens UI) to mint/revoke org-scoped tokens; show the connect snippet from the <a href="/docs/mcp">MCP guide</a>.</li>
+  </ul>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>MCP auth: resolve a bearer token to user+org via the API-token store; fall back to the legacy admin env token.</li>
+    <li>Authorization: route every tool's resource lookup through the token's org; deny cross-org; cover with tests (extend the existing org-scoping specs).</li>
+    <li>Issuance UI + revisions: mint/revoke org-scoped MCP tokens, read-only vs deploy scope, surfaced with the connect snippet.</li>
+    <li>Docs: update the <a href="/docs/mcp">MCP guide</a> — drop the "single shared token / admin" caveat once per-user tokens land.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A non-admin member can mint an org-scoped MCP token and deploy their org's apps via MCP.</li>
+    <li>That token cannot see or act on another org's servers/apps/credentials.</li>
+    <li>A read-only token can call <code>fleet_status</code>/<code>deployment_log</code> but not <code>deploy_app</code>/<code>set_env_variable</code>.</li>
+    <li>The audit log attributes each call to the real user + org behind the token.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on the existing org-scoped <code>/api/v1</code> token auth and the <code>McpCall</code> audit log. Completes the agent-native pillar started by the live MCP server. Related: <a href="/docs/mcp">MCP guide</a>, <a href="plan-github-app.html">GitHub App</a> (clone auth per org), and the org/membership model already in the app.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-20</footer>
+</div></body></html>

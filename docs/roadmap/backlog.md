@@ -2,7 +2,9 @@
 
 Gap analysis vs **Hatchbox.io**, mapped to the 6 strategic pillars. Detailed plans live alongside this file as `plan-*.html`.
 
-_Index in Markdown; individual plan pages stay HTML._ · Updated 2026-06-19.
+_Index in Markdown; individual plan pages stay HTML._ · Updated 2026-06-20.
+
+> **Build order:** this file is the *spine* (what each item is). For *what order to build them in*, see **[`00-delivery-sequence.html`](00-delivery-sequence.html)** ([md](00-delivery-sequence.md)) — the dependency-wave overlay.
 
 ## Thesis
 
@@ -36,6 +38,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Server provisioning via provider APIs](plan-server-provisioning.html) | Provider Automation | P1 | L | Planned |
 | [Seed management & idempotency check](plan-seed-management.html) | Runtime Backends | P1 | S | Planned |
 | [In-container task runner (db:seed / rake / migrate)](plan-app-task-runner.html) | Agent-native | P1 | M | Planned |
+| [Multi-tenant MCP (anyone can deploy)](plan-multi-tenant-mcp.html) | Agent-native | P1 | M | Planned |
 | [Deploy hooks (pre/post commands)](plan-deploy-hooks.html) | Runtime Backends | P2 | S | Planned |
 | [Web console (rails console / shell)](plan-web-console.html) | Fleet Control | P2 | M | Planned |
 | [Alerts & notifications](plan-alerts.html) | Continuous Maintenance | P2 | M | Planned |
