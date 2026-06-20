@@ -92,6 +92,9 @@ module Mcp
       # non-admin), so tools are scoped to their organizations (see ActorScoped).
       if (api_token = ApiToken.authenticate(token))
         @mcp_user = api_token.user
+        # Bind scoping to the token's org (not all the user's orgs) and its scope.
+        Current.organization = api_token.organization
+        Current.read_only = api_token.read_only?
         return
       end
 

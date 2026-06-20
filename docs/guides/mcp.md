@@ -95,14 +95,8 @@ Two kinds of bearer token work:
 - **Per-user / per-org token (recommended).** An `ApiToken` bound to a user + organization. MCP runs the call **as that user, scoped to their organizations** — `deploy_app`, `set_env_variable`, `fleet_status`, logs, domains, etc. only see and act on apps/servers in orgs the user belongs to. One org's token can't touch another org's resources. This is how "anyone can deploy *their own* apps" works.
 - **Legacy shared token.** The instance `CONDUCTOR_MCP_TOKEN` env var runs as the first admin with **global** scope. Treat it like a root credential; rotate by changing the env var and redeploying.
 
-Mint a per-user token today via the token API (`/api/v1`) or the Rails console:
+Mint one self-serve in the **Tokens** page (top nav → *Tokens*, or `/mcp_tokens`): name it, pick a **scope** — `deploy` (full) or `read` (read-only: `fleet_status` / `recent_logs` / `deployment_log` only) — and copy the token (shown once). Tokens are **bound to the active org**, so they can only see and act on that org's apps. Revoke anytime.
 
-```ruby
-raw, _ = ApiToken.generate(user: User.find_by(email: "you@example.com"),
-                           name: "my-agent", organization: Organization.find_by(name: "Acme"))
-puts raw   # shown once — use it as the MCP bearer token
-```
-
-> A self-serve "MCP tokens" UI (mint/revoke org-scoped tokens, read-only vs deploy scope) is the remaining slice — see the delivery sequence, slot 14 *Multi-tenant MCP*.
+(Console equivalent: `ApiToken.generate(user:, name:, organization:, scope: "deploy")`.)
 
 **Audit log.** Every call (tool, args, the real user + affected org behind the token, duration) is recorded; secret values are redacted.

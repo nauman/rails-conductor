@@ -36,7 +36,10 @@ module ActorScoped
 
   private
 
+  # When a token is bound to a specific org (Current.organization), scope to it
+  # alone; otherwise fall back to all of the user's orgs.
   def actor_org_ids
+    return [Current.organization.id] if Current.organization
     @user ? @user.organizations.ids : []
   end
 end

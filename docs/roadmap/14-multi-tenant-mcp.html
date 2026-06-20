@@ -54,12 +54,19 @@
     <span class="badge">Pillar: Agent-native</span>
     <span class="badge p1">Priority: P1</span>
     <span class="badge">Effort: M</span>
-    <span class="badge progress">Status: Partial — auth + scoping shipped 2026-06-20</span>
+    <span class="badge done">Status: Shipped 2026-06-20</span>
   </div>
 </header>
 <div class="card" style="border-color:#2c7a4d">
-  <h2>Shipped 2026-06-20</h2>
-  <p>The core boundary is live: the MCP server accepts a per-user / per-org <code>ApiToken</code> bearer and runs the call <strong>as that user</strong>, with every resource tool scoped to the actor's organizations via the <code>ActorScoped</code> concern (<code>deploy_app</code>, <code>update_app</code>, <code>set_env_variable</code>, <code>generate_deploy_key</code>, <code>sync_app_status</code>, <code>deployment_log</code>, <code>add_domain</code>, <code>remove_domain</code>, <code>fleet_status</code>, <code>recent_logs</code>). A non-admin token cannot see or act on another org's apps/servers; the legacy <code>CONDUCTOR_MCP_TOKEN</code> keeps global admin scope. Covered by <code>test/integration/multi_tenant_mcp_test.rb</code>. See the <a href="/docs/mcp">MCP guide</a>. <strong>Remaining:</strong> self-serve issuance UI + read-only vs deploy token scope.</p>
+  <h2>Shipped 2026-06-20 — complete</h2>
+  <p>The MCP server accepts a per-user / per-org <code>ApiToken</code> bearer and runs the call <strong>as that user</strong>, scoped via the <code>ActorScoped</code> concern + a membership-checked <code>resolve_organization</code>. Delivered:</p>
+  <ul>
+    <li><strong>Org-bound scoping</strong> — a token is bound to one org (<code>Current.organization</code>); it can't see or act on another org's apps/servers even if the user belongs to both. Legacy <code>CONDUCTOR_MCP_TOKEN</code> keeps global admin scope.</li>
+    <li><strong>Read-only vs deploy scope</strong> — <code>ApiToken#scope</code> (<code>read</code>/<code>deploy</code>); read-only tokens limited to <code>fleet_status</code>/<code>recent_logs</code>/<code>deployment_log</code> at the <code>ToolRegistry</code> choke point.</li>
+    <li><strong>Self-serve issuance UI</strong> — the <em>Tokens</em> page (<code>/mcp_tokens</code>) mints/revokes org-scoped tokens with a scope picker; raw token shown once.</li>
+    <li>Privilege-escalation gaps closed across creation/admin tools (membership check, <code>run_script</code> scoping, admin-gated GitHub-App tools).</li>
+  </ul>
+  <p>Covered by <code>test/integration/multi_tenant_mcp_test.rb</code> (9 cases). See the <a href="/docs/mcp">MCP guide</a>.</p>
 </div>
 <div class="card">
   <h2>Problem</h2>

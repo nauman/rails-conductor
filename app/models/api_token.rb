@@ -14,13 +14,19 @@ class ApiToken < ApplicationRecord
   # The raw token is shown once and cannot be retrieved again.
   # Pass an optional organization to scope the token; otherwise it falls back
   # to the user's first organization when the API resolves the request org.
-  def self.generate(user:, name:, organization: nil)
+  SCOPES = %w[deploy read].freeze
+  validates :scope, inclusion: { in: SCOPES }
+
+  def self.generate(user:, name:, organization: nil, scope: "deploy")
     raw_token = SecureRandom.urlsafe_base64(32)
     digest = Digest::SHA256.hexdigest(raw_token)
 
-    record = create!(user: user, name: name, token_digest: digest, organization: organization)
+    record = create!(user: user, name: name, token_digest: digest,
+                     organization: organization, scope: scope)
     [raw_token, record]
   end
+
+  def read_only? = scope == "read"
 
   # Authenticate a raw token string.
   # Returns the ApiToken record if valid, nil otherwise.

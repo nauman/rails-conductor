@@ -38,7 +38,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
 | [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | Planned |
 | [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | P1 | M | Planned |
-| [Multi-tenant MCP (anyone can deploy)](14-multi-tenant-mcp.html) | Agent-native | P1 | M | 🟡 Partial (auth + scoping done) |
+| [Multi-tenant MCP (anyone can deploy)](14-multi-tenant-mcp.html) | Agent-native | P1 | M | ✅ Done (2026-06-20) |
 | [Deploy hooks (pre/post commands)](10-deploy-hooks.html) | Runtime Backends | P2 | S | Planned |
 | [Web console (rails console / shell)](11-web-console.html) | Fleet Control | P2 | M | Planned |
 | [Alerts & notifications](12-alerts.html) | Continuous Maintenance | P2 | M | Planned |

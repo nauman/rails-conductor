@@ -90,6 +90,9 @@ Rails.application.routes.draw do
 
   resources :ssh_keys
 
+  # Per-user, org-scoped MCP/API tokens (self-serve issuance for agents).
+  resources :mcp_tokens, only: [:index, :create, :destroy]
+
   # Settings → Integrations: Conductor-wide integrations (GitHub App). Singular
   # resource (one config per instance); admin-gated in the controller.
   resource :integrations, only: [:show, :update], controller: :integrations do

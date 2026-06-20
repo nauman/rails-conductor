@@ -54,6 +54,7 @@
                   <%= nav_link "Credentials", credentials_path, active: request.path.start_with?('/credentials') %>
                   <%= nav_link "SSH Keys", ssh_keys_path, active: request.path.start_with?('/ssh_keys') %>
                   <%= nav_link "Members", members_path, active: request.path.start_with?('/members') %>
+                  <%= nav_link "Tokens", mcp_tokens_path, active: request.path.start_with?('/mcp_tokens') %>
                   <% if current_admin? %>
                     <%= nav_link "Integrations", integrations_path, active: request.path.start_with?('/integrations') %>
                     <%= nav_link "Admin", admin_organizations_path, active: request.path.start_with?('/admin') %>

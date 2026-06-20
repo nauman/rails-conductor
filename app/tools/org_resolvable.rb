@@ -21,7 +21,7 @@ module OrgResolvable
       return [org, nil]
     end
 
-    org = @user&.organizations&.first
+    org = Current.organization || @user&.organizations&.first
     return [nil, "No organization available for this user"] unless org
     [org, nil]
   end
@@ -29,9 +29,11 @@ module OrgResolvable
   private
 
   # A non-admin actor (a per-user MCP token) may only target orgs it belongs to.
-  # A nil user is a trusted internal/system actor; admins are global.
+  # If the token is bound to a specific org (Current.organization), that's the
+  # only allowed org. A nil user is a trusted internal/system actor; admins global.
   def org_allowed?(org)
     return true if @user.nil? || @user.admin?
+    return org.id == Current.organization.id if Current.organization
     @user.organizations.exists?(org.id)
   end
 end

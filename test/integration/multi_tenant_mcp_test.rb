@@ -45,6 +45,24 @@ class MultiTenantMcpTest < ActionDispatch::IntegrationTest
     assert_equal 0, @app_b.deployments.count, "must not deploy another org's app"
   end
 
+  test "a token bound to one org can't act on another org the user also belongs to" do
+    @org_b.add_member(@user_a) # user_a now belongs to org_b too...
+    # ...but @token_a is bound to org_a, so it still can't touch app-b.
+    call_tool("deploy_app", { app_name: "app-b" }, token: @token_a)
+    assert_response :unprocessable_entity
+    assert_match(/App not found/, response.body)
+  end
+
+  test "a read-only token can read but not deploy" do
+    raw, = ApiToken.generate(user: @user_a, name: "ro", organization: @org_a, scope: "read")
+    call_tool("deploy_app", { app_name: "app-a" }, token: raw)
+    assert_response :unprocessable_entity
+    assert_match(/read-only/, response.body)
+
+    call_tool("fleet_status", {}, token: raw)
+    assert_response :success
+  end
+
   test "a per-user token cannot create resources in another org (org_id escalation)" do
     call_tool("create_app", { name: "sneaky", organization_id: @org_b.id }, token: @token_a)
     assert_response :unprocessable_entity
