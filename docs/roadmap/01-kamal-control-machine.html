@@ -42,7 +42,7 @@ volumes:
   <ul>
     <li><strong>Docker access:</strong> mount the host's <code>/var/run/docker.sock</code> so <code>kamal</code> can build/push (the host already has buildx). The deploy user is in the docker group.</li>
     <li><strong>kamal on PATH:</strong> confirm <code>kamal</code> resolves in the app checkout (it runs from the app dir; fall back to the app's <code>bin/kamal</code> or invoke via Conductor's bundle).</li>
-    <li><strong>Repo auth:</strong> private repos need a deploy key / token at clone time — see <a href="plan-github-app.html">GitHub App &amp; deploy keys</a>.</li>
+    <li><strong>Repo auth:</strong> private repos need a deploy key / token at clone time — see <a href="02-github-app.html">GitHub App &amp; deploy keys</a>.</li>
     <li><strong>SSH to target:</strong> the materialized key must be wired into Kamal's net-ssh (deploy.yml <code>ssh.keys</code> / an ssh-config / ssh-agent). This is the main integration point to validate.</li>
     <li><strong>Registry:</strong> Conductor's container logs into Docker Hub using <code>KAMAL_REGISTRY_PASSWORD</code> from the app's env.</li>
   </ul>
@@ -65,7 +65,7 @@ volumes:
   </ul></div>
 
   <h2>Dependencies &amp; related</h2>
-  <p>Builds on the <strong>Kamal-env bridge</strong> (<code>KamalEnvWriter</code>) and the <strong>kamal-aware status sync</strong> (both shipped). Unblocked private-repo deploys depend on <a href="plan-github-app.html">GitHub App &amp; deploy keys</a>. Pairs with <a href="plan-auto-deploy-push.html">auto-deploy on push</a> to deliver the full “push → deploy” loop.</p>
+  <p>Builds on the <strong>Kamal-env bridge</strong> (<code>KamalEnvWriter</code>) and the <strong>kamal-aware status sync</strong> (both shipped). Unblocked private-repo deploys depend on <a href="02-github-app.html">GitHub App &amp; deploy keys</a>. Pairs with <a href="03-auto-deploy-push.html">auto-deploy on push</a> to deliver the full “push → deploy” loop.</p>
 </div>
 <footer>Conductor roadmap · 2026-06-17 · proven against the live fleet box this session</footer>
 </div></body></html>

@@ -30,7 +30,7 @@
   <p>Introduce a git-credential layer with two interchangeable strategies, injected into the clone step in both deployers:</p>
   <ul>
     <li><strong>Deploy key (per repo)</strong> — Conductor generates an SSH keypair, stores the private half, and the user adds the public half as a read-only deploy key on the repo. The clone uses an SSH URL with <code>GIT_SSH_COMMAND="ssh -i &lt;key&gt;"</code>.</li>
-    <li><strong>GitHub App (per org)</strong> — Conductor is installed as a GitHub App; per clone it mints a short-lived installation access token and clones over HTTPS via <code>GIT_ASKPASS</code> (or <code>x-access-token:&lt;token&gt;@github.com</code>). This also unlocks the shared webhook secret and commit-status / checks API used by <a href="plan-auto-deploy-push.html">auto-deploy</a>.</li>
+    <li><strong>GitHub App (per org)</strong> — Conductor is installed as a GitHub App; per clone it mints a short-lived installation access token and clones over HTTPS via <code>GIT_ASKPASS</code> (or <code>x-access-token:&lt;token&gt;@github.com</code>). This also unlocks the shared webhook secret and commit-status / checks API used by <a href="03-auto-deploy-push.html">auto-deploy</a>.</li>
   </ul>
   <pre><code># KamalDeployer — clone with an injected credential (deploy-key variant)
 def sync_repo_env
@@ -59,7 +59,7 @@ exports &lt;&lt; "export GIT_ASKPASS=#{askpass_helper}"  # echoes a short-lived 
   </ul></div>
 
   <h2>Dependencies &amp; related</h2>
-  <p>Direct prerequisite for <a href="plan-auto-deploy-push.html">Auto-deploy on git push</a> — the GitHub App that authorizes clones is also the natural source of the webhook delivery and signing secret, and enables commit-status updates once auto-deploy is live. Touches the clone steps in <code>app/services/kamal_deployer.rb</code> and <code>app/services/native_deployer.rb</code>, and adds a credential association to <code>app/models/app.rb</code>. Distinct from the existing server SSH key (<code>Server#ssh_key</code>), which authenticates to the box, not to GitHub.</p>
+  <p>Direct prerequisite for <a href="03-auto-deploy-push.html">Auto-deploy on git push</a> — the GitHub App that authorizes clones is also the natural source of the webhook delivery and signing secret, and enables commit-status updates once auto-deploy is live. Touches the clone steps in <code>app/services/kamal_deployer.rb</code> and <code>app/services/native_deployer.rb</code>, and adds a credential association to <code>app/models/app.rb</code>. Distinct from the existing server SSH key (<code>Server#ssh_key</code>), which authenticates to the box, not to GitHub.</p>
 </div>
 <footer>Conductor roadmap · 2026-06-17</footer>
 </div></body></html>

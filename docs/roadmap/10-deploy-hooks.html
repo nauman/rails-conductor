@@ -43,7 +43,7 @@
   </ul></div>
 
   <h2>Dependencies &amp; related</h2>
-  <p>Touches the same deployer step sequences as the rollbacks plan (<code>plan-rollbacks.html</code>) — both edit where <code>NativeDeployer</code> runs its phases. Reuses the SSH/streaming-log plumbing in <code>app/services/native_deployer.rb</code> and the <code>Deployment#append_log</code>/ActionCable broadcast in <code>app/models/deployment.rb</code>. The Kamal slice depends on the control-machine workspace generation in <code>app/services/kamal_deployer.rb</code> (alongside its <code>.kamal/secrets</code> writing). The MCP CRUD parallels the existing app-management tools.</p>
+  <p>Touches the same deployer step sequences as the rollbacks plan (<code>04-rollbacks.html</code>) — both edit where <code>NativeDeployer</code> runs its phases. Reuses the SSH/streaming-log plumbing in <code>app/services/native_deployer.rb</code> and the <code>Deployment#append_log</code>/ActionCable broadcast in <code>app/models/deployment.rb</code>. The Kamal slice depends on the control-machine workspace generation in <code>app/services/kamal_deployer.rb</code> (alongside its <code>.kamal/secrets</code> writing). The MCP CRUD parallels the existing app-management tools.</p>
 </div>
 <footer>Conductor roadmap · 2026-06-17</footer>
 </div></body></html>

@@ -52,4 +52,4 @@ Wave 0 is **shipped and live-validated** (2026-06-19): the KamalDeployer control
 ## See also
 
 - [`backlog.md`](./backlog.md) — the spine (what each slot is, priority, effort).
-- Per-slot detail: `plan-kamal-control-machine.html` · `plan-github-app.html` · `plan-auto-deploy-push.html` · `plan-rollbacks.html` · `plan-background-workers.html` · `plan-app-logs.html` · `plan-server-provisioning.html` · `plan-seed-management.html` · `plan-app-task-runner.html` · `plan-deploy-hooks.html` · `plan-web-console.html` · `plan-alerts.html` · `plan-accessories.html`.
+- Per-slot detail: `01-kamal-control-machine.html` · `02-github-app.html` · `03-auto-deploy-push.html` · `04-rollbacks.html` · `05-background-workers.html` · `06-app-logs.html` · `07-server-provisioning.html` · `08-seed-management.html` · `09-app-task-runner.html` · `10-deploy-hooks.html` · `11-web-console.html` · `12-alerts.html` · `13-accessories.html`.

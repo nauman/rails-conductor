@@ -20,7 +20,7 @@
   <p>The second half of the problem is <em>safety</em>: seeds are only safe to run repeatedly if they're idempotent (<code>find_or_create_by</code>, upserts). Many real seed files mix idempotent reference data with non-idempotent demo generators that insert duplicate rows every run. Running such a seed on every deploy would silently bloat the database.</p>
 
   <h2>Current state</h2>
-  <p>The Kamal entrypoint runs <code>./bin/rails db:prepare</code> only; seeds are out of band. Conductor has no concept of an app's seed step, no per-app toggle, and no exec path into the app container (see <a href="plan-app-task-runner.html">in-container task runner</a>). Today running seeds means an operator dropping to a terminal and remembering <code>kamal app exec --reuse "… bin/rails db:seed"</code> with the right env flags.</p>
+  <p>The Kamal entrypoint runs <code>./bin/rails db:prepare</code> only; seeds are out of band. Conductor has no concept of an app's seed step, no per-app toggle, and no exec path into the app container (see <a href="09-app-task-runner.html">in-container task runner</a>). Today running seeds means an operator dropping to a terminal and remembering <code>kamal app exec --reuse "… bin/rails db:seed"</code> with the right env flags.</p>
 
   <h2>Proposed design</h2>
   <p>Two coupled features:</p>
@@ -47,7 +47,7 @@
   </ul></div>
 
   <h2>Dependencies &amp; related</h2>
-  <p>Built on the <a href="plan-app-task-runner.html">in-container task runner</a> (executes <code>db:seed</code> against the running app) and the <a href="plan-kamal-control-machine.html">Kamal control machine</a> (deploy pipeline that gains the post-migrate seed step). Related: <a href="plan-deploy-hooks.html">deploy hooks</a>.</p>
+  <p>Built on the <a href="09-app-task-runner.html">in-container task runner</a> (executes <code>db:seed</code> against the running app) and the <a href="01-kamal-control-machine.html">Kamal control machine</a> (deploy pipeline that gains the post-migrate seed step). Related: <a href="10-deploy-hooks.html">deploy hooks</a>.</p>
 </div>
 <footer>Conductor roadmap · 2026-06-19</footer>
 </div></body></html>

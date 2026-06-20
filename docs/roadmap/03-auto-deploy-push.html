@@ -77,7 +77,7 @@ end</code></pre>
   </ul></div>
 
   <h2>Dependencies &amp; related</h2>
-  <p>Closely paired with <a href="plan-github-app.html">GitHub App &amp; deploy keys</a>: the same GitHub App can both <em>deliver</em> these webhooks (and supply the shared secret) and <em>authorize</em> the private-repo clone that the resulting deploy performs, plus post commit-status updates back. Builds directly on the existing <code>DeployAppJob</code> dispatch (<code>app/jobs/deploy_app_job.rb</code>) and the <code>Deployment</code> lifecycle in <code>app/models/deployment.rb</code>; no deployer changes required.</p>
+  <p>Closely paired with <a href="02-github-app.html">GitHub App &amp; deploy keys</a>: the same GitHub App can both <em>deliver</em> these webhooks (and supply the shared secret) and <em>authorize</em> the private-repo clone that the resulting deploy performs, plus post commit-status updates back. Builds directly on the existing <code>DeployAppJob</code> dispatch (<code>app/jobs/deploy_app_job.rb</code>) and the <code>Deployment</code> lifecycle in <code>app/models/deployment.rb</code>; no deployer changes required.</p>
 </div>
 <footer>Conductor roadmap · 2026-06-17</footer>
 </div></body></html>
