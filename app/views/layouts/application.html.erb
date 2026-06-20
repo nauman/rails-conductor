@@ -30,44 +30,50 @@
 
   <body class="bg-bg text-body font-sans antialiased">
     <div class="min-h-screen flex flex-col">
-      <header class="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
-        <div class="max-w-7xl mx-auto px-4">
-          <div class="h-14 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="h-9 w-9 rounded-card bg-ink text-white flex items-center justify-center text-sm font-semibold">
-                C
-              </div>
-              <div class="leading-tight">
-                <div class="text-sm font-semibold text-ink">Conductor</div>
-                <div class="text-xs text-muted">Ops control panel</div>
-              </div>
-            </div>
+      <header class="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur">
+        <div class="max-w-[88rem] mx-auto px-4">
+          <div class="h-16 flex items-center gap-4">
+            <%= link_to (user_signed_in? ? dashboard_path : root_path), class: "flex items-center gap-2.5 shrink-0" do %>
+              <span class="h-9 w-9 rounded-card bg-primary text-white flex items-center justify-center font-display text-lg leading-none">C</span>
+              <span class="leading-tight hidden sm:block">
+                <span class="block font-display text-lg text-ink">Conductor</span>
+                <span class="block text-2xs uppercase tracking-label text-faint">Ops control panel</span>
+              </span>
+            <% end %>
+
             <% if user_signed_in? %>
-              <nav class="flex items-center gap-1 text-sm font-medium text-body">
-                <%= link_to "Overview", dashboard_path, class: "px-3 py-1.5 rounded-full #{request.path == dashboard_path ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Chat", conversations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/conversations') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Servers", servers_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/servers') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Apps", apps_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/apps') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Backups", backups_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/backups') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Databases", database_clusters_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/database_clusters') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Pulls", database_pulls_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/database_pulls') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Credentials", credentials_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/credentials') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "SSH Keys", ssh_keys_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/ssh_keys') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <%= link_to "Members", members_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/members') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <% if current_admin? %>
-                  <%= link_to "Integrations", integrations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/integrations') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                  <%= link_to "Admin", admin_organizations_path, class: "px-3 py-1.5 rounded-full #{request.path.start_with?('/admin') ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
-                <% end %>
-                <span class="ml-2 text-faint">|</span>
-                <%= render "organizations/switcher" %>
-                <span class="ml-2 text-xs text-muted"><%= current_user.email %></span>
-                <% if current_admin? %>
-                  <span class="text-xs text-warning">(admin)</span>
-                <% end %>
-                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "ml-2 px-3 py-1.5 rounded-full text-muted hover:bg-fill-strong" %>
+              <nav class="flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div class="flex items-center gap-0.5 whitespace-nowrap text-[13px] font-medium">
+                  <%= nav_link "Overview", dashboard_path, active: request.path == dashboard_path %>
+                  <%= nav_link "Chat", conversations_path, active: request.path.start_with?('/conversations') %>
+                  <%= nav_link "Servers", servers_path, active: request.path.start_with?('/servers') %>
+                  <%= nav_link "Apps", apps_path, active: request.path.start_with?('/apps') %>
+                  <%= nav_link "Backups", backups_path, active: request.path.start_with?('/backups') %>
+                  <%= nav_link "Databases", database_clusters_path, active: request.path.start_with?('/database_clusters') %>
+                  <%= nav_link "Pulls", database_pulls_path, active: request.path.start_with?('/database_pulls') %>
+                  <%= nav_link "Credentials", credentials_path, active: request.path.start_with?('/credentials') %>
+                  <%= nav_link "SSH Keys", ssh_keys_path, active: request.path.start_with?('/ssh_keys') %>
+                  <%= nav_link "Members", members_path, active: request.path.start_with?('/members') %>
+                  <% if current_admin? %>
+                    <%= nav_link "Integrations", integrations_path, active: request.path.start_with?('/integrations') %>
+                    <%= nav_link "Admin", admin_organizations_path, active: request.path.start_with?('/admin') %>
+                  <% end %>
+                </div>
               </nav>
+
+              <div class="flex items-center gap-3 shrink-0 pl-3 border-l border-border">
+                <%= render "organizations/switcher" %>
+                <div class="hidden lg:flex flex-col items-end leading-tight">
+                  <span class="text-2xs text-muted max-w-[12rem] truncate"><%= current_user.email %></span>
+                  <% if current_admin? %>
+                    <span class="text-2xs uppercase tracking-label text-warning">Admin</span>
+                  <% end %>
+                </div>
+                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "shrink-0 px-3 py-1.5 rounded-pill text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink hover:bg-fill-strong" %>
+              </div>
             <% else %>
-              <%= link_to "Sign in", user_sign_in_path, class: "px-3 py-1.5 rounded-full bg-ink text-white text-sm font-medium" %>
+              <div class="flex-1"></div>
+              <%= link_to "Sign in", user_sign_in_path, class: "shrink-0 px-4 py-1.5 rounded-pill bg-ink text-white text-sm font-medium hover:bg-body" %>
             <% end %>
           </div>
         </div>

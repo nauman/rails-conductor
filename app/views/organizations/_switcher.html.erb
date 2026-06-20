@@ -1,17 +1,18 @@
 <% if current_organization %>
   <% if current_user.organizations.many? %>
-    <details class="relative">
-      <summary class="cursor-pointer list-none px-3 py-1.5 rounded-full hover:bg-fill-strong">
-        <%= current_organization.name %> <span class="text-faint">&#9662;</span>
-      </summary>
-      <div class="absolute right-0 mt-1 w-52 rounded-lg border border-border bg-surface p-1 shadow-lg z-40">
+    <div class="relative" data-controller="dropdown">
+      <button type="button" data-action="dropdown#toggle"
+              class="flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill">
+        <%= current_organization.name %> <span class="text-faint text-xs">&#9662;</span>
+      </button>
+      <div data-dropdown-target="menu" class="hidden absolute right-0 mt-1.5 w-52 rounded-card border border-border bg-surface p-1 shadow-card z-40">
         <% current_user.organizations.order(:name).each do |org| %>
           <%= button_to org.name, switch_organization_path(org),
-                class: "block w-full text-left px-3 py-1.5 rounded text-sm #{org.id == current_organization.id ? 'bg-ink text-white' : 'hover:bg-fill-strong'}" %>
+                class: "block w-full text-left px-3 py-1.5 rounded-control text-sm #{org.id == current_organization.id ? 'bg-ink text-white' : 'text-body hover:bg-fill-strong'}" %>
         <% end %>
       </div>
-    </details>
+    </div>
   <% else %>
-    <span class="px-3 py-1.5 text-xs text-muted"><%= current_organization.name %></span>
+    <span class="rounded-pill bg-fill px-3 py-1.5 text-xs font-medium text-muted"><%= current_organization.name %></span>
   <% end %>
 <% end %>

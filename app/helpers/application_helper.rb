@@ -1,4 +1,11 @@
 module ApplicationHelper
+  # Top-nav pill. Active = solid ink; inactive = muted with a soft hover fill.
+  def nav_link(label, path, active:)
+    base = "px-3 py-1.5 rounded-pill transition-colors"
+    state = active ? "bg-ink text-white" : "text-muted hover:text-ink hover:bg-fill-strong"
+    link_to label, path, class: "#{base} #{state}"
+  end
+
   def status_badge(status)
     success = "bg-primary-tint text-primary ring-primary/20"
     warn    = "bg-warning-tint text-warning ring-warning/25"
