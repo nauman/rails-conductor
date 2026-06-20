@@ -12,6 +12,8 @@
 #
 module Mcp
   class ServerController < ActionController::API
+    SKILL_DOC = Rails.root.join("docs/skills/conductor/SKILL.md")
+
     before_action :authenticate_mcp_token!
 
     # GET /mcp/list
@@ -26,6 +28,15 @@ module Mcp
           }
         end
       }
+    end
+
+    # GET /mcp/skill
+    # Returns the judgment layer that complements /mcp/list: how to wield the
+    # tools well (orient first, confirm before destructive actions, poll after
+    # deploy). Source of truth is docs/skills/conductor/SKILL.md, versioned with
+    # ToolRegistry so it can't drift from the tool set.
+    def skill
+      render json: { name: "conductor", skill: SKILL_DOC.read }
     end
 
     # POST /mcp/call

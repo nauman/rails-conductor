@@ -141,10 +141,14 @@ Rails.application.routes.draw do
     resources :messages, only: [:create]
   end
 
+  # Inbound SCM push webhooks → auto-deploy (public; verified by per-app HMAC).
+  post "webhooks/:provider/:app_id", to: "webhooks#receive", as: :webhook
+
   # MCP server endpoint (JSON-RPC over HTTP, for AI agents)
   namespace :mcp do
-    post :call, to: 'server#call'
-    get  :list, to: 'server#list'
+    post :call,  to: 'server#call'
+    get  :list,  to: 'server#list'
+    get  :skill, to: 'server#skill'
   end
 
   mount ActionCable.server => '/cable'
