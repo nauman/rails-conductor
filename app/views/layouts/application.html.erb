@@ -15,9 +15,22 @@
     <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
     <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
 
-    <link rel="icon" href="/icon.png" type="image/png">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="icon" href="/icon.png" type="image/png">
     <link rel="apple-touch-icon" href="/icon.png">
+
+    <%# SEO + social cards %>
+    <meta name="description" content="<%= content_for?(:description) ? yield(:description) : "Conductor — the control plane for self-hosted Ruby on Rails. Deploy, route, databases, backups, and server maintenance across your own servers (Kamal, Docker, native), driven by UI, CLI, and AI agents over MCP." %>">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Conductor">
+    <meta property="og:title" content="<%= content_for?(:title) ? strip_tags(yield(:title)) : "Conductor — control plane for self-hosted Ruby on Rails" %>">
+    <meta property="og:description" content="Deploy, route, databases, backups, and server maintenance for your Ruby on Rails apps across your own servers — Kamal, Docker, native — driven by UI, CLI, and AI agents over MCP.">
+    <meta property="og:image" content="<%= request.base_url %>/og.png">
+    <meta property="og:url" content="<%= request.original_url %>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Conductor — control plane for self-hosted Ruby on Rails">
+    <meta name="twitter:description" content="Self-hosted Ruby on Rails ops: deploy, route, databases, backups, maintenance — UI, CLI, and AI agents over MCP.">
+    <meta name="twitter:image" content="<%= request.base_url %>/og.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
