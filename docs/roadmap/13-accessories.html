@@ -1,7 +1,50 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Redis &amp; MySQL accessories · Conductor Roadmap</title>
-<link rel="stylesheet" href="style.css"></head>
+<style>
+  :root{
+    --bg:#fafaf8; --card:#fff; --ink:#15161a; --body:#3a3633; --muted:#6b7280;
+    --line:#e4e3de; --line-2:#d6d4cd; --accent:#3a5a3f; --accent-ink:#3a5a3f;
+    --p0:#a8443c; --p1:#8a6a1f; --p2:#c79a4a; --p3:#2c7a4d;
+    --done:#2c7a4d; --progress:#3a4f7a; --planned:#9ca3af;
+    --serif:"Instrument Serif",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  h3{font-size:11px;margin:20px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  pre{background:var(--ink);color:#e7e3da;padding:14px 16px;border-radius:12px;overflow:auto;font-size:13px;font-family:var(--mono)}
+  pre code{background:none;color:inherit;padding:0}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p0{background:#f7efee;color:var(--p0);border-color:#eccaca}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.p2{background:#f5ebd3;color:var(--p2);border-color:#ecdcb8}
+  .badge.p3{background:#e7f0e9;color:var(--p3);border-color:#cce6d5}
+  .badge.done{background:#e7f0e9;color:var(--done);border-color:#cce6d5}
+  .badge.progress{background:#e2e7f1;color:var(--progress);border-color:#cdd7e8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  tr:hover td{background:var(--bg)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
 <body><div class="wrap">
 <a class="back" href="backlog.md">← Back to backlog</a>
 <header class="page">
