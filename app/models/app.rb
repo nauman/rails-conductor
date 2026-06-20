@@ -44,6 +44,13 @@ class App < ApplicationRecord
 
   before_validation :generate_slug, on: :create
   before_validation :generate_image_name, on: :create
+  before_validation :generate_webhook_secret, on: :create
+
+  # The path SCM providers POST push events to. Combined with webhook_secret,
+  # this drives auto-deploy-on-push (see WebhooksController).
+  def webhook_path(provider = "github")
+    "/webhooks/#{provider}/#{id}"
+  end
 
   def url
     return nil unless domain
@@ -146,5 +153,9 @@ class App < ApplicationRecord
   def generate_image_name
     return if image_name.present?
     self.image_name = "conductor/#{slug}"
+  end
+
+  def generate_webhook_secret
+    self.webhook_secret = SecureRandom.hex(32) if webhook_secret.blank?
   end
 end

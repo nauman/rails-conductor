@@ -54,9 +54,13 @@
     <span class="badge">Pillar: Runtime Backends</span>
     <span class="badge p0">Priority: P0</span>
     <span class="badge">Effort: M</span>
-    <span class="badge planned">Status: Planned</span>
+    <span class="badge done">Status: Shipped 2026-06-20</span>
   </div>
 </header>
+<div class="card" style="border-color:#2c7a4d">
+  <h2>Shipped 2026-06-20</h2>
+  <p>Implemented as designed: apps gained <code>auto_deploy</code> + a generated <code>webhook_secret</code>; a public <code>WebhooksController</code> (<code>POST /webhooks/:provider/:app_id</code>) verifies the GitHub <code>X-Hub-Signature-256</code> HMAC over the raw body, gates on <code>auto_deploy</code> + branch match, debounces in-progress deploys, and enqueues the existing <code>DeployAppJob</code> — no new deploy path. An "Auto-deploy on push" card on the app page toggles it and shows the payload URL + secret. Covered by <code>test/integration/auto_deploy_webhook_test.rb</code> (signature, auto_deploy gate, branch match, debounce, 404).</p>
+</div>
 <div class="card">
   <h2>Problem</h2>
   <p>Conductor only deploys when a human pulls the trigger: a button in the UI or an explicit MCP call. Hatchbox's entire value proposition is the opposite — you <code>git push</code> and your app ships. Until Conductor reacts to pushes on its own, it can't honestly be sold as a Hatchbox replacement; every deploy still needs a person in the loop.</p>

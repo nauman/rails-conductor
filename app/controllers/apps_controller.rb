@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status, :provision_database, :generate_deploy_key]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -57,6 +57,12 @@ class AppsController < ApplicationController
     DeployAppJob.perform_later(deployment.id)
 
     redirect_to @app, notice: "Deployment started. Check logs for progress."
+  end
+
+  def toggle_auto_deploy
+    @app.update!(auto_deploy: !@app.auto_deploy)
+    state = @app.auto_deploy? ? "enabled" : "disabled"
+    redirect_to @app, notice: "Auto-deploy on push #{state}."
   end
 
   def stop

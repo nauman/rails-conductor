@@ -191,6 +191,39 @@
     <% end %>
   </div>
 
+  <%# Auto-deploy on push %>
+  <div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <h2 class="text-sm font-semibold text-ink">Auto-deploy on push</h2>
+        <p class="mt-1 text-sm text-muted">Deploy automatically when GitHub pushes to <code class="text-xs bg-fill-strong px-1.5 py-0.5 rounded"><%= @app.branch.presence || "main" %></code>.</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <% if @app.auto_deploy? %>
+          <span class="inline-flex items-center rounded-pill bg-primary-tint px-2.5 py-1 text-2xs font-semibold uppercase tracking-label text-primary ring-1 ring-inset ring-primary/20">On</span>
+        <% else %>
+          <span class="inline-flex items-center rounded-pill bg-fill px-2.5 py-1 text-2xs font-semibold uppercase tracking-label text-muted ring-1 ring-inset ring-border-strong">Off</span>
+        <% end %>
+        <%= button_to (@app.auto_deploy? ? "Disable" : "Enable"), toggle_auto_deploy_app_path(@app), method: :patch,
+              class: "rounded-control border border-border-strong px-3 py-1.5 text-sm font-medium text-body hover:bg-fill" %>
+      </div>
+    </div>
+    <% if @app.auto_deploy? %>
+      <div class="mt-4 space-y-3 border-t border-border pt-4">
+        <p class="text-2xs font-semibold uppercase tracking-label text-muted">GitHub webhook (Settings → Webhooks → Add webhook)</p>
+        <div>
+          <div class="text-2xs uppercase tracking-label text-faint">Payload URL</div>
+          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= request.base_url %><%= @app.webhook_path %></code>
+        </div>
+        <div>
+          <div class="text-2xs uppercase tracking-label text-faint">Secret</div>
+          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= @app.webhook_secret %></code>
+        </div>
+        <p class="text-2xs text-faint">Content type: <code>application/json</code> · Events: just the push event. Conductor verifies the signature and deploys only on the <code><%= @app.branch.presence || "main" %></code> branch.</p>
+      </div>
+    <% end %>
+  </div>
+
   <%# Database %>
   <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
     <div class="flex items-center justify-between">

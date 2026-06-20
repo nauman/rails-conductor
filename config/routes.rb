@@ -116,6 +116,7 @@ Rails.application.routes.draw do
       post :sync_status
       post :provision_database
       post :generate_deploy_key
+      patch :toggle_auto_deploy
     end
     collection do
       post :sync_all
