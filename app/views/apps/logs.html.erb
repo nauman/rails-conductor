@@ -6,13 +6,13 @@
       <h1 class="font-display text-2xl text-ink tracking-display dark:text-white">Container Logs</h1>
       <p class="mt-1 text-sm text-muted dark:text-faint">
         <%= link_to @app.name, app_path(@app), class: "hover:underline" %> ·
-        Last 100 lines
+        Last <%= @tail %> lines · live tail
       </p>
     </div>
     <div class="flex items-center gap-2">
       <label class="inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint cursor-pointer hover:bg-fill dark:hover:bg-fill">
-        <input type="checkbox" id="auto-refresh" class="rounded border-border-strong dark:border-border-strong text-ink dark:text-white focus:ring-primary">
-        <span>Auto-refresh</span>
+        <input type="checkbox" id="auto-refresh" checked class="rounded border-border-strong dark:border-border-strong text-ink dark:text-white focus:ring-primary">
+        <span>Live tail</span>
       </label>
       <%= link_to "Refresh", logs_app_path(@app), id: "manual-refresh", class: "inline-flex items-center gap-2 rounded-lg bg-ink dark:bg-fill px-4 py-2 text-sm font-medium text-white hover:bg-body dark:hover:bg-fill-strong" %>
       <%= link_to "Back to App", app_path(@app), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
@@ -93,6 +93,12 @@
         }
       }
     });
+
+    // Live tail is on by default — start immediately.
+    if (checkbox.checked) {
+      fetchLogs();
+      intervalId = setInterval(fetchLogs, 2500);
+    }
 
     // Update "last updated" text periodically
     setInterval(function() {

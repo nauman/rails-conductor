@@ -87,12 +87,13 @@ class AppsController < ApplicationController
   end
 
   def logs
+    @tail = [ (params[:tail] || 300).to_i, 2000 ].min
     if @app.server.present? && @app.server.ssh_configured?
       ssh = SshConnection.new(@app.server)
       command = if @app.native?
-        "journalctl --user -u #{@app.service_name} -n 100 --no-pager"
+        "journalctl --user -u #{@app.service_name} -n #{@tail} --no-pager"
       else
-        "docker logs --tail 100 #{@app.container_name}"
+        "docker logs --tail #{@tail} #{@app.container_name}"
       end
       ssh.execute(command)
       @logs = ssh.output || ssh.error

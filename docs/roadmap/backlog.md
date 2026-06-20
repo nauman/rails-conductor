@@ -34,7 +34,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Auto-deploy on git push](03-auto-deploy-push.html) | Runtime Backends | P0 | M | ✅ Done (2026-06-20) |
 | [Rollbacks & release history](04-rollbacks.html) | Runtime Backends | P1 | M | Planned |
 | [Background worker management](05-background-workers.html) | Runtime Backends | P1 | M | Planned |
-| [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | Planned |
+| [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | ✅ Done (2026-06-21) |
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
 | [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | Planned |
 | [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | P1 | M | Planned |
