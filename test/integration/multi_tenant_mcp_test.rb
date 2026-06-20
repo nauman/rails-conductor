@@ -45,6 +45,18 @@ class MultiTenantMcpTest < ActionDispatch::IntegrationTest
     assert_equal 0, @app_b.deployments.count, "must not deploy another org's app"
   end
 
+  test "a per-user token cannot create resources in another org (org_id escalation)" do
+    call_tool("create_app", { name: "sneaky", organization_id: @org_b.id }, token: @token_a)
+    assert_response :unprocessable_entity
+    assert_match(/Not authorized/, response.body)
+  end
+
+  test "a non-admin token cannot configure the instance-wide GitHub App" do
+    call_tool("set_github_app", { app_id: "1", private_key: "x" }, token: @token_a)
+    assert_response :unprocessable_entity
+    assert_match(/Admin only/, response.body)
+  end
+
   test "the legacy shared admin token keeps global scope" do
     admin = User.create!(email: "admin@example.com", admin: true)
     admin.ensure_personal_organization!

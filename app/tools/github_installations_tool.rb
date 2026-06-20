@@ -1,4 +1,6 @@
 class GithubInstallationsTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'github_installations',
     description: "List the orgs/users where Conductor's GitHub App is installed (to verify access before deploying). Also accepts a repo to check whether the App can reach it.",
@@ -16,6 +18,8 @@ class GithubInstallationsTool
   end
 
   def call(input)
+    return Result.fail("Admin only — the GitHub App is instance-wide.") unless actor_admin?
+
     gh = GithubApp.from_config
     return Result.fail("No GitHub App configured. Use set_github_app first.") unless gh
 

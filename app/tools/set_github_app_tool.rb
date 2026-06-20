@@ -1,4 +1,6 @@
 class SetGithubAppTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'set_github_app',
     description: "Configure Conductor's GitHub App (app_id + PEM private key). Once set, and the App installed on your org(s), Conductor mints installation tokens to clone/pull any accessible repo — no per-repo deploy keys, works across orgs. Stored Conductor-wide.",
@@ -17,6 +19,8 @@ class SetGithubAppTool
   end
 
   def call(input)
+    return Result.fail("Admin only — the GitHub App is instance-wide.") unless actor_admin?
+
     return Result.fail("app_id and private_key are required") if input["app_id"].blank? || input["private_key"].blank?
 
     # Validate the key parses before storing.

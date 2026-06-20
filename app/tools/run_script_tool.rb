@@ -1,4 +1,6 @@
 class RunScriptTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'run_script',
     description: 'Run a provisioning or deployment script on a server. Creates a ScriptRun record and enqueues the job.',
@@ -23,7 +25,7 @@ class RunScriptTool
   end
 
   def call(input)
-    server = Server.find_by(id: input['server_id'])
+    server = visible_servers.find_by(id: input['server_id'])
     return Result.fail("Server not found: #{input['server_id']}") unless server
 
     script = Script.find_by(name: input['script_name'])
