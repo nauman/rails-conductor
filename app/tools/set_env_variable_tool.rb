@@ -1,4 +1,6 @@
 class SetEnvVariableTool
+  include ActorScoped
+
   include OrgResolvable
 
   DEFINITION = {
@@ -46,11 +48,4 @@ class SetEnvVariableTool
 
   private
 
-  def find_app(input)
-    if input['app_id'].present?
-      App.find_by(id: input['app_id'])
-    elsif input['app_name'].present?
-      App.find_by(name: input['app_name'])
-    end
-  end
 end

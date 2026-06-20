@@ -1,4 +1,6 @@
 class DeployAppTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'deploy_app',
     description: "Deploy an app to its latest commit. Creates a Deployment and dispatches by the app's deploy_method (native, docker, or kamal).",
@@ -48,8 +50,4 @@ class DeployAppTool
 
   private
 
-  def find_app(input)
-    return App.find_by(id: input['app_id']) if input['app_id'].present?
-    App.find_by(name: input['app_name']) if input['app_name'].present?
-  end
 end

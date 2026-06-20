@@ -11,9 +11,13 @@
     <span class="badge">Pillar: Agent-native</span>
     <span class="badge p1">Priority: P1</span>
     <span class="badge">Effort: M</span>
-    <span class="badge planned">Status: Planned</span>
+    <span class="badge progress">Status: Partial — auth + scoping shipped 2026-06-20</span>
   </div>
 </header>
+<div class="card" style="border-color:#2c7a4d">
+  <h2>Shipped 2026-06-20</h2>
+  <p>The core boundary is live: the MCP server accepts a per-user / per-org <code>ApiToken</code> bearer and runs the call <strong>as that user</strong>, with every resource tool scoped to the actor's organizations via the <code>ActorScoped</code> concern (<code>deploy_app</code>, <code>update_app</code>, <code>set_env_variable</code>, <code>generate_deploy_key</code>, <code>sync_app_status</code>, <code>deployment_log</code>, <code>add_domain</code>, <code>remove_domain</code>, <code>fleet_status</code>, <code>recent_logs</code>). A non-admin token cannot see or act on another org's apps/servers; the legacy <code>CONDUCTOR_MCP_TOKEN</code> keeps global admin scope. Covered by <code>test/integration/multi_tenant_mcp_test.rb</code>. See the <a href="/docs/mcp">MCP guide</a>. <strong>Remaining:</strong> self-serve issuance UI + read-only vs deploy token scope.</p>
+</div>
 <div class="card">
   <h2>Problem</h2>
   <p>Conductor's MCP server is live and fully drives deploys (see the <a href="/docs/mcp">MCP guide</a>), but auth is single-tenant: there is <strong>one shared <code>CONDUCTOR_MCP_TOKEN</code></strong>, and every call runs as <code>User.admins.first</code>. So "anyone can deploy" today means "anyone holding the root token, acting as admin across every org." That's fine for a single operator; it blocks handing MCP access to other members/customers, which is the point of the multi-tenant model already in the app (Organizations + Memberships + org-scoped <code>/api/v1</code>).</p>

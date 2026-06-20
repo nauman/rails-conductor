@@ -76,18 +76,29 @@ module Mcp
 
     def authenticate_mcp_token!
       token = request.headers['Authorization']&.sub(/\ABearer\s+/, '')
-      expected = ENV['CONDUCTOR_MCP_TOKEN']
 
-      if expected.blank?
-        render json: { error: 'MCP not configured (CONDUCTOR_MCP_TOKEN not set)' }, status: :service_unavailable
-      elsif !ActiveSupport::SecurityUtils.secure_compare(token.to_s, expected)
-        render json: { error: 'Unauthorized' }, status: :unauthorized
+      # Multi-tenant: a per-user / per-org API token runs as that user (a
+      # non-admin), so tools are scoped to their organizations (see ActorScoped).
+      if (api_token = ApiToken.authenticate(token))
+        @mcp_user = api_token.user
+        return
       end
+
+      # Legacy single-tenant: the shared CONDUCTOR_MCP_TOKEN runs as the first
+      # admin (global scope), preserving existing behaviour.
+      expected = ENV['CONDUCTOR_MCP_TOKEN']
+      if expected.present? && ActiveSupport::SecurityUtils.secure_compare(token.to_s, expected)
+        @mcp_user = User.admins.first
+        return
+      end
+
+      render json: { error: 'Unauthorized' }, status: :unauthorized
     end
 
-    # MCP calls run as the first admin user (system actor).
+    # The actor for this MCP call — a per-user token's user, or the first admin
+    # for the legacy shared token. Tools scope resource access off this user.
     def mcp_user
-      @mcp_user ||= User.admins.first
+      @mcp_user
     end
   end
 end

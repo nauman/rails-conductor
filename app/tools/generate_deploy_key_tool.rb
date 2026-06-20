@@ -1,4 +1,6 @@
 class GenerateDeployKeyTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'generate_deploy_key',
     description: "Generate a read-only SSH deploy key for an app's private repo. Returns the PUBLIC key to add to the repo's GitHub deploy keys (Settings → Deploy keys, read-only). The private key is stored encrypted and used by Conductor to clone the repo.",
@@ -49,11 +51,4 @@ class GenerateDeployKeyTool
     app.repository_url.to_s[%r{[:/]([^/:]+/[^/]+?)(?:\.git)?/?\z}, 1] || "OWNER/REPO"
   end
 
-  def find_app(input)
-    if input['app_id'].present?
-      App.find_by(id: input['app_id'])
-    elsif input['app_name'].present?
-      App.find_by(name: input['app_name'])
-    end
-  end
 end

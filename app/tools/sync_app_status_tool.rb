@@ -1,4 +1,6 @@
 class SyncAppStatusTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'sync_app_status',
     description: "Check an app's live container status on its server (SSH) and update Conductor's record. Works for docker, native, and kamal apps.",
@@ -39,11 +41,4 @@ class SyncAppStatusTool
 
   private
 
-  def find_app(input)
-    if input['app_id'].present?
-      App.find_by(id: input['app_id'])
-    elsif input['app_name'].present?
-      App.find_by(name: input['app_name'])
-    end
-  end
 end

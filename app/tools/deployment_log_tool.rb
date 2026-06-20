@@ -1,4 +1,6 @@
 class DeploymentLogTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'deployment_log',
     description: "Read a deployment's status and log output. Pass deployment_id, or app_id/app_name to get its latest deployment. Use to watch a deploy triggered via deploy_app.",
@@ -44,17 +46,9 @@ class DeploymentLogTool
 
   def find_deployment(input)
     if input["deployment_id"].present?
-      Deployment.find_by(id: input["deployment_id"])
+      visible_deployments.find_by(id: input["deployment_id"])
     elsif (app = find_app(input))
       app.deployments.order(created_at: :desc).first
-    end
-  end
-
-  def find_app(input)
-    if input["app_id"].present?
-      App.find_by(id: input["app_id"])
-    elsif input["app_name"].present?
-      App.find_by(name: input["app_name"])
     end
   end
 end

@@ -1,4 +1,6 @@
 class AddDomainTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'add_domain',
     description: 'Add a domain to Caddy on a server, routing it to an app via its socket or port.',
@@ -27,7 +29,7 @@ class AddDomainTool
   end
 
   def call(input)
-    server = Server.find_by(id: input['server_id'])
+    server = visible_servers.find_by(id: input['server_id'])
     return Result.fail("Server not found: #{input['server_id']}") unless server
 
     route = CaddyClient.new(server).upsert_route(

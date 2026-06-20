@@ -1,4 +1,6 @@
 class FleetStatusTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'fleet_status',
     description: 'List all servers in the fleet with their current status, apps, and health metrics.',
@@ -19,7 +21,7 @@ class FleetStatusTool
   end
 
   def call(input = {})
-    servers = Server.all.includes(:apps, :script_runs)
+    servers = visible_servers.includes(:apps, :script_runs)
     # Optional org scoping: keeps admin-global behavior by default.
     servers = servers.where(organization_id: input['organization_id']) if input['organization_id'].present?
 

@@ -88,8 +88,21 @@ curl -s "$H" "${A[@]}" -d '{"name":"deployment_log","input":{"deployment_id":42}
 
 Conductor's container clones the repo, generates `.kamal/secrets` from the env you loaded, **builds on the target's Docker daemon over SSH**, and deploys behind the shared proxy. See [Deploy an app](deploy-an-app) and [Connect GitHub](connect-github).
 
-## Security & scope
+## Tokens & scope
 
-- **One shared token, admin scope.** Today every MCP call runs as the instance's first admin user. The token is all-or-nothing — treat it like a root credential, rotate it by changing `CONDUCTOR_MCP_TOKEN` and redeploying.
-- **Audit log.** Every call (tool, args, affected org, duration) is recorded; secret values are redacted.
-- **Roadmap.** Per-user / per-org MCP tokens scoped to an org's own apps (so any member can deploy *their* apps, not the whole fleet) is on the roadmap — see the delivery sequence, slot 14 *Multi-tenant MCP*.
+Two kinds of bearer token work:
+
+- **Per-user / per-org token (recommended).** An `ApiToken` bound to a user + organization. MCP runs the call **as that user, scoped to their organizations** — `deploy_app`, `set_env_variable`, `fleet_status`, logs, domains, etc. only see and act on apps/servers in orgs the user belongs to. One org's token can't touch another org's resources. This is how "anyone can deploy *their own* apps" works.
+- **Legacy shared token.** The instance `CONDUCTOR_MCP_TOKEN` env var runs as the first admin with **global** scope. Treat it like a root credential; rotate by changing the env var and redeploying.
+
+Mint a per-user token today via the token API (`/api/v1`) or the Rails console:
+
+```ruby
+raw, _ = ApiToken.generate(user: User.find_by(email: "you@example.com"),
+                           name: "my-agent", organization: Organization.find_by(name: "Acme"))
+puts raw   # shown once — use it as the MCP bearer token
+```
+
+> A self-serve "MCP tokens" UI (mint/revoke org-scoped tokens, read-only vs deploy scope) is the remaining slice — see the delivery sequence, slot 14 *Multi-tenant MCP*.
+
+**Audit log.** Every call (tool, args, the real user + affected org behind the token, duration) is recorded; secret values are redacted.

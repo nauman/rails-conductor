@@ -1,4 +1,6 @@
 class RemoveDomainTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'remove_domain',
     description: 'Remove a domain from Caddy on a server.',
@@ -23,7 +25,7 @@ class RemoveDomainTool
   end
 
   def call(input)
-    server = Server.find_by(id: input['server_id'])
+    server = visible_servers.find_by(id: input['server_id'])
     return Result.fail("Server not found: #{input['server_id']}") unless server
 
     route = CaddyClient.new(server).remove_route(input['domain'])

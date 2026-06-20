@@ -1,4 +1,6 @@
 class RecentLogsTool
+  include ActorScoped
+
   DEFINITION = {
     name: 'recent_logs',
     description: 'Show recent script run or deployment logs for a server or specific run.',
@@ -32,7 +34,7 @@ class RecentLogsTool
 
   def call(input)
     if input['script_run_id'].present?
-      run = ScriptRun.find_by(id: input['script_run_id'])
+      run = ScriptRun.where(server_id: visible_servers.select(:id)).find_by(id: input['script_run_id'])
       return Result.fail("ScriptRun not found: #{input['script_run_id']}") unless run
 
       return Result.ok({
@@ -49,7 +51,7 @@ class RecentLogsTool
     end
 
     limit = [ (input['limit'] || 5).to_i, 20 ].min
-    runs = ScriptRun.includes(:server, :script).recent.limit(limit)
+    runs = ScriptRun.where(server_id: visible_servers.select(:id)).includes(:server, :script).recent.limit(limit)
     runs = runs.where(server_id: input['server_id']) if input['server_id'].present?
     # Optional org scoping: limit to runs on servers in the given org (admin-global otherwise).
     if input['organization_id'].present?
