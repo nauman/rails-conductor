@@ -8,7 +8,7 @@
 #
 # Endpoints:
 #   GET  /mcp/list  → returns { tools: [...] }
-#   POST /mcp/call  → { name: "fleet_status", input: {} } → { result: ... }
+#   POST /mcp/call  → { name: "conductor_read", input: { action: "fleet_status" } } → { result: ... }
 #
 module Mcp
   class ServerController < ActionController::API
@@ -40,7 +40,7 @@ module Mcp
     end
 
     # POST /mcp/call
-    # Body: { "name": "fleet_status", "input": {} }
+    # Body: { "name": "conductor_read", "input": { "action": "fleet_status" } }
     def call
       name  = params[:name].to_s
       input = (params[:input] || {}).to_unsafe_h.stringify_keys
@@ -52,7 +52,7 @@ module Mcp
       # Affected-org logging: resource tools embed the org they touched under the
       # `_organization` key of their (Hash) Result payload. We record it on the
       # McpCall for the audit log, then strip the key so it never leaks to the client.
-      # List tools (fleet_status, recent_logs) return arrays and log no single org.
+      # Read calls (conductor_read fleet_status/logs) return arrays and log no single org.
       organization = affected_organization(result)
 
       McpCall.record(

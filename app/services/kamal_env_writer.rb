@@ -2,7 +2,7 @@
 #
 # A server-side `git clone` of the app repo does NOT include `.kamal/secrets`
 # (it's gitignored), so KamalDeployer generates it from the app's EnvVariables.
-# This makes Conductor's UI / the `set_env_variable` MCP tool the source of truth
+# This makes Conductor's UI / the `conductor_app_config` (set_env) MCP tool the source of truth
 # for a kamal app's secret VALUES (e.g. SECRET_KEY_BASE, DATABASE_URL). The app's
 # committed `deploy.yml` still declares WHICH keys to inject under `env.secret`.
 class KamalEnvWriter

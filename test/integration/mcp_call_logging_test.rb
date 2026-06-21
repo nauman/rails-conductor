@@ -23,14 +23,14 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
     with_token do
       ToolRegistry.stub(:call, Result.ok({ "ok" => true })) do
         assert_difference -> { McpCall.count }, 1 do
-          post "/mcp/call", params: { name: "fleet_status", input: {} }, headers: auth_headers, as: :json
+          post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } }, headers: auth_headers, as: :json
         end
       end
     end
 
     assert_response :success
     call = McpCall.last
-    assert_equal "fleet_status", call.tool_name
+    assert_equal "conductor_read", call.tool_name
     assert_equal "success", call.status
     assert_equal @admin, call.user
     assert call.duration_ms >= 0
@@ -40,7 +40,7 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
     with_token do
       ToolRegistry.stub(:call, Result.fail("boom")) do
         assert_difference -> { McpCall.count }, 1 do
-          post "/mcp/call", params: { name: "deploy_app", input: {} }, headers: auth_headers, as: :json
+          post "/mcp/call", params: { name: "conductor_app", input: { action: "deploy" } }, headers: auth_headers, as: :json
         end
       end
     end
@@ -60,7 +60,7 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
 
     with_token do
       assert_difference -> { McpCall.count }, 1 do
-        post "/mcp/call", params: { name: "deploy_app", input: { app_id: app.id } }, headers: auth_headers, as: :json
+        post "/mcp/call", params: { name: "conductor_app", input: { action: "deploy", app_id: app.id } }, headers: auth_headers, as: :json
       end
     end
 
@@ -71,7 +71,7 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
   test "an unscoped fleet_status call logs no organization" do
     with_token do
       ToolRegistry.stub(:call, Result.ok([])) do
-        post "/mcp/call", params: { name: "fleet_status", input: {} }, headers: auth_headers, as: :json
+        post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } }, headers: auth_headers, as: :json
       end
     end
 
@@ -81,14 +81,14 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
   test "an unauthorized call is not logged" do
     with_token do
       assert_no_difference -> { McpCall.count } do
-        post "/mcp/call", params: { name: "fleet_status", input: {} }, headers: { "Authorization" => "Bearer wrong" }, as: :json
+        post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } }, headers: { "Authorization" => "Bearer wrong" }, as: :json
       end
     end
     assert_response :unauthorized
   end
 
   test "a webmaster can view the MCP activity log" do
-    McpCall.record(tool_name: "fleet_status", arguments: {}, result: Result.ok({}), duration_ms: 5)
+    McpCall.record(tool_name: "conductor_read", arguments: {}, result: Result.ok({}), duration_ms: 5)
     ps = Passwordless::Session.create!(authenticatable: @admin)
     get "/users/sign_in/#{ps.identifier}/#{ps.token}"
 
@@ -96,12 +96,12 @@ class McpCallLoggingTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_match "MCP Activity", @response.body
-    assert_match "fleet_status", @response.body
+    assert_match "conductor_read", @response.body
   end
 
   test "the MCP activity log shows the affected organization" do
     org = Organization.create!(name: "Visible Org")
-    McpCall.record(tool_name: "deploy_app", arguments: {}, result: Result.ok({}), duration_ms: 5, organization: org)
+    McpCall.record(tool_name: "conductor_app", arguments: {}, result: Result.ok({}), duration_ms: 5, organization: org)
     ps = Passwordless::Session.create!(authenticatable: @admin)
     get "/users/sign_in/#{ps.identifier}/#{ps.token}"
 

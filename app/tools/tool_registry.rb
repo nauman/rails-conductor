@@ -1,23 +1,15 @@
 class ToolRegistry
+  # The wire surface is seven flat `action`-enum tools. Each delegates via
+  # EnumDispatch to the single-purpose `*_tool.rb` implementation classes,
+  # which remain as internal handlers (not registered).
   TOOLS = [
-    FleetStatusTool,
-    RunScriptTool,
-    RecentLogsTool,
-    AddDomainTool,
-    RemoveDomainTool,
-    DeployAppTool,
-    RegisterServerTool,
-    RegisterDatabaseClusterTool,
-    ProvisionDatabaseTool,
-    CreateAppTool,
-    SetEnvVariableTool,
-    UpdateAppTool,
-    SyncAppStatusTool,
-    GenerateDeployKeyTool,
-    DeploymentLogTool,
-    SetGithubTokenTool,
-    SetGithubAppTool,
-    GithubInstallationsTool
+    ConductorReadTool,
+    ConductorAppTool,
+    ConductorAppConfigTool,
+    ConductorServerTool,
+    ConductorDatabaseTool,
+    ConductorDomainTool,
+    ConductorGithubTool
   ].freeze
 
   def self.definitions
@@ -28,9 +20,9 @@ class ToolRegistry
     TOOLS.find { |t| t::DEFINITION[:name] == name }
   end
 
-  # Tools a read-only token may call. Everything else mutates infra and needs a
-  # deploy-scoped token.
-  READ_ONLY_TOOLS = %w[fleet_status recent_logs deployment_log].freeze
+  # Tools a read-only token may call. conductor_read is the only non-mutating
+  # tool; everything else mutates infra and needs a deploy-scoped token.
+  READ_ONLY_TOOLS = %w[conductor_read].freeze
 
   def self.call(name, input, user:)
     tool_class = find(name)

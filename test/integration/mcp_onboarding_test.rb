@@ -16,8 +16,8 @@ class McpOnboardingTest < ActionDispatch::IntegrationTest
 
   test "register_server over MCP creates a server and strips _organization" do
     post "/mcp/call",
-      params: { name: "register_server",
-                input: { name: "edge-1", ip_address: "10.0.0.9", ssh_user: "deploy" } },
+      params: { name: "conductor_server",
+                input: { action: "register", name: "edge-1", ip_address: "10.0.0.9", ssh_user: "deploy" } },
       headers: auth, as: :json
 
     assert_response :success
@@ -31,7 +31,7 @@ class McpOnboardingTest < ActionDispatch::IntegrationTest
     server = @org.servers.create!(name: "host", status: "online")
     @org.apps.create!(name: "Kuickr", server: server, deploy_method: "docker", notes: "kamal deploy")
 
-    post "/mcp/call", params: { name: "fleet_status", input: {} }, headers: auth, as: :json
+    post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } }, headers: auth, as: :json
     assert_response :success
     body = JSON.parse(response.body)
     app = body["result"].flat_map { |s| s["apps"] }.find { |a| a["name"] == "Kuickr" }

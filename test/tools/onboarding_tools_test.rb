@@ -167,9 +167,14 @@ class OnboardingToolsTest < ActiveSupport::TestCase
 
   # --- registry ----------------------------------------------------------
 
-  test "all new tools are registered" do
+  # The single-purpose tool classes above are internal handlers, reached only
+  # through the consolidated enum tools — they are NOT registered on the wire.
+  test "legacy single-purpose names are not on the wire; the enum tools are" do
     names = ToolRegistry.definitions.map { |d| d[:name] }
     %w[register_server register_database_cluster provision_database create_app set_env_variable].each do |n|
+      refute_includes names, n
+    end
+    %w[conductor_server conductor_database conductor_app conductor_app_config].each do |n|
       assert_includes names, n
     end
   end
