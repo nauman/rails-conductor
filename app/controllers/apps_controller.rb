@@ -159,7 +159,7 @@ class AppsController < ApplicationController
     params.require(:app).permit(
       :name, :slug, :server_id, :port, :domain, :status,
       :repository_url, :branch, :dockerfile_path, :image_name,
-      :health_check_path, :ssl_enabled, :deploy_method, :notes
+      :health_check_path, :ssl_enabled, :deploy_method, :notes, :self_managed
     )
   end
 end

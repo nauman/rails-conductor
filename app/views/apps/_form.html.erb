@@ -120,6 +120,14 @@
       <%= f.check_box :ssl_enabled, class: "rounded border-border-strong text-ink focus:ring-primary" %>
       <%= f.label :ssl_enabled, "Enable SSL (HTTPS)", class: "text-sm text-body" %>
     </div>
+
+    <div class="flex items-start gap-3">
+      <%= f.check_box :self_managed, class: "mt-0.5 rounded border-border-strong text-ink focus:ring-primary" %>
+      <div>
+        <%= f.label :self_managed, "This app is Conductor itself", class: "text-sm text-body" %>
+        <p class="mt-1 text-xs text-muted">A self-deploy replaces the container running the deploy, so its status is reconciled when the new release boots. Leave off for normal apps.</p>
+      </div>
+    </div>
   </div>
 
   <div class="flex items-center justify-between pt-4">
