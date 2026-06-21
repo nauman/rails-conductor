@@ -1,4 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Conductor">
-  <rect width="64" height="64" rx="14" fill="#3a5a3f"/>
-  <text x="32" y="46" font-family="Georgia, 'Times New Roman', serif" font-size="42" fill="#fafaf8" text-anchor="middle">C</text>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#436a49"/>
+      <stop offset="1" stop-color="#324e38"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#tile)"/>
+  <!-- conductor's sweep: an open C baton arc orchestrating the fleet -->
+  <path d="M 41 18.6 A 16.4 16.4 0 1 0 41 45.4" fill="none"
+        stroke="#f3f2ee" stroke-width="5.6" stroke-linecap="round"/>
+  <!-- the node it conducts -->
+  <circle cx="45.8" cy="32" r="4.3" fill="#e8a53b"/>
 </svg>
