@@ -73,6 +73,41 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert @deployment.reload.commit_sha.present?, "expected commit_sha recorded from git rev-parse HEAD"
   end
 
+  test "fails fast with a clear message when a deploy.yml secret is missing from env vars" do
+    checkout = File.join(@workspace, @app.slug)
+    FileUtils.mkdir_p(File.join(checkout, "config"))
+    File.write(File.join(checkout, "config", "deploy.yml"), <<~YML)
+      registry:
+        password:
+          - KAMAL_REGISTRY_PASSWORD
+      env:
+        secret:
+          - RAILS_MASTER_KEY
+          - SECRET_KEY_BASE
+    YML
+
+    shell = FakeShell.new(success: true)
+    deploy_with(shell) # @app only has SECRET_KEY_BASE
+
+    assert_equal "failed", @deployment.reload.status
+    assert_match(/KAMAL_REGISTRY_PASSWORD/, @deployment.log.to_s)
+    assert_match(/RAILS_MASTER_KEY/, @deployment.log.to_s)
+    assert_match(/Environment Variables/i, @deployment.log.to_s)
+    refute shell.runs.any? { |r| r[:command].last.to_s.include?("kamal deploy") },
+           "must not run kamal when required secrets are missing"
+  end
+
+  test "proceeds when all deploy.yml secrets are present" do
+    checkout = File.join(@workspace, @app.slug)
+    FileUtils.mkdir_p(File.join(checkout, "config"))
+    File.write(File.join(checkout, "config", "deploy.yml"), "env:\n  secret:\n    - SECRET_KEY_BASE\n")
+
+    shell = FakeShell.new(success: true)
+    deploy_with(shell) # @app has SECRET_KEY_BASE
+
+    assert_equal "succeeded", @deployment.reload.status
+  end
+
   test "a self-managed deploy logs the replace-and-reconcile note" do
     @app.update!(self_managed: true)
     deploy_with(FakeShell.new(success: true))

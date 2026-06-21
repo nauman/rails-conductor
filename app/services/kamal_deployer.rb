@@ -44,6 +44,7 @@ class KamalDeployer
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     record_commit_sha
+    return false unless verify_required_secrets
     write_secrets_file
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
@@ -68,6 +69,29 @@ class KamalDeployer
 
     fail_with("#{label} failed (exit #{result.exit_code})")
     false
+  end
+
+  # Fail fast with a clear, actionable error when the app is missing env vars the
+  # repo's deploy.yml declares as secrets. Without this, kamal fails deep in the
+  # run with a cryptic message (e.g. an empty `docker login -p` when
+  # KAMAL_REGISTRY_PASSWORD is absent), which reads as a mysterious crash.
+  def verify_required_secrets
+    missing = required_secrets - app.env_variables.pluck(:key)
+    return true if missing.empty?
+
+    fail_with("Missing required env var(s): #{missing.join(', ')}. " \
+              "Add them under the app's Environment Variables (mark as secret), then redeploy.")
+    false
+  end
+
+  # Secret keys the app's deploy.yml references — bare UPPER_SNAKE list items
+  # under registry.password and env.secret. Each must be present in the app's
+  # EnvVariables, since KamalEnvWriter builds .kamal/secrets from them.
+  def required_secrets
+    path = File.join(checkout_dir, "config", "deploy.yml")
+    return [] unless File.exist?(path)
+
+    File.readlines(path).filter_map { |line| line[/\A\s*-\s*([A-Z][A-Z0-9_]+)\s*\z/, 1] }.uniq
   end
 
   # Record the checked-out HEAD as the deployment's commit. Kamal uses this same
