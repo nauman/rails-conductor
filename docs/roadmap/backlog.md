@@ -44,6 +44,8 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Web console (rails console / shell)](11-web-console.html) | Fleet Control | P2 | M | Planned |
 | [Alerts & notifications](12-alerts.html) | Continuous Maintenance | P2 | M | Planned |
 | [Redis & MySQL accessories](13-accessories.html) | Data & Backups | P2 | M | Planned |
+| [Secretless deploys (vault-resolved secrets)](16-secretless-deploys.html) | Agent-native | P1 | M | Planned |
+| [Reactive statuses everywhere (Turbo Streams)](17-reactive-statuses.html) | Fleet Control | P1 | M | 🔄 In progress (slice 1 done 2026-06-22) |
 
 ## Critical path
 

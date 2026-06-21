@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reactive statuses everywhere (Turbo Streams) · Conductor Roadmap</title>
+<style>
+  :root{
+    --bg:#fafaf8; --card:#fff; --ink:#15161a; --body:#3a3633; --muted:#6b7280;
+    --line:#e4e3de; --line-2:#d6d4cd; --accent:#3a5a3f; --accent-ink:#3a5a3f;
+    --p0:#a8443c; --p1:#8a6a1f; --p2:#c79a4a; --p3:#2c7a4d;
+    --done:#2c7a4d; --progress:#3a4f7a; --planned:#9ca3af;
+    --serif:"Instrument Serif",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  h3{font-size:11px;margin:20px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  pre{background:var(--ink);color:#e7e3da;padding:14px 16px;border-radius:12px;overflow:auto;font-size:13px;font-family:var(--mono)}
+  pre code{background:none;color:inherit;padding:0}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p0{background:#f7efee;color:var(--p0);border-color:#eccaca}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.p2{background:#f5ebd3;color:var(--p2);border-color:#ecdcb8}
+  .badge.p3{background:#e7f0e9;color:var(--p3);border-color:#cce6d5}
+  .badge.done{background:#e7f0e9;color:var(--done);border-color:#cce6d5}
+  .badge.progress{background:#e2e7f1;color:var(--progress);border-color:#cdd7e8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  tr:hover td{background:var(--bg)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Reactive statuses everywhere (Turbo Streams)</h1>
+  <p class="sub">Make statuses, deployments, and lists update <strong>live</strong> over Turbo Streams — no polling, no "Sync Status then refresh." Bring the whole UI up to the reactive standard the chat already meets.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Fleet Control</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge progress">Status: In progress</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Most of the UI is not reactive. App and container <strong>status badges</strong> require clicking <em>Sync Status</em> and then refreshing the page to see the result. <strong>Log tails</strong> (<code>apps#logs</code>, <code>servers#logs</code>) poll with a <code>setInterval</code> + <code>fetch</code> every few seconds. Deployments, script runs, and database pulls <em>are</em> pushed live, but through <strong>bespoke ActionCable channels + Stimulus DOM-patching</strong> rather than native Turbo Streams — more JS to maintain, and inconsistent with the rest of Hotwire. In 2026, on Rails 8 + Hotwire, "keep refreshing to see state" is the wrong default.</p>
+
+  <h2>Current state</h2>
+  <p>The foundation is all present: <code>turbo-rails</code> is pinned, ActionCable works, and the <strong>chat already does it right</strong> (<code>turbo_stream_from</code> + model <code>broadcast_*</code>). Slice 1 is <strong>shipped</strong> (2026-06-22): <code>App#broadcast_status_badge</code> pushes a Turbo Stream replace of the status badge whenever a status-relevant field changes, and <code>apps/show</code> subscribes via <code>turbo_stream_from @app</code> — the badge updates with no refresh. Deployments/script runs still use the custom <code>deploy_channel</code>/<code>script_run_channel</code>; index lists, the dashboard fleet view, and server pages remain manual; log tails still poll.</p>
+
+  <h2>Proposed design</h2>
+  <p>Push state from the <strong>model layer</strong>: <code>App</code>, <code>Deployment</code>, and <code>Server</code> broadcast targeted Turbo Stream replaces on status changes (the slice-1 pattern). Views subscribe with <code>turbo_stream_from</code> and render each badge/row inside a stable <code>dom_id</code> target. Fold the bespoke deploy/script-run channels into native Turbo Stream broadcasts (delete the hand-rolled DOM-patching JS). Finally, convert log tails from client polling to a server-side streamed append. Net effect: zero <code>setInterval</code> for state, far less custom JS, and consistent live updates everywhere.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>Done (2026-06-22):</strong> live app status badge — <code>App#broadcast_status_badge</code> + <code>turbo_stream_from</code> on the app page.</li>
+    <li>Live <strong>deployment</strong> status + list rows (deployments page and the app's deploy section) via <code>Deployment</code> broadcasts.</li>
+    <li>Live badges on the <strong>apps index</strong> and the <strong>dashboard fleet view</strong>; <code>Server</code> status broadcasts on the servers pages.</li>
+    <li>Retire the bespoke <code>deploy_channel</code>/<code>script_run_channel</code> DOM-patching into native Turbo Streams; convert the <code>apps#logs</code>/<code>servers#logs</code> polling into a streamed append.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>App, container, deployment, and server status update on screen with <strong>no manual refresh and no polling</strong>.</li>
+    <li>No <code>setInterval</code> remains for status; log tails arrive over a stream.</li>
+    <li>The hand-rolled status/DOM-patching JS is replaced by Turbo Stream broadcasts.</li>
+    <li>A second open tab reflects a status change within a second of it happening.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Uses <code>turbo-rails</code> + ActionCable (both already in place) and mirrors the chat's <code>broadcast_*</code>/<code>turbo_stream_from</code> pattern. Pairs naturally with <a href="06-app-logs.html">live app log streaming</a> (the log-tail slice) and makes deploy progress — including the self-deploy reconcile — visible without refresh.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-22</footer>
+</div></body></html>
