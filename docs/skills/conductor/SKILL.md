@@ -3,48 +3,27 @@ name: conductor
 description: Use to operate a self-hosted Rails fleet through Conductor's MCP server — fleet status/logs, registering servers/clusters, creating/updating/deploying apps, provisioning databases, managing domains and env vars, wiring GitHub access. Fires on fleet/server/deploy/route/database framing when Conductor is the control plane. Real infrastructure actions on owned servers — confirm before destructive or outward-facing ones.
 ---
 
-# Conductor — operating the fleet over MCP
+# Conductor (fleet via MCP)
 
-Conductor is a Rails control plane for self-hosted ops, and part of the **InventList**
-suite of self-hosting tools. This skill is the judgment layer that complements the
-tool schemas at `GET /mcp/list`: when to reach for each tool, the discover-then-act
-flow, and safe ordering. It is shipped with the product and served live at
-`GET /mcp/skill`, so it can never drift from the tool set.
+Endpoint `/mcp` — `GET /mcp/list` to discover, `POST /mcp/call` to invoke, `GET /mcp/skill` for this doc. Auth: Bearer `CONDUCTOR_MCP_TOKEN` (or a per-user/org API token; `401` if neither). Tool defs come from `ToolRegistry` (`app/tools/tool_registry.rb`) — always trust `/mcp/list` over this doc.
 
-## The seven tools (flat `action` enums)
+## Surface: 7 flat tools, each with an `action`
 
-Each tool takes an `action` plus the params that action needs. Always trust
-`/mcp/list` for exact schemas.
+The surface is **seven flat tools**; each call sets `action` plus that action's params (fewer tools keeps agent tool-selection accurate). Call shape: `{"name":"conductor_read","input":{"action":"fleet_status"}}`.
 
-- **`conductor_read`** — `fleet_status` (servers + apps + health), `logs` (recent
-  script/deploy runs), `deployment` (one deployment's status + log). Read-only.
-- **`conductor_app`** — `create`, `update`, `deploy`, `sync_status`.
-- **`conductor_app_config`** — `set_env`, `gen_deploy_key`.
-- **`conductor_server`** — `register`, `run_script`.
-- **`conductor_database`** — `register_cluster`, `provision`.
-- **`conductor_domain`** — `add`, `remove`.
-- **`conductor_github`** — `set_token`, `set_app`, `installations`.
+| Tool | Actions | Notes |
+|------|---------|-------|
+| `conductor_read` | `fleet_status`, `logs`, `deployment` | Read-only. Orient here first. |
+| `conductor_app` | `create`, `update`, `deploy`, `sync_status` | Mutating — confirm. `deploy` dispatches by deploy_method. |
+| `conductor_app_config` | `set_env`, `gen_deploy_key` | `gen_deploy_key` returns the PUBLIC key to add on GitHub. |
+| `conductor_server` | `register`, `run_script` | `run_script` creates a ScriptRun + enqueues. |
+| `conductor_database` | `register_cluster`, `provision` | `provision` returns a connection URL — confirm. |
+| `conductor_domain` | `add`, `remove` | `remove` is destructive — confirm. |
+| `conductor_github` | `set_token`, `set_app`, `installations` | Stores credentials Conductor-wide. |
 
-## Deploy-from-chat — the happy path
+## Flow
+1. `conductor_read action: fleet_status` to orient → `action: logs` / `action: deployment` to diagnose.
+2. Mutating app config, deploying, provisioning DBs, changing domains, or storing GitHub credentials are real infra actions on owned servers — **confirm with the user before each**, especially `conductor_domain action: remove`, `conductor_database action: provision`, and the `conductor_github` actions.
+3. After `conductor_app action: deploy`, poll `conductor_read action: deployment` (pass `deployment_id`, or `app_id`/`app_name` for the latest) to confirm success.
 
-Drive a deploy as this sequence, confirming before the destructive step:
-
-1. `conductor_read` `action: fleet_status` — orient; pick the server, confirm health.
-2. `conductor_app` `action: create` — only if the app is new (needs name,
-   repository_url, deploy_method).
-3. `conductor_app_config` `action: gen_deploy_key` — only for a private repo; add
-   the returned public key to the repo (or set a token via `conductor_github`).
-4. `conductor_app_config` `action: set_env` — one call per variable.
-5. **Confirm with the user**, then `conductor_app` `action: deploy`.
-6. `conductor_read` `action: deployment` `tail: 50` — watch until it goes green.
-
-## Safety
-
-- **Orient before acting** — `conductor_read action: fleet_status` first.
-- **Confirm before destructive/outward-facing actions**: `conductor_app action: deploy`,
-  `conductor_domain action: remove`, `conductor_database action: provision`.
-- A read-only token may call only `conductor_read`; everything else needs a
-  deploy-scoped token.
-
-When driving a specific instance, fetch `/mcp/skill` from it for the
-version-matched copy rather than relying on a cached version.
+Setup: the Conductor MCP server must be connected in the session (see `docs/USAGE.md` "MCP Server"). Authoring new tools? Follow the `mcp-authoring` skill — thin flat enum tools + this fat skill.
