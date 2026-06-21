@@ -1,0 +1,3 @@
+<%# Live deployment status badge — replaced over Turbo Streams as the deploy
+    progresses (building → deploying → succeeded/failed), no page reload. %>
+<span id="<%= dom_id(deployment, :status_badge) %>" class="<%= status_badge(deployment.status) %>"><%= deployment.status %></span>

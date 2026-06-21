@@ -12,6 +12,17 @@ class Deployment < ApplicationRecord
   scope :failed, -> { where(status: "failed") }
   scope :in_progress, -> { where(status: %w[pending building deploying]) }
 
+  # Live deploy status: push a Turbo Stream replace of the status badge whenever
+  # the status changes (building → deploying → succeeded/failed), so the
+  # deployment page updates without a reload. Subscribe with turbo_stream_from.
+  after_update_commit :broadcast_status_badge, if: :saved_change_to_status?
+
+  def broadcast_status_badge
+    broadcast_replace_to self,
+      target: ActionView::RecordIdentifier.dom_id(self, :status_badge),
+      partial: "deployments/status_badge", locals: { deployment: self }
+  end
+
   def pending?
     status == "pending"
   end
