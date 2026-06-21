@@ -1,0 +1,106 @@
+<% content_for :title, "Logs · #{@server.name} · Conductor" %>
+
+<section class="max-w-5xl mx-auto px-4 py-10">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="font-display text-2xl text-ink tracking-display dark:text-white">Server Logs</h1>
+      <p class="mt-1 text-sm text-muted dark:text-faint">
+        <%= link_to @server.name, server_path(@server), class: "hover:underline" %> ·
+        <%= @container ? "container #{@container}" : "system journal" %> ·
+        Last <%= @tail %> lines · live tail
+      </p>
+      <details class="mt-2 text-xs text-muted dark:text-faint">
+        <summary class="cursor-pointer hover:text-body dark:hover:text-white">Tail on the box</summary>
+        <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @server.ssh_user %>@<%= @server.ip_address %>
+<%= @container ? "docker logs -f --tail #{@tail} #{@container}" : "journalctl -n #{@tail} -f" %></pre>
+      </details>
+    </div>
+    <div class="flex items-center gap-2">
+      <label class="inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint cursor-pointer hover:bg-fill dark:hover:bg-fill">
+        <input type="checkbox" id="auto-refresh" checked class="rounded border-border-strong dark:border-border-strong text-ink dark:text-white focus:ring-primary">
+        <span>Live tail</span>
+      </label>
+      <%= link_to "Refresh", logs_server_path(@server, container: @container), id: "manual-refresh", class: "inline-flex items-center gap-2 rounded-lg bg-ink dark:bg-fill px-4 py-2 text-sm font-medium text-white hover:bg-body dark:hover:bg-fill-strong" %>
+      <%= link_to "Back to Server", server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
+    </div>
+  </div>
+
+  <%# Source picker: system journal + each app's container (incl. Conductor itself) %>
+  <div class="mt-6 flex flex-wrap items-center gap-2">
+    <%= link_to "System (journalctl)", logs_server_path(@server),
+          class: "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-mono border #{@container ? 'border-border dark:border-border-strong text-muted hover:bg-fill' : 'border-primary bg-primary-tint text-primary'}" %>
+    <% @containers.each do |app| %>
+      <%= link_to app.container_name, logs_server_path(@server, container: app.container_name),
+            class: "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-mono border #{@container == app.container_name ? 'border-primary bg-primary-tint text-primary' : 'border-border dark:border-border-strong text-muted hover:bg-fill'}" %>
+    <% end %>
+  </div>
+
+  <div class="mt-6 rounded-large border border-border-strong bg-ink shadow-soft overflow-hidden" id="log-container">
+    <div class="p-4 border-b border-border-strong flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-white font-mono"><%= @container ? "docker logs #{@container}" : "journalctl @ #{@server.name}" %></h3>
+      <div class="flex items-center gap-3">
+        <span id="refresh-indicator" class="hidden">
+          <svg class="h-4 w-4 text-faint animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </span>
+        <span id="last-updated" class="text-xs text-faint">Updated just now</span>
+      </div>
+    </div>
+    <div class="p-4 max-h-[700px] overflow-y-auto" id="log-content">
+      <% if @logs.present? %>
+        <pre class="text-sm text-faint font-mono whitespace-pre-wrap"><%= @logs %></pre>
+      <% else %>
+        <p class="text-sm text-muted">No logs available.</p>
+      <% end %>
+    </div>
+  </div>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const checkbox = document.getElementById('auto-refresh');
+    const logContent = document.getElementById('log-content');
+    const refreshIndicator = document.getElementById('refresh-indicator');
+    const lastUpdated = document.getElementById('last-updated');
+    const url = '<%= logs_server_path(@server, container: @container, format: :json) %>';
+    let intervalId = null;
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function fetchLogs() {
+      refreshIndicator.classList.remove('hidden');
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          logContent.innerHTML = data.logs
+            ? '<pre class="text-sm text-faint font-mono whitespace-pre-wrap">' + escapeHtml(data.logs) + '</pre>'
+            : '<p class="text-sm text-muted">No logs available.</p>';
+          lastUpdated.textContent = 'Updated just now';
+          refreshIndicator.classList.add('hidden');
+          logContent.scrollTop = logContent.scrollHeight;
+        })
+        .catch(() => refreshIndicator.classList.add('hidden'));
+    }
+
+    checkbox.addEventListener('change', function() {
+      if (this.checked) {
+        fetchLogs();
+        intervalId = setInterval(fetchLogs, 3000);
+      } else if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    });
+
+    if (checkbox.checked) {
+      fetchLogs();
+      intervalId = setInterval(fetchLogs, 3000);
+    }
+  });
+</script>

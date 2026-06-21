@@ -104,6 +104,7 @@ Rails.application.routes.draw do
       post :test_connection
       post :refresh_metrics
       post :provision
+      get :logs
     end
     resources :cron_jobs, only: [:create, :update, :destroy] do
       collection { post :schedule_script }
