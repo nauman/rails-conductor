@@ -45,6 +45,21 @@ class KamalDeployerTest < ActiveSupport::TestCase
     KamalDeployer.new(@app, @deployment, shell: shell).tap(&:deploy!)
   end
 
+  def with_env(vars)
+    old = vars.to_h { |k, _| [ k, ENV[k] ] }
+    vars.each { |k, v| ENV[k] = v }
+    yield
+  ensure
+    old.each { |k, v| v.nil? ? ENV.delete(k) : ENV[k] = v }
+  end
+
+  def write_checkout_file(relpath, content)
+    path = File.join(@workspace, @app.slug, relpath)
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, content)
+    path
+  end
+
   test "runs git sync then kamal deploy locally, marks deployment succeeded" do
     shell = FakeShell.new(success: true)
     deploy_with(shell)
@@ -104,6 +119,62 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
     shell = FakeShell.new(success: true)
     deploy_with(shell) # @app has SECRET_KEY_BASE
+
+    assert_equal "succeeded", @deployment.reload.status
+  end
+
+  test "self-deploy materializes config/master.key from Conductor's RAILS_MASTER_KEY" do
+    @app.update!(self_managed: true)
+    FileUtils.mkdir_p(File.join(@workspace, @app.slug))
+
+    with_env("RAILS_MASTER_KEY" => "abc123masterkey") do
+      deploy_with(FakeShell.new(success: true))
+    end
+
+    assert_equal "abc123masterkey", File.read(File.join(@workspace, @app.slug, "config", "master.key"))
+  end
+
+  test "self-deploy preserves the committed .kamal/secrets (resolves from Conductor's env)" do
+    @app.update!(self_managed: true)
+    committed = "RAILS_MASTER_KEY=$(cat config/master.key)\nKAMAL_REGISTRY_PASSWORD=$KAMAL_REGISTRY_PASSWORD\n"
+    write_checkout_file(".kamal/secrets", committed)
+
+    deploy_with(FakeShell.new(success: true))
+
+    assert_equal committed, File.read(File.join(@workspace, @app.slug, ".kamal", "secrets")),
+                 "committed secrets must be preserved for a self-deploy (not overwritten)"
+  end
+
+  test "self-deploy only requires KAMAL_REGISTRY_PASSWORD; others resolve from Conductor's env" do
+    @app.update!(self_managed: true)
+    write_checkout_file("config/deploy.yml", <<~YML)
+      registry:
+        password:
+          - KAMAL_REGISTRY_PASSWORD
+      env:
+        secret:
+          - RAILS_MASTER_KEY
+          - DATABASE_PASSWORD
+    YML
+
+    with_env("RAILS_MASTER_KEY" => "k", "DATABASE_PASSWORD" => "d") do
+      deploy_with(FakeShell.new(success: true)) # app has no KAMAL_REGISTRY_PASSWORD
+    end
+
+    assert_equal "failed", @deployment.reload.status
+    assert_match(/KAMAL_REGISTRY_PASSWORD/, @deployment.log.to_s)
+    refute_match(/RAILS_MASTER_KEY/, @deployment.log.to_s)
+    refute_match(/DATABASE_PASSWORD/, @deployment.log.to_s)
+  end
+
+  test "self-deploy proceeds with only KAMAL_REGISTRY_PASSWORD set + the rest in env" do
+    @app.update!(self_managed: true)
+    @app.env_variables.create!(key: "KAMAL_REGISTRY_PASSWORD", value: "rpw")
+    write_checkout_file("config/deploy.yml", "registry:\n  password:\n    - KAMAL_REGISTRY_PASSWORD\nenv:\n  secret:\n    - RAILS_MASTER_KEY\n")
+
+    with_env("RAILS_MASTER_KEY" => "k") do
+      deploy_with(FakeShell.new(success: true))
+    end
 
     assert_equal "succeeded", @deployment.reload.status
   end

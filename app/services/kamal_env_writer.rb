@@ -1,10 +1,13 @@
 # Bridges Conductor's per-app env vars into a Kamal deploy.
 #
-# A server-side `git clone` of the app repo does NOT include `.kamal/secrets`
-# (it's gitignored), so KamalDeployer generates it from the app's EnvVariables.
-# This makes Conductor's UI / the `conductor_app_config` (set_env) MCP tool the source of truth
-# for a kamal app's secret VALUES (e.g. SECRET_KEY_BASE, DATABASE_URL). The app's
-# committed `deploy.yml` still declares WHICH keys to inject under `env.secret`.
+# A repo's committed `.kamal/secrets` is references-only (e.g. `$DATABASE_PASSWORD`,
+# `$(cat config/master.key)`) and safe for git — it carries no values. For a
+# normal app those references can't resolve in Conductor's container, so
+# KamalDeployer regenerates `.kamal/secrets` from the app's EnvVariables: Conductor
+# (UI / the `conductor_app_config` set_env MCP tool) is the source of truth for the
+# secret VALUES. (Self-deploys are the exception — they reuse the committed file,
+# which resolves from Conductor's own env; see KamalDeployer#write_secrets_file.)
+# The app's committed `deploy.yml` still declares WHICH keys to inject.
 class KamalEnvWriter
   # dotenv-style KEY=value content for `.kamal/secrets`. One line per env var;
   # values are passed through verbatim (Kamal reads this file as dotenv).

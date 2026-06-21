@@ -45,6 +45,7 @@ class KamalDeployer
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     record_commit_sha
     return false unless verify_required_secrets
+    materialize_master_key
     write_secrets_file
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
@@ -71,17 +72,30 @@ class KamalDeployer
     false
   end
 
-  # Fail fast with a clear, actionable error when the app is missing env vars the
-  # repo's deploy.yml declares as secrets. Without this, kamal fails deep in the
-  # run with a cryptic message (e.g. an empty `docker login -p` when
-  # KAMAL_REGISTRY_PASSWORD is absent), which reads as a mysterious crash.
+  # Fail fast with a clear, actionable error when a required secret can't be
+  # resolved. Without this, kamal fails deep in the run with a cryptic message
+  # (e.g. an empty `docker login -p` when KAMAL_REGISTRY_PASSWORD is absent).
+  #
+  # A secret is satisfied if it's an app env var, OR — for a self-managed deploy —
+  # already present in Conductor's own container env (its deploy.yml injects the
+  # same secrets), OR it's RAILS_MASTER_KEY we can materialize from that env.
   def verify_required_secrets
-    missing = required_secrets - app.env_variables.pluck(:key)
+    provided = app.env_variables.pluck(:key).to_set
+    missing = required_secrets.reject do |key|
+      provided.include?(key) || (app.self_managed? && resolvable_from_conductor_env?(key))
+    end
     return true if missing.empty?
 
     fail_with("Missing required env var(s): #{missing.join(', ')}. " \
               "Add them under the app's Environment Variables (mark as secret), then redeploy.")
     false
+  end
+
+  # For a self-deploy, Conductor's own running container already holds its
+  # secrets in ENV (RAILS_MASTER_KEY, DATABASE_PASSWORD, the AR keys, SES, …),
+  # which the kamal subprocess inherits and the committed .kamal/secrets resolves.
+  def resolvable_from_conductor_env?(key)
+    ENV[key].present? || (key == "RAILS_MASTER_KEY" && ENV["RAILS_MASTER_KEY"].present?)
   end
 
   # Secret keys the app's deploy.yml references — bare UPPER_SNAKE list items
@@ -92,6 +106,27 @@ class KamalDeployer
     return [] unless File.exist?(path)
 
     File.readlines(path).filter_map { |line| line[/\A\s*-\s*([A-Z][A-Z0-9_]+)\s*\z/, 1] }.uniq
+  end
+
+  # For a self-deploy, the repo's committed .kamal/secrets reads the master key
+  # via `$(cat config/master.key)`, but a server-side clone omits the gitignored
+  # file. Conductor's own container already holds RAILS_MASTER_KEY (its own
+  # deploy.yml injects it), so write the file from that env var — no need to enter
+  # it as an app env var. Only done for self-managed apps (where Conductor's key
+  # IS the app's key); other apps must supply their own.
+  def materialize_master_key
+    return unless app.self_managed?
+
+    key = ENV["RAILS_MASTER_KEY"]
+    return if key.blank?
+
+    path = File.join(checkout_dir, "config", "master.key")
+    return if File.exist?(path)
+
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, key)
+    File.chmod(0o600, path)
+    log "Materialized config/master.key from Conductor's RAILS_MASTER_KEY for the self-deploy."
   end
 
   # Record the checked-out HEAD as the deployment's commit. Kamal uses this same
@@ -285,12 +320,23 @@ class KamalDeployer
   end
 
   # Write Conductor-managed .kamal/secrets (values from EnvVariables).
+  #
+  # Self-deploys are special: the repo's committed .kamal/secrets is references
+  # only (e.g. `$DATABASE_PASSWORD`, `$(cat config/master.key)`) and those resolve
+  # from Conductor's OWN container env (inherited by the kamal subprocess) plus
+  # the master.key we just materialized — so we PRESERVE it rather than overwrite,
+  # and only KAMAL_REGISTRY_PASSWORD needs to come from an app env var (flows in
+  # via deploy_env). For other apps Conductor is the source of truth, so we
+  # generate the file from the app's EnvVariables as before.
   def write_secrets_file
+    secrets_path = File.join(checkout_dir, ".kamal", "secrets")
+    return if app.self_managed? && File.exist?(secrets_path)
+
     content = KamalEnvWriter.secrets_content(app)
     return if content.strip.empty?
 
-    FileUtils.mkdir_p(File.join(checkout_dir, ".kamal"))
-    File.write(File.join(checkout_dir, ".kamal", "secrets"), content)
+    FileUtils.mkdir_p(File.dirname(secrets_path))
+    File.write(secrets_path, content)
   end
 
   # Materialize the target server's private key so Kamal's net-ssh can use it.
