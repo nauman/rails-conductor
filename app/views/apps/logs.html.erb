@@ -8,6 +8,18 @@
         <%= link_to @app.name, app_path(@app), class: "hover:underline" %> ·
         Last <%= @tail %> lines · live tail
       </p>
+      <details class="mt-2 text-xs text-muted dark:text-faint">
+        <summary class="cursor-pointer hover:text-body dark:hover:text-white">Tail on the box (multi-app: filter by service label)</summary>
+        <% if @app.native? %>
+          <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
+journalctl --user -u <%= @app.service_name %> -n <%= @tail %> -f</pre>
+        <% else %>
+          <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
+docker ps --filter label=service=<%= @app.service_name %>   # find this app's container
+docker logs -f --tail <%= @tail %> <%= @app.container_name %>
+# or from the app repo: kamal app logs -f</pre>
+        <% end %>
+      </details>
     </div>
     <div class="flex items-center gap-2">
       <label class="inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint cursor-pointer hover:bg-fill dark:hover:bg-fill">
