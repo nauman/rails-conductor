@@ -29,6 +29,15 @@ class App < ApplicationRecord
   scope :deploying, -> { where(status: "deploying") }
   scope :failed, -> { where(status: "failed") }
   scope :deployable, -> { joins(:server).where.not(repository_url: [nil, ""]) }
+  # The app(s) representing Conductor itself — deploys are reconciled on boot
+  # rather than observed inline (see SelfDeployReconciler).
+  scope :self_managed, -> { where(self_managed: true) }
+
+  # The git sha of the release this Conductor container is running. Kamal injects
+  # it as KAMAL_VERSION; absent outside a kamal-deployed container (dev/test).
+  def self.current_release_version
+    ENV["KAMAL_VERSION"].presence
+  end
 
   # Container status scopes
   scope :container_running, -> { where(container_status: "running") }

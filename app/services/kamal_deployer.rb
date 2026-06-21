@@ -43,8 +43,10 @@ class KamalDeployer
     @ssh_home = setup_ssh_home
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
+    record_commit_sha
     write_secrets_file
     log_ssh_diagnostics
+    note_self_deploy if app.self_managed?
     return false unless run_step("kamal deploy", kamal_command, chdir: checkout_dir, env: deploy_env)
 
     deployment.succeed!
@@ -66,6 +68,27 @@ class KamalDeployer
 
     fail_with("#{label} failed (exit #{result.exit_code})")
     false
+  end
+
+  # Record the checked-out HEAD as the deployment's commit. Kamal uses this same
+  # sha as the release version (injected into the container as KAMAL_VERSION), so
+  # recording it lets SelfDeployReconciler match a stranded self-deploy to the
+  # release that actually booted.
+  def record_commit_sha
+    result = @shell.run("git", "-C", checkout_dir, "rev-parse", "HEAD")
+    sha = result.output.to_s.strip
+    deployment.update!(commit_sha: sha) if result.success? && sha.present?
+  rescue StandardError
+    nil
+  end
+
+  # A self-managed deploy replaces THIS Conductor container, killing this job
+  # mid-`kamal deploy`. Explain that in the log so a truncated deploy log isn't
+  # mistaken for a crash; the new release reconciles the status on boot.
+  def note_self_deploy
+    log "Self-managed deploy: kamal will replace this Conductor container. If this " \
+        "job is terminated during the release swap, the deployment is reconciled " \
+        "when the new release boots (commit #{deployment.commit_sha.to_s[0, 12]})."
   end
 
   # Idempotent: clone on first deploy, otherwise hard-reset to the branch's head.

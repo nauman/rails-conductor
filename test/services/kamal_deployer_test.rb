@@ -64,6 +64,23 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_includes secrets, "SECRET_KEY_BASE=skb_xyz"
   end
 
+  test "records the checked-out commit sha on the deployment (for self-deploy reconciliation)" do
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    assert shell.runs.any? { |r| r[:command].first(2) == ["git", "-C"] && r[:command].last == "HEAD" },
+           "expected a git rev-parse HEAD step"
+    assert @deployment.reload.commit_sha.present?, "expected commit_sha recorded from git rev-parse HEAD"
+  end
+
+  test "a self-managed deploy logs the replace-and-reconcile note" do
+    @app.update!(self_managed: true)
+    deploy_with(FakeShell.new(success: true))
+
+    assert_match(/Self-managed deploy/i, @deployment.reload.log.to_s)
+    assert_match(/reconciled when the new release boots/i, @deployment.log.to_s)
+  end
+
   test "passes Conductor's env (incl. deploy host) to the kamal subprocess" do
     shell = FakeShell.new(success: true)
     deploy_with(shell)
