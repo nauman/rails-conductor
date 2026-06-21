@@ -1,0 +1,9 @@
+<%# Live app status badge. Wrapped in a stable dom_id so App#broadcast_status can
+    replace it over Turbo Streams — no polling, no manual refresh. %>
+<span id="<%= dom_id(app, :status_badge) %>">
+  <% if app.status == "running" && app.status_check_error.present? %>
+    <%= rui_badge(text: "Running · needs attention", color: :warning) %>
+  <% else %>
+    <%= rui_badge(text: app.status, color: app.status == "running" ? :success : app.status == "failed" ? :danger : :slate) %>
+  <% end %>
+</span>

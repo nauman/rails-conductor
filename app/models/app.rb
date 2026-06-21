@@ -33,6 +33,21 @@ class App < ApplicationRecord
   # rather than observed inline (see SelfDeployReconciler).
   scope :self_managed, -> { where(self_managed: true) }
 
+  # Live status: when a status-relevant field changes (from a deploy, a status
+  # sync, anywhere), push a Turbo Stream that replaces the badge on any open page
+  # — no polling, no manual refresh. Subscribe with `turbo_stream_from @app`.
+  after_update_commit :broadcast_status_badge, if: :status_relevantly_changed?
+
+  def status_relevantly_changed?
+    saved_change_to_status? || saved_change_to_container_status? || saved_change_to_status_check_error?
+  end
+
+  def broadcast_status_badge
+    broadcast_replace_to self,
+      target: ActionView::RecordIdentifier.dom_id(self, :status_badge),
+      partial: "apps/status_badge", locals: { app: self }
+  end
+
   # The git sha of the release this Conductor container is running. Kamal injects
   # it as KAMAL_VERSION; absent outside a kamal-deployed container (dev/test).
   def self.current_release_version

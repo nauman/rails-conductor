@@ -4,12 +4,9 @@
   <div class="flex items-center justify-between">
     <div>
       <div class="flex items-center gap-3">
+        <%= turbo_stream_from @app %>
         <h1 class="font-display text-2xl text-ink tracking-display dark:text-white"><%= @app.name %></h1>
-        <% if @app.status == "running" && @app.status_check_error.present? %>
-          <%= rui_badge(text: "Running · needs attention", color: :warning) %>
-        <% else %>
-          <%= rui_badge(text: @app.status, color: @app.status == "running" ? :success : @app.status == "failed" ? :danger : :slate) %>
-        <% end %>
+        <%= render "apps/status_badge", app: @app %>
       </div>
       <p class="mt-1 text-sm text-muted dark:text-faint">
         <% if @app.domain.present? %>
