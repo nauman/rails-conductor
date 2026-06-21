@@ -56,12 +56,23 @@ class ContainerStatus
 
     if running.to_s.strip.present?
       app.update!(status: "running", container_status: "running",
-                  last_status_check_at: Time.current, status_check_error: nil)
+                  last_status_check_at: Time.current, status_check_error: failed_deploy_note)
     else
       app.update!(status: "stopped", container_status: "exited",
                   last_status_check_at: Time.current, status_check_error: nil)
     end
     true
+  end
+
+  # A container is up, but if the LATEST deployment failed we're serving the
+  # PREVIOUS release — surface that instead of a clean green "running", so the
+  # badge doesn't claim a failed deploy worked.
+  def failed_deploy_note
+    dep = app.last_deployment
+    return nil unless dep&.failed?
+
+    when_failed = dep.completed_at ? " (#{dep.completed_at.strftime('%b %-d %H:%M UTC')})" : ""
+    "Last deploy failed#{when_failed} — still serving the previous release."
   end
 
   def parse_and_update(json_output)

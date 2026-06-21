@@ -30,6 +30,26 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
     assert_includes ssh.commands.first, "status=running"
   end
 
+  test "a running container with a FAILED latest deploy flags needs-attention, not clean green" do
+    @app.deployments.create!(status: "failed", completed_at: Time.current)
+    ssh = FakeSsh.new(output: "kuickr-web-old123\n")
+    SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
+
+    @app.reload
+    assert_equal "running", @app.status, "container is up, so it's running…"
+    assert @app.status_check_error.present?, "…but the failed last deploy must be surfaced"
+    assert_match(/previous release/i, @app.status_check_error)
+    assert @app.needs_attention?
+  end
+
+  test "a running container with a succeeded latest deploy stays clean green" do
+    @app.deployments.create!(status: "succeeded", completed_at: Time.current)
+    ssh = FakeSsh.new(output: "kuickr-web-new456\n")
+    SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
+
+    assert_nil @app.reload.status_check_error
+  end
+
   test "no running kamal container marks the app stopped" do
     ssh = FakeSsh.new(output: "")
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
