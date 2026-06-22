@@ -46,6 +46,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Redis & MySQL accessories](13-accessories.html) | Data & Backups | P2 | M | Planned |
 | [Secretless deploys (vault-resolved secrets)](16-secretless-deploys.html) | Agent-native | P1 | M | Planned |
 | [Reactive statuses everywhere (Turbo Streams)](17-reactive-statuses.html) | Fleet Control | P1 | M | 🔄 In progress (slice 1 done 2026-06-22) |
+| [Per-app proxy mode (Caddy or kamal-proxy)](18-per-app-proxy-mode.html) | Fleet Control | P1 | M | Planned |
 
 ## Critical path
 
