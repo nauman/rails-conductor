@@ -2,6 +2,8 @@
 
 `docs/plans/` is the product-requirements layer for Conductor. Use these plans as the canonical build map, grouped by strategic pillar and current status.
 
+> **Canonical pillars (reconciled 2026-06-23): 7** — the six below **plus _Agent-native control_** (added 2026-06-23, leads the moat); Routing & edge stays standalone. `docs/VISION.md` is the single source of truth for pillars + moat. The March 2026 pillars-audit %s are stale (much shipped since).
+
 ## Source of Truth
 
 - Strategy: `docs/VISION.md`

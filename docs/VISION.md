@@ -37,9 +37,10 @@ Conductor should remain compatible with lower-level tools without depending on a
 
 ## Moat
 
-**The moat is not deployment by itself. The moat is unified operations across mixed infrastructure.**
+**The moat is not deployment by itself. The moat is an entire self-hosted fleet that an AI agent can operate end-to-end, safely — unified mixed-infrastructure operations *plus* agent-native, secretless control. The combination.**
 
-What should make Conductor defensible:
+The headline differentiator — **agent-native, secretless control** — is defensible by *architecture*, not just effort: Hatchbox is a hosted panel and ONCE is a single-machine TUI; neither is a fleet that an agent can drive over MCP. The rest is defensible by *depth*:
+- agent-native MCP surface (every op a tool), org-scoped + audited + least-privilege, with secretless deploys so values are never handled by human or agent
 - Kamal and native hosting in one system
 - multi-host Caddy orchestration
 - deep provider workflows for Hetzner, Cloudflare, R2, and SES
@@ -47,23 +48,29 @@ What should make Conductor defensible:
 - continuous maintenance, updates, health checks, and drift detection
 - a single UI, API, and CLI layer above existing tools
 
+Conductor proves it by **running itself** — it deploys and reconciles its own releases through the same control plane it gives you.
+
 ## Current State
 
-Conductor is not at the full vision yet. Today it is best understood as a fleet dashboard with working deploy, backup, and alerting primitives plus a large amount of strategic surface still unbuilt.
+Conductor is well past the dashboard stage: it deploys real apps across runtimes and is **agent-operable and self-hosting** (it deploys itself). The remaining gap is mostly provider automation and stateful-data depth.
 
-What works today:
-- basic Docker deploys over SSH
-- server provisioning scripts
-- backup creation and scheduling
-- critical failure alerts by email
-- dashboard visibility into current fleet status
+What works today (as of 2026-06):
+- deploys across **Kamal (control-machine, build-over-SSH), Docker, and native** runtimes; auto-deploy on git push
+- **Conductor deploys itself** — self-deploy with boot-time reconciliation (live on `conductor.pavelabs.io`)
+- **agent-native MCP server** — 7 flat enum tools, org-scoped multi-tenant auth, read-only scope, redacted audit log; plus the AI chat that plans-and-executes fleet ops
+- GitHub App + deploy keys for private-repo cloning across orgs
+- Caddy route management via the Admin API (JSON); per-app domains
+- Postgres clusters with per-app database provisioning; backups + scheduling (R2)
+- cron / scheduled jobs, server hardening + auto-update, failure alerts
+- reactive UI (Turbo Streams), live server/app/deploy log tails, fleet dashboard
+- multi-app proven on the shared box: `kuickr.co`, `wiseherds.com`, `conductor.pavelabs.io`
 
 What is still the critical gap:
-- Caddy routing and Admin API integration
-- provider APIs for Hetzner, Cloudflare DNS, SES, and R2 management
-- Postgres restore and operational checks
-- recurring maintenance jobs, auto-updates, and drift detection
-- multi-host orchestration across the fleet
+- **secretless / vault-resolved deploys** (roadmap 16) — the agent-native trust capstone
+- **provider APIs** — Hetzner VM creation, Cloudflare DNS CRUD, deeper R2/SES management
+- **Postgres restore / PITR** and operational verification
+- **drift detection**, rollbacks, and richer continuous-maintenance loops
+- **per-app proxy mode + dynamic subdomains** (roadmap 18) and fuller multi-host orchestration
 
 ## Strategic Pillars
 
@@ -73,6 +80,22 @@ What is still the critical gap:
 4. **Provisioning and provider automation** — domains, Hetzner, Cloudflare, R2, SES, and control-panel setup flows
 5. **Data and backups** — Postgres backup, restore, monitoring, and cluster lifecycle
 6. **Continuous maintenance** — server checks, updates, drift detection, and alerts
+7. **Agent-native control** — the whole fleet is operable by an AI agent end-to-end over MCP — every action a tool, every tool org-scoped, audited, and least-privilege, deploying *secretlessly* so neither human nor agent need handle secret values. This is the pillar Hatchbox and ONCE cannot copy, and it leads the moat.
+
+## Connected Services (the integration hub)
+
+A core expression of the control plane: **one place to monitor *and* manage every provider your fleet depends on**, from both the UI and an agent — not five separate dashboards. Each integration is *monitor* (status, health, usage) + *manage* (act via the provider's API). Priority order:
+
+| Service | Monitor | Manage | Status |
+|---|---|---|---|
+| **Caddy** (Admin API) | routes, certs, reachability | add/remove domains + per-app proxy via JSON | partial (route CRUD live) |
+| **Cloudflare R2** | buckets, usage | create buckets, credentials, lifecycle | planned |
+| **Backups → R2** | last run, size, success | schedule, run, **restore/verify** | partial (backup live; restore is the gap) |
+| **AWS SES** (email) | sending stats, bounce/complaint, reputation | identities, config sets | partial (SMTP send live) |
+| **AWS SNS** (SMS) | delivery, spend | send/topics — *SMS is SNS/Pinpoint, not SES* | planned |
+| **Hetzner** (VM API) | VM state, metrics | create/destroy servers, keys — *later* | deferred |
+
+These map onto pillars 3–5 (Routing & edge, Provider automation, Data & backups); agent-native means every row above is also a set of MCP tools, not just UI.
 
 ## What Conductor Is
 
