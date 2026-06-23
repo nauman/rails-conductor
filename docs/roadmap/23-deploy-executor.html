@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy-executor rework (isolate kamal from the web container) · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p1:#8a6a1f;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Deploy-executor rework</h1>
+  <p class="sub">Stop running <code>kamal</code> inside the long-lived web container. Move each deploy into a <strong>short-lived, isolated executor</strong> so self-deploys don't kill their own job, secrets are injected at spawn (not rebuilt from the DB), and the runner is stateless.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime backends</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: L</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem (the architecture inversion)</h2>
+  <p>Kamal is a <strong>client-side / CI tool</strong> — meant to run from a laptop or CI job that orchestrates <em>remote</em> servers. Today Conductor runs <code>kamal deploy</code> from <strong>inside a long-lived app container that is itself a deploy target</strong> (<code>KamalDeployer</code> = "Conductor is the control machine"). That inversion is the root of every recurring deploy pain:</p>
+  <ul>
+    <li><strong>Self-reference:</strong> deploying Conductor means the deployer container is stopped mid-swap, killing the job before it records success. <code>SelfDeployReconciler</code> is a band-aid over a structural flaw.</li>
+    <li><strong>Secret re-plumbing:</strong> kamal expects secrets in the runner's env, but the runner doesn't have the deploy-time secrets — so we rebuild <code>.kamal/secrets</code> from DB EnvVariables. The entire secret-juggling saga stems from this.</li>
+    <li><strong>docker-over-SSH complexity:</strong> the container builds on the target daemon over SSH (host keys, <code>known_hosts</code>, stale identities).</li>
+    <li><strong>Stateful multi-tenant runner:</strong> one container running many apps' deploys accumulates SSH/workspace cruft.</li>
+  </ul>
+
+  <h2>Current state</h2>
+  <p><code>KamalDeployer</code> runs <code>kamal deploy</code> as an in-process subprocess (<code>LocalShell</code>) inside the web container (jobs run there via <code>SOLID_QUEUE_IN_PUMA</code>). Worked around with the reconciler + master-key materialization + committed-secrets reuse for self-deploys. It works — but it's fragile and the wrong shape.</p>
+
+  <h2>Proposed design</h2>
+  <p>Separate <strong>control plane</strong> from <strong>deploy executor</strong>:</p>
+  <ul>
+    <li><strong>Control plane</strong> = the Conductor web app. Stores config, shows UI, exposes MCP. <em>Never</em> runs <code>kamal</code> in-process.</li>
+    <li><strong>Deploy executor</strong> = a short-lived, isolated runner spawned <em>per deploy</em> — a one-off <code>docker run --rm conductor-deployer …</code> on the host daemon (or a dedicated worker), given the repo, env, and secrets at spawn, that runs <code>kamal deploy</code> and exits.</li>
+  </ul>
+  <p>This makes self-deploy trivial (the executor outlives the web container's restart — no reconciler), removes the <code>.kamal/secrets</code> rebuild (secrets injected at spawn, ideally <a href="16-secretless-deploys.html">vault-resolved</a>), and keeps each run stateless. Study prior art: kamal-ui, polaris-deploy, ubicloud.</p>
+
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>Extract a <code>DeployRunner</code> boundary; package a <code>conductor-deployer</code> image (kamal + docker CLI + git).</li>
+    <li>Spawn the executor as a one-off container per deploy on the host daemon, streaming its log back over the existing channel; deployment status from the executor's exit, not the web job.</li>
+    <li>Inject secrets at spawn (env or vault-resolved); delete the DB→<code>.kamal/secrets</code> rebuild path. Self-deploy needs no reconciler.</li>
+    <li>Retire/keep <code>SelfDeployReconciler</code> as belt-and-suspenders; migrate other runtimes' deployers onto the same runner boundary.</li>
+  </ol>
+
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A self-deploy completes and records success <strong>without</strong> a reconciler — the executor survives the web container's restart.</li>
+    <li>No deploy rebuilds <code>.kamal/secrets</code> from the DB; secrets are injected at spawn (or vault-resolved) and never persisted.</li>
+    <li>Each deploy runs in a fresh, stateless executor; no accumulated SSH/workspace state in the web container.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Supersedes the workarounds in <a href="01-kamal-control-machine.html">the Kamal control machine</a> + the self-deploy reconciler. Pairs with <a href="16-secretless-deploys.html">secretless deploys</a>. Source: <code>docs/handoffs/2026-06-24-ui-deploy-architecture.md</code>.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-24</footer>
+</div></body></html>

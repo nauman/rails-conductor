@@ -37,11 +37,11 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | ✅ Done (2026-06-21) |
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
 | [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | Planned |
-| [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | P1 | M | Planned |
+| [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | **P0** | M | Planned · **Heroku-DX** |
 | [Multi-tenant MCP (anyone can deploy)](14-multi-tenant-mcp.html) | Agent-native | P1 | M | ✅ Done (2026-06-20) |
 | [MCP wire-protocol transport](15-mcp-wire-protocol.html) | Agent-native | P1 | M | Planned |
 | [Deploy hooks (pre/post commands)](10-deploy-hooks.html) | Runtime Backends | P2 | S | Planned |
-| [Web console (rails console / shell)](11-web-console.html) | Fleet Control | P2 | M | Planned |
+| [Web console (rails console / shell)](11-web-console.html) | Fleet Control | **P1** | M | Planned · **Heroku-DX** |
 | [Alerts & notifications](12-alerts.html) | Continuous Maintenance | P2 | M | Planned |
 | [Redis & MySQL accessories](13-accessories.html) | Data & Backups | P2 | M | Planned |
 | [Secretless deploys (vault-resolved secrets)](16-secretless-deploys.html) | Agent-native | P1 | M | Planned |
@@ -51,6 +51,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [AWS SES + SNS messaging (email + SMS)](20-ses-sns-messaging.html) | Provider Automation | P1 | M | Planned |
 | [Backup restore + verification (R2)](21-backup-restore.html) | Data & Backups | P0 | M | Planned |
 | [Caddy management console + per-app multi-subdomain](22-caddy-console.html) | Routing & edge | P1 | M | Planned |
+| [Deploy-executor rework (isolate kamal from the web container)](23-deploy-executor.html) | Runtime Backends | P1 | L | Planned · **architecture** |
 
 ## Critical path
 
