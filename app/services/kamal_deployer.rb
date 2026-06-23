@@ -95,7 +95,28 @@ class KamalDeployer
   # secrets in ENV (RAILS_MASTER_KEY, DATABASE_PASSWORD, the AR keys, SES, …),
   # which the kamal subprocess inherits and the committed .kamal/secrets resolves.
   def resolvable_from_conductor_env?(key)
-    ENV[key].present? || (key == "RAILS_MASTER_KEY" && ENV["RAILS_MASTER_KEY"].present?)
+    return true if ENV[key].present?
+    return true if key == "RAILS_MASTER_KEY" && ENV["RAILS_MASTER_KEY"].present?
+
+    # The committed .kamal/secrets (which a self-deploy reuses) may alias this key
+    # to another env var — e.g. the Postgres accessory seed `POSTGRES_PASSWORD=$DATABASE_PASSWORD`.
+    # Follow that indirection: the key resolves if its referenced env var is present.
+    ref = committed_secret_reference(key)
+    ref.present? && ENV[ref].present?
+  end
+
+  # Parse the committed .kamal/secrets for `KEY=$REF` (or `${REF}`) and return the
+  # bare referenced env var name, or nil. Only the `$VAR` indirection form is an
+  # env alias; `$(cat …)` materialization and literals are not.
+  def committed_secret_reference(key)
+    path = File.join(checkout_dir, ".kamal", "secrets")
+    return nil unless File.exist?(path)
+
+    File.readlines(path).each do |line|
+      m = line.match(/\A\s*#{Regexp.escape(key)}\s*=\s*\$\{?([A-Z][A-Z0-9_]+)\}?\s*\z/)
+      return m[1] if m
+    end
+    nil
   end
 
   # Secret keys the app's deploy.yml references — bare UPPER_SNAKE list items

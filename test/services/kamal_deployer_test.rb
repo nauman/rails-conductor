@@ -179,6 +179,34 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+  test "self-deploy resolves a deploy.yml secret aliased in .kamal/secrets (POSTGRES_PASSWORD=$DATABASE_PASSWORD)" do
+    @app.update!(self_managed: true)
+    @app.env_variables.create!(key: "KAMAL_REGISTRY_PASSWORD", value: "rpw")
+    write_checkout_file("config/deploy.yml", <<~YML)
+      registry:
+        password:
+          - KAMAL_REGISTRY_PASSWORD
+      env:
+        secret:
+          - DATABASE_PASSWORD
+      accessories:
+        db:
+          env:
+            secret:
+              - POSTGRES_PASSWORD
+    YML
+    # The committed secrets file aliases the accessory seed to DATABASE_PASSWORD,
+    # which IS in Conductor's container env — so pre-flight must not block on it.
+    write_checkout_file(".kamal/secrets", "DATABASE_PASSWORD=$DATABASE_PASSWORD\nPOSTGRES_PASSWORD=$DATABASE_PASSWORD\n")
+
+    with_env("DATABASE_PASSWORD" => "d", "RAILS_MASTER_KEY" => "k") do
+      deploy_with(FakeShell.new(success: true))
+    end
+
+    assert_equal "succeeded", @deployment.reload.status
+    refute_match(/POSTGRES_PASSWORD/, @deployment.log.to_s)
+  end
+
   test "a self-managed deploy logs the replace-and-reconcile note" do
     @app.update!(self_managed: true)
     deploy_with(FakeShell.new(success: true))
