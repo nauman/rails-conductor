@@ -58,14 +58,24 @@
     <li><strong>Control plane</strong> = the Conductor web app. Stores config, shows UI, exposes MCP. <em>Never</em> runs <code>kamal</code> in-process.</li>
     <li><strong>Deploy executor</strong> = a short-lived, isolated runner spawned <em>per deploy</em> — a one-off <code>docker run --rm conductor-deployer …</code> on the host daemon (or a dedicated worker), given the repo, env, and secrets at spawn, that runs <code>kamal deploy</code> and exits.</li>
   </ul>
-  <p>This makes self-deploy trivial (the executor outlives the web container's restart — no reconciler), removes the <code>.kamal/secrets</code> rebuild (secrets injected at spawn, ideally <a href="16-secretless-deploys.html">vault-resolved</a>), and keeps each run stateless. Study prior art: kamal-ui, polaris-deploy, ubicloud.</p>
+  <p>This makes self-deploy trivial (the executor outlives the web container's restart — no reconciler), removes the <code>.kamal/secrets</code> rebuild (secrets injected at spawn, ideally <a href="16-secretless-deploys.html">vault-resolved</a>), and keeps each run stateless.</p>
+
+  <h2>Grounded in prior art (researched 2026-06-24)</h2>
+  <p><strong>The real principle isn't "one-off container" — it's "the web app holds NO in-flight deploy state; Postgres does."</strong> The container is just the means.</p>
+  <ul>
+    <li><strong>kamal-ui</strong> &amp; <strong>polaris-deploy</strong> both <em>refuse</em> to run server-side deploys (kamal-ui = read-only Docker observability; polaris = a macOS GUI shelling out to local <code>kamal</code>). The two closest comparables dodge this exact problem — confirmation it's hard, and that Conductor is the ambitious one.</li>
+    <li><strong>ubicloud</strong> (Ruby/Postgres IaaS control plane) is the model: work is a <em>DB row</em> (Strand) run by a stateless worker; mutual exclusion is a <strong>DB lease</strong> (<code>SELECT … FOR NO KEY UPDATE SKIP LOCKED</code> + lease timestamp), so a crashed worker's lease just expires and the row is re-picked — crash-safe by construction. Secrets are pulled per-operation from encrypted columns, decrypted in-process at connect time, never written to a long-lived file. Every step is bounded + a watchdog kills wedged work.</li>
+  </ul>
+  <p><strong>Adopt:</strong> (1) persist <em>structured deploy progress to the DB</em>, not stdout — if the executor dies, stdout is gone (this was the "log says streaming but isn't" bug); (2) a <strong>deploy lease</strong> per app for one-at-a-time + auto-recovery; (3) use <strong>Solid Queue</strong> (already present) to spawn + supervise the executor — do NOT build ubicloud's custom scheduler.</p>
+  <p><strong>Pitfall:</strong> re-entry ≠ idempotency. <code>kamal deploy</code> mid-swap is <em>not</em> idempotent — blindly retrying a torn deploy can double-act. Each phase must be check-then-act; decide per-phase whether to resume, roll back, or require a human.</p>
+  <p><strong>Novel to us:</strong> none of the three ever redeploys the process orchestrating the deploy — the <strong>self-deploy / bootstrap-swap</strong> problem is ours alone, and externalizing the executor is the correct answer.</p>
 
   <h2>Implementation slices</h2>
   <ol class="slices">
-    <li>Extract a <code>DeployRunner</code> boundary; package a <code>conductor-deployer</code> image (kamal + docker CLI + git).</li>
-    <li>Spawn the executor as a one-off container per deploy on the host daemon, streaming its log back over the existing channel; deployment status from the executor's exit, not the web job.</li>
-    <li>Inject secrets at spawn (env or vault-resolved); delete the DB→<code>.kamal/secrets</code> rebuild path. Self-deploy needs no reconciler.</li>
-    <li>Retire/keep <code>SelfDeployReconciler</code> as belt-and-suspenders; migrate other runtimes' deployers onto the same runner boundary.</li>
+    <li>Extract a <code>DeployRunner</code> boundary + a <strong>deploy lease</strong> on the app (one deploy at a time; a crashed/expired lease is reclaimable). Package a <code>conductor-deployer</code> image (kamal + docker CLI + git).</li>
+    <li>A Solid Queue job spawns the executor as a one-off container per deploy on the host daemon and supervises it; <strong>persist structured progress to the Deployment row</strong> (phase + status), not just streamed stdout; final status from the executor's exit, not the web job.</li>
+    <li>Inject secrets at spawn (env or <a href="16-secretless-deploys.html">vault-resolved</a>); delete the DB→<code>.kamal/secrets</code> rebuild path. Make each phase check-then-act so a crashed deploy is safely re-runnable. Self-deploy needs no reconciler.</li>
+    <li>Retire <code>SelfDeployReconciler</code> (or keep as belt-and-suspenders); migrate the Docker + Native deployers onto the same runner boundary.</li>
   </ol>
 
   <h2>Acceptance criteria</h2>
@@ -73,6 +83,7 @@
     <li>A self-deploy completes and records success <strong>without</strong> a reconciler — the executor survives the web container's restart.</li>
     <li>No deploy rebuilds <code>.kamal/secrets</code> from the DB; secrets are injected at spawn (or vault-resolved) and never persisted.</li>
     <li>Each deploy runs in a fresh, stateless executor; no accumulated SSH/workspace state in the web container.</li>
+    <li>A crashed executor doesn't strand a deploy: its lease expires and the deploy is reclaimable/retryable, and status reflects DB-persisted progress (not lost stdout).</li>
   </ul></div>
 
   <h2>Dependencies &amp; related</h2>
