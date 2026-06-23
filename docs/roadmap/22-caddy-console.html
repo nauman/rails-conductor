@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caddy management console + per-app multi-subdomain · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p1:#8a6a1f;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Caddy management console + per-app multi-subdomain</h1>
+  <p class="sub">A full Caddy surface in Conductor: see and edit every route and cert across the fleet, and give an app its <strong>own per-app Caddy API access</strong> so it can register/retire <strong>subdomains on the fly</strong> (e.g. calm.page handing out tenant subdomains via JSON).</p>
+  <div class="badges">
+    <span class="badge">Pillar: Routing &amp; edge</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p><code>CaddyClient</code> can upsert/remove a single route, but there's no <strong>console</strong> — no place to see all routes, certs, and reachability across servers, or to diff the live config against what Conductor expects. And there's no <strong>per-app</strong> path: an app like calm.page that needs to mint subdomains at runtime has no scoped, safe way to drive Caddy itself. <a href="18-per-app-proxy-mode.html">Slot 18</a> picks the proxy <em>mode</em> at deploy; this is the ongoing <em>management</em> + dynamic-routing surface.</p>
+  <h2>Current state</h2>
+  <p><code>CaddyClient</code> (Admin API on :2019) does route CRUD over SSH; <code>conductor_domain</code> (add/remove) is the MCP tool. Routes aren't modelled/persisted in Conductor, there's no cert/drift view, and there's no per-app credential to let an app call Caddy in a bounded way.</p>
+  <h2>Proposed design</h2>
+  <p><strong>Console:</strong> a <code>Route</code> model synced from each server's live Caddy config, a fleet routing view (domain → app/upstream, cert status, last-seen), and drift detection (live config vs expected) with one-click reconcile. <strong>Per-app Caddy API:</strong> issue an app a <em>scoped</em> routing credential + a narrow Conductor-mediated endpoint, so the app POSTs a JSON payload (<code>{subdomain, upstream}</code>) and Conductor upserts the Caddy route on its behalf — the app never touches the raw Admin API, every change is org-scoped and audited. Wildcard-cert aware for <code>*.app.com</code> tenant subdomains.</p>
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><code>Route</code> model + sync from live Caddy; fleet routing console (domains, upstreams, cert status) with drift detection + reconcile.</li>
+    <li>Per-app routing credential (scoped) + a Conductor-mediated <code>POST /apps/:id/subdomains</code> (JSON) that upserts a Caddy route, org-scoped + audited.</li>
+    <li>Multi-subdomain UX: list/add/remove an app's subdomains; wildcard-cert handling for <code>*.domain</code>.</li>
+    <li>MCP parity: <code>conductor_domain</code> gains subdomain + console actions; agents manage routing the same way the app does.</li>
+  </ol>
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>One console shows every Caddy route + cert across the fleet, flags drift, and reconciles with one click.</li>
+    <li>An app (e.g. calm.page) registers/retires a subdomain by POSTing a JSON payload to its scoped endpoint, and it routes immediately — without touching the raw Admin API.</li>
+    <li>Every subdomain change is org-scoped, audited, and visible in the console; revoking the app's credential stops it.</li>
+  </ul></div>
+  <h2>Dependencies &amp; related</h2>
+  <p>Extends <code>CaddyClient</code> + the <a href="18-per-app-proxy-mode.html">per-app proxy mode</a> (caddy mode is the prerequisite). Cert/wildcard work touches <a href="domains-dns.html">domains &amp; DNS</a>. Core of the Routing &amp; edge pillar.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-23</footer>
+</div></body></html>

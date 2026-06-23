@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backup restore + verification (R2) · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p0:#a8443c;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p0{background:#f7efee;color:var(--p0);border-color:#eccaca}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Backup restore + verification (R2)</h1>
+  <p class="sub">Close the loop on backups: <strong>restore</strong> a Postgres backup from R2 into a target database, and <strong>verify</strong> backups are actually restorable — a backup you can't restore isn't a backup.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Data &amp; backups</span>
+    <span class="badge p0">Priority: P0</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Conductor creates and schedules <code>pg_dump</code> backups to R2, but there is <strong>no restore path</strong> and no verification — so backups are untested and recovery means manual <code>pg_restore</code> gymnastics under pressure. This is the single riskiest gap in the Data pillar.</p>
+  <h2>Current state</h2>
+  <p>Backup creation + scheduling to R2 works (<code>docs/plans/backups-r2.md</code>, <code>postgres-restore.md</code> notes the restore flow doesn't exist). Postgres clusters + per-app databases are provisioned via <code>PostgresClusterClient</code>. No restore, no verify, no PITR.</p>
+  <h2>Proposed design</h2>
+  <p>A guarded restore service: pull a chosen backup from R2 → restore into a target (a fresh database, a scratch verify DB, or — with explicit confirmation — an existing one). <strong>Verification</strong> runs restores into a throwaway DB on a schedule and records pass/fail, so every backup has a "last verified" state. Destructive restores are gated (confirm + audit) and exposed as a deliberate MCP tool, not arbitrary shell.</p>
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><code>BackupRestore</code> service: fetch from R2 → <code>pg_restore</code> into a fresh/scratch database, streamed log (like deploys).</li>
+    <li>Verification job: scheduled restore-into-throwaway-DB per backup; record "last verified" + size/row sanity checks.</li>
+    <li>UI: per-backup Restore + Verify actions, restore history, and a red/green "restorable" badge.</li>
+    <li>Gated restore-into-existing (confirm + audit) + MCP <code>conductor_backup</code> tool (restore/verify, allow-listed, never arbitrary).</li>
+  </ol>
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>An operator can restore any R2 backup into a fresh database from UI and MCP, watching streamed output.</li>
+    <li>Scheduled verification marks each backup restorable / not, surfaced as a badge + alert on failure.</li>
+    <li>Restoring over an existing database requires explicit confirmation and is audited.</li>
+  </ul></div>
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on the Postgres cluster lifecycle + <a href="19-r2-integration.html">R2 integration</a> (the backup store). Failure surfacing feeds <a href="12-alerts.html">alerts</a> and Continuous maintenance.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-23</footer>
+</div></body></html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS SES + SNS messaging (email + SMS) · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p1:#8a6a1f;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>AWS SES + SNS messaging (email + SMS)</h1>
+  <p class="sub">One place to monitor and manage transactional <strong>email (SES)</strong> and <strong>SMS (SNS)</strong> for the fleet — sending health, reputation, identities — from UI and over MCP.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Provider automation</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Apps send mail through SES (SMTP creds injected at deploy), but Conductor has no visibility into <em>deliverability</em> — bounce/complaint rates, reputation, verified identities — and no way to manage them. And there's no SMS path at all. Email/SMS health is operational state the control plane should own.</p>
+  <h2>Current state</h2>
+  <p>SES SMTP send works (credentials via env/vault). No SES API client, no stats, no identity management, no SNS. <strong>Note: SES is email-only — SMS is AWS SNS (or Pinpoint), a separate service.</strong></p>
+  <h2>Proposed design</h2>
+  <p>An AWS client (SES + SNS) using IAM creds from the secret source. <strong>Monitor:</strong> SES sending stats (sends, bounces, complaints, reputation), verified identities/domains; SNS delivery + spend. <strong>Manage:</strong> verify identities, manage config sets, send test email/SMS, SNS topics. UI panel + MCP <code>conductor_messaging</code> tool. Alerts when bounce/complaint rates cross thresholds (feeds Continuous maintenance).</p>
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li>AWS client + credentials (IAM via secret source); SES monitor: sending stats, bounce/complaint, identities.</li>
+    <li>SES manage: verify domain/email identities, config sets, send test.</li>
+    <li>SNS (SMS): send, delivery status, spend monitor — clearly separate from SES.</li>
+    <li>MCP <code>conductor_messaging</code> tool + threshold alerts on reputation/bounce rate.</li>
+  </ol>
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>From UI and MCP, an operator sees SES sending health (bounce/complaint/reputation) and verified identities.</li>
+    <li>SMS can be sent via SNS with delivery + spend visible; the SES/SNS distinction is explicit in the UI.</li>
+    <li>An alert fires when bounce or complaint rate crosses a configured threshold.</li>
+  </ul></div>
+  <h2>Dependencies &amp; related</h2>
+  <p>Credentials via <a href="16-secretless-deploys.html">the secret source</a>; alerts feed <a href="12-alerts.html">alerts &amp; notifications</a>. Part of the <em>Connected Services</em> hub.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-23</footer>
+</div></body></html>

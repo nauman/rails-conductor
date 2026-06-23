@@ -47,6 +47,10 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Secretless deploys (vault-resolved secrets)](16-secretless-deploys.html) | Agent-native | P1 | M | Planned |
 | [Reactive statuses everywhere (Turbo Streams)](17-reactive-statuses.html) | Fleet Control | P1 | M | 🔄 In progress (slice 1 done 2026-06-22) |
 | [Per-app proxy mode (Caddy or kamal-proxy)](18-per-app-proxy-mode.html) | Routing & edge | P1 | M | Planned |
+| [Cloudflare R2 integration](19-r2-integration.html) | Provider Automation | P1 | M | Planned |
+| [AWS SES + SNS messaging (email + SMS)](20-ses-sns-messaging.html) | Provider Automation | P1 | M | Planned |
+| [Backup restore + verification (R2)](21-backup-restore.html) | Data & Backups | P0 | M | Planned |
+| [Caddy management console + per-app multi-subdomain](22-caddy-console.html) | Routing & edge | P1 | M | Planned |
 
 ## Critical path
 

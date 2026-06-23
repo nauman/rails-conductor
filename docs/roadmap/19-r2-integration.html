@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare R2 integration · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p0:#a8443c;--p1:#8a6a1f;--p2:#c79a4a;--p3:#2c7a4d;--done:#2c7a4d;--progress:#3a4f7a;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Cloudflare R2 integration</h1>
+  <p class="sub">Monitor and manage R2 object storage from Conductor — buckets, usage, and credentials — so app storage and backups have one home in the control plane, from UI and over MCP.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Provider automation</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Planned</span>
+  </div>
+</header>
+<div class="card">
+  <h2>Problem</h2>
+  <p>Apps use R2 for Active Storage and backups, but Conductor has no R2 surface — buckets are created and credentialed by hand in the Cloudflare dashboard, with no visibility into usage or which app owns which bucket. The control plane should own this like it owns servers and databases.</p>
+  <h2>Current state</h2>
+  <p>Backups can target R2 (<code>docs/plans/backups-r2.md</code>) and R2 is named across the vision, but there's no R2 client, no bucket model, and no UI/MCP tool. Credentials live in env/vault, not managed by Conductor.</p>
+  <h2>Proposed design</h2>
+  <p>An <code>R2Client</code> over the Cloudflare R2 / S3-compatible API, an <code>R2Bucket</code> model linked to org (and optionally app), a UI panel (buckets, size, object count, last activity), and MCP tools (<code>conductor_storage</code>: list / create / credentials / lifecycle). Credentials resolved via the secret source (vault), never persisted plaintext — consistent with secretless deploys.</p>
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><code>R2Client</code> + <code>R2Bucket</code> model (org/app-scoped); store the account + access keys as managed credentials.</li>
+    <li>Monitor: UI panel + a read tool — buckets, usage/size, per-app ownership.</li>
+    <li>Manage: create bucket, issue/rotate scoped credentials, set lifecycle rules; MCP <code>conductor_storage</code> tool.</li>
+    <li>Wire app Active Storage + the backup target to a managed bucket (one-click "give this app R2 storage").</li>
+  </ol>
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>From UI and MCP, an operator sees all R2 buckets with usage and can create one + scoped credentials.</li>
+    <li>An app can be pointed at a managed bucket for storage/backups without leaving Conductor.</li>
+    <li>R2 credentials are resolved from the secret source, never stored plaintext.</li>
+  </ul></div>
+  <h2>Dependencies &amp; related</h2>
+  <p>Pairs with <a href="21-backup-restore.html">backup restore</a> (R2 is the backup store) and the secret source from <a href="16-secretless-deploys.html">secretless deploys</a>. First of the <em>Connected Services</em> hub in <code>VISION.md</code>.</p>
+</div>
+<footer>Conductor roadmap · 2026-06-23</footer>
+</div></body></html>
