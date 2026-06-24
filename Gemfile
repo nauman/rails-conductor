@@ -27,7 +27,7 @@ gem "passwordless", "~> 1.0"
 gem "ruby_llm", "~> 1.3"
 
 # SSH connectivity
-gem "net-ssh", "~> 7.2"
+gem "net-ssh", "~> 7.3"
 gem "ed25519", "~> 1.3"        # Ed25519 key support
 gem "bcrypt_pbkdf", "~> 1.1"   # OpenSSH key format support
 
