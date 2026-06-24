@@ -205,7 +205,9 @@ GEM
     mini_magick (5.3.1)
       logger
     mini_mime (1.1.5)
-    minitest (5.27.0)
+    minitest (6.0.6)
+      drb (~> 2.0)
+      prism (~> 1.5)
     msgpack (1.8.0)
     multipart-post (2.4.1)
     net-http (0.9.1)
@@ -433,7 +435,7 @@ DEPENDENCIES
   kramdown-parser-gfm
   letter_opener
   letter_opener_web
-  minitest (~> 5.27)
+  minitest (~> 6.0)
   net-ssh (~> 7.2)
   passwordless (~> 1.0)
   pg (~> 1.5)
