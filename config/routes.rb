@@ -5,6 +5,10 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Public build-info: the running release's git sha (KAMAL_VERSION), for
+  # externally verifying deploys against origin/main HEAD.
+  get "version" => "version#show", as: :version
+
   # API for CLI and external integrations
   namespace :api do
     namespace :v1 do
