@@ -1,0 +1,94 @@
+name: Deploy Conductor
+
+# Conductor (the backbone) deploys itself via CI — a clean control machine — NOT
+# via in-product self-deploy. This sidesteps the self-deploy inversion entirely:
+# no self-kill, no stranded kamal locks, no rebuilding secrets from the DB.
+#
+# ── One-time setup (GitHub → Settings → Secrets and variables → Actions) ──
+# Repository VARIABLES:
+#   DEPLOY_SERVER_IP   e.g. 135.181.114.59
+#   DEPLOY_SSH_USER    e.g. deploy
+#   APP_HOST           conductor.pavelabs.io
+# Repository SECRETS:
+#   SSH_PRIVATE_KEY    private key authorized on the box (deploy user)
+#   RAILS_MASTER_KEY   contents of config/master.key
+#   DATABASE_PASSWORD
+#   ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
+#   ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY
+#   ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
+#   SES_SMTP_USERNAME
+#   SES_SMTP_PASSWORD
+#   SENTRY_DSN                (may be blank)
+#   CONDUCTOR_MCP_TOKEN
+# (Registry auth uses the built-in GITHUB_TOKEN — no PAT needed; GHCR is same-owner.)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two production deploys at once (this is what prevents lock contention).
+concurrency:
+  group: deploy-conductor-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Don't deploy from forks.
+    if: github.repository == 'nauman/rails-conductor'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push the image to ghcr.io/<owner>/conductor via GITHUB_TOKEN
+    env:
+      DEPLOY_SERVER_IP: ${{ vars.DEPLOY_SERVER_IP }}
+      DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+      APP_HOST: ${{ vars.APP_HOST }}
+      KAMAL_REGISTRY_SERVER: ghcr.io
+      KAMAL_REGISTRY_USERNAME: ${{ github.actor }}
+      KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+      ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: ${{ secrets.ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY }}
+      ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY: ${{ secrets.ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY }}
+      ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: ${{ secrets.ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT }}
+      SES_SMTP_USERNAME: ${{ secrets.SES_SMTP_USERNAME }}
+      SES_SMTP_PASSWORD: ${{ secrets.SES_SMTP_PASSWORD }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      CONDUCTOR_MCP_TOKEN: ${{ secrets.CONDUCTOR_MCP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The committed .kamal/secrets reads RAILS_MASTER_KEY via `$(cat config/master.key)`,
+      # which is gitignored — materialize it from the secret.
+      - name: Materialize master key
+        run: |
+          install -m 600 /dev/null config/master.key
+          printf '%s' "$RAILS_MASTER_KEY" > config/master.key
+
+      - name: Set up SSH to the deploy host
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_SERVER_IP" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: kamal deploy
+        run: bin/kamal deploy
+
+      - name: Verify /version
+        run: |
+          sleep 10
+          for i in $(seq 1 20); do
+            v=$(curl -s --max-time 10 "https://$APP_HOST/version" | grep -o "${GITHUB_SHA:0:7}" || true)
+            if [ -n "$v" ]; then echo "✅ /version reports $v — deploy live"; exit 0; fi
+            sleep 10
+          done
+          echo "::warning::/version did not report ${GITHUB_SHA:0:7} within ~3.5min"
