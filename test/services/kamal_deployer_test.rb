@@ -207,6 +207,53 @@ class KamalDeployerTest < ActiveSupport::TestCase
     refute_match(/POSTGRES_PASSWORD/, @deployment.log.to_s)
   end
 
+  # Shell where the FIRST `kamal deploy` fails with a stale-lock error, `kamal lock
+  # release` succeeds, and the SECOND `kamal deploy` succeeds. All other commands ok.
+  class LockedThenOkShell
+    attr_reader :commands
+    def initialize
+      @commands = []
+      @deploys = 0
+    end
+
+    def run(*command, chdir: nil, env: {})
+      script = command.last.to_s
+      @commands << script
+      yield "…output…" if block_given?
+      if script.end_with?("kamal deploy")
+        @deploys += 1
+        if @deploys == 1
+          yield "ERROR (Kamal::Cli::LockError): Deploy lock found" if block_given?
+          return LocalShell::Result.new(success: false, exit_code: 1, output: "Deploy lock found")
+        end
+      end
+      LocalShell::Result.new(success: true, exit_code: 0, output: "out")
+    end
+  end
+
+  test "self-deploy auto-releases a stale kamal lock and retries" do
+    @app.update!(self_managed: true)
+    @app.env_variables.create!(key: "KAMAL_REGISTRY_PASSWORD", value: "rpw")
+    shell = LockedThenOkShell.new
+
+    with_env("RAILS_MASTER_KEY" => "k") do
+      KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+    end
+
+    assert_equal "succeeded", @deployment.reload.status, "should recover after releasing the lock"
+    assert shell.commands.any? { |c| c.end_with?("lock release") }, "expected a kamal lock release"
+    assert_equal 2, shell.commands.count { |c| c.end_with?("kamal deploy") }, "expected deploy retried once"
+    assert_match(/Stale kamal deploy lock/i, @deployment.log.to_s)
+  end
+
+  test "a non-self-managed deploy does NOT auto-release a lock (no stomping concurrent deploys)" do
+    shell = LockedThenOkShell.new # @app is not self_managed
+    deploy_with(shell)
+
+    assert_equal "failed", @deployment.reload.status
+    refute shell.commands.any? { |c| c.end_with?("lock release") }, "must not release locks for non-self apps"
+  end
+
   test "a self-managed deploy logs the replace-and-reconcile note" do
     @app.update!(self_managed: true)
     deploy_with(FakeShell.new(success: true))

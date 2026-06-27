@@ -49,7 +49,7 @@ class KamalDeployer
     write_secrets_file
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
-    return false unless run_step("kamal deploy", kamal_command, chdir: checkout_dir, env: deploy_env)
+    return false unless run_kamal_deploy
 
     deployment.succeed!
     log "Kamal deployment completed successfully!"
@@ -236,10 +236,38 @@ class KamalDeployer
     path
   end
 
+  # Runs `kamal deploy`, recovering from a stale deploy lock. A self-managed deploy
+  # that was killed mid-swap (kamal stops THIS container) never releases its lock,
+  # so the next deploy fails with "Deploy lock found". For a self-managed app that's
+  # a lock stranded by our own prior run — release it and retry once. (Scoped to
+  # self-managed so we never stomp a genuinely-concurrent deploy of another app.)
+  def run_kamal_deploy
+    log "Running: kamal deploy"
+    result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    return true if result.success?
+
+    if app.self_managed? && result.output.to_s.include?("Deploy lock found")
+      log "Stale kamal deploy lock detected (a prior self-deploy was killed mid-swap). Releasing and retrying once."
+      @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      return true if result.success?
+    end
+
+    fail_with("kamal deploy failed (exit #{result.exit_code})")
+    false
+  end
+
   # `kamal deploy` from the checkout; prefer the bundled binstub.
   def kamal_command
-    kamal = File.exist?(File.join(checkout_dir, "bin", "kamal")) ? "./bin/kamal" : "kamal"
-    ["bash", "-lc", "#{kamal} deploy"]
+    ["bash", "-lc", "#{kamal_bin} deploy"]
+  end
+
+  def kamal_lock_release_command
+    ["bash", "-lc", "#{kamal_bin} lock release"]
+  end
+
+  def kamal_bin
+    File.exist?(File.join(checkout_dir, "bin", "kamal")) ? "./bin/kamal" : "kamal"
   end
 
   # Conductor's env vars become Kamal's process env (deploy.yml ERB reads e.g.
