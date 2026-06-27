@@ -18,6 +18,17 @@ Partial
 
 Define the restore and verification model for Postgres so Conductor can move from backup creation to actual recovery confidence.
 
+## Progress
+
+- **Slice 1 landed (2026-06-24):** `DatabaseRestore` service (`app/services/database_restore.rb`)
+  — fetches a chosen R2/S3 object onto the target server over SSH, restores via
+  `gunzip -c … | psql <target>` (matching today's `pg_dump | gzip` dump format), cleans up
+  the temp artifact, and streams to `#log`. Stateless first pass: takes an explicit
+  `object_key` + `target_url` (a fresh/scratch DB); destructive replacement and the restore
+  run record are later slices. Tests: `test/services/database_restore_test.rb`.
+- **Next:** artifact key tracking on backup records (so the UI can pick "a backup"),
+  verification-into-throwaway-DB job, restore run record + audit, then UI + MCP.
+
 ## Why This Plan Exists
 
 `backups-r2.md` covers backup generation and storage. This plan covers the operationally harder half: downloading, restoring, verifying, and making restore actions safe enough for real use.

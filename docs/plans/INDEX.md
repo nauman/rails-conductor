@@ -19,7 +19,8 @@
 3. `docs/plans/cloudflare.md` + `docs/plans/domains-dns.md` + `docs/plans/provisioning-hetzner.md` + `docs/plans/server-bootstrap.md` — complete domain, DNS, server creation, and bootstrap automation
 4. `docs/plans/monitoring-ops.md` + `docs/plans/logs-observability.md` — deepen daily-use operational workflows
 5. `docs/plans/backups-r2.md` + `docs/plans/postgres-restore.md` + `docs/plans/data-layer.md` — complete restore, verification, and database operations
-6. `docs/plans/deployment-kamal.md` — revisit richer Docker backend support after routing and provider automation are in place
+6. `docs/plans/deploy-executor.md` — isolate the deploy executor from the web container (roadmap slot 23); foundation for robust self-hosted-Heroku deploys
+7. `docs/plans/deployment-kamal.md` — revisit richer Docker backend support after routing and provider automation are in place
 
 ## Implemented
 
@@ -36,6 +37,7 @@
 | File | Covers | Main Gap | Pillar |
 | --- | --- | --- | --- |
 | `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Recurring jobs now run; failure surfacing and queue tuning remain | Continuous maintenance |
+| `docs/plans/deploy-executor.md` | Short-lived isolated deploy executor + DB-persisted progress + deploy lease (roadmap slot 23) | Deploys still run in-process in the web container; executor/lease/persisted-progress not extracted | Runtime backends |
 | `docs/plans/caddy-client.md` | Caddy Admin API service boundary and failure model | Baseline SSH-backed client exists; route persistence, richer validation, and cert/drift workflows remain | Routing and edge |
 | `docs/plans/backups-r2.md` | `pg_dump` to R2 with scheduling | Restore, verification, PITR | Data and backups |
 | `docs/plans/cloudflare.md` | Cloudflare DNS and R2 credentials/setup | Actual API calls and validation | Provisioning and provider automation |
@@ -44,7 +46,7 @@
 | `docs/plans/server-bootstrap.md` | Post-creation host bootstrap workflow | No end-to-end bootstrap automation | Provisioning and provider automation |
 | `docs/plans/ssh-keys.md` | SSH key storage and management | Hetzner key registration | Provisioning and provider automation |
 | `docs/plans/logs-observability.md` | Centralized log access | Storage, filters, analytics | Continuous maintenance |
-| `docs/plans/postgres-restore.md` | Restore flow, verification, and safety model | Restore workflow does not exist | Data and backups |
+| `docs/plans/postgres-restore.md` | Restore flow, verification, and safety model | Slice 1 (`DatabaseRestore` fetch+restore over SSH) landed 2026-06-24; artifact tracking, verification, run record, UI/MCP remain | Data and backups |
 | `docs/plans/sc-001-kamal-monitoring.md` | Monitoring dashboard for Docker apps | Dashboard widgets and scheduling | Fleet control |
 | `docs/plans/multi-tenancy.md` | Orgs, scoping, invitations, admin, billing | Invitations, admin, API scoping, billing remain | Cross-cutting (Tenancy) |
 | `docs/plans/onboarding.md` | First-run org naming + empty-state guidance | Building now | Cross-cutting (Tenancy) |
