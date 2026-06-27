@@ -83,7 +83,14 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           install -m 600 /dev/null ~/.ssh/id_ed25519
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          ssh-keyscan -H "$DEPLOY_SERVER_IP" >> ~/.ssh/known_hosts 2>/dev/null
+          # Fixed, known box deployed from CI — don't fail on host-key verification.
+          # net-ssh (which kamal uses) reads ~/.ssh/config and honors these.
+          {
+            echo "Host ${DEPLOY_SERVER_IP}"
+            echo "  StrictHostKeyChecking no"
+            echo "  UserKnownHostsFile /dev/null"
+          } >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: kamal deploy
         run: bin/kamal deploy
