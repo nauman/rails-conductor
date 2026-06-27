@@ -45,8 +45,13 @@ jobs:
       DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
       APP_HOST: ${{ vars.APP_HOST }}
       KAMAL_REGISTRY_SERVER: ghcr.io
-      KAMAL_REGISTRY_USERNAME: ${{ github.actor }}
-      KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      # Owner of the ghcr.io/nauman/conductor package. Using a token that owns the
+      # package (KAMAL_REGISTRY_PASSWORD secret) rather than the Actions GITHUB_TOKEN,
+      # which 403s on a package created out-of-band. Long-term: link the package to
+      # this repo (Package → Manage Actions access) and revert to GITHUB_TOKEN, or
+      # use a dedicated write:packages classic PAT.
+      KAMAL_REGISTRY_USERNAME: nauman
+      KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD }}
       RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
       DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
       ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: ${{ secrets.ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY }}
