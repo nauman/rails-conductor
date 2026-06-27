@@ -78,22 +78,20 @@ jobs:
           install -m 600 /dev/null config/master.key
           printf '%s' "$RAILS_MASTER_KEY" > config/master.key
 
-      - name: Set up SSH to the deploy host
+      - name: kamal deploy
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          install -m 600 /dev/null ~/.ssh/id_ed25519
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          # Fixed, known box deployed from CI — don't fail on host-key verification.
-          # net-ssh (which kamal uses) reads ~/.ssh/config and honors these.
-          {
-            echo "Host ${DEPLOY_SERVER_IP}"
-            echo "  StrictHostKeyChecking no"
-            echo "  UserKnownHostsFile /dev/null"
-          } >> ~/.ssh/config
+          # Fixed, known box — don't fail host-key verification (net-ssh reads this).
+          { echo "Host ${DEPLOY_SERVER_IP}"; echo "  StrictHostKeyChecking no"; echo "  UserKnownHostsFile /dev/null"; } >> ~/.ssh/config
           chmod 600 ~/.ssh/config
-
-      - name: kamal deploy
-        run: bin/kamal deploy
+          # Load the key into an agent IN THIS SHELL so kamal's net-ssh uses it
+          # (passed via env + stdin — avoids interpolation/file-fidelity issues).
+          eval "$(ssh-agent -s)"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | ssh-add -
+          ssh-add -l
+          bin/kamal deploy
 
       - name: Verify /version
         run: |
