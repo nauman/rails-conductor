@@ -35,7 +35,7 @@ _Proof: `conductor.pavelabs.io` + `kuickr.co` + `wiseherds.com` live on the shar
 | Area | Gap |
 |---|---|
 | **Architecture** | deploy-executor rework — *now slot 23* (isolate kamal from the web container) |
-| **Runtime backends** | runtime-agnostic dev commands (Heroku-DX: console/exec/run-task as one button across kamal *and* native) — slots 09 + 11 |
+| **Runtime backends** | runtime-agnostic dev commands (Heroku-DX: console/exec/run-task as one button across kamal *and* native) — slots 09 + 11; **migration lifecycle — status/pending/drift detection + gated run + failure remediation — slot 24 (caused 2 prod 500s); seed idempotency — slot 08** |
 | **Routing & edge** | wildcard certs, DNS-driven routing, cert/drift reconcile workflows |
 | **Provider automation** | Cloudflare DNS CRUD; Hetzner VM create (deferred); deeper R2/SES management |
 | **Data & backups** | PITR; scheduled restore-verification (partly slot 21) |
