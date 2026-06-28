@@ -28,10 +28,21 @@ class DeployAppTool
     app = find_app(input)
     return Result.fail("App not found. Provide app_id or app_name.") unless app
     return Result.fail("App '#{app.name}' is not deployable (needs a server with SSH + a repository).") unless app.deployable?
-    return Result.fail("A deployment is already in progress for #{app.name}.") if app.deployments.in_progress.any?
 
-    deployment = app.deployments.create!(user: @user)
-    DeployAppJob.perform_later(deployment.id)
+    # Single-flight: a duplicate trigger (rapid double-fire from chat, or MCP + the
+    # UI button) returns the in-flight deployment as already_running rather than
+    # starting a second kamal deploy. The DB invariant guarantees exactly one.
+    deployment, already_running = app.start_deployment!(user: @user)
+
+    if already_running
+      return Result.ok({
+        deployment_id: deployment&.id,
+        app:           app.name,
+        status:        'already_running',
+        message:       "A deployment is already in progress for #{app.name}. Deployment ID: #{deployment&.id}.",
+        _organization: app.organization || app.server.organization
+      })
+    end
 
     Result.ok({
       deployment_id: deployment.id,

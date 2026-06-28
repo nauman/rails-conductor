@@ -236,18 +236,22 @@ class KamalDeployer
     path
   end
 
-  # Runs `kamal deploy`, recovering from a stale deploy lock. A self-managed deploy
-  # that was killed mid-swap (kamal stops THIS container) never releases its lock,
-  # so the next deploy fails with "Deploy lock found". For a self-managed app that's
-  # a lock stranded by our own prior run — release it and retry once. (Scoped to
-  # self-managed so we never stomp a genuinely-concurrent deploy of another app.)
+  # Runs `kamal deploy`, recovering from a stale deploy lock. Kamal takes a global
+  # per-service "Automatic deploy lock" and releases it in an ensure; a process
+  # killed mid-run (e.g. a self-deploy where kamal stops THIS container) never
+  # releases it, so the next deploy fails with "Deploy lock found".
+  #
+  # The unique partial index idx_one_active_deploy_per_app guarantees at most one
+  # in-flight deployment per app, so a "Deploy lock found" here is ALWAYS a stale
+  # lock from a prior killed run — never a genuinely-concurrent deploy. That makes
+  # it safe to release-and-retry for every app (no longer scoped to self-managed).
   def run_kamal_deploy
     log "Running: kamal deploy"
     result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
-    if app.self_managed? && result.output.to_s.include?("Deploy lock found")
-      log "Stale kamal deploy lock detected (a prior self-deploy was killed mid-swap). Releasing and retrying once."
+    if result.output.to_s.include?("Deploy lock found")
+      log "Stale kamal deploy lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
       @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
       result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
       return true if result.success?

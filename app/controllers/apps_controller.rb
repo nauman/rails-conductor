@@ -49,12 +49,10 @@ class AppsController < ApplicationController
       return redirect_to @app, alert: "App is not deployable. Configure server and repository first."
     end
 
-    if @app.deployments.in_progress.any?
+    _deployment, already_running = @app.start_deployment!(user: current_user)
+    if already_running
       return redirect_to @app, alert: "A deployment is already in progress."
     end
-
-    deployment = @app.deployments.create!(user: current_user)
-    DeployAppJob.perform_later(deployment.id)
 
     redirect_to @app, notice: "Deployment started. Check logs for progress."
   end

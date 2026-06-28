@@ -93,6 +93,26 @@ class App < ApplicationRecord
     deployments.order(created_at: :desc).first
   end
 
+  # Single-flight deploy starter shared by every trigger path (MCP, UI, webhook).
+  # Guarantees at most one in-flight deployment per app: the unique partial index
+  # idx_one_active_deploy_per_app is the real invariant; this returns the existing
+  # in-flight deployment instead of racing a second `kamal deploy`. Enqueues the
+  # job only for a freshly-created deployment.
+  #
+  # Returns [deployment, already_running] — already_running is true when a deploy
+  # was already in flight (so callers can report "already_running" / debounce).
+  def start_deployment!(user: nil)
+    existing = deployments.in_progress.order(created_at: :desc).first
+    return [existing, true] if existing
+
+    deployment = deployments.create!(user: user)
+    DeployAppJob.perform_later(deployment.id)
+    [deployment, false]
+  rescue ActiveRecord::RecordNotUnique
+    # Lost the race: a concurrent trigger created the in-flight deployment first.
+    [deployments.in_progress.order(created_at: :desc).first, true]
+  end
+
   def docker?
     deploy_method == "docker"
   end

@@ -246,12 +246,15 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_match(/Stale kamal deploy lock/i, @deployment.log.to_s)
   end
 
-  test "a non-self-managed deploy does NOT auto-release a lock (no stomping concurrent deploys)" do
+  test "a non-self-managed deploy ALSO auto-releases a stale lock (DB invariant makes it safe)" do
+    # The unique partial index guarantees one in-flight deploy per app, so a
+    # "Deploy lock found" is always stale — safe to release-and-retry for any app.
     shell = LockedThenOkShell.new # @app is not self_managed
     deploy_with(shell)
 
-    assert_equal "failed", @deployment.reload.status
-    refute shell.commands.any? { |c| c.end_with?("lock release") }, "must not release locks for non-self apps"
+    assert_equal "succeeded", @deployment.reload.status, "should recover after releasing the stale lock"
+    assert shell.commands.any? { |c| c.end_with?("lock release") }, "expected a kamal lock release"
+    assert_equal 2, shell.commands.count { |c| c.end_with?("kamal deploy") }, "expected deploy retried once"
   end
 
   test "a self-managed deploy logs the replace-and-reconcile note" do

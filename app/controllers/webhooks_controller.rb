@@ -15,10 +15,9 @@ class WebhooksController < ActionController::Base
 
     head(:ok) and return unless app.auto_deploy?
     head(:ok) and return unless ref_matches_branch?(app)
-    head(:ok) and return if app.deployments.in_progress.any? # debounce
+    _deployment, already_running = app.start_deployment!
+    head(:ok) and return if already_running # debounce
 
-    deployment = app.deployments.create!
-    DeployAppJob.perform_later(deployment.id)
     head :accepted
   end
 
