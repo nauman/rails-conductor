@@ -58,6 +58,14 @@
     </div>
   </div>
 
+  <%# Tail the log: jump to the latest line on load so you don't scroll a long log. %>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      var c = document.getElementById("deploy-log-container");
+      if (c) c.scrollTop = c.scrollHeight;
+    });
+  </script>
+
   <% if @deployment.in_progress? %>
     <script>
     (function() {

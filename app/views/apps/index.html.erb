@@ -15,6 +15,7 @@
   <% if @apps.any? %>
     <div class="mt-6 grid gap-4 lg:grid-cols-2">
       <% @apps.each do |app| %>
+        <%= turbo_stream_from app %>
         <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
           <div class="flex items-center justify-between">
             <div>
@@ -27,7 +28,7 @@
                 <% end %>
               </div>
             </div>
-            <span class="<%= status_badge(app.status) %>"><%= app.status %></span>
+            <%= render "apps/status_badge", app: app %>
           </div>
           <div class="mt-4 grid grid-cols-3 gap-3 text-xs text-muted">
             <div class="rounded-lg bg-fill p-3">
