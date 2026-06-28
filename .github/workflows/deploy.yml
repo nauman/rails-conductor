@@ -92,6 +92,13 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" | ssh-add -
           ssh-add -l
           bin/kamal deploy
+          # Explicit, gated migration. The image entrypoint also runs db:prepare on
+          # boot, but running it here makes migrations a visible, fail-loud step —
+          # a failed migration fails the deploy instead of leaving prod's DB lagging
+          # the code (recurring 500s). Idempotent: a no-op if already migrated.
+          echo "=== db:migrate (gated) ==="
+          bin/kamal app exec --reuse "bin/rails db:migrate"
+          bin/kamal app exec --reuse "bin/rails db:abort_if_pending_migrations"
 
       - name: Verify /version
         run: |
