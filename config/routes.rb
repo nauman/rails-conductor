@@ -109,6 +109,8 @@ Rails.application.routes.draw do
       post :refresh_metrics
       post :provision
       get :logs
+      get :health
+      post :install_packages
     end
     resources :cron_jobs, only: [:create, :update, :destroy] do
       collection { post :schedule_script }
@@ -121,6 +123,7 @@ Rails.application.routes.draw do
       post :stop
       post :restart
       get :logs
+      get :jobs
       post :sync_status
       post :provision_database
       post :generate_deploy_key

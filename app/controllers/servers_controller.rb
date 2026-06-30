@@ -1,7 +1,7 @@
 require "shellwords"
 
 class ServersController < ApplicationController
-  before_action :set_server, only: [:show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs]
+  before_action :set_server, only: [:show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key).order(created_at: :desc)
@@ -58,6 +58,42 @@ class ServersController < ApplicationController
     else
       redirect_to @server, alert: "Failed to refresh metrics: #{metrics_service.error}"
     end
+  end
+
+  # Deep health check (disk/memory/load/swap/failed-units/reboot) over SSH.
+  # Rendered into a lazy turbo-frame on the server page + JSON for refresh.
+  def health
+    @health = ServerHealth.new(@server).check
+
+    respond_to do |format|
+      format.html { render partial: "servers/health", locals: { server: @server, health: @health } }
+      format.json do
+        render json: {
+          status: @health.status,
+          error:  @health.error,
+          checks: @health.checks.map { |c| { key: c.key, label: c.label, status: c.status, detail: c.detail } }
+        }
+      end
+    end
+  end
+
+  # Install apt packages on this server (async — apt can be slow). Validation +
+  # the actual sudo apt-get run live in PackageInstaller; here we just mark the
+  # run "running" (drives the reactive panel) and enqueue it.
+  def install_packages
+    packages = PackageInstaller.parse_list(params[:packages])
+    if packages.empty?
+      return redirect_to @server, alert: "Enter one or more package names to install."
+    end
+
+    @server.update!(
+      last_package_install_status:   "running",
+      last_package_install_packages: packages.join(" ").first(255),
+      last_package_install_log:      nil,
+      last_package_install_at:       Time.current
+    )
+    InstallPackagesJob.perform_later(@server.id, packages)
+    redirect_to @server, notice: "Installing #{packages.join(', ')}… the result will appear below."
   end
 
   # Live tail of the host's logs over SSH. Defaults to the systemd journal

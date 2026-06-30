@@ -20,6 +20,20 @@ class Server < ApplicationRecord
   scope :recently_seen, -> { where("last_seen_at > ?", 5.minutes.ago) }
   scope :with_ssh, -> { where.not(ssh_key_id: nil).where.not(ip_address: [nil, ""]) }
 
+  # Package installs run async; push the result panel to the server page live.
+  after_update_commit :broadcast_package_install, if: :saved_change_to_last_package_install_at?
+
+  def package_install_running? = last_package_install_status == "running"
+
+  def broadcast_package_install
+    broadcast_replace_to(
+      self,
+      target:  ActionView::RecordIdentifier.dom_id(self, :package_install),
+      partial: "servers/package_install",
+      locals:  { server: self }
+    )
+  end
+
   def formatted_memory
     return "0 / 0 GB" if memory_total_mb.to_i.zero?
     "#{(memory_used_mb.to_f / 1024).round(1)} / #{(memory_total_mb.to_f / 1024).round} GB"

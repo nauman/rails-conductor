@@ -1,0 +1,37 @@
+<div id="<%= dom_id(server, :package_install) %>">
+  <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+    <h2 class="font-display text-lg text-ink">Install packages</h2>
+    <p class="mt-1 text-xs text-muted">
+      apt packages, space- or comma-separated. Runs <code class="font-mono">sudo apt-get install -y</code> on this server.
+    </p>
+
+    <%= form_with url: install_packages_server_path(server), method: :post, class: "mt-3 flex items-center gap-2" do %>
+      <%= text_field_tag :packages, "", placeholder: "htop ncdu jq",
+            disabled: server.package_install_running?,
+            class: "min-w-0 flex-1 rounded-lg border border-border px-3 py-1.5 text-sm font-mono disabled:opacity-50" %>
+      <%= submit_tag(server.package_install_running? ? "Installing…" : "Install",
+            disabled: server.package_install_running?,
+            class: "rounded-lg bg-primary-strong px-4 py-1.5 text-sm font-medium text-white hover:bg-primary disabled:opacity-60 cursor-pointer") %>
+    <% end %>
+
+    <% if server.last_package_install_at.present? %>
+      <% st = server.last_package_install_status %>
+      <% badge = { "succeeded" => "bg-primary-tint text-primary", "failed" => "bg-danger-tint text-danger-deep", "running" => "bg-warning-tint text-warning" }[st] || "bg-fill text-muted" %>
+      <div class="mt-4 border-t border-border pt-3">
+        <div class="flex items-center justify-between gap-3">
+          <span class="flex min-w-0 items-center gap-2">
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-label <%= badge %>"><%= st %></span>
+            <span class="truncate font-mono text-xs text-muted"><%= server.last_package_install_packages %></span>
+          </span>
+          <span class="shrink-0 text-xs text-muted"><%= time_ago_in_words(server.last_package_install_at) %> ago</span>
+        </div>
+        <% if server.last_package_install_log.present? %>
+          <details class="mt-2">
+            <summary class="cursor-pointer text-xs text-muted hover:text-ink">Output</summary>
+            <pre class="mt-2 max-h-72 overflow-y-auto rounded-lg bg-bg-alt p-3 text-xs text-faint font-mono whitespace-pre-wrap"><%= server.last_package_install_log %></pre>
+          </details>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

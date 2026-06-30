@@ -1,0 +1,33 @@
+<%# Lazy turbo-frame: loaded + re-checked via servers#health. %>
+<%= turbo_frame_tag dom_id(server, :health) do %>
+  <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+    <div class="flex items-center justify-between">
+      <h2 class="font-display text-lg text-ink">Server health</h2>
+      <div class="flex items-center gap-3">
+        <% rollup = { healthy: "text-success", degraded: "text-warning", critical: "text-danger", unknown: "text-muted" }[health.status] %>
+        <span class="text-xs font-semibold uppercase tracking-wide <%= rollup %>"><%= health.status %></span>
+        <%= link_to health_server_path(server), class: "text-xs font-medium text-muted hover:text-ink" do %>
+          Re-check
+        <% end %>
+      </div>
+    </div>
+
+    <% if health.ok? %>
+      <ul class="mt-3 divide-y divide-border">
+        <% health.checks.each do |c| %>
+          <% color = { ok: "text-success", warn: "text-warning", fail: "text-danger" }[c.status] %>
+          <li class="flex items-center justify-between py-2 text-sm">
+            <span class="flex items-center gap-2 text-body">
+              <span class="inline-block h-1.5 w-1.5 rounded-full <%= { ok: 'bg-success', warn: 'bg-warning', fail: 'bg-danger' }[c.status] %>"></span>
+              <%= c.label %>
+            </span>
+            <span class="font-mono text-xs <%= color %>"><%= c.detail %></span>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="mt-3 text-sm text-danger"><%= health.error %></p>
+      <p class="mt-1 text-xs text-muted">Check SSH connectivity, then re-check.</p>
+    <% end %>
+  </div>
+<% end %>

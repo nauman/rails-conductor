@@ -95,6 +95,17 @@
     <% end %>
   </div>
 
+  <%# Live updates for the async package install result. %>
+  <%= turbo_stream_from @server %>
+  <% if @server.ssh_configured? %>
+    <div class="mt-8 grid gap-4 md:grid-cols-2">
+      <%= turbo_frame_tag dom_id(@server, :health), src: health_server_path(@server), loading: :lazy do %>
+        <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Checking server health…</div>
+      <% end %>
+      <%= render "servers/package_install", server: @server %>
+    </div>
+  <% end %>
+
   <% if @server.apps.any? %>
     <div class="mt-8">
       <h2 class="font-display text-lg text-ink">Apps on this server</h2>
