@@ -64,7 +64,7 @@ jobs:
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       CONDUCTOR_MCP_TOKEN: ${{ secrets.CONDUCTOR_MCP_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ruby/setup-ruby@v1
         with:
