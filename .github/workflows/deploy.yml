@@ -25,6 +25,10 @@ name: Deploy Conductor
 on:
   push:
     branches: [main]
+    # Docs/markdown-only changes don't ship code — skip the full rebuild + deploy.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
 
 # Never run two production deploys at once (this is what prevents lock contention).

@@ -53,6 +53,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Caddy management console + per-app multi-subdomain](22-caddy-console.html) | Routing & edge | P1 | M | Planned |
 | [Deploy-executor rework (isolate kamal from the web container)](23-deploy-executor.html) | Runtime Backends | P1 | L | Planned · **architecture** |
 | [Migration lifecycle: status, pending/drift detection, gated run, failure remediation](24-migration-lifecycle.html) | Runtime Backends | **P0** | M | Planned · **caused 2 prod 500s** |
+| [Two-identity servers (root=automation, deploy=app ops) + server automation/upgrades as root](25-two-identity-servers.html) | Continuous Maintenance | P1 | M | Planned · **security split** |
 
 ## Critical path
 

@@ -39,7 +39,7 @@ _Proof: `conductor.pavelabs.io` + `kuickr.co` + `wiseherds.com` live on the shar
 | **Routing & edge** | wildcard certs, DNS-driven routing, cert/drift reconcile workflows |
 | **Provider automation** | Cloudflare DNS CRUD; Hetzner VM create (deferred); deeper R2/SES management |
 | **Data & backups** | PITR; scheduled restore-verification (partly slot 21) |
-| **Continuous maintenance** | drift detection; centralized log storage/analytics; richer health checks |
+| **Continuous maintenance** | drift detection; centralized log storage/analytics; richer health checks; **two-identity servers (root=automation/upgrades, deploy=app ops) + server automation as root — slot 25** |
 | **Agent-native** | Conductor's own CLI (future); secretless is the trust capstone |
 | **Cross-cutting** | dark mode; deeper multi-host orchestration |
 
