@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -88,13 +88,9 @@ class AppsController < ApplicationController
     @tail = [ (params[:tail] || 300).to_i, 2000 ].min
     if @app.server.present? && @app.server.ssh_configured?
       ssh = SshConnection.new(@app.server)
-      command = if @app.native?
-        "journalctl --user -u #{@app.service_name} -n #{@tail} --no-pager"
-      else
-        "docker logs --tail #{@tail} #{@app.container_name}"
-      end
+      command = @app.log_tail_command(@tail)
       ssh.execute(command)
-      @logs = ssh.output || ssh.error
+      @logs = ssh.output.presence || ssh.error
     else
       @logs = "No server configured or SSH not available for this app."
     end
@@ -102,6 +98,24 @@ class AppsController < ApplicationController
     respond_to do |format|
       format.html
       format.json { render json: { logs: @logs, updated_at: Time.current.iso8601 } }
+    end
+  end
+
+  # Solid Queue (Rails default Active Job) health for this app, read straight
+  # from its queue DB. Serves a lazy turbo-frame badge (fleet rollup), a full
+  # page (deep view + link to mission_control-jobs), and JSON (refresh).
+  def jobs
+    @stats = SolidQueueStats.for(@app)
+
+    respond_to do |format|
+      format.html do
+        if turbo_frame_request_id == "app_jobs_#{@app.id}"
+          render partial: "apps/jobs_badge", locals: { app: @app, stats: @stats }
+        end
+      end
+      format.json do
+        render json: @stats.to_h.merge(workers_alive: @stats.workers_alive, healthy: @stats.healthy?)
+      end
     end
   end
 

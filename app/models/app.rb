@@ -143,6 +143,20 @@ class App < ApplicationRecord
     "conductor-#{slug}"
   end
 
+  # Command to tail this app's logs over an SSH exec. Native (Hatchbox-style) apps
+  # run as per-user systemd units named <slug>-server; over a non-login SSH exec
+  # `journalctl --user` can't reach the user journal without XDG_RUNTIME_DIR, and
+  # stderr would otherwise be dropped — set the runtime dir and fold stderr in so
+  # the UI shows the real tail (or the actual error) instead of a blank box.
+  def log_tail_command(tail = 300)
+    n = [tail.to_i, 1].max
+    if native?
+      "XDG_RUNTIME_DIR=/run/user/$(id -u) journalctl --user -u #{service_name} -n #{n} --no-pager 2>&1"
+    else
+      "docker logs --tail #{n} #{container_name} 2>&1"
+    end
+  end
+
   def env_hash
     env_variables.each_with_object({}) { |var, hash| hash[var.key] = var.value }
   end

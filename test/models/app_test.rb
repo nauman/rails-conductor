@@ -52,6 +52,24 @@ class AppTest < ActiveSupport::TestCase
     end
   end
 
+  test "log_tail_command for a native app reaches the user journal (XDG_RUNTIME_DIR) and folds stderr" do
+    @app.update!(deploy_method: "native")
+    cmd = @app.log_tail_command(150)
+
+    assert_includes cmd, "XDG_RUNTIME_DIR=/run/user/$(id -u)", "user journal needs the runtime dir over non-login ssh"
+    assert_includes cmd, "journalctl --user -u #{@app.service_name}"
+    assert_includes cmd, "-n 150"
+    assert_includes cmd, "2>&1", "stderr must be folded in so errors aren't invisible"
+  end
+
+  test "log_tail_command for a docker app tails the container" do
+    @app.update!(deploy_method: "docker")
+    cmd = @app.log_tail_command(50)
+
+    assert_includes cmd, "docker logs --tail 50 #{@app.container_name}"
+    assert_includes cmd, "2>&1"
+  end
+
   test "the index is scoped per app — two different apps can each deploy" do
     other = @org.apps.create!(name: "Wise", slug: "wise", server: @server, deploy_method: "kamal",
                               repository_url: "https://github.com/pavelabs/wise.git", branch: "main")
