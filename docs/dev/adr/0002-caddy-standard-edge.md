@@ -4,7 +4,15 @@ Date: 2026-07-09
 
 ## Status
 
-Proposed
+**Rejected (2026-07-09).** The decision requires Conductor to reimplement
+kamal-proxy's battle-tested zero-downtime deploy handoff (health-check → upstream
+swap → drain) — reinventing proven 37signals functionality and owning a new class
+of deploy-time reliability risk. Not worth it. **kamal-proxy stays as the edge and
+keeps doing the handoff.** calm.page's dynamic-subdomain need is met by *adding*
+Caddy narrowly / coexisting with kamal-proxy — never by replacing it (see below;
+follow-up ADR / slot 18 revision). The analysis in Context stands and is why we
+keep Caddy for native/docker + gain its Admin API where kamal-proxy can't reach —
+but Caddy does **not** supersede kamal-proxy for Kamal apps.
 
 ## Context
 
