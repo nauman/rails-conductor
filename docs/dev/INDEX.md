@@ -10,6 +10,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | `docs/dev/CHANGELOG.md` | Lightweight shipped-history summary with links to session logs | Notable changes ship |
 | `docs/dev/FEATURES.md` | Current shipped foundation and next major capabilities | Product reality changes materially |
 | `docs/dev/RALPH-METHODS.md` | Spec template/process for features | The process changes or new examples are added |
+| `docs/dev/CONDUCTOR-DEV-LOOP-PROMPT.md` | Auditable loop prompt for completing one Conductor roadmap slice at a time | Loop stop conditions or verification rules change |
 | `docs/dev/adr/` | Architecture Decision Records (numbered, one decision each) | A cross-cutting architectural decision is made, reversed, or superseded |
 
 ## Architecture Decisions (ADR)
@@ -17,6 +18,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [`0001`](adr/0001-self-describing-kamal-deploys.md) | Proposed | Conductor-managed Kamal deploys must emit self-describing config: all non-secret values materialized in-repo; secrets in Kamal secrets or behind a documented localvault pointer — never stale placeholder defaults |
+| [`0002`](adr/0002-caddy-standard-edge.md) | Proposed | Caddy becomes the standard edge across all runtimes, superseding kamal-proxy: one programmable Admin-API edge (routes, dynamic subdomains, on-demand TLS); Conductor takes on the zero-downtime deploy handoff kamal-proxy did for free |
 
 ## Authoring Notes
 
