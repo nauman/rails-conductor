@@ -48,13 +48,23 @@ class KamalConfig
     header + YAML.dump(overlay).sub(/\A---\n/, "")
   end
 
-  # The git-safe secrets pointer file (.kamal/secrets.production). No raw values.
+  # The git-safe secrets file (.kamal/secrets.production). No raw values — secrets
+  # resolve from the ENVIRONMENT (variable substitution), which Conductor injects
+  # at deploy time and an operator seeds ONCE for hand use. The header documents
+  # the localvault seed so it isn't needed on every command ("seed once").
   def secrets_file
-    lines = ["# #{GENERATED} — .kamal/secrets.#{DESTINATION}",
-             "# Git-safe: POINTERS, not values. Unlock the vault first:  localvault unlock #{vault}"]
-    lines << secret_line("KAMAL_REGISTRY_PASSWORD")
-    secret_keys.each { |k| lines << secret_line(k) }
-    lines.join("\n") + "\n"
+    all_keys = (["KAMAL_REGISTRY_PASSWORD"] + secret_keys).uniq - ["RAILS_MASTER_KEY"]
+
+    header = ["# #{GENERATED} — .kamal/secrets.#{DESTINATION}",
+              "# Git-safe: values are NOT here. Conductor injects these at deploy time.",
+              "# For hand use (kamal console -d #{DESTINATION}), seed your env ONCE, e.g.:",
+              "#   localvault unlock #{vault}"]
+    all_keys.each { |k| header << "#   export #{k}=$(localvault get #{app.slug}.#{k} --vault #{vault})" }
+
+    body = all_keys.map { |k| "#{k}=$#{k}" }
+    body << "RAILS_MASTER_KEY=$(cat config/master.key)" if secret_keys.include?("RAILS_MASTER_KEY") || app.env_hash.key?("RAILS_MASTER_KEY")
+
+    (header + [""] + body).join("\n") + "\n"
   end
 
   # Path => contents, for a writer to drop into a checkout (or commit to the repo).
@@ -91,12 +101,6 @@ class KamalConfig
 
   def secret_keys
     @secret_keys ||= app.env_variables.secrets.map(&:key).reject { |k| DEPLOY_KEYS.include?(k) }.sort
-  end
-
-  # RAILS_MASTER_KEY follows the Rails convention; everything else points at localvault.
-  def secret_line(key)
-    return "RAILS_MASTER_KEY=$(cat config/master.key)" if key == "RAILS_MASTER_KEY"
-    "#{key}=$(localvault get #{app.slug}.#{key} --vault #{vault})"
   end
 
   def registry_server

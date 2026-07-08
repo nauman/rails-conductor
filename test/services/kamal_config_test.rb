@@ -47,17 +47,20 @@ class KamalConfigTest < ActiveSupport::TestCase
     refute_includes env["clear"].keys, "KAMAL_REGISTRY_USERNAME"
   end
 
-  test "secrets file has git-safe POINTERS, never raw values" do
+  test "secrets file resolves from env (git-safe), documents the localvault seed, never raw values" do
     s = KamalConfig.new(@app).secrets_file
-    assert_includes s, "SECRET_KEY_BASE=$(localvault get kuickr.SECRET_KEY_BASE --vault devops)"
-    assert_includes s, "DATABASE_URL=$(localvault get kuickr.DATABASE_URL --vault devops)"
-    assert_includes s, "KAMAL_REGISTRY_PASSWORD=$(localvault get kuickr.KAMAL_REGISTRY_PASSWORD --vault devops)"
+    # Resolution: variable substitution — Conductor injects at deploy, operator seeds once.
+    assert_includes s, "SECRET_KEY_BASE=$SECRET_KEY_BASE"
+    assert_includes s, "DATABASE_URL=$DATABASE_URL"
+    assert_includes s, "KAMAL_REGISTRY_PASSWORD=$KAMAL_REGISTRY_PASSWORD"
     assert_includes s, "RAILS_MASTER_KEY=$(cat config/master.key)", "master key follows the Rails convention"
-    # No raw secret values ever.
+    # Header documents seeding the env ONCE from localvault (not every command).
+    assert_includes s, "export SECRET_KEY_BASE=$(localvault get kuickr.SECRET_KEY_BASE --vault devops)"
+    # Never raw secret values.
     refute_match(/skb_raw_value|postgres:\/\/raw|deadbeef/, s)
   end
 
-  test "vault is configurable per app" do
+  test "vault is configurable in the seed header" do
     s = KamalConfig.new(@app, vault: "production").secrets_file
     assert_includes s, "--vault production"
     refute_includes s, "--vault devops"
