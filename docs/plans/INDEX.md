@@ -43,6 +43,7 @@
 | `docs/plans/cloudflare.md` | Cloudflare DNS and R2 credentials/setup | Actual API calls and validation | Provisioning and provider automation |
 | `docs/plans/domains-dns.md` | Domain management via Cloudflare | DNS CRUD, validation, alerts | Routing and edge |
 | `docs/plans/routing-caddy.md` | Caddy Admin API route sync | Baseline route CRUD exists; persistence, reconciliation, deploy hooks, and certificate/drift workflows remain | Routing and edge |
+| `docs/plans/per-app-proxy-mode.md` | Per-app Caddy edge (proxy mode) + box kamal-proxy→Caddy migration (roadmap slot 18) | Spec only (2026-07-09); `Server#edge`, edge-aware deployers, and `EdgeMigrator` not built; depends on ADR 0001 | Routing and edge |
 | `docs/plans/server-bootstrap.md` | Post-creation host bootstrap workflow | No end-to-end bootstrap automation | Provisioning and provider automation |
 | `docs/plans/ssh-keys.md` | SSH key storage and management | Hetzner key registration | Provisioning and provider automation |
 | `docs/plans/logs-observability.md` | Centralized log access | Storage, filters, analytics | Continuous maintenance |
