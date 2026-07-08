@@ -30,6 +30,7 @@ This is a compact roadmap snapshot. For the canonical plan set, use `docs/plans/
 - [x] Add baseline route CRUD and validation via domain tools
 - [ ] Add route persistence, reconciliation, and deploy-hook integration
 - [ ] Make native and multi-app hosting reachable
+- [ ] Self-describing Kamal deploys — materialize real non-secret values in-repo + localvault secret pointers (ADR `docs/dev/adr/0001-self-describing-kamal-deploys.md`)
 
 ### 3. Provisioning and Provider Automation
 - [ ] Add Hetzner API provisioning

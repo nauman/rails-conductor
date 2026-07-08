@@ -19,6 +19,7 @@
 | Learnings | `docs/learnings/` | Hard-won manual-ops learnings → Conductor feature blueprints (e.g. multi-app-hosting) |
 | Infrastructure | `docs/infra/INDEX.md` | VM/Kamal/Caddy/R2/Active Storage ops docs |
 | Development | `docs/dev/INDEX.md` | Roadmap, changelog, features, and spec method |
+| Decisions (ADR) | `docs/dev/adr/` | Architecture Decision Records — cross-cutting decisions, one per file (e.g. 0001 self-describing Kamal deploys) |
 | Plans | `docs/plans/INDEX.md` | Master PRD map and capability plans by pillar |
 | Scenarios | `docs/scenarios/INDEX.md` | User-driven use cases with actors and flows |
 | Analysis | `docs/analysis/pillars-audit-2026-03-19.md` | Current-state audit, plan status, and gap map |
