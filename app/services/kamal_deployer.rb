@@ -47,6 +47,7 @@ class KamalDeployer
     return false unless verify_required_secrets
     materialize_master_key
     write_secrets_file
+    write_self_describing_config if app.self_describing?
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
     return false unless run_kamal_deploy
@@ -263,11 +264,17 @@ class KamalDeployer
 
   # `kamal deploy` from the checkout; prefer the bundled binstub.
   def kamal_command
-    ["bash", "-lc", "#{kamal_bin} deploy"]
+    ["bash", "-lc", "#{kamal_bin} deploy#{destination_flag}"]
   end
 
   def kamal_lock_release_command
-    ["bash", "-lc", "#{kamal_bin} lock release"]
+    ["bash", "-lc", "#{kamal_bin} lock release#{destination_flag}"]
+  end
+
+  # Self-describing apps deploy with a Kamal destination so the generated
+  # config/deploy.production.yml overlay + .kamal/secrets.production apply (ADR 0001).
+  def destination_flag
+    app.self_describing? ? " -d #{KamalConfig::DESTINATION}" : ""
   end
 
   def kamal_bin
@@ -390,6 +397,18 @@ class KamalDeployer
 
     FileUtils.mkdir_p(File.dirname(secrets_path))
     File.write(secrets_path, content)
+  end
+
+  # ADR 0001: write the generated self-describing artifact into the checkout — the
+  # real config/deploy.production.yml overlay + git-safe .kamal/secrets.production.
+  # Secrets resolve from deploy_env (variable substitution), which Conductor injects.
+  def write_self_describing_config
+    KamalConfig.new(app).files.each do |rel_path, content|
+      full = File.join(checkout_dir, rel_path)
+      FileUtils.mkdir_p(File.dirname(full))
+      File.write(full, content)
+      log "Wrote self-describing #{rel_path}"
+    end
   end
 
   # Materialize the target server's private key so Kamal's net-ssh can use it.

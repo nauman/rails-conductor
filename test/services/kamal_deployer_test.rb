@@ -257,6 +257,31 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal 2, shell.commands.count { |c| c.end_with?("kamal deploy") }, "expected deploy retried once"
   end
 
+  test "a self-describing app writes the overlay + secrets and deploys with -d production" do
+    @app.update!(self_describing: true)
+    shell = FakeShell.new
+    with_env("RAILS_MASTER_KEY" => "k") { deploy_with(shell) }
+
+    checkout = File.join(@workspace, @app.slug)
+    assert File.exist?(File.join(checkout, "config", "deploy.production.yml")), "overlay written into checkout"
+    assert File.exist?(File.join(checkout, ".kamal", "secrets.production")), "secrets.production written"
+
+    deploy_cmds = shell.runs.map { |r| r[:command].last.to_s }.select { |c| c.include?("kamal") && c.include?("deploy") }
+    assert deploy_cmds.any? { |c| c.include?("-d production") }, "kamal deploy must use the production destination"
+  end
+
+  test "a default (non-self-describing) app deploys unchanged: no overlay, no destination" do
+    shell = FakeShell.new
+    with_env("RAILS_MASTER_KEY" => "k") { deploy_with(shell) }
+
+    checkout = File.join(@workspace, @app.slug)
+    refute File.exist?(File.join(checkout, "config", "deploy.production.yml")), "no overlay for default apps"
+
+    deploy_cmds = shell.runs.map { |r| r[:command].last.to_s }.select { |c| c.include?("kamal") && c.include?(" deploy") }
+    assert deploy_cmds.any?, "should still deploy"
+    refute deploy_cmds.any? { |c| c.include?("-d ") }, "no destination flag for default apps"
+  end
+
   test "a self-managed deploy logs the replace-and-reconcile note" do
     @app.update!(self_managed: true)
     deploy_with(FakeShell.new(success: true))

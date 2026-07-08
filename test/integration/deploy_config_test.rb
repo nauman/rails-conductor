@@ -36,4 +36,12 @@ class DeployConfigTest < ActionDispatch::IntegrationTest
     get deploy_config_app_path(@application)
     assert_redirected_to app_path(@application)
   end
+
+  test "toggling self_describing flips the flag (default off)" do
+    refute @application.self_describing?
+    patch toggle_self_describing_app_path(@application)
+    assert @application.reload.self_describing?
+    patch toggle_self_describing_app_path(@application)
+    refute @application.reload.self_describing?
+  end
 end

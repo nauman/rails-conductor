@@ -13,6 +13,24 @@
     <code class="font-mono">kamal app logs -d production</code> work by hand, with Conductor offline.
   </p>
 
+  <div class="mt-4 rounded-large border border-border bg-bg-alt p-4">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <div class="text-sm font-semibold text-ink">Self-describing deploy · <%= @app.self_describing? ? "enabled" : "off" %></div>
+        <div class="mt-0.5 text-xs text-muted">
+          <% if @app.self_describing? %>
+            Deploys write these files into the checkout and run <code class="font-mono">kamal deploy -d production</code>.
+          <% else %>
+            Off — this app deploys the current way. Enabling makes Conductor write these files and deploy with <code class="font-mono">-d production</code>. Verify <code class="font-mono">kamal console -d production</code> works from the repo first.
+          <% end %>
+        </div>
+      </div>
+      <%= button_to(@app.self_describing? ? "Disable" : "Enable", toggle_self_describing_app_path(@app), method: :patch,
+            class: "shrink-0 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill",
+            form: { data: { turbo_confirm: (@app.self_describing? ? nil : "Enable self-describing deploy? The next deploy will use -d production.") } }) %>
+    </div>
+  </div>
+
   <% @files.each do |path, content| %>
     <div class="mt-6 rounded-large border border-border bg-surface shadow-soft">
       <div class="flex items-center justify-between border-b border-border px-4 py-2">

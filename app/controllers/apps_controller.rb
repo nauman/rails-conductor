@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :deploy_config]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :deploy_config, :toggle_self_describing]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -77,6 +77,14 @@ class AppsController < ApplicationController
       format.html
       format.json { render json: { files: @files } }
     end
+  end
+
+  # Opt this app into ADR 0001: deploys write the generated overlay + secrets and
+  # run `kamal deploy -d production`. Default off — flipping is per-app + reversible.
+  def toggle_self_describing
+    @app.update!(self_describing: !@app.self_describing)
+    state = @app.self_describing? ? "enabled" : "disabled"
+    redirect_to deploy_config_app_path(@app), notice: "Self-describing deploy #{state} for #{@app.name}."
   end
 
   def stop
