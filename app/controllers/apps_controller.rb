@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :deploy_config]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -61,6 +61,22 @@ class AppsController < ApplicationController
     @app.update!(auto_deploy: !@app.auto_deploy)
     state = @app.auto_deploy? ? "enabled" : "disabled"
     redirect_to @app, notice: "Auto-deploy on push #{state}."
+  end
+
+  # Self-describing deploy config (ADR 0001): the REAL config/deploy.production.yml
+  # + git-safe .kamal/secrets.production, generated from this app's record so
+  # `kamal console -d production` works from the repo. Read-only preview to copy
+  # into the repo (Kamal only for now).
+  def deploy_config
+    unless @app.kamal?
+      return redirect_to @app, alert: "Self-describing deploy config is Kamal-only for now (this app deploys via #{@app.deploy_method})."
+    end
+    @files = KamalConfig.new(@app).files
+
+    respond_to do |format|
+      format.html
+      format.json { render json: { files: @files } }
+    end
   end
 
   def stop

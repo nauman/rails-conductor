@@ -33,6 +33,9 @@
         <%= rui_button_to("Restart", restart_app_path(@app), method: :post, variant: :outline, color: :slate) %>
         <%= rui_button_to("Stop", stop_app_path(@app), method: :post, variant: :outline, color: :slate, data: { turbo_confirm: "Stop this app?" }) %>
       <% end %>
+      <% if @app.kamal? %>
+        <%= rui_button("Deploy config", url: deploy_config_app_path(@app), variant: :outline, color: :slate) %>
+      <% end %>
       <%= rui_button("Edit", url: edit_app_path(@app), variant: :outline, color: :slate) %>
       <%= rui_button("Back", url: apps_path, variant: :outline, color: :slate) %>
     </div>
@@ -317,9 +320,15 @@
   <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body shadow-soft overflow-hidden">
     <div class="p-4 border-b border-border dark:border-border bg-fill dark:bg-fill flex items-center justify-between">
       <h3 class="text-sm font-semibold text-ink dark:text-white">Deployment History</h3>
-      <% if @app.container_id.present? || @app.native? %>
-        <%= rui_button("View Logs", url: logs_app_path(@app), variant: :link, size: :sm, color: :slate) %>
-      <% end %>
+      <div class="flex items-center gap-3">
+        <%= turbo_frame_tag "app_jobs_#{@app.id}", src: jobs_app_path(@app), loading: :lazy do %>
+          <span class="text-2xs text-faint">jobs…</span>
+        <% end %>
+        <%= rui_button("Jobs", url: jobs_app_path(@app), variant: :link, size: :sm, color: :slate) %>
+        <% if @app.container_id.present? || @app.native? %>
+          <%= rui_button("View Logs", url: logs_app_path(@app), variant: :link, size: :sm, color: :slate) %>
+        <% end %>
+      </div>
     </div>
 
     <% if @deployments.any? %>

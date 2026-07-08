@@ -1,0 +1,36 @@
+<section class="mx-auto max-w-4xl px-6 py-8">
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="text-xs uppercase tracking-label text-muted">Self-describing deploy · <%= @app.name %></div>
+      <h1 class="font-display text-2xl text-ink">Deploy config (Kamal · ADR 0001)</h1>
+    </div>
+    <%= link_to "Back", @app, class: "inline-flex items-center rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill" %>
+  </div>
+
+  <p class="mt-2 text-sm text-muted">
+    Real, literal deploy coordinates generated from this app — no placeholder <code class="font-mono">ENV[…] || default</code> fallbacks.
+    Commit these to the repo so <code class="font-mono">kamal console -d production</code> and
+    <code class="font-mono">kamal app logs -d production</code> work by hand, with Conductor offline.
+  </p>
+
+  <% @files.each do |path, content| %>
+    <div class="mt-6 rounded-large border border-border bg-surface shadow-soft">
+      <div class="flex items-center justify-between border-b border-border px-4 py-2">
+        <span class="font-mono text-sm text-ink"><%= path %></span>
+        <% if path.include?("secrets") %>
+          <span class="text-2xs font-semibold uppercase tracking-label text-warning">git-safe pointers · no raw values</span>
+        <% end %>
+      </div>
+      <pre class="overflow-x-auto p-4 text-xs text-body font-mono whitespace-pre-wrap"><%= content %></pre>
+    </div>
+  <% end %>
+
+  <div class="mt-6 rounded-large border border-border bg-bg-alt p-4 text-xs text-muted">
+    <div class="font-semibold text-ink">To use</div>
+    <ol class="mt-2 list-decimal space-y-1 pl-4">
+      <li>Commit both files to the app repo — <code class="font-mono">.kamal/secrets.production</code> holds <em>pointers</em>, not secrets, so it's safe to commit.</li>
+      <li>Seed the vault once: <code class="font-mono">localvault set <%= @app.slug %>.&lt;KEY&gt; &lt;value&gt; --vault devops</code> (or point the secrets file at a seeded <code class="font-mono">.env</code> to avoid per-command vault unlocks).</li>
+      <li>Deploy / operate with the destination: <code class="font-mono">kamal deploy -d production</code>, <code class="font-mono">kamal console -d production</code>.</li>
+    </ol>
+  </div>
+</section>
