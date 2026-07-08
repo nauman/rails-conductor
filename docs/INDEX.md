@@ -4,6 +4,7 @@
 
 ## Start Here
 
+- **`docs/ARCHITECTURE.md` — READ FIRST. The deployment matrix (3 runtimes × Caddy edge × topology) with mermaid diagrams. Understand this before touching deploy code.**
 - `docs/README.md` — overview and structure
 - `docs/USAGE.md` — how to use Conductor (web UI, API, MCP, chat)
 - `docs/PILLARS.md` — the six product pillars and where help is wanted
@@ -13,6 +14,7 @@
 
 | Section | Doc | Purpose |
 | --- | --- | --- |
+| **Architecture** | **`docs/ARCHITECTURE.md`** | **The deployment matrix (Docker/Native/Kamal × Caddy edge × standalone/fleet) with mermaid diagrams — read first** |
 | Usage | `docs/USAGE.md` | Getting started and the web UI / API / MCP / chat surfaces |
 | Pillars | `docs/PILLARS.md` | Six pillars, current maturity, and contribution entry points |
 | Agents | `docs/agents/staff_engineer.md` | Engineering brief: TDD-first, vanilla-Rails/Hotwire defaults, Conductor conventions |
