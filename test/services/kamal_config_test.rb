@@ -34,7 +34,7 @@ class KamalConfigTest < ActiveSupport::TestCase
 
   test "registry uses real username + a secret-list password reference" do
     o = overlay
-    assert_equal "ghcr.io", o["registry"]["server"]
+    assert_equal "docker.io", o["registry"]["server"], "defaults to Kamal's default registry"
     assert_equal "nauman", o["registry"]["username"]
     assert_equal ["KAMAL_REGISTRY_PASSWORD"], o["registry"]["password"]
   end

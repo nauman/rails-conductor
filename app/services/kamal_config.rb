@@ -104,7 +104,9 @@ class KamalConfig
   end
 
   def registry_server
-    app.env_hash["KAMAL_REGISTRY_SERVER"].presence || "ghcr.io"
+    # Kamal's default registry is Docker Hub; apps using another registry set
+    # KAMAL_REGISTRY_SERVER explicitly. Default here must match Kamal's default.
+    app.env_hash["KAMAL_REGISTRY_SERVER"].presence || "docker.io"
   end
 
   def registry_username
