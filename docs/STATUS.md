@@ -16,7 +16,7 @@ _Last updated: 2026-06-24._
 | **Continuous maintenance** | cron/scheduled jobs; server hardening / auto-update / audit; email failure alerts |
 | **Agent-native control** | MCP server (7 enum tools); multi-tenant org-scoped + read-only scope + token-issuance UI; AI chat orchestration; `/mcp/skill`; **Conductor deploys itself** |
 
-_Proof: `conductor.pavelabs.io` + `kuickr.co` + `wiseherds.com` live on the shared box._
+_Proof: `conductor.pavelabs.io` + `app-one.example.com` + `app-three.example.com` live on the shared box._
 
 ## 🔜 Planned (roadmap)
 

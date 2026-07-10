@@ -11,19 +11,19 @@ Proposed (spec, 2026-07-09). Roadmap: `docs/roadmap/18-per-app-proxy-mode.html`.
 - Kamal apps front with **kamal-proxy**: the `proxy:` block in `config/deploy.yml` owns `:80/:443`, terminates TLS (Let's Encrypt), and routes by host to the app container.
 - `CaddyClient` already speaks the Caddy Admin API over SSH — `upsert_route` / `remove_route` / `fetch_managed_routes` on routes tagged `conductor-route-*`. So Conductor can publish/withdraw a Caddy reverse-proxy route today.
 - Native/Docker route wiring is partial (`routing-caddy.md`).
-- **No per-app edge selection, no migration flow.** `calm.page` needs Caddy but (a) its `deploy.yml` is still placeholder (`mademysite` — the ADR 0001 truth-gap) and (b) it shares a box with other kamal-proxy apps.
+- **No per-app edge selection, no migration flow.** `app-two.example.com` needs Caddy but (a) its `deploy.yml` is still placeholder (`app-two` — the ADR 0001 truth-gap) and (b) it shares a box with other kamal-proxy apps.
 
 ## The one hard constraint (read before designing)
 
-`:80/:443` is a **box-level** resource. **Caddy and kamal-proxy cannot both own `:80/:443` on the same host.** On the shared fleet box (multiple Kamal apps behind one kamal-proxy), "put calm.page on Caddy" is therefore **not a per-app toggle in isolation** — it is a **box-edge decision**. This spec models the edge at the **Server** level, with per-app route/publish details, and a guided migration that flips a whole box.
+`:80/:443` is a **box-level** resource. **Caddy and kamal-proxy cannot both own `:80/:443` on the same host.** On the shared fleet box (multiple Kamal apps behind one kamal-proxy), "put app-two.example.com on Caddy" is therefore **not a per-app toggle in isolation** — it is a **box-edge decision**. This spec models the edge at the **Server** level, with per-app route/publish details, and a guided migration that flips a whole box.
 
 ## Goal
 
-Make **Caddy a first-class, selectable edge**: a server declares its edge (Caddy or kamal-proxy), apps on a Caddy server are published to loopback and served by Caddy (TLS, host routing, wildcard subdomains), and Conductor can **migrate a box from kamal-proxy to Caddy safely and reversibly** — so `calm.page` (and any app) moves with confidence, reproducibly from the repo.
+Make **Caddy a first-class, selectable edge**: a server declares its edge (Caddy or kamal-proxy), apps on a Caddy server are published to loopback and served by Caddy (TLS, host routing, wildcard subdomains), and Conductor can **migrate a box from kamal-proxy to Caddy safely and reversibly** — so `app-two.example.com` (and any app) moves with confidence, reproducibly from the repo.
 
 ## Why This Plan Exists
 
-- Standardizing on Caddy: one edge per box, automatic TLS, and per-app subdomains driven by a JSON payload (the calm.page requirement).
+- Standardizing on Caddy: one edge per box, automatic TLS, and per-app subdomains driven by a JSON payload (the app-two.example.com requirement).
 - kamal-proxy is per-service and contends for `:80/:443`, so it does not compose with Caddy on shared boxes.
 - Migration is manual and risky today; it should be a Conductor capability with verify + rollback.
 
@@ -70,15 +70,15 @@ Make **Caddy a first-class, selectable edge**: a server declares its edge (Caddy
 
 ## Core Workflows
 1. New app on a Caddy-edge server → deploy → Caddy serves it on `:443` with valid TLS; kamal-proxy uninvolved.
-2. **Migrate calm.page's box to Caddy** → every app republished + routed via Caddy, kamal-proxy retired, reversible on failure.
-3. Add `*.calm.page` wildcard / per-subdomain routes via the Admin API JSON payload.
+2. **Migrate app-two.example.com's box to Caddy** → every app republished + routed via Caddy, kamal-proxy retired, reversible on failure.
+3. Add `*.app-two.example.com` wildcard / per-subdomain routes via the Admin API JSON payload.
 4. Move an app between servers → routes follow, no stale entries (shared with `routing-caddy.md`).
 
 ## Acceptance
 - Set `server.edge = caddy`, deploy an app → HTTPS 200 via Caddy, valid cert, no kamal-proxy.
-- Run the migration on calm.page's box → all apps served by Caddy, kamal-proxy gone, zero stale routes, rollback proven on an injected failure.
+- Run the migration on app-two.example.com's box → all apps served by Caddy, kamal-proxy gone, zero stale routes, rollback proven on an injected failure.
 - `kamal console -d production` / `kamal app logs` still work from the repo (ADR 0001) regardless of edge.
-- `*.calm.page` resolves through a Caddy route created from a JSON payload.
+- `*.app-two.example.com` resolves through a Caddy route created from a JSON payload.
 
 ## Phases (finish-workflow — ship all)
 - **P1** — `Server#edge` model + deployers honour it (publish loopback port + `CaddyClient.upsert_route` on caddy edge). Tests: deploy in caddy mode upserts the expected route; kamal_proxy mode unchanged.

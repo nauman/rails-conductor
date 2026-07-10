@@ -27,7 +27,7 @@ Without an overlay, an engineer builds seed-management before the task runner it
 
 ## Wave 0 close-out — done
 
-Wave 0 is **shipped and live-validated** (2026-06-19): the KamalDeployer control-machine path builds over SSH and deploys (wiseherds + kuickr proven), and the GitHub App + deploy-key clone auth works. Wave 1 is unblocked.
+Wave 0 is **shipped and live-validated** (2026-06-19): the KamalDeployer control-machine path builds over SSH and deploys (app-three + app-one proven), and the GitHub App + deploy-key clone auth works. Wave 1 is unblocked.
 
 ## Wave 1 close-out — blocks Wave 2
 

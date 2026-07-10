@@ -18,7 +18,7 @@ fleet apps; Conductor's own backbone goes through CI.
 | Fact | Value |
 | --- | --- |
 | Deploy method | Push `main` → `.github/workflows/deploy.yml` → GHCR build → `kamal deploy` over SSH → migrate → verify |
-| Prod host | `135.181.114.59`, SSH user `deploy`, key `conductor_fleet` (in `authorized_keys` directly; box uses SSH **certificate** auth so personal keys fail) |
+| Prod host | `192.0.2.10`, SSH user `deploy`, key `conductor_fleet` (in `authorized_keys` directly; box uses SSH **certificate** auth so personal keys fail) |
 | Registry | GHCR — `KAMAL_REGISTRY_SERVER=ghcr.io`, `KAMAL_REGISTRY_USERNAME=nauman` (fleet moved off Docker Hub 2026-06-18) |
 | App host | `conductor.pavelabs.io`, edge = **kamal-proxy** (see ADR 0002 — Caddy is NOT the edge) |
 | Verify endpoint | `GET /version` → `{app, version, env}` where `version` = deployed git sha |

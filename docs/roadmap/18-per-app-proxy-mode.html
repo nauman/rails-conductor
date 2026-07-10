@@ -49,7 +49,7 @@
 <a class="back" href="backlog.md">← Back to backlog</a>
 <header class="page">
   <h1>Per-app proxy mode (Caddy or kamal-proxy)</h1>
-  <p class="sub">Let each app choose how it's fronted — <strong>Caddy</strong> (dynamic JSON routes via the admin API, the fleet default) or <strong>kamal-proxy</strong> (Kamal's built-in). Caddy mode unlocks on-the-fly subdomains (e.g. calm.page handing out tenant subdomains via a JSON payload).</p>
+  <p class="sub">Let each app choose how it's fronted — <strong>Caddy</strong> (dynamic JSON routes via the admin API, the fleet default) or <strong>kamal-proxy</strong> (Kamal's built-in). Caddy mode unlocks on-the-fly subdomains (e.g. app-two.example.com handing out tenant subdomains via a JSON payload).</p>
   <div class="badges">
     <span class="badge">Pillar: Fleet Control</span>
     <span class="badge p1">Priority: P1</span>
@@ -59,7 +59,7 @@
 </header>
 <div class="card">
   <h2>Problem</h2>
-  <p>The fleet's intended router is <strong>Caddy</strong> (<code>VISION.md</code>: "Caddy — reverse proxy + Let's Encrypt + Admin API on :2019"), and Conductor already drives it with JSON route config (<code>CaddyClient#upsert_route</code>). But each app's routing is dictated by <em>its own</em> <code>deploy.yml</code>: a Kamal app defaults to <strong>kamal-proxy</strong>, which contends with Caddy for :80/:443 and can't do dynamic per-tenant subdomains. Conductor's own <code>deploy.yml</code> still carries a kamal <code>proxy:</code> block — the outlier. There's no way to say "this app is fronted by Caddy" vs "by kamal-proxy", and no clean path for an app like <strong>calm.page</strong> to register a subdomain at runtime.</p>
+  <p>The fleet's intended router is <strong>Caddy</strong> (<code>VISION.md</code>: "Caddy — reverse proxy + Let's Encrypt + Admin API on :2019"), and Conductor already drives it with JSON route config (<code>CaddyClient#upsert_route</code>). But each app's routing is dictated by <em>its own</em> <code>deploy.yml</code>: a Kamal app defaults to <strong>kamal-proxy</strong>, which contends with Caddy for :80/:443 and can't do dynamic per-tenant subdomains. Conductor's own <code>deploy.yml</code> still carries a kamal <code>proxy:</code> block — the outlier. There's no way to say "this app is fronted by Caddy" vs "by kamal-proxy", and no clean path for an app like <strong>app-two.example.com</strong> to register a subdomain at runtime.</p>
 
   <h2>Current state</h2>
   <p><code>CaddyClient</code> manages routes over Caddy's admin API (JSON: <code>domain → upstream</code>), exposed via the <code>conductor_domain</code> (add/remove) MCP tool. <code>App</code> has <code>port</code> and <code>domain</code> but <strong>no proxy-mode field</strong>. Conductor deploys an app by cloning its repo and running <code>kamal deploy</code> with the app's committed <code>deploy.yml</code> (proxy block as-is). Kamal and Caddy compose fine — set <code>proxy: false</code> so Kamal skips kamal-proxy, publish the container's port, and let Caddy reverse-proxy to it — but Conductor doesn't orchestrate that today.</p>
@@ -76,15 +76,15 @@
   <ol class="slices">
     <li><code>App#proxy_mode</code> column (<code>caddy</code>|<code>kamal</code>) + a toggle on the app form.</li>
     <li>Deployer honors the mode: caddy → render <code>proxy: false</code> + publish port + upsert the Caddy route on deploy; kamal → unchanged.</li>
-    <li>Move Conductor itself + calm.page to caddy mode — <strong>after</strong> confirming the live box's :443 binding so routing isn't cut.</li>
-    <li>calm.page dynamic subdomains: a JSON endpoint / MCP tool that upserts a Caddy route per tenant subdomain (or a wildcard) via <code>CaddyClient</code>.</li>
+    <li>Move Conductor itself + app-two.example.com to caddy mode — <strong>after</strong> confirming the live box's :443 binding so routing isn't cut.</li>
+    <li>app-two.example.com dynamic subdomains: a JSON endpoint / MCP tool that upserts a Caddy route per tenant subdomain (or a wildcard) via <code>CaddyClient</code>.</li>
   </ol>
 
   <h2>Acceptance criteria</h2>
   <div class="acc"><ul>
     <li>An app can be set to Caddy or kamal-proxy in the UI; the next deploy honors it.</li>
     <li>A caddy-mode app is reachable via a Caddy route with no kamal-proxy port contention.</li>
-    <li>calm.page can add a subdomain via a JSON payload and it routes immediately (no redeploy).</li>
+    <li>app-two.example.com can add a subdomain via a JSON payload and it routes immediately (no redeploy).</li>
     <li>kamal-mode apps deploy exactly as before — no regression.</li>
   </ul></div>
 

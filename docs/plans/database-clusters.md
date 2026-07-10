@@ -48,7 +48,7 @@ DatabaseCluster
 
 Database
  ├── organization, database_cluster, app (optional)
- ├── name (e.g. "wiseherds_production")
+ ├── name (e.g. "app-three_production")
  ├── username, password (encrypted)
  └── status (pending | active | error)
 ```

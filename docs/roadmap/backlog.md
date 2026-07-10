@@ -21,7 +21,7 @@ Conductor is the **control plane for self-hosted Rails ops across a fleet** — 
 
 - **Deploy Kamal apps through Conductor (control machine)** — **live-validated 2026-06-19**: Conductor's container clones the repo and builds on the target's docker daemon over SSH, then deploys. First clean end-to-end deploy proven on a real app. (See [01-kamal-control-machine.html](01-kamal-control-machine.html).)
 - **GitHub App & deploy keys (private repos)** — cross-org installation tokens + auto-installed deploy keys, plus a browser **Integrations** page to configure the GitHub App. (See [02-github-app.html](02-github-app.html).)
-- Cron / scheduled jobs, server hardening/auto-update/audit, Postgres clusters (per-app DB on a shared cluster), MCP server + token + audit log (secret-redacted), org-scoped `/api/v1` + org-aware MCP, kamal env bridge + status sync. `kuickr.co` + `wiseherds.com` live on the shared fleet box (multi-app proven).
+- Cron / scheduled jobs, server hardening/auto-update/audit, Postgres clusters (per-app DB on a shared cluster), MCP server + token + audit log (secret-redacted), org-scoped `/api/v1` + org-aware MCP, kamal env bridge + status sync. `app-one.example.com` + `app-three.example.com` live on the shared fleet box (multi-app proven).
 
 ## Backlog — gaps to fully replace Hatchbox
 

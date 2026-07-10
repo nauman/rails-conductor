@@ -19,19 +19,19 @@ and the real deploy target lives only in Conductor's database and is materialize
 transiently at deploy time. An operator reading the repo — or running
 `bin/kamal` directly from it — is actively misled.
 
-Concrete incident (calm.page / MadeMySite, 2026-07-08):
+Concrete incident (app-two.example.com / Example App, 2026-07-08):
 
-- Committed `config/deploy.yml` defaulted to host `91.107.218.170` and service
-  `mademysite`.
-- Real production was host `135.181.114.59`, service `calmpage`, SSH user
+- Committed `config/deploy.yml` defaulted to host `192.0.2.20` and service
+  `app-two`.
+- Real production was host `192.0.2.10`, service `app-two`, SSH user
   `deploy` (key `~/.ssh/pavelabs_deploy`), Postgres in a shared
   `conductor-postgres` accessory — all injected only via Conductor ENV.
 - A direct `bin/kamal app exec` from the repo hit the stale default host and
   failed with `docker: command not found` (that host has no Docker).
 - Finding the production database required reverse-engineering DNS
-  (`dig calm.page`), scanning `~/.ssh/config`, and enumerating containers by
+  (`dig app-two.example.com`), scanning `~/.ssh/config`, and enumerating containers by
   hand. The operator's identity (`nauman@intellecta.co`) was never a Postgres
-  role — the DB only accepts `calmpage_production` from the `DATABASE_URL`
+  role — the DB only accepts `app-two_production` from the `DATABASE_URL`
   secret — so "login rejected" sent the investigation down a false path.
 
 The DB password / secrets handling is correct (Kamal `env/secret` +
@@ -64,8 +64,8 @@ artifact. Rules:
    ```
    # .kamal/secrets  (git-safe)
    # DATABASE_URL is not stored here. Retrieve via localvault:
-   #   localvault get calmpage/DATABASE_URL
-   DATABASE_URL=$(localvault get calmpage/DATABASE_URL)
+   #   localvault get app-two/DATABASE_URL
+   DATABASE_URL=$(localvault get app-two/DATABASE_URL)
    ```
 
    The pointer documents *how to get the secret*, never the secret itself.
@@ -91,7 +91,7 @@ artifact. Rules:
   in-repo content is *pointers* (vault key + command), which are safe.
 - **Migration:** audit existing Conductor-managed repos for `ENV[...] || <ip>`
   placeholder defaults in `config/deploy.yml`; replace with materialized values
-  + localvault pointers. calm.page is the first known offender.
+  + localvault pointers. app-two.example.com is the first known offender.
 - **Follow-up:** define the canonical localvault key naming
   (`<service>/<SECRET_NAME>`) and whether Conductor writes the pointer block or
   the app template ships it.
@@ -100,5 +100,5 @@ artifact. Rules:
 
 - Nodepad capture (PaveLabs): idea `cb458d4e` — original principle.
 - Incident evidence: `02-addons/59-calm-page/config/deploy.yml` (placeholder
-  defaults), real target `135.181.114.59` / service `calmpage`.
+  defaults), real target `192.0.2.10` / service `app-two`.
 - `74-dev-docs/dev/ADR.md` — ADR format.

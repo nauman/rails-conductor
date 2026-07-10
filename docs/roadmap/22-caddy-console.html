@@ -31,7 +31,7 @@
 <a class="back" href="backlog.md">← Back to backlog</a>
 <header class="page">
   <h1>Caddy management console + per-app multi-subdomain</h1>
-  <p class="sub">A full Caddy surface in Conductor: see and edit every route and cert across the fleet, and give an app its <strong>own per-app Caddy API access</strong> so it can register/retire <strong>subdomains on the fly</strong> (e.g. calm.page handing out tenant subdomains via JSON).</p>
+  <p class="sub">A full Caddy surface in Conductor: see and edit every route and cert across the fleet, and give an app its <strong>own per-app Caddy API access</strong> so it can register/retire <strong>subdomains on the fly</strong> (e.g. app-two.example.com handing out tenant subdomains via JSON).</p>
   <div class="badges">
     <span class="badge">Pillar: Routing &amp; edge</span>
     <span class="badge p1">Priority: P1</span>
@@ -41,7 +41,7 @@
 </header>
 <div class="card">
   <h2>Problem</h2>
-  <p><code>CaddyClient</code> can upsert/remove a single route, but there's no <strong>console</strong> — no place to see all routes, certs, and reachability across servers, or to diff the live config against what Conductor expects. And there's no <strong>per-app</strong> path: an app like calm.page that needs to mint subdomains at runtime has no scoped, safe way to drive Caddy itself. <a href="18-per-app-proxy-mode.html">Slot 18</a> picks the proxy <em>mode</em> at deploy; this is the ongoing <em>management</em> + dynamic-routing surface.</p>
+  <p><code>CaddyClient</code> can upsert/remove a single route, but there's no <strong>console</strong> — no place to see all routes, certs, and reachability across servers, or to diff the live config against what Conductor expects. And there's no <strong>per-app</strong> path: an app like app-two.example.com that needs to mint subdomains at runtime has no scoped, safe way to drive Caddy itself. <a href="18-per-app-proxy-mode.html">Slot 18</a> picks the proxy <em>mode</em> at deploy; this is the ongoing <em>management</em> + dynamic-routing surface.</p>
   <h2>Current state</h2>
   <p><code>CaddyClient</code> (Admin API on :2019) does route CRUD over SSH; <code>conductor_domain</code> (add/remove) is the MCP tool. Routes aren't modelled/persisted in Conductor, there's no cert/drift view, and there's no per-app credential to let an app call Caddy in a bounded way.</p>
   <h2>Proposed design</h2>
@@ -56,7 +56,7 @@
   <h2>Acceptance criteria</h2>
   <div class="acc"><ul>
     <li>One console shows every Caddy route + cert across the fleet, flags drift, and reconciles with one click.</li>
-    <li>An app (e.g. calm.page) registers/retires a subdomain by POSTing a JSON payload to its scoped endpoint, and it routes immediately — without touching the raw Admin API.</li>
+    <li>An app (e.g. app-two.example.com) registers/retires a subdomain by POSTing a JSON payload to its scoped endpoint, and it routes immediately — without touching the raw Admin API.</li>
     <li>Every subdomain change is org-scoped, audited, and visible in the console; revoking the app's credential stops it.</li>
   </ul></div>
   <h2>Dependencies &amp; related</h2>

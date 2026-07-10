@@ -1,6 +1,6 @@
 # Conductor design system — "warm paper"
 
-The visual direction for Conductor, extracted from the **Conductor Ops** and **Conductor Signal** mockups (2026-06-20). One system, light/warm-paper default; a dark theme will layer on the same token names. Source of truth: [`tokens.css`](tokens.css). Same house style as kuickr (Instrument Serif + warm tones) → consistent Pavelabs identity.
+The visual direction for Conductor, extracted from the **Conductor Ops** and **Conductor Signal** mockups (2026-06-20). One system, light/warm-paper default; a dark theme will layer on the same token names. Source of truth: [`tokens.css`](tokens.css). Same house style as app-one (Instrument Serif + warm tones) → consistent Pavelabs identity.
 
 ## Foundations
 

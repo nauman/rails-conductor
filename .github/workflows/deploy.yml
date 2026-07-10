@@ -6,7 +6,7 @@ name: Deploy Conductor
 #
 # ── One-time setup (GitHub → Settings → Secrets and variables → Actions) ──
 # Repository VARIABLES:
-#   DEPLOY_SERVER_IP   e.g. 135.181.114.59
+#   DEPLOY_SERVER_IP   e.g. 192.0.2.10
 #   DEPLOY_SSH_USER    e.g. deploy
 #   APP_HOST           conductor.pavelabs.io
 # Repository SECRETS:

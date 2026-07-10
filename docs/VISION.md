@@ -63,7 +63,7 @@ What works today (as of 2026-06):
 - Postgres clusters with per-app database provisioning; backups + scheduling (R2)
 - cron / scheduled jobs, server hardening + auto-update, failure alerts
 - reactive UI (Turbo Streams), live server/app/deploy log tails, fleet dashboard
-- multi-app proven on the shared box: `kuickr.co`, `wiseherds.com`, `conductor.pavelabs.io`
+- multi-app proven on the shared box: `app-one.example.com`, `app-three.example.com`, `conductor.pavelabs.io`
 
 What is still the critical gap:
 - **secretless / vault-resolved deploys** (roadmap 16) — the agent-native trust capstone
@@ -193,7 +193,7 @@ DELETE /api/v1/domains    → remove a domain
 GET    /api/v1/health     → fleet health summary
 ```
 
-This means MadeMySite's custom domain feature (user brings their own domain) doesn't need DNS magic — it calls Conductor, Conductor calls Caddy.
+This means Example App's custom domain feature (user brings their own domain) doesn't need DNS magic — it calls Conductor, Conductor calls Caddy.
 
 ---
 

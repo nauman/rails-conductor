@@ -35,13 +35,13 @@ Read in this order:
 ## Copy-Paste Goal
 
 ```text
-/goal In /Users/naumantariq/Code/02-addons/79-conductor, complete one smallest valuable Conductor roadmap slice from docs/dev/ROADMAP.md and docs/plans/INDEX.md. Start by naming the selected slice and its acceptance criteria. Implement only that slice, add or update focused tests, update concise docs when product reality changes, and write a docs/sessions/YYYY-MM-DD-<topic>.md note with what changed, verification evidence, and remaining gaps. Stop only when bin/ci and bash docs/scripts/ralph-doc-check.sh pass, or after 5 fix attempts. If the same root cause fails twice, if no meaningful diff is produced, or if production/destructive credentials are needed, stop and report the blocker.
+/goal In /Users/your-user/Code/02-addons/79-conductor, complete one smallest valuable Conductor roadmap slice from docs/dev/ROADMAP.md and docs/plans/INDEX.md. Start by naming the selected slice and its acceptance criteria. Implement only that slice, add or update focused tests, update concise docs when product reality changes, and write a docs/sessions/YYYY-MM-DD-<topic>.md note with what changed, verification evidence, and remaining gaps. Stop only when bin/ci and bash docs/scripts/ralph-doc-check.sh pass, or after 5 fix attempts. If the same root cause fails twice, if no meaningful diff is produced, or if production/destructive credentials are needed, stop and report the blocker.
 ```
 
 ## Agent Prompt
 
 ```text
-You are continuing Conductor development in /Users/naumantariq/Code/02-addons/79-conductor.
+You are continuing Conductor development in /Users/your-user/Code/02-addons/79-conductor.
 
 Goal: complete one smallest valuable slice toward the Conductor roadmap, with an audit trail.
 

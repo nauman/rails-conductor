@@ -30,7 +30,7 @@
 
     <div>
       <%= f.label :source_env_file, "Env file to source (optional)", class: "block text-sm font-medium text-body mb-1" %>
-      <%= f.text_field :source_env_file, placeholder: "/home/deploy/mademysite/.asdf-vars",
+      <%= f.text_field :source_env_file, placeholder: "/home/deploy/app-two/.asdf-vars",
             class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
       <p class="text-xs text-faint mt-1">Sourced before <code>pg_dump</code> so <code>$DATABASE_URL</code> is set (Hatchbox keeps it here). Leave blank if the variable is already in the shell environment.</p>
     </div>
@@ -43,14 +43,14 @@
 
     <div>
       <%= f.label :source_database, "Source label (optional)", class: "block text-sm font-medium text-body mb-1" %>
-      <%= f.text_field :source_database, placeholder: "mademysite_production",
+      <%= f.text_field :source_database, placeholder: "app-two_production",
             class: "w-full text-sm border border-border-strong rounded-md px-3 py-2" %>
       <p class="text-xs text-faint mt-1">Informational only — for display in the pulls list.</p>
     </div>
 
     <div>
       <%= f.label :restore_target, "Restore into local database (optional)", class: "block text-sm font-medium text-body mb-1" %>
-      <%= f.text_field :restore_target, placeholder: "int_mademysite_development",
+      <%= f.text_field :restore_target, placeholder: "int_app-two_development",
             class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
       <p class="text-xs text-danger-deep mt-1">⚠ If set, this <strong>drops and recreates</strong> that local database on the Conductor host before restoring. Leave blank to only download the dump.</p>
     </div>

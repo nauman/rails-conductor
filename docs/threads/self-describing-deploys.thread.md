@@ -13,16 +13,16 @@ Kamal config. Canonical decision: `docs/dev/adr/0001-self-describing-kamal-deplo
 ### deploy - Opened: config isn't self-describing (2026-07-11)
 
 What happened:
-- Deploying `calm.page` (a Conductor-managed app), reaching the prod DB took a
+- Deploying `app-two.example.com` (a Conductor-managed app), reaching the prod DB took a
   forensic hunt. The committed `config/deploy.yml` defaulted to host
-  `91.107.218.170` / service `mademysite`, but the real target was host
-  `135.181.114.59` / service `calmpage` / SSH user `deploy` — values injected
+  `192.0.2.20` / service `app-two`, but the real target was host
+  `192.0.2.10` / service `app-two` / SSH user `deploy` — values injected
   only via Conductor ENV at deploy time.
 - A direct `bin/kamal app exec` from the repo hit the stale default host and
   failed with `docker: command not found` (wrong box). The real coordinates had
-  to be reverse-engineered from `dig calm.page`, `~/.ssh/config`, and
+  to be reverse-engineered from `dig app-two.example.com`, `~/.ssh/config`, and
   `docker ps` on the host.
-- The DB only accepts the `calmpage_production` role from the `DATABASE_URL`
+- The DB only accepts the `app-two_production` role from the `DATABASE_URL`
   secret; the operator's `nauman@intellecta.co` identity is not a Postgres role,
   which sent the investigation down a false "login rejected" path.
 

@@ -11,7 +11,7 @@ Conductor deploys your apps from their Git repositories. For **private** repos i
 ## How it works (one App, many installations)
 
 - **One** GitHub App is registered by whoever runs this Conductor instance (you, for self-hosted).
-- You **install** that App on your GitHub org(s) — `intellectaco`, `pavelabs`, anything.
+- You **install** that App on your GitHub org(s) — `my-vault`, `pavelabs`, anything.
 - Conductor stores the App's credentials once, then mints **short-lived installation tokens** to clone any repo the App can see.
 
 > You never add keys per repository, and end-users never create their own App — they just install yours.
@@ -36,7 +36,7 @@ On the App's page, scroll to **Private keys → Generate a private key**. A `.pe
 ## 3. Install the App on your org(s)
 
 1. On the App page, click **Install App** (left sidebar).
-2. Choose the org (e.g. **intellectaco**), then **All repositories** (recommended — every current and future repo becomes deployable) or select specific repos.
+2. Choose the org (e.g. **my-vault**), then **All repositories** (recommended — every current and future repo becomes deployable) or select specific repos.
 3. Click **Install**. Repeat for any other orgs (e.g. `pavelabs`).
 
 ## 4. Give Conductor the credentials (once)
@@ -63,7 +63,7 @@ github_installations
 You should see your org(s) listed. To check a specific repo:
 
 ```
-github_installations  repo=intellectaco/your-app
+github_installations  repo=my-vault/your-app
 ```
 
 A `reachable: true` means Conductor can clone it.

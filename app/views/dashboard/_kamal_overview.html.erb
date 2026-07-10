@@ -66,6 +66,9 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-2">
+                  <%= turbo_frame_tag "app_jobs_#{app.id}", src: jobs_app_path(app), loading: :lazy do %>
+                    <span class="text-2xs text-faint">jobs…</span>
+                  <% end %>
                   <%= rui_badge(text: app.container_status, color: :slate, size: :sm) %>
                   <% if app.can_sync_status? %>
                     <%= rui_button_to(sync_status_app_path(app), method: :post, variant: :ghost, size: :sm, color: :slate, title: "Sync Status") do %>

@@ -8,7 +8,7 @@ Date: 2026-07-09
 kamal-proxy's battle-tested zero-downtime deploy handoff (health-check → upstream
 swap → drain) — reinventing proven 37signals functionality and owning a new class
 of deploy-time reliability risk. Not worth it. **kamal-proxy stays as the edge and
-keeps doing the handoff.** calm.page's dynamic-subdomain need is met by *adding*
+keeps doing the handoff.** app-two.example.com's dynamic-subdomain need is met by *adding*
 Caddy narrowly / coexisting with kamal-proxy — never by replacing it (see below;
 follow-up ADR / slot 18 revision). The analysis in Context stands and is why we
 keep Caddy for native/docker + gain its Admin API where kamal-proxy can't reach —
@@ -36,7 +36,7 @@ request, gated by an ask endpoint), and dynamic host routing. It does **not** kn
 about Kamal's blue-green container versioning, so the deploy-time upstream cutover
 must be orchestrated by the caller.
 
-**Driver:** calm.page needs dynamic per-tenant `*.calm.page` subdomains created
+**Driver:** app-two.example.com needs dynamic per-tenant `*.app-two.example.com` subdomains created
 from a JSON payload — impossible on kamal-proxy, native to Caddy. It is not a
 one-off exception; it is the first case that exposes kamal-proxy's ceiling.
 
@@ -60,7 +60,7 @@ kamal-proxy.** Concretely:
 
 - **Positive:** one edge for all three runtimes (kamal-proxy was Kamal-only); the
   edge becomes programmable and Conductor-native (matches the whole product
-  thesis); dynamic subdomains + on-demand TLS become possible (calm.page); cert
+  thesis); dynamic subdomains + on-demand TLS become possible (app-two.example.com); cert
   issuance can be coordinated across the fleet rather than single-server.
 - **Cost / risk (the crux):** Conductor must reimplement kamal-proxy's zero-downtime
   handoff (health-check → Admin-API upstream swap → drain). Bounded and one-time,

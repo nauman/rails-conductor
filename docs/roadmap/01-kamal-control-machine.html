@@ -61,7 +61,7 @@
 <div class="card">
   <h2>Problem</h2>
   <p>Conductor can <em>trigger</em> a Kamal deploy (the <code>deploy_app</code> MCP tool and <code>apps#deploy</code> dispatch to <code>KamalDeployer</code> via <code>DeployAppJob</code>), but the first version SSHed to the target server and ran <code>kamal</code> there. Proving the path against the live fleet box showed why that can't work:</p>
-  <pre><code>fleet box 135.181.114.59:
+  <pre><code>fleet box 192.0.2.10:
   git: /usr/bin/git    docker: ok    buildx: ok    docker group: yes
   ruby:   MISSING      bundle: MISSING      kamal: MISSING</code></pre>
   <p>Kamal is a <strong>control-machine</strong> tool — the target only needs Docker. Running <code>kamal</code> on the box would die at <code>kamal: command not found</code>, and the box also has no git credentials to clone a private repo.</p>
@@ -95,7 +95,7 @@ volumes:
     <li><strong>Done —</strong> control-machine redesign: <code>LocalShell</code> + <code>KamalDeployer</code> run kamal locally; generate secrets; materialize/cleanup the SSH key; stream logs. Unit-tested.</li>
     <li>Mount <code>docker.sock</code> + a persistent workspace volume into Conductor's container; redeploy Conductor.</li>
     <li>Wire the target SSH key into Kamal's net-ssh and confirm <code>kamal</code> resolves from the app checkout.</li>
-    <li>Validate end-to-end: deploy <code>kuickr</code> via the <code>deploy_app</code> MCP tool; confirm the deploy log streams and the release boots; status-sync flips to <code>running</code>.</li>
+    <li>Validate end-to-end: deploy <code>app-one</code> via the <code>deploy_app</code> MCP tool; confirm the deploy log streams and the release boots; status-sync flips to <code>running</code>.</li>
     <li>Add a <code>deployment_log</code> MCP tool / API so deploy progress is observable over MCP (today only <code>recent_logs</code> reads ScriptRuns).</li>
   </ol>
 
