@@ -17,6 +17,22 @@ class KamalDeployerTest < ActiveSupport::TestCase
     end
   end
 
+  # Succeeds for every command except those containing a given substring.
+  class FailOnShell
+    attr_reader :runs
+    def initialize(fail_substring)
+      @fail = fail_substring
+      @runs = []
+    end
+
+    def run(*command, chdir: nil, env: {})
+      @runs << { command: command, chdir: chdir, env: env }
+      yield "out" if block_given?
+      ok = !command.last.to_s.include?(@fail)
+      LocalShell::Result.new(success: ok, exit_code: ok ? 0 : 1, output: "out")
+    end
+  end
+
   setup do
     @workspace = Dir.mktmpdir("kamal-test")
     ENV["KAMAL_WORKSPACE"] = @workspace
@@ -280,6 +296,26 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deploy_cmds = shell.runs.map { |r| r[:command].last.to_s }.select { |c| c.include?("kamal") && c.include?(" deploy") }
     assert deploy_cmds.any?, "should still deploy"
     refute deploy_cmds.any? { |c| c.include?("-d ") }, "no destination flag for default apps"
+  end
+
+  test "a successful deploy runs gated migrations (db:migrate + abort_if_pending)" do
+    shell = FakeShell.new
+    with_env("RAILS_MASTER_KEY" => "k") { deploy_with(shell) }
+
+    assert_equal "succeeded", @deployment.reload.status
+    cmds = shell.runs.map { |r| r[:command].last.to_s }
+    assert cmds.any? { |c| c.include?("app exec --reuse") && c.include?("db:migrate") }, "runs gated db:migrate in the container"
+    assert cmds.any? { |c| c.include?("db:abort_if_pending_migrations") }, "verifies no pending migrations remain"
+  end
+
+  test "a failed migration fails the deploy — never marked succeeded (the recurring-500 guard)" do
+    shell = FailOnShell.new("db:migrate")
+    with_env("RAILS_MASTER_KEY" => "k") do
+      KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+    end
+
+    assert_equal "failed", @deployment.reload.status, "a failed migration must fail the deploy"
+    assert_match(/db:migrate failed/i, @deployment.log.to_s)
   end
 
   test "a self-managed deploy logs the replace-and-reconcile note" do

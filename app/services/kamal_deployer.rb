@@ -51,6 +51,7 @@ class KamalDeployer
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
     return false unless run_kamal_deploy
+    return false unless run_gated_migrations
 
     deployment.succeed!
     log "Kamal deployment completed successfully!"
@@ -275,6 +276,33 @@ class KamalDeployer
   # config/deploy.production.yml overlay + .kamal/secrets.production apply (ADR 0001).
   def destination_flag
     app.self_describing? ? " -d #{KamalConfig::DESTINATION}" : ""
+  end
+
+  # Gated migrations (roadmap slot 24). The image entrypoint runs db:prepare
+  # silently on boot; run db:migrate explicitly in the just-deployed container and
+  # then abort_if_pending as a FAIL-LOUD check — so a failed or incomplete
+  # migration fails the deploy instead of leaving the DB lagging the code (the
+  # recurring prod-500 root cause). Idempotent: a no-op when already migrated.
+  def run_gated_migrations
+    log "=== gated migrations: bin/rails db:migrate ==="
+    migrate = @shell.run(*kamal_app_exec("bin/rails db:migrate"), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    unless migrate.success?
+      fail_with("db:migrate failed (exit #{migrate.exit_code}) — deploy halted before marking success")
+      return false
+    end
+
+    check = @shell.run(*kamal_app_exec("bin/rails db:abort_if_pending_migrations"), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    unless check.success?
+      fail_with("pending migrations remain after deploy — schema is behind the code")
+      return false
+    end
+    true
+  end
+
+  # Run a command inside the just-deployed container (kamal app exec --reuse),
+  # honouring the destination for self-describing apps.
+  def kamal_app_exec(command)
+    ["bash", "-lc", "#{kamal_bin} app exec --reuse \"#{command}\"#{destination_flag}"]
   end
 
   def kamal_bin
