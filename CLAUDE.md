@@ -1,4 +1,4 @@
-# Agent Instructions
+# Claude Code Instructions
 
 ## Project Context
 

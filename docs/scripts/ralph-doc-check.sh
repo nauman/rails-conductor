@@ -10,6 +10,7 @@ required_files=(
   "docs/dev/CHANGELOG.md"
   "docs/dev/FEATURES.md"
   "docs/dev/RALPH-METHODS.md"
+  "docs/dev/CONDUCTOR-DEV-LOOP-PROMPT.md"
   "docs/infra/INDEX.md"
 )
 

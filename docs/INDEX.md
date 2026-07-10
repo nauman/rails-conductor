@@ -17,15 +17,21 @@
 | **Architecture** | **`docs/ARCHITECTURE.md`** | **The deployment matrix (Docker/Native/Kamal × Caddy edge × standalone/fleet) with mermaid diagrams — read first** |
 | Usage | `docs/USAGE.md` | Getting started and the web UI / API / MCP / chat surfaces |
 | Pillars | `docs/PILLARS.md` | Six pillars, current maturity, and contribution entry points |
+| Agents | `docs/agents/00-roster.md` | The `awaiting:` address book — read first on boot; names usable in thread headers |
 | Agents | `docs/agents/staff_engineer.md` | Engineering brief: TDD-first, vanilla-Rails/Hotwire defaults, Conductor conventions |
+| Agents | `docs/agents/deploy.agent.md` | Deploy agent: GHCR CI backbone, kamal-proxy edge, `localvault` secrets, `/version` verify |
+| Threads | `docs/threads/` | Living agent↔agent conversations (`<topic>.thread.md`); convention in `docs/dev/THREADS.md` |
 | Learnings | `docs/learnings/` | Hard-won manual-ops learnings → Conductor feature blueprints (e.g. multi-app-hosting) |
 | Infrastructure | `docs/infra/INDEX.md` | VM/Kamal/Caddy/R2/Active Storage ops docs |
 | Development | `docs/dev/INDEX.md` | Roadmap, changelog, features, and spec method |
+| Development | `docs/dev/CONDUCTOR-DEV-LOOP-PROMPT.md` | Auditable loop prompt for completing one Conductor roadmap slice at a time |
 | Decisions (ADR) | `docs/dev/adr/` | Architecture Decision Records — cross-cutting decisions, one per file (e.g. 0001 self-describing Kamal deploys) |
 | Plans | `docs/plans/INDEX.md` | Master PRD map and capability plans by pillar |
 | Scenarios | `docs/scenarios/INDEX.md` | User-driven use cases with actors and flows |
+| Scenario | `docs/scenarios/sc-008-beta-access.md` | Hosted beta intake: waitlist, manual approval, and free access guardrails |
 | Analysis | `docs/analysis/pillars-audit-2026-03-19.md` | Current-state audit, plan status, and gap map |
 | Sessions | `docs/sessions/INDEX.md` | Session-level implementation history and current handoff docs |
+| Scripts | `docs/scripts/agent-thread-status.sh` | Read-only report of thread obligations (OWED BY ME / WAITING ON OTHERS) |
 | Scripts | `docs/scripts/ralph-doc-loop.md` | Minimal doc update loop |
 | Scripts | `docs/scripts/ralph-doc-prompt.sh` | Emits a compact prompt for doc updates |
 | Scripts | `docs/scripts/ralph-doc-check.sh` | Sanity checks for required docs |
