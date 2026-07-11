@@ -102,7 +102,11 @@
       <%= turbo_frame_tag dom_id(@server, :health), src: health_server_path(@server), loading: :lazy do %>
         <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Checking server health…</div>
       <% end %>
+      <%= turbo_frame_tag dom_id(@server, :audit), src: audit_server_path(@server), loading: :lazy do %>
+        <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Running security audit…</div>
+      <% end %>
       <%= render "servers/package_install", server: @server %>
+      <%= render "servers/system_update", server: @server %>
     </div>
   <% end %>
 

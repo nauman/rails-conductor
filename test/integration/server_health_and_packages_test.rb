@@ -62,4 +62,26 @@ class ServerHealthAndPackagesTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", @server.last_package_install_status
     assert_match "Setting up htop", @server.last_package_install_log
   end
+
+  test "audit renders a graded security panel" do
+    probe = "UFW:active\nFAIL2BAN:active\nSSH_ROOT:no\nSSH_PASSWORD:no\nSEC_UPDATES:0\nUPDATES:2\nREBOOT:no\nAUTOUPGRADE:active\nDB_PUBLIC:\n"
+    SshConnection.stub(:new, FakeSsh.new(probe)) { get audit_server_path(@server) }
+
+    assert_response :success
+    assert_match "Security audit", @response.body
+    assert_match "secure", @response.body
+  end
+
+  test "apply_updates (security) marks running and enqueues the job" do
+    assert_enqueued_with(job: ApplyUpdatesJob) do
+      post apply_updates_server_path(@server), params: { scope: "security" }
+    end
+    assert_equal "running", @server.reload.last_update_status
+    assert_equal "security", @server.last_update_scope
+  end
+
+  test "apply_updates defaults an unknown scope to security (safe)" do
+    post apply_updates_server_path(@server), params: { scope: "everything" }
+    assert_equal "security", @server.reload.last_update_scope
+  end
 end

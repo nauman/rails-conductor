@@ -1,7 +1,7 @@
 require "shellwords"
 
 class ServersController < ApplicationController
-  before_action :set_server, only: [:show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages]
+  before_action :set_server, only: [:show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key).order(created_at: :desc)
@@ -77,6 +77,22 @@ class ServersController < ApplicationController
     end
   end
 
+  # Read-only security + patch-posture audit (firewall, SSH hardening, pending
+  # security updates, DB exposure…) over SSH. Lazy turbo-frame panel + JSON.
+  def audit
+    @audit = ServerAudit.new(@server).audit
+
+    respond_to do |format|
+      format.html { render partial: "servers/audit", locals: { server: @server, audit: @audit } }
+      format.json do
+        render json: {
+          status: @audit.status, error: @audit.error,
+          checks: @audit.checks.map { |c| { key: c.key, label: c.label, status: c.status, detail: c.detail } }
+        }
+      end
+    end
+  end
+
   # Install apt packages on this server (async — apt can be slow). Validation +
   # the actual sudo apt-get run live in PackageInstaller; here we just mark the
   # run "running" (drives the reactive panel) and enqueue it.
@@ -94,6 +110,16 @@ class ServersController < ApplicationController
     )
     InstallPackagesJob.perform_later(@server.id, packages)
     redirect_to @server, notice: "Installing #{packages.join(', ')}… the result will appear below."
+  end
+
+  # Apply OS updates (async). scope=security (default, safe) or all (may restart
+  # docker/kernel and briefly bounce apps — the UI confirms that first).
+  def apply_updates
+    scope = params[:scope] == "all" ? "all" : "security"
+    @server.update!(last_update_status: "running", last_update_scope: scope,
+                    last_update_log: nil, last_update_at: Time.current)
+    ApplyUpdatesJob.perform_later(@server.id, scope)
+    redirect_to @server, notice: "Applying #{scope} updates on #{@server.name}… the result will appear below."
   end
 
   # Live tail of the host's logs over SSH. Defaults to the systemd journal

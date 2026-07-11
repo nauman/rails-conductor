@@ -110,7 +110,9 @@ Rails.application.routes.draw do
       post :provision
       get :logs
       get :health
+      get :audit
       post :install_packages
+      post :apply_updates
     end
     resources :cron_jobs, only: [:create, :update, :destroy] do
       collection { post :schedule_script }

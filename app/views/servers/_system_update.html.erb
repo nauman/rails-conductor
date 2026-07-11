@@ -1,0 +1,39 @@
+<div id="<%= dom_id(server, :system_update) %>">
+  <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+    <h2 class="font-display text-lg text-ink">System updates</h2>
+    <p class="mt-1 text-xs text-muted">Apply OS package updates over SSH.</p>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <%= button_to("Apply security updates", apply_updates_server_path(server, scope: "security"), method: :post,
+            disabled: server.update_running?,
+            class: "rounded-lg bg-primary-strong px-4 py-1.5 text-sm font-medium text-white hover:bg-primary disabled:opacity-60 cursor-pointer") %>
+      <%= button_to("Apply all updates", apply_updates_server_path(server, scope: "all"), method: :post,
+            disabled: server.update_running?,
+            form: { data: { turbo_confirm: "‘All updates’ may upgrade Docker or the kernel, which restarts services and briefly bounces every app on this box. Continue?" } },
+            class: "rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-medium text-body hover:bg-fill disabled:opacity-60 cursor-pointer") %>
+    </div>
+    <p class="mt-2 text-2xs text-muted">
+      <strong>Security-only</strong> is safe — no service restart. <strong>All updates</strong> can restart Docker/kernel → a few seconds of app downtime.
+    </p>
+
+    <% if server.last_update_at.present? %>
+      <% st = server.last_update_status %>
+      <% badge = { "succeeded" => "bg-primary-tint text-primary", "failed" => "bg-danger-tint text-danger-deep", "running" => "bg-warning-tint text-warning" }[st] || "bg-fill text-muted" %>
+      <div class="mt-4 border-t border-border pt-3">
+        <div class="flex items-center justify-between gap-3">
+          <span class="flex min-w-0 items-center gap-2">
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-label <%= badge %>"><%= st %></span>
+            <span class="truncate font-mono text-xs text-muted"><%= server.last_update_scope %> updates</span>
+          </span>
+          <span class="shrink-0 text-xs text-muted"><%= time_ago_in_words(server.last_update_at) %> ago</span>
+        </div>
+        <% if server.last_update_log.present? %>
+          <details class="mt-2">
+            <summary class="cursor-pointer text-xs text-muted hover:text-ink">Output</summary>
+            <pre class="mt-2 max-h-72 overflow-y-auto rounded-lg bg-bg-alt p-3 text-xs text-faint font-mono whitespace-pre-wrap"><%= server.last_update_log %></pre>
+          </details>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

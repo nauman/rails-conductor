@@ -34,6 +34,20 @@ class Server < ApplicationRecord
     )
   end
 
+  # OS updates run async too; push the result panel live.
+  after_update_commit :broadcast_system_update, if: :saved_change_to_last_update_at?
+
+  def update_running? = last_update_status == "running"
+
+  def broadcast_system_update
+    broadcast_replace_to(
+      self,
+      target:  ActionView::RecordIdentifier.dom_id(self, :system_update),
+      partial: "servers/system_update",
+      locals:  { server: self }
+    )
+  end
+
   def formatted_memory
     return "0 / 0 GB" if memory_total_mb.to_i.zero?
     "#{(memory_used_mb.to_f / 1024).round(1)} / #{(memory_total_mb.to_f / 1024).round} GB"
