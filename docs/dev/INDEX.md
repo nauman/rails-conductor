@@ -18,7 +18,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 
 | ADR | Status | Decision |
 | --- | --- | --- |
-| [`0001`](adr/0001-self-describing-kamal-deploys.md) | Proposed | Conductor-managed Kamal deploys must emit self-describing config: all non-secret values materialized in-repo; secrets in Kamal secrets or behind a documented localvault pointer — never stale placeholder defaults |
+| [`0001`](adr/0001-self-describing-kamal-deploys.md) | **Accepted** | Conductor-managed Kamal deploys must emit self-describing config: all non-secret values materialized in-repo; secrets in Kamal secrets or behind a documented localvault pointer — never stale placeholder defaults |
 | [`0002`](adr/0002-caddy-standard-edge.md) | **Rejected** | Caddy superseding kamal-proxy would force Conductor to rebuild kamal-proxy's zero-downtime deploy handoff — reinventing battle-tested functionality. kamal-proxy stays the edge; Caddy is *added* narrowly for dynamic subdomains, never a replacement |
 
 ## Authoring Notes

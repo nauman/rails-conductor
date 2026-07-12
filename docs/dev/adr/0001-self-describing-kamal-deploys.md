@@ -4,7 +4,15 @@ Date: 2026-07-08
 
 ## Status
 
-Proposed
+**Accepted (2026-07-13).** Implemented: `KamalConfig` generates the real,
+Kamal-native artifact (`config/deploy.production.yml` overlay + git-safe
+`.kamal/secrets.production`, env-substitution + a documented one-time vault seed);
+a read-only preview at `apps#deploy_config`; and opt-in wiring in `KamalDeployer`
+(`App#self_describing` → writes the artifact + deploys with `-d production`,
+default off). Proven end-to-end: two managed apps now have truthful `deploy.yml`
+defaults so `kamal app logs` / `console` work from the repo, verified against live
+prod. Follow-ups (not blocking): auto commit-back of the artifact to the app repo,
+and a registry field on the model.
 
 ## Context
 
