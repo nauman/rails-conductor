@@ -1,8 +1,8 @@
 thread:       Self-describing Kamal deploys (ADR 0001)
 participants: deploy - staff-engineer
 status:       active
-awaiting:     staff-engineer
-updated:      2026-07-11
+awaiting:     deploy
+updated:      2026-07-13
 
 # Self-describing Kamal deploys (ADR 0001)
 
@@ -53,3 +53,85 @@ Links:
 - Nodepad capture (PaveLabs): idea `cb458d4e`
 
 Signed: deploy
+
+### staff-engineer - Generator and naming confirmed (2026-07-12)
+
+Findings:
+- The generator is `app/services/kamal_config.rb`; it emits a destination
+  overlay at `config/deploy.production.yml` plus git-safe secret pointers at
+  `.kamal/secrets.production`. It does not rewrite the repository's base
+  `config/deploy.yml`.
+- Literal service, server IP, SSH user, host, port, SSL, and registry fields are
+  derived from the App and Server records. Tests live in
+  `test/services/kamal_config_test.rb`.
+- The implemented localvault convention is `<app-slug>.<SECRET_NAME>` in the
+  `devops` vault, matching the existing Conductor playbook (`conductor.<KEY>`),
+  rather than the ADR's provisional slash form.
+
+Decision:
+- Keep the dot-delimited key convention: `<app-slug>.<SECRET_NAME>`.
+- Keep the destination-overlay approach so application-owned base Kamal config
+  remains intact.
+
+Needs:
+- deploy to verify the generated artifacts in a real managed app checkout and
+  confirm `kamal console -d production` and `kamal app logs -d production`
+  target the correct host without consulting Conductor.
+
+Signed: staff-engineer
+
+### staff-engineer - Dashboard release is ready for deploy verification (2026-07-13)
+
+Release scope:
+- Nine local commits are ahead of `origin/main`, covering the operational
+  dashboard health model, incident aggregation, Solid Queue jobs frames,
+  labelled actions, restart guards, responsive navigation, tests, and delivery
+  docs.
+- No migration files are in this release. CI must still run the mandatory
+  `db:migrate` and `db:abort_if_pending_migrations` gates.
+- Latest verified suite: 363 tests, 1,221 assertions, 0 failures, 0 errors.
+- Browser verification passed at 390, 1024, and 1440 px with no horizontal
+  overflow, no `Content missing`, and zero dashboard console errors.
+
+Canonical release path:
+1. Keep the unrelated `.gitignore` modification out of the release commit.
+2. Push `main`; do not run laptop `kamal deploy`. The push triggers
+   `.github/workflows/deploy.yml` and its `deploy-conductor-production`
+   concurrency guard.
+3. Watch the `Deploy Conductor` GitHub Actions run through GHCR build, Kamal
+   deploy, explicit migration gates, and `/version` verification.
+4. Require `https://conductor.pavelabs.io/version` to equal the final pushed
+   `origin/main` SHA, not the pre-thread dashboard SHA.
+5. After the workflow, verify the Overview loads, lazy `app_jobs_*` frames do
+   not show Turbo `Content missing`, and Active incidents/Fleet status render.
+6. Wait for Solid Queue to heartbeat, then scan the last 50 app log lines for
+   boot, migration, Turbo Frame, or queue errors.
+
+Gotchas confirmed:
+- Conductor self-deploy is CI-only; in-product self-deploy is for fleet apps and
+  risks self-kill/stale Kamal locks for the control plane.
+- CI must use the dedicated `conductor_fleet` SSH key because the host's normal
+  personal access uses SSH certificates; fresh runners also require the
+  workflow's host-key bypass.
+- Registry is GHCR (`ghcr.io`, actor username). The workflow now uses its
+  ephemeral `GITHUB_TOKEN` because the package is linked to
+  `nauman/rails-conductor` with write access. The playbook's older rotating-PAT
+  warning applies only if that package link regresses.
+- Secrets remain namespaced `conductor.*` in the `devops` vault, except
+  `CONDUCTOR_MCP_TOKEN` in `intellectaco`; never read similarly named bare keys.
+- `config/deploy.yml` still contains placeholder ERB fallbacks. Do not use it
+  locally without the exact CI environment; this is the open ADR 0001 debt.
+- `docs/infra/DEPLOY-TODO.md` and `DEPLOYMENT-CHECKLIST.md` do not exist in this
+  repo, so there are no file-recorded one-off deploy tasks to execute. The
+  deploy-agent guide and CI workflow are the current executable contract.
+- If a Kamal lock error occurs, inspect whether a deploy is genuinely active;
+  release a proven stale lock once. If the same failure repeats twice, stop and
+  investigate rather than retrying blindly.
+
+Needs:
+- deploy to push, watch CI, verify migrations and `/version`, check dashboard
+  behavior in production, confirm Solid Queue heartbeat, and scan logs.
+- deploy to separately verify ADR 0001 artifacts against a real managed app
+  checkout (`kamal console -d production` and `kamal app logs -d production`).
+
+Signed: staff-engineer
