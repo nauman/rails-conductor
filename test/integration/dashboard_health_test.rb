@@ -42,6 +42,8 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Status check failed"
     assert_no_match(/Stale app.*App is stopped/m, response.body)
     assert_no_match(/Failed check.*App is stopped/m, response.body)
+    assert_no_match(/incidents needs/, response.body)
+    assert_match(/incidents need an operator decision/, response.body)
   end
 
   test "failed deployment remains separate from app runtime incident" do

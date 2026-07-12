@@ -87,7 +87,7 @@
           </div>
           <div>
             <h2 class="font-display text-xl text-danger-deep">Active incidents</h2>
-            <p class="text-sm text-danger"><%= pluralize(@issues.count, "incident") %> needs an operator decision</p>
+            <p class="text-sm text-danger"><%= pluralize(@issues.count, "incident") %> <%= @issues.one? ? "needs" : "need" %> an operator decision</p>
           </div>
         </div>
       </div>
