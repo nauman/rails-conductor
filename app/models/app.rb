@@ -174,7 +174,19 @@ class App < ApplicationRecord
   end
 
   def can_sync_status?
-    (docker? || kamal?) && server&.ssh_configured?
+    status_sync_supported? && server&.ssh_configured?
+  end
+
+  def status_sync_supported?
+    docker? || kamal?
+  end
+
+  def restart_supported?
+    server&.ssh_configured? && (docker? || kamal? || native?)
+  end
+
+  def dashboard_restart_supported?
+    restart_supported? && status_sync_supported?
   end
 
   # The Kamal `service:` name used to label this app's containers on the host
@@ -188,7 +200,7 @@ class App < ApplicationRecord
   end
 
   def status_stale?
-    docker? && can_sync_status? && !status_fresh?
+    can_sync_status? && !status_fresh?
   end
 
   def update_container_status!(new_status, error: nil, started_at: nil)

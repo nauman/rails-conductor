@@ -79,4 +79,39 @@ class AppTest < ActiveSupport::TestCase
       other.deployments.create!(user: @user)
     end
   end
+
+  test "status sync support covers Docker and Kamal only" do
+    @app.update!(deploy_method: "kamal")
+    assert @app.status_sync_supported?
+    assert @app.can_sync_status?
+
+    @app.update!(deploy_method: "docker")
+    assert @app.status_sync_supported?
+    assert @app.can_sync_status?
+
+    @app.update!(deploy_method: "native")
+    assert_not @app.status_sync_supported?
+    assert_not @app.can_sync_status?
+  end
+
+  test "restart support requires SSH while dashboard restart excludes native" do
+    %w[docker kamal].each do |method|
+      @app.update!(deploy_method: method)
+      assert @app.restart_supported?
+      assert @app.dashboard_restart_supported?
+    end
+
+    @app.update!(deploy_method: "native")
+    assert @app.restart_supported?
+    assert_not @app.dashboard_restart_supported?
+
+    @app.update!(server: nil)
+    assert_not @app.restart_supported?
+    assert_not @app.dashboard_restart_supported?
+  end
+
+  test "Kamal container status becomes stale after five minutes" do
+    @app.update!(deploy_method: "kamal", last_status_check_at: 6.minutes.ago)
+    assert @app.status_stale?
+  end
 end
