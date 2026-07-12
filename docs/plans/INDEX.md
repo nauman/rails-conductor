@@ -29,13 +29,13 @@
 | `docs/plans/conductor-phase-0-1.md` | Core models, credentials, apps, backups, dashboard shell | Fleet control |
 | `docs/plans/conductor-phase-2-ssh.md` | SSH key vault, agentless execution, polling foundation | Fleet control |
 | `docs/plans/conductor-phase-3-deployment.md` | Docker deploy via SSH with streaming output | Runtime backends |
-| `docs/plans/monitoring-ops.md` | Dashboard, host health, app status, backup visibility | Fleet control |
 | `docs/plans/production-readiness.md` | Schema fixes, deploy streaming, production-readiness cleanup | Cross-cutting |
 
 ## Partially Implemented
 
 | File | Covers | Main Gap | Pillar |
 | --- | --- | --- | --- |
+| `docs/plans/monitoring-ops.md` | Dashboard, host health, app status, backup visibility | Separate desired, observed, monitoring, and deploy state; repair incident and fleet UX | Fleet control |
 | `docs/plans/recurring-ops-schedule.md` | Scheduled metrics, container sync, backup triggering | Recurring jobs now run; failure surfacing and queue tuning remain | Continuous maintenance |
 | `docs/plans/deploy-executor.md` | Short-lived isolated deploy executor + DB-persisted progress + deploy lease (roadmap slot 23) | Deploys still run in-process in the web container; executor/lease/persisted-progress not extracted | Runtime backends |
 | `docs/plans/caddy-client.md` | Caddy Admin API service boundary and failure model | Baseline SSH-backed client exists; route persistence, richer validation, and cert/drift workflows remain | Routing and edge |
