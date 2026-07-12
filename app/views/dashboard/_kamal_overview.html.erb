@@ -10,19 +10,19 @@
   <%# Container Status Stats %>
   <div class="mt-4 grid grid-cols-4 gap-3">
     <div class="rounded-card bg-primary-tint p-3 text-center">
-      <div class="font-mono text-2xl font-semibold text-primary"><%= @kamal_stats[:running_apps] %></div>
+      <div class="font-mono text-2xl font-semibold text-primary" data-container-stat="running"><%= @kamal_stats[:running_apps] %></div>
       <div class="text-2xs font-medium uppercase tracking-label text-primary-strong">Running</div>
     </div>
     <div class="rounded-card bg-danger-tint p-3 text-center">
-      <div class="font-mono text-2xl font-semibold text-danger-deep"><%= @kamal_stats[:stopped_apps] %></div>
+      <div class="font-mono text-2xl font-semibold text-danger-deep" data-container-stat="stopped"><%= @kamal_stats[:stopped_apps] %></div>
       <div class="text-2xs font-medium uppercase tracking-label text-danger">Stopped</div>
     </div>
     <div class="rounded-card bg-fill p-3 text-center">
-      <div class="font-mono text-2xl font-semibold text-body"><%= @kamal_stats[:unknown_status] %></div>
+      <div class="font-mono text-2xl font-semibold text-body" data-container-stat="unknown"><%= @kamal_stats[:unknown_status] %></div>
       <div class="text-2xs font-medium uppercase tracking-label text-muted">Unknown</div>
     </div>
     <div class="rounded-card bg-bg-alt p-3 text-center">
-      <div class="font-mono font-display text-2xl text-ink tracking-display"><%= @kamal_stats[:total_apps] %></div>
+      <div class="font-mono font-display text-2xl text-ink tracking-display" data-container-stat="total"><%= @kamal_stats[:total_apps] %></div>
       <div class="text-2xs font-medium uppercase tracking-label text-muted">Total</div>
     </div>
   </div>

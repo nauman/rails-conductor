@@ -93,7 +93,8 @@
       </div>
       <div class="mt-4 space-y-2">
         <% @issues.first(5).each do |issue| %>
-          <div class="flex items-center justify-between rounded-card bg-surface px-4 py-3 border <%= issue[:severity] == 'critical' ? 'border-danger/30' : issue[:severity] == 'warning' ? 'border-warning/40' : 'border-border' %>">
+          <% resource_label = issue[:type] == "deployment" ? "#{issue[:resource].app.name} deployment" : issue[:type] == "backup" ? "#{issue[:resource].bucket_name} backup" : issue[:resource].name %>
+          <div class="flex items-center justify-between rounded-card bg-surface px-4 py-3 border <%= issue[:severity] == 'critical' ? 'border-danger/30' : issue[:severity] == 'warning' ? 'border-warning/40' : 'border-border' %>" data-incident-resource="<%= resource_label %>">
             <div class="flex items-center gap-3">
               <% if issue[:severity] == "critical" %>
                 <span class="h-2 w-2 rounded-pill bg-danger-bright animate-pulse"></span>

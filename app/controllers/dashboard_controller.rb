@@ -9,8 +9,10 @@ class DashboardController < ApplicationController
     # Recent deployments (last 10) for this org's apps
     @recent_deployments = Deployment.where(app: org.apps).includes(:app, :user).recent.limit(10)
 
+    @app_health = @apps.index_with { |app| AppHealth.new(app) }
+
     # Issues - what needs attention
-    @issues = collect_issues(org)
+    @issues = collect_issues(org, @app_health.values)
 
     @stats = {
       servers_count: @servers.count,
@@ -31,16 +33,16 @@ class DashboardController < ApplicationController
     # Kamal/Docker container monitoring stats
     @kamal_stats = {
       total_apps: @apps.count,
-      running_apps: @apps.container_running.count,
-      stopped_apps: @apps.container_stopped.count,
-      unknown_status: @apps.container_unknown.count
+      running_apps: @app_health.values.count { |health| health.summary_state == "running" },
+      stopped_apps: @app_health.values.count { |health| health.summary_state == "stopped" },
+      unknown_status: @app_health.values.count { |health| health.summary_state == "unknown" }
     }
     @apps_by_server = @apps.includes(:server).group_by(&:server)
   end
 
   private
 
-  def collect_issues(org)
+  def collect_issues(org, app_health)
     issues = []
 
     # Offline servers
@@ -70,25 +72,11 @@ class DashboardController < ApplicationController
       issues << { type: "server", severity: "warning", resource: server, message: "High disk usage (#{server.disk_percent}%)" }
     end
 
-    org.apps.includes(:server).order(:name).each do |app|
-      next unless app.status_stale?
-
-      issues << { type: "app", severity: "warning", resource: app, message: "Container status is stale" }
-    end
-
-    # Failed apps
-    org.apps.failed.includes(:server).each do |app|
-      issues << { type: "app", severity: "critical", resource: app, message: "App deployment failed" }
-    end
-
-    # Stopped apps (might be intentional, but worth noting)
-    org.apps.stopped.includes(:server).each do |app|
-      issues << { type: "app", severity: "info", resource: app, message: "App is stopped" }
-    end
+    app_health.filter_map(&:incident).each { |incident| issues << incident }
 
     # Failed deployments in last 24h
     Deployment.where(app: org.apps).failed.where("created_at > ?", 24.hours.ago).includes(:app).each do |deployment|
-      issues << { type: "deployment", severity: "critical", resource: deployment, message: "Deployment failed" }
+      issues << { type: "deployment", severity: "critical", resource: deployment, message: "Deployment failed", action: "deployment" }
     end
 
     # Failed backups
