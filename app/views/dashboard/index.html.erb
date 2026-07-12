@@ -86,8 +86,8 @@
             <svg class="h-5 w-5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
           </div>
           <div>
-            <h2 class="font-display text-xl text-danger-deep">Attention Required</h2>
-            <p class="text-sm text-danger"><%= @issues.count %> issue<%= @issues.count == 1 ? "" : "s" %> need<%= @issues.count == 1 ? "s" : "" %> your attention</p>
+            <h2 class="font-display text-xl text-danger-deep">Active incidents</h2>
+            <p class="text-sm text-danger"><%= pluralize(@issues.count, "incident") %> needs an operator decision</p>
           </div>
         </div>
       </div>
@@ -118,7 +118,11 @@
                 <span class="text-sm text-muted ml-2"><%= issue[:message] %></span>
               </div>
             </div>
-            <% if issue[:type] == "server" %>
+            <% if issue[:type] == "app" && issue[:action] == "sync" %>
+              <%= rui_button_to("Sync", sync_status_app_path(issue[:resource]), method: :post, variant: :ghost, size: :sm, color: :slate) %>
+            <% elsif issue[:type] == "app" && issue[:action] == "logs" %>
+              <%= rui_button("Logs", url: logs_app_path(issue[:resource]), variant: :ghost, size: :sm, color: :slate) %>
+            <% elsif issue[:type] == "server" %>
               <%= link_to "View", server_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
             <% elsif issue[:type] == "app" %>
               <%= link_to "View", app_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>

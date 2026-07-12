@@ -80,6 +80,23 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
     assert_no_match "Secret app", response.body
   end
 
+  test "incident-first fleet rows expose truthful state and distinct actions" do
+    create_app(name: "Action app", container_status: "dead", status_check_error: "docker unavailable")
+
+    get dashboard_path
+
+    assert_select "h2", text: "Active incidents"
+    assert_select "h2", text: "Fleet status"
+    assert_select "[data-fleet-app='Action app']" do
+      assert_select "[data-health-dimension='desired']", text: /Running/
+      assert_select "[data-health-dimension='observed']", text: /Dead/
+      assert_select "[data-health-dimension='monitoring']", text: /Sync failed/
+      assert_select "a", text: "Logs"
+      assert_select "button", text: "Sync"
+      assert_select "button[data-turbo-confirm]", text: "Restart"
+    end
+  end
+
   private
 
   def sign_in_as(user)
