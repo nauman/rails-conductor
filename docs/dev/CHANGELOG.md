@@ -18,3 +18,13 @@ Source: `docs/sessions/2026-03-12-production-readiness.md`
 - Wired add/remove domain tools to the real Caddy client and added test coverage
 
 Source: `docs/sessions/2026-03-28-routing-baseline-and-doc-realignment.md`
+
+## 2026-07-12
+
+- Separated desired app state, observed runtime state, and monitoring confidence on Overview
+- Replaced stopped-app noise with deduplicated, actionable runtime incidents
+- Fixed lazy Solid Queue Turbo Frames and added full job-health drill-down
+- Added labelled Sync, Logs, and Restart controls with guarded restart confirmation
+- Contained navigation and fleet rows at mobile, tablet, and desktop widths
+
+Source: `docs/sessions/2026-07-12-operational-dashboard-health.md`

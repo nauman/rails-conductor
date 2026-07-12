@@ -202,18 +202,18 @@ Queue data renders as "No job data," not Turbo's "Content missing" fallback.
 
 ### Acceptance criteria
 
-- [ ] No overview row renders Turbo's "Content missing" fallback.
-- [ ] Intentionally stopped apps do not appear in Active incidents unless a
+- [x] No overview row renders Turbo's "Content missing" fallback.
+- [x] Intentionally stopped apps do not appear in Active incidents unless a
       fresh observation proves they are running or restarting.
-- [ ] Unknown, stale, and failed observations never claim an app is stopped.
-- [ ] Desired/observed mismatches produce one actionable incident per app.
-- [ ] Sync, Logs, and Restart have distinct visible labels and accessible names.
-- [ ] Every fleet row includes monitoring context: a last-check age for fresh,
+- [x] Unknown, stale, and failed observations never claim an app is stopped.
+- [x] Desired/observed mismatches produce one actionable incident per app.
+- [x] Sync, Logs, and Restart have distinct visible labels and accessible names.
+- [x] Every fleet row includes monitoring context: a last-check age for fresh,
       stale, or failed checks; `Never checked`; an unavailable reason; or
       `Unsupported · not checked`.
-- [ ] At 390 px and 1024 px viewport widths, account controls remain visible,
+- [x] At 390 px and 1024 px viewport widths, account controls remain visible,
       headings are not obscured, and the page has no horizontal overflow.
-- [ ] Controller/model and integration tests cover the state matrix, Turbo Frame
+- [x] Controller/model and integration tests cover the state matrix, Turbo Frame
       response, action confirmation, and responsive class contract; browser
       verification at 390 px and 1024 px proves actual reflow and containment.
 
