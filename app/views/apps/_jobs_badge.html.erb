@@ -1,0 +1,15 @@
+<%= turbo_frame_tag "app_jobs_#{app.id}" do %>
+  <% if stats.available %>
+    <span class="inline-flex items-center gap-2 text-2xs font-mono whitespace-nowrap">
+      <span class="<%= stats.all_workers_alive? ? "text-success" : "text-danger-deep" %>" title="workers alive / total">
+        ⚙ <%= stats.workers_alive %>/<%= stats.workers_total %>
+      </span>
+      <span class="text-muted"><%= stats.pending %> queued</span>
+      <% if stats.failed.positive? %>
+        <%= link_to "#{stats.failed} failed", jobs_app_path(app), class: "text-danger-deep font-semibold hover:underline" %>
+      <% end %>
+    </span>
+  <% else %>
+    <span class="text-2xs text-faint" title="<%= stats.error %>">No job data</span>
+  <% end %>
+<% end %>

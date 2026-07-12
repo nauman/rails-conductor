@@ -1,0 +1,87 @@
+<% content_for :title, "Jobs · #{@app.name} · Conductor" %>
+
+<section class="max-w-5xl mx-auto px-4 py-10">
+  <div class="flex items-start justify-between">
+    <div>
+      <h1 class="font-display text-2xl text-ink tracking-display dark:text-white">Background Jobs</h1>
+      <p class="mt-1 text-sm text-muted dark:text-faint">
+        <%= link_to @app.name, app_path(@app), class: "hover:underline" %> ·
+        Solid Queue (Rails default) · read from the app's queue database
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <% if @app.url.present? %>
+        <%= link_to "Open Mission Control ↗", "#{@app.url}/jobs", target: "_blank", rel: "noopener",
+              class: "inline-flex items-center gap-2 rounded-lg bg-ink dark:bg-fill px-4 py-2 text-sm font-medium text-white hover:bg-body dark:hover:bg-fill-strong" %>
+      <% end %>
+      <%= link_to "Refresh", jobs_app_path(@app), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
+      <%= link_to "Back to App", app_path(@app), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
+    </div>
+  </div>
+
+  <% if @stats.available %>
+    <!-- Counters -->
+    <div class="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <% [
+        ["Pending", @stats.pending, :slate],
+        ["Running", @stats.running, :slate],
+        ["Scheduled", @stats.scheduled, :slate],
+        ["Failed", @stats.failed, @stats.failed.positive? ? :danger : :slate]
+      ].each do |label, value, tone| %>
+        <div class="rounded-large border <%= tone == :danger ? "border-danger/40 bg-danger-tint" : "border-border bg-surface" %> p-5 shadow-soft">
+          <p class="text-2xs font-semibold uppercase tracking-label text-muted"><%= label %></p>
+          <p class="mt-1 font-display text-3xl <%= tone == :danger ? "text-danger-deep" : "text-ink dark:text-white" %>"><%= value %></p>
+        </div>
+      <% end %>
+    </div>
+
+    <!-- Workers -->
+    <div class="mt-8 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+      <div class="px-5 py-4 border-b border-border flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-ink dark:text-white">Workers</h3>
+        <span class="text-2xs font-mono <%= @stats.all_workers_alive? ? "text-success" : "text-danger-deep" %>">
+          <%= @stats.workers_alive %>/<%= @stats.workers_total %> alive
+        </span>
+      </div>
+      <% if @stats.workers.any? %>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-2xs uppercase tracking-label text-muted">
+              <th class="text-left font-medium px-5 py-2">Process</th>
+              <th class="text-left font-medium px-5 py-2">Kind</th>
+              <th class="text-left font-medium px-5 py-2">Last heartbeat</th>
+              <th class="text-left font-medium px-5 py-2">State</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @stats.workers.each do |w| %>
+              <tr class="border-t border-border">
+                <td class="px-5 py-2 font-mono text-xs text-body dark:text-faint"><%= w[:name] %></td>
+                <td class="px-5 py-2 text-xs text-muted"><%= w[:kind] %></td>
+                <td class="px-5 py-2 text-xs text-muted"><%= w[:last_heartbeat_at] ? "#{time_ago_in_words(w[:last_heartbeat_at])} ago" : "—" %></td>
+                <td class="px-5 py-2">
+                  <%= rui_badge(text: w[:alive] ? "alive" : "stale", color: w[:alive] ? :success : :danger, size: :sm) %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      <% else %>
+        <p class="px-5 py-6 text-sm text-danger-deep">No worker processes registered — background jobs are <strong>not being processed</strong>. Check that the Solid Queue supervisor is running (e.g. <code class="font-mono">SOLID_QUEUE_IN_PUMA=1</code> or a separate worker).</p>
+      <% end %>
+    </div>
+
+    <% if @stats.failed.positive? %>
+      <p class="mt-4 text-sm text-muted">
+        <%= @stats.failed %> failed job<%= "s" if @stats.failed != 1 %> — inspect backtraces and retry in
+        <% if @app.url.present? %><%= link_to "Mission Control ↗", "#{@app.url}/jobs", target: "_blank", rel: "noopener", class: "text-primary hover:underline" %><% else %>the app's <code class="font-mono">/jobs</code> dashboard<% end %>.
+      </p>
+    <% end %>
+  <% else %>
+    <div class="mt-8 rounded-large border border-border bg-surface shadow-soft px-5 py-8 text-center">
+      <p class="text-sm text-muted">No Solid Queue data available for this app.</p>
+      <p class="mt-1 text-2xs font-mono text-faint"><%= @stats.error %></p>
+      <p class="mt-3 text-xs text-muted">This app may not use Solid Queue, or its queue database isn't reachable from Conductor.</p>
+    </div>
+  <% end %>
+</section>

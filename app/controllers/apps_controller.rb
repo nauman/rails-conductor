@@ -135,6 +135,8 @@ class AppsController < ApplicationController
       format.html do
         if turbo_frame_request_id == "app_jobs_#{@app.id}"
           render partial: "apps/jobs_badge", locals: { app: @app, stats: @stats }
+        else
+          render :jobs
         end
       end
       format.json do
