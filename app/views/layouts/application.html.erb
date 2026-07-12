@@ -44,19 +44,19 @@
 
   <body class="bg-bg text-body font-sans antialiased">
     <div class="min-h-screen flex flex-col">
-      <header class="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur">
-        <div class="max-w-[88rem] mx-auto px-4">
-          <div class="h-16 flex items-center gap-4">
+      <header class="sticky top-0 z-30 overflow-hidden border-b border-border bg-surface/85 backdrop-blur">
+        <div class="mx-auto max-w-[88rem] min-w-0 px-2 sm:px-4">
+          <div class="flex h-16 min-w-0 items-center gap-2 sm:gap-3" data-primary-header>
             <%= link_to (user_signed_in? ? dashboard_path : root_path), class: "flex items-center gap-2.5 shrink-0" do %>
               <span class="h-9 w-9 rounded-card bg-primary text-white flex items-center justify-center font-display text-lg leading-none">C</span>
-              <span class="leading-tight hidden sm:block">
+              <span class="hidden leading-tight xl:block">
                 <span class="block font-display text-lg text-ink">Conductor</span>
                 <span class="block text-2xs uppercase tracking-label text-faint">Ops control panel</span>
               </span>
             <% end %>
 
             <% if user_signed_in? %>
-              <nav class="flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <nav class="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-primary-navigation aria-label="Primary navigation">
                 <div class="flex items-center gap-0.5 whitespace-nowrap text-[13px] font-medium">
                   <%= nav_link "Overview", dashboard_path, active: request.path == dashboard_path %>
                   <%= nav_link "Chat", conversations_path, active: request.path.start_with?('/conversations') %>
@@ -76,15 +76,17 @@
                 </div>
               </nav>
 
-              <div class="flex items-center gap-3 shrink-0 pl-3 border-l border-border">
-                <%= render "organizations/switcher" %>
-                <div class="hidden lg:flex flex-col items-end leading-tight">
+              <div class="flex max-w-full shrink-0 items-center gap-1 border-l border-border pl-2 sm:gap-2" data-account-controls>
+                <div class="hidden md:block">
+                  <%= render "organizations/switcher" %>
+                </div>
+                <div class="hidden xl:flex flex-col items-end leading-tight">
                   <span class="text-2xs text-muted max-w-[12rem] truncate"><%= current_user.email %></span>
                   <% if current_admin? %>
                     <span class="text-2xs uppercase tracking-label text-warning">Admin</span>
                   <% end %>
                 </div>
-                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "shrink-0 px-3 py-1.5 rounded-pill text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink hover:bg-fill-strong" %>
+                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "shrink-0 whitespace-nowrap rounded-pill px-2 py-1.5 text-2xs font-semibold uppercase tracking-label text-muted hover:bg-fill-strong hover:text-ink sm:px-3" %>
               </div>
             <% else %>
               <div class="flex-1"></div>

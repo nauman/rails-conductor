@@ -97,6 +97,19 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "header and fleet publish the responsive containment contract" do
+    create_app(name: "Responsive app")
+
+    get dashboard_path
+
+    assert_select "header.overflow-hidden"
+    assert_select "header [data-primary-header].min-w-0"
+    assert_select "nav[data-primary-navigation].min-w-0.overflow-x-auto"
+    assert_select "[data-account-controls].shrink-0"
+    assert_select ".grid.grid-cols-2.sm\\:grid-cols-4"
+    assert_select "[data-fleet-app='Responsive app'].flex-col.sm\\:flex-row"
+  end
+
   private
 
   def sign_in_as(user)

@@ -104,6 +104,10 @@ class AppsController < ApplicationController
   end
 
   def restart
+    unless @app.restart_supported?
+      return redirect_to @app, alert: "Restart is unavailable because this app has no server with usable SSH."
+    end
+
     RestartAppJob.perform_later(@app.id)
     redirect_back fallback_location: @app, notice: "Restart initiated. Status will update shortly."
   end
