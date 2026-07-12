@@ -12,13 +12,13 @@ class DatabaseUrlTest < ActiveSupport::TestCase
   end
 
   test "database_url builds a postgres URL from cluster + credentials" do
-    db = @org.databases.create!(database_cluster: @cluster, name: "kuickr_production",
-                                username: "kuickr", password: "secret", status: "active")
-    assert_equal "postgres://kuickr:secret@conductor-postgres:5432/kuickr_production", db.database_url
+    db = @org.databases.create!(database_cluster: @cluster, name: "appone_production",
+                                username: "appone", password: "secret", status: "active")
+    assert_equal "postgres://appone:secret@conductor-postgres:5432/appone_production", db.database_url
   end
 
   test "App#database_base_name sanitizes the app name to a valid identifier" do
-    app = @org.apps.create!(name: "Calm.page", server: @server, status: "stopped")
-    assert_equal "calm_page", app.database_base_name
+    app = @org.apps.create!(name: "App.two", server: @server, status: "stopped")
+    assert_equal "app_two", app.database_base_name
   end
 end

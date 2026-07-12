@@ -27,11 +27,11 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
 
   test "conductor_app action=create delegates to CreateAppTool" do
     res = ConductorAppTool.new(user: @user).call(
-      "action" => "create", "name" => "Kuickr",
-      "repository_url" => "git@github.com:me/kuickr.git", "deploy_method" => "docker"
+      "action" => "create", "name" => "Appone",
+      "repository_url" => "git@github.com:me/appone.git", "deploy_method" => "docker"
     )
     assert res.success?, res.error
-    assert_equal "kuickr", res.value[:slug]
+    assert_equal "appone", res.value[:slug]
   end
 
   test "conductor_server action=register delegates to RegisterServerTool" do
@@ -43,7 +43,7 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
   end
 
   test "conductor_app_config action=set_env delegates to SetEnvVariableTool" do
-    app = @org.apps.create!(name: "Kuickr", deploy_method: "docker")
+    app = @org.apps.create!(name: "Appone", deploy_method: "docker")
     res = ConductorAppConfigTool.new(user: @user).call(
       "action" => "set_env", "app_id" => app.id, "key" => "RAILS_ENV", "value" => "production"
     )

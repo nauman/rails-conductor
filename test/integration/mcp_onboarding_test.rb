@@ -29,12 +29,12 @@ class McpOnboardingTest < ActionDispatch::IntegrationTest
 
   test "create_app surfaces notes in fleet_status output" do
     server = @org.servers.create!(name: "host", status: "online")
-    @org.apps.create!(name: "Kuickr", server: server, deploy_method: "docker", notes: "kamal deploy")
+    @org.apps.create!(name: "Appone", server: server, deploy_method: "docker", notes: "kamal deploy")
 
     post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } }, headers: auth, as: :json
     assert_response :success
     body = JSON.parse(response.body)
-    app = body["result"].flat_map { |s| s["apps"] }.find { |a| a["name"] == "Kuickr" }
+    app = body["result"].flat_map { |s| s["apps"] }.find { |a| a["name"] == "Appone" }
     assert_equal "kamal deploy", app["notes"]
   end
 end

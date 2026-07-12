@@ -4,9 +4,9 @@ class GithubDeployKeyInstallerTest < ActiveSupport::TestCase
   setup do
     user = User.create!(email: "gh@example.com")
     @org = Organization.create_for(user, name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/kuickr.git")
-    @app.create_deploy_key!(public_key: "ssh-ed25519 AAAA conductor-kuickr", private_key: valid_private_key)
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal",
+                             repository_url: "https://github.com/pavelabs/appone.git")
+    @app.create_deploy_key!(public_key: "ssh-ed25519 AAAA conductor-appone", private_key: valid_private_key)
   end
 
   class FakeClient
@@ -21,9 +21,9 @@ class GithubDeployKeyInstallerTest < ActiveSupport::TestCase
     result = GithubDeployKeyInstaller.install(@app, client: client)
 
     assert result[:installed]
-    assert_equal "pavelabs/kuickr", result[:repo]
-    assert_equal "pavelabs/kuickr", client.added[:repo]
-    assert_equal "conductor-kuickr", client.added[:title]
+    assert_equal "pavelabs/appone", result[:repo]
+    assert_equal "pavelabs/appone", client.added[:repo]
+    assert_equal "conductor-appone", client.added[:title]
     assert client.added[:read_only]
   end
 
@@ -44,8 +44,8 @@ class GithubDeployKeyInstallerTest < ActiveSupport::TestCase
   end
 
   test "App#github_repo parses https and ssh forms" do
-    assert_equal "pavelabs/kuickr", @app.github_repo
-    @app.update!(repository_url: "git@github.com:pavelabs/kuickr.git")
-    assert_equal "pavelabs/kuickr", @app.github_repo
+    assert_equal "pavelabs/appone", @app.github_repo
+    @app.update!(repository_url: "git@github.com:pavelabs/appone.git")
+    assert_equal "pavelabs/appone", @app.github_repo
   end
 end

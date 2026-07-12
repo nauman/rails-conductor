@@ -38,6 +38,6 @@ class GithubAppTest < ActiveSupport::TestCase
     gh.define_singleton_method(:installation_id_for) { |repo| (@seen ||= []) << repo; 99 }
     gh.define_singleton_method(:installation_token) { |id| "ghs_token_for_#{id}" }
 
-    assert_equal "ghs_token_for_99", gh.clone_token_for("intellectaco/kuickr")
+    assert_equal "ghs_token_for_99", gh.clone_token_for("myvault/appone")
   end
 end

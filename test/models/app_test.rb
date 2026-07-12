@@ -9,8 +9,8 @@ class AppTest < ActiveSupport::TestCase
     @key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "10.0.0.9",
                                    ssh_key: @key, ssh_user: "deploy")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", server: @server, deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/kuickr.git", branch: "main")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", server: @server, deploy_method: "kamal",
+                             repository_url: "https://github.com/pavelabs/appone.git", branch: "main")
     @user = user
   end
 

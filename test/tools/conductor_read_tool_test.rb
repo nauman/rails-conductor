@@ -9,7 +9,7 @@ class ConductorReadToolTest < ActiveSupport::TestCase
     @user = User.create!(email: "cr@example.com", admin: true)
     @org = Organization.create_for(@user, name: "Acme")
     @server = Server.create!(name: "fleet-a", status: "online", organization: @org)
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal")
     @deployment = @app.deployments.create!(status: "deploying", log: "l1\nl2\nl3\n")
   end
 
@@ -26,7 +26,7 @@ class ConductorReadToolTest < ActiveSupport::TestCase
   end
 
   test "action=deployment delegates to DeploymentLogTool and passes params through" do
-    res = ConductorReadTool.new(user: @user).call("action" => "deployment", "app_name" => "Kuickr", "tail" => 1)
+    res = ConductorReadTool.new(user: @user).call("action" => "deployment", "app_name" => "Appone", "tail" => 1)
     assert res.success?
     assert_equal @deployment.id, res.value[:deployment_id]
     assert_equal "l3\n", res.value[:log]

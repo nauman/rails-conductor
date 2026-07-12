@@ -8,7 +8,7 @@ class DeploymentStatusBroadcastTest < ActiveSupport::TestCase
 
   setup do
     @org = Organization.create!(name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal")
     @deployment = @app.deployments.create!(status: "pending")
   end
 

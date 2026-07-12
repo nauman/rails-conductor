@@ -32,7 +32,7 @@ class GithubAppToolsTest < ActiveSupport::TestCase
     fake = Object.new
     def fake.installation_id_for(repo) = 55
     GithubApp.stub(:from_config, fake) do
-      res = GithubInstallationsTool.new(user: @user).call("repo" => "intellectaco/kuickr")
+      res = GithubInstallationsTool.new(user: @user).call("repo" => "myvault/appone")
       assert res.success?
       assert res.value[:reachable]
       assert_equal 55, res.value[:installation_id]

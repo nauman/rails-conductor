@@ -4,8 +4,8 @@ class DeployKeyTest < ActiveSupport::TestCase
   setup do
     user = User.create!(email: "dk@example.com")
     @org = Organization.create_for(user, name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/kuickr.git")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal",
+                             repository_url: "https://github.com/pavelabs/appone.git")
   end
 
   class StubGen
@@ -27,8 +27,8 @@ class DeployKeyTest < ActiveSupport::TestCase
   end
 
   test "ssh_url converts https github urls to the ssh deploy form" do
-    assert_equal "git@github.com:pavelabs/kuickr.git", DeployKey.ssh_url("https://github.com/pavelabs/kuickr.git")
-    assert_equal "git@github.com:pavelabs/kuickr.git", DeployKey.ssh_url("https://github.com/pavelabs/kuickr")
+    assert_equal "git@github.com:pavelabs/appone.git", DeployKey.ssh_url("https://github.com/pavelabs/appone.git")
+    assert_equal "git@github.com:pavelabs/appone.git", DeployKey.ssh_url("https://github.com/pavelabs/appone")
     # already ssh form is left alone
     assert_equal "git@github.com:o/r.git", DeployKey.ssh_url("git@github.com:o/r.git")
   end

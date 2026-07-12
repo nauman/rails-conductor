@@ -9,7 +9,7 @@ class AppStatusBroadcastTest < ActiveSupport::TestCase
 
   setup do
     @org = Organization.create!(name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal", status: "stopped")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal", status: "stopped")
   end
 
   test "changing status broadcasts a badge replace to the app stream" do

@@ -22,30 +22,30 @@ class GithubClientTest < ActiveSupport::TestCase
   test "add_deploy_key posts the key and returns the created key" do
     conn = FakeConn.new([
       FakeConn::Resp.new(200, "[]"),                       # list (none existing)
-      FakeConn::Resp.new(201, '{"id":42,"title":"conductor-kuickr"}') # create
+      FakeConn::Resp.new(201, '{"id":42,"title":"conductor-appone"}') # create
     ])
     c = client_with(conn)
 
-    key = c.add_deploy_key(repo: "pavelabs/kuickr", title: "conductor-kuickr", key: "ssh-ed25519 AAAA", read_only: true)
+    key = c.add_deploy_key(repo: "pavelabs/appone", title: "conductor-appone", key: "ssh-ed25519 AAAA", read_only: true)
 
     assert_equal 42, key["id"]
     post = conn.calls.find { |verb,| verb == :post }
-    assert_equal "/repos/pavelabs/kuickr/keys", post[1]
+    assert_equal "/repos/pavelabs/appone/keys", post[1]
     assert_includes post[2], "ssh-ed25519"
     assert_includes post[2], "\"read_only\":true"
   end
 
   test "add_deploy_key replaces an existing key with the same title (idempotent)" do
     conn = FakeConn.new([
-      FakeConn::Resp.new(200, '[{"id":7,"title":"conductor-kuickr"}]'), # list (exists)
+      FakeConn::Resp.new(200, '[{"id":7,"title":"conductor-appone"}]'), # list (exists)
       FakeConn::Resp.new(204, ""),                                       # delete
       FakeConn::Resp.new(201, '{"id":43}')                              # create
     ])
     c = client_with(conn)
 
-    c.add_deploy_key(repo: "pavelabs/kuickr", title: "conductor-kuickr", key: "ssh-ed25519 AAAA")
+    c.add_deploy_key(repo: "pavelabs/appone", title: "conductor-appone", key: "ssh-ed25519 AAAA")
 
-    assert conn.calls.any? { |verb, path,| verb == :delete && path == "/repos/pavelabs/kuickr/keys/7" }
+    assert conn.calls.any? { |verb, path,| verb == :delete && path == "/repos/pavelabs/appone/keys/7" }
   end
 
   test "raises GithubClient::Error on a failed create" do

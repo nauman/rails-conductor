@@ -4,8 +4,8 @@ class GithubToolsTest < ActiveSupport::TestCase
   setup do
     @user = User.create!(email: "ght@example.com", admin: true)
     @org = Organization.create_for(@user, name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/kuickr.git")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal",
+                             repository_url: "https://github.com/pavelabs/appone.git")
   end
 
   test "set_github_token stores an org github credential" do
@@ -24,7 +24,7 @@ class GithubToolsTest < ActiveSupport::TestCase
   end
 
   test "generate_deploy_key reports not-auto-added when no github token is set" do
-    res = GenerateDeployKeyTool.new(user: @user).call("app_name" => "Kuickr")
+    res = GenerateDeployKeyTool.new(user: @user).call("app_name" => "Appone")
     assert res.success?
     refute res.value[:github_installed]
     assert_match(/\Assh-ed25519 /, res.value[:public_key])
@@ -36,9 +36,9 @@ class GithubToolsTest < ActiveSupport::TestCase
     def fake.add_deploy_key(**) = { "id" => 1 }
 
     GithubClient.stub(:new, fake) do
-      res = GenerateDeployKeyTool.new(user: @user).call("app_name" => "Kuickr")
+      res = GenerateDeployKeyTool.new(user: @user).call("app_name" => "Appone")
       assert res.value[:github_installed], res.value[:github_detail]
-      assert_equal "pavelabs/kuickr", res.value[:github_detail]
+      assert_equal "pavelabs/appone", res.value[:github_detail]
     end
   end
 end

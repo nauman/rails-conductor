@@ -4,12 +4,12 @@ class DeploymentLogToolTest < ActiveSupport::TestCase
   setup do
     @user = User.create!(email: "dl@example.com", admin: true)
     @org = Organization.create_for(@user, name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal")
     @deployment = @app.deployments.create!(status: "deploying", log: "line1\nline2\nline3\n")
   end
 
   test "returns the latest deployment's status and log by app name" do
-    res = DeploymentLogTool.new(user: @user).call("app_name" => "Kuickr")
+    res = DeploymentLogTool.new(user: @user).call("app_name" => "Appone")
     assert res.success?
     assert_equal @deployment.id, res.value[:deployment_id]
     assert_equal "deploying", res.value[:status]

@@ -44,8 +44,8 @@ class KamalDeployerTest < ActiveSupport::TestCase
     @org = Organization.create_for(user, name: "Acme")
     @key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "10.0.0.9", ssh_key: @key, ssh_user: "deploy")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", server: @server, deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/kuickr.git", branch: "main", domain: "kuickr.co")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", server: @server, deploy_method: "kamal",
+                             repository_url: "https://github.com/pavelabs/appone.git", branch: "main", domain: "appone.example.com")
     @app.env_variables.create!(key: "SECRET_KEY_BASE", value: "skb_xyz")
     @deployment = @app.deployments.create!(user: user)
   end
@@ -81,17 +81,17 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deploy_with(shell)
 
     cmds = shell.runs.map { |r| r[:command].last }
-    assert cmds.any? { |c| c.include?("git clone") && c.include?("kuickr.git") }, "expected a git clone step"
+    assert cmds.any? { |c| c.include?("git clone") && c.include?("appone.git") }, "expected a git clone step"
     kamal_run = shell.runs.find { |r| r[:command].last.include?("kamal deploy") }
     assert kamal_run, "expected a kamal deploy step"
-    assert_equal File.join(@workspace, "kuickr"), kamal_run[:chdir]
+    assert_equal File.join(@workspace, "appone"), kamal_run[:chdir]
     assert_equal "succeeded", @deployment.reload.status
   end
 
   test "generates .kamal/secrets from the app's env vars (Conductor = source of truth)" do
     deploy_with(FakeShell.new(success: true))
 
-    secrets = File.read(File.join(@workspace, "kuickr", ".kamal", "secrets"))
+    secrets = File.read(File.join(@workspace, "appone", ".kamal", "secrets"))
     assert_includes secrets, "SECRET_KEY_BASE=skb_xyz"
   end
 
@@ -356,7 +356,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_includes config, "Host #{@server.ip_address}"
     assert_includes config, "StrictHostKeyChecking accept-new"
     assert_includes config, "UserKnownHostsFile #{File.join(@ssh_root, ".ssh", "known_hosts")}"
-    assert_includes config, "conductor_kuickr", "expected the per-app IdentityFile"
+    assert_includes config, "conductor_appone", "expected the per-app IdentityFile"
   end
 
   test "config Host stanza is idempotent across repeat deploys (no duplicate blocks)" do
@@ -395,7 +395,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deploy_with(shell)
 
     sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
-    assert_includes sync[:command].last, "git@github.com:pavelabs/kuickr.git"
+    assert_includes sync[:command].last, "git@github.com:pavelabs/appone.git"
     assert_includes sync[:env]["GIT_SSH_COMMAND"].to_s, "ssh -i "
     assert_includes sync[:env]["GIT_SSH_COMMAND"].to_s, "IdentitiesOnly=yes"
   end
@@ -410,7 +410,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     end
 
     sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
-    assert_includes sync[:command].last, "https://x-access-token@github.com/pavelabs/kuickr.git"
+    assert_includes sync[:command].last, "https://x-access-token@github.com/pavelabs/appone.git"
     assert sync[:env]["GIT_ASKPASS"].present?
     refute_includes sync[:command].last, "ghs_installtoken" # token never in the command
   end
@@ -420,7 +420,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deploy_with(shell)
 
     sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
-    assert_includes sync[:command].last, "https://github.com/pavelabs/kuickr.git"
+    assert_includes sync[:command].last, "https://github.com/pavelabs/appone.git"
     assert_nil sync[:env]["GIT_SSH_COMMAND"]
   end
 

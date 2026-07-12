@@ -15,7 +15,7 @@ class AppDatabaseProvisioningTest < ActionDispatch::IntegrationTest
       server: @server, name: "shared", container_name: "conductor-postgres",
       admin_username: "conductor", admin_password: "adminpw"
     )
-    @target_app = @org.apps.create!(name: "Kuickr", server: @server, status: "stopped", deploy_method: "docker")
+    @target_app = @org.apps.create!(name: "Appone", server: @server, status: "stopped", deploy_method: "docker")
     sign_in_as(@user)
   end
 
@@ -30,8 +30,8 @@ class AppDatabaseProvisioningTest < ActionDispatch::IntegrationTest
     end
 
     db = @target_app.databases.last
-    assert_equal "kuickr_production", db.name
-    assert_equal "kuickr", db.username
+    assert_equal "appone_production", db.name
+    assert_equal "appone", db.username
     assert_equal @target_app, db.app
     assert_equal @cluster, db.database_cluster
   end

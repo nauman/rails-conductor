@@ -48,7 +48,7 @@ class SelfDeployReconcilerTest < ActiveSupport::TestCase
   end
 
   test "ignores deployments of non-self-managed apps" do
-    other = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal", self_managed: false)
+    other = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal", self_managed: false)
     dep = other.deployments.create!(status: "deploying", started_at: 2.minutes.ago, commit_sha: "match123")
 
     SelfDeployReconciler.run(version: "match123")

@@ -38,3 +38,6 @@
 !/app/assets/builds/.keep
 .inventlist.yml
 .claude/
+
+# Rust build artifacts (never commit)
+conductor-cli/target/

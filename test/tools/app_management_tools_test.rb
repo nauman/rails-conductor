@@ -6,13 +6,13 @@ class AppManagementToolsTest < ActiveSupport::TestCase
     @org = Organization.create_for(@user, name: "Acme")
     key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "10.0.0.9", ssh_key: key)
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", server: @server, deploy_method: "docker", status: "stopped")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", server: @server, deploy_method: "docker", status: "stopped")
   end
 
   test "update_app sets deploy_method, repository_url and notes" do
     res = UpdateAppTool.new(user: @user).call(
-      "app_name" => "Kuickr", "deploy_method" => "kamal",
-      "repository_url" => "https://github.com/pavelabs/kuickr.git",
+      "app_name" => "Appone", "deploy_method" => "kamal",
+      "repository_url" => "https://github.com/pavelabs/appone.git",
       "notes" => "Fleet box; shared conductor-postgres; SES email."
     )
     assert res.success?, res.error
@@ -35,7 +35,7 @@ class AppManagementToolsTest < ActiveSupport::TestCase
     def fake.error = nil
     # Make the underlying ContainerStatus flip the app to running.
     ContainerStatus.stub(:new, ->(app) { app.update!(status: "running", container_status: "running"); fake }) do
-      res = SyncAppStatusTool.new(user: @user).call("app_name" => "Kuickr")
+      res = SyncAppStatusTool.new(user: @user).call("app_name" => "Appone")
       assert res.success?
       assert_equal "running", res.value[:status]
       assert_equal "kamal", res.value[:deploy_method]

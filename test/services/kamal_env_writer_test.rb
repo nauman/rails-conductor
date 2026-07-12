@@ -4,7 +4,7 @@ class KamalEnvWriterTest < ActiveSupport::TestCase
   setup do
     user = User.create!(email: "kew@example.com")
     @org = Organization.create_for(user, name: "Acme")
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", deploy_method: "kamal")
+    @app = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal")
   end
 
   test "renders dotenv KEY=value lines sorted by key" do

@@ -75,10 +75,10 @@ class OnboardingToolsTest < ActiveSupport::TestCase
 
     PostgresClusterClient.stub(:new, fake) do
       result = ProvisionDatabaseTool.new(user: @user).call(
-        "cluster_name" => "shared", "name" => "kuickr_production", "username" => "kuickr"
+        "cluster_name" => "shared", "name" => "appone_production", "username" => "appone"
       )
       assert result.success?, result.error
-      assert_includes result.value[:database_url], "kuickr_production"
+      assert_includes result.value[:database_url], "appone_production"
       assert_equal @org, result.value[:_organization]
     end
   end
@@ -89,7 +89,7 @@ class OnboardingToolsTest < ActiveSupport::TestCase
       server: server, name: "shared", container_name: "c",
       admin_username: "u", admin_password: "p"
     )
-    app = @org.apps.create!(name: "Kuickr", server: server, deploy_method: "docker")
+    app = @org.apps.create!(name: "Appone", server: server, deploy_method: "docker")
     fake = Object.new
     def fake.create_database(**) = { "action" => "created" }
 
@@ -112,17 +112,17 @@ class OnboardingToolsTest < ActiveSupport::TestCase
   test "create_app creates an app with notes on a server" do
     @org.servers.create!(name: "app-host", status: "offline")
     result = CreateAppTool.new(user: @user).call(
-      "name" => "Kuickr", "repository_url" => "git@github.com:me/kuickr.git",
+      "name" => "Appone", "repository_url" => "git@github.com:me/appone.git",
       "server_name" => "app-host", "deploy_method" => "docker",
-      "domain" => "kuickr.co", "port" => 3000, "notes" => "deploy via kamal"
+      "domain" => "appone.example.com", "port" => 3000, "notes" => "deploy via kamal"
     )
 
     assert result.success?, result.error
     app = App.find(result.value[:id])
-    assert_equal "kuickr", app.slug
+    assert_equal "appone", app.slug
     assert_equal "deploy via kamal", app.notes
     assert_equal @org, result.value[:_organization]
-    assert_equal "kuickr", result.value[:slug]
+    assert_equal "appone", result.value[:slug]
   end
 
   test "create_app rejects invalid deploy_method" do
@@ -135,10 +135,10 @@ class OnboardingToolsTest < ActiveSupport::TestCase
   # --- set_env_variable --------------------------------------------------
 
   test "set_env_variable upserts a variable on an app by name" do
-    app = @org.apps.create!(name: "Kuickr", deploy_method: "docker")
+    app = @org.apps.create!(name: "Appone", deploy_method: "docker")
 
     created = SetEnvVariableTool.new(user: @user).call(
-      "app_name" => "Kuickr", "key" => "RAILS_ENV", "value" => "production"
+      "app_name" => "Appone", "key" => "RAILS_ENV", "value" => "production"
     )
     assert created.success?, created.error
     assert_equal "production", app.env_variables.find_by(key: "RAILS_ENV").value
@@ -153,9 +153,9 @@ class OnboardingToolsTest < ActiveSupport::TestCase
   end
 
   test "set_env_variable fails on invalid key format" do
-    @org.apps.create!(name: "Kuickr", deploy_method: "docker")
+    @org.apps.create!(name: "Appone", deploy_method: "docker")
     result = SetEnvVariableTool.new(user: @user).call(
-      "app_name" => "Kuickr", "key" => "lower-case", "value" => "x"
+      "app_name" => "Appone", "key" => "lower-case", "value" => "x"
     )
     assert result.failure?
   end

@@ -10,11 +10,11 @@ class DeployConfigTest < ActionDispatch::IntegrationTest
     @user = User.create!(email: "dc@example.com")
     @org = Organization.create_for(@user, name: "Mine")
     @key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
-    @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "135.181.114.59",
+    @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "192.0.2.10",
                                    ssh_key: @key, ssh_user: "deploy")
-    @application = @org.apps.create!(name: "Kuickr", slug: "kuickr", server: @server, deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/kuickr.git", branch: "main",
-                             domain: "kuickr.co", port: 3000, ssl_enabled: true)
+    @application = @org.apps.create!(name: "Appone", slug: "appone", server: @server, deploy_method: "kamal",
+                             repository_url: "https://github.com/pavelabs/appone.git", branch: "main",
+                             domain: "appone.example.com", port: 3000, ssl_enabled: true)
     @application.env_variables.create!(key: "SECRET_KEY_BASE", value: "raw_value", secret: true)
     @user.organizations.update_all(onboarded_at: Time.current)
     sign_in_as(@user)
@@ -24,9 +24,9 @@ class DeployConfigTest < ActionDispatch::IntegrationTest
     get deploy_config_app_path(@application)
     assert_response :success
     assert_match "config/deploy.production.yml", @response.body
-    assert_match "135.181.114.59", @response.body
+    assert_match "192.0.2.10", @response.body
     assert_match ".kamal/secrets.production", @response.body
-    assert_match "localvault get kuickr.SECRET_KEY_BASE", @response.body
+    assert_match "localvault get appone.SECRET_KEY_BASE", @response.body
     refute_match(/YOUR_SERVER_IP/, @response.body)
     refute_match(/raw_value/, @response.body)
   end

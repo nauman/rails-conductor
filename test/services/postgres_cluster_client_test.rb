@@ -43,13 +43,13 @@ class PostgresClusterClientTest < ActiveSupport::TestCase
     ssh = FakeSsh.new([ { stdout: "" }, { stdout: "" } ])
     client = PostgresClusterClient.new(build_cluster, ssh_connection: ssh)
 
-    result = client.create_database(name: "wiseherds_production", username: "wiseherds", password: "s3cret")
+    result = client.create_database(name: "appthree_production", username: "appthree", password: "s3cret")
 
     assert_equal "created", result["action"]
     assert_equal 2, ssh.commands.size
-    assert_match(/CREATE ROLE wiseherds LOGIN PASSWORD/, sql_in(ssh.commands[0]))
+    assert_match(/CREATE ROLE appthree LOGIN PASSWORD/, sql_in(ssh.commands[0]))
     assert_match(/CREATEDB/, sql_in(ssh.commands[0]))
-    assert_match(/CREATE DATABASE wiseherds_production OWNER wiseherds/, sql_in(ssh.commands[1]))
+    assert_match(/CREATE DATABASE appthree_production OWNER appthree/, sql_in(ssh.commands[1]))
     # runs through docker exec against the cluster's container as the admin user
     assert_match(/docker exec.*conductor-postgres.*psql -U conductor/, ssh.commands[0])
   end
@@ -58,10 +58,10 @@ class PostgresClusterClientTest < ActiveSupport::TestCase
     ssh = FakeSsh.new([ { stdout: "" }, { stdout: "" } ])
     client = PostgresClusterClient.new(build_cluster, ssh_connection: ssh)
 
-    client.drop_database(name: "wiseherds_production", username: "wiseherds")
+    client.drop_database(name: "appthree_production", username: "appthree")
 
-    assert_match(/DROP DATABASE IF EXISTS wiseherds_production/, sql_in(ssh.commands[0]))
-    assert_match(/DROP ROLE IF EXISTS wiseherds/, sql_in(ssh.commands[1]))
+    assert_match(/DROP DATABASE IF EXISTS appthree_production/, sql_in(ssh.commands[0]))
+    assert_match(/DROP ROLE IF EXISTS appthree/, sql_in(ssh.commands[1]))
   end
 
   test "rejects invalid SQL identifiers (no injection)" do

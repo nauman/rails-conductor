@@ -16,23 +16,23 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
     @org = Organization.create_for(user, name: "Acme")
     key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "10.0.0.9", ssh_key: key)
-    @app = @org.apps.create!(name: "Kuickr", slug: "kuickr", server: @server, deploy_method: "kamal",
+    @app = @org.apps.create!(name: "Appone", slug: "appone", server: @server, deploy_method: "kamal",
                              status: "stopped", repository_url: "https://x/r.git")
   end
 
   test "a running kamal container marks the app running and reconciles App.status" do
-    ssh = FakeSsh.new(output: "kuickr-web-abc123\n")
+    ssh = FakeSsh.new(output: "appone-web-abc123\n")
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     assert_equal "running", @app.reload.status
     assert_equal "running", @app.container_status
-    assert_includes ssh.commands.first, "label=service=kuickr"
+    assert_includes ssh.commands.first, "label=service=appone"
     assert_includes ssh.commands.first, "status=running"
   end
 
   test "a running container with a FAILED latest deploy flags needs-attention, not clean green" do
     @app.deployments.create!(status: "failed", completed_at: Time.current)
-    ssh = FakeSsh.new(output: "kuickr-web-old123\n")
+    ssh = FakeSsh.new(output: "appone-web-old123\n")
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     @app.reload
@@ -44,7 +44,7 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
 
   test "a running container with a succeeded latest deploy stays clean green" do
     @app.deployments.create!(status: "succeeded", completed_at: Time.current)
-    ssh = FakeSsh.new(output: "kuickr-web-new456\n")
+    ssh = FakeSsh.new(output: "appone-web-new456\n")
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     assert_nil @app.reload.status_check_error
@@ -60,6 +60,6 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
 
   test "kamal apps are status-syncable" do
     assert @app.can_sync_status?
-    assert_equal "kuickr", @app.kamal_service
+    assert_equal "appone", @app.kamal_service
   end
 end
