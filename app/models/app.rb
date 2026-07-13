@@ -108,19 +108,35 @@ class App < ApplicationRecord
   #   :blocked         — preflight failed and force was not set (deployment is nil)
   # `preflight` is the DeployPreflight::Result (nil on the already_running race).
   # Pass force: true to deploy past a blocking preflight.
-  def start_deployment!(user: nil, force: false)
+  def start_deployment!(user: nil, force: false, commit_sha: nil)
     existing = deployments.in_progress.order(created_at: :desc).first
     return [existing, :already_running, nil] if existing
 
     preflight = DeployPreflight.new(self).check
-    return [nil, :blocked, preflight] if preflight.blocked? && !force
+    blockers_json = preflight.blocked? ? preflight_blockers_json(preflight) : nil
 
-    deployment = deployments.create!(user: user)
+    if preflight.blocked? && !force
+      # Persist the refused attempt (esp. a webhook auto-deploy) so the intent is
+      # durable + auditable instead of silently dropped. Not an in_progress state.
+      blocked = deployments.create!(user: user, commit_sha: commit_sha,
+                                    status: "blocked", preflight_snapshot: blockers_json)
+      return [blocked, :blocked, preflight]
+    end
+
+    # Record a forced override (which blockers it overrode) for the audit trail.
+    deployment = deployments.create!(user: user, commit_sha: commit_sha,
+                                     forced: force && preflight.blocked?,
+                                     preflight_snapshot: force ? blockers_json : nil)
     DeployAppJob.perform_later(deployment.id)
     [deployment, :started, preflight]
   rescue ActiveRecord::RecordNotUnique
     # Lost the race: a concurrent trigger created the in-flight deployment first.
     [deployments.in_progress.order(created_at: :desc).first, :already_running, nil]
+  end
+
+  def preflight_blockers_json(preflight)
+    preflight.checks.select { |c| c.status == :fail }
+             .map { |c| { key: c.key, label: c.label, detail: c.detail } }.to_json
   end
 
   def docker?

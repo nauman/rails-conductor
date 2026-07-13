@@ -1,5 +1,7 @@
 class Deployment < ApplicationRecord
-  STATUSES = %w[pending building deploying succeeded failed cancelled].freeze
+  # "blocked" = a deploy attempt the preflight gate refused (recorded, not run) so
+  # the intent isn't lost — it is NOT an in_progress state (see the scope + index).
+  STATUSES = %w[pending building deploying succeeded failed cancelled blocked].freeze
 
   belongs_to :app
   belongs_to :server, optional: true
@@ -11,6 +13,15 @@ class Deployment < ApplicationRecord
   scope :successful, -> { where(status: "succeeded") }
   scope :failed, -> { where(status: "failed") }
   scope :in_progress, -> { where(status: %w[pending building deploying]) }
+  scope :blocked, -> { where(status: "blocked") }
+
+  # The parsed preflight blockers captured when this deploy was blocked or forced.
+  def preflight_blockers
+    return [] if preflight_snapshot.blank?
+    JSON.parse(preflight_snapshot)
+  rescue JSON::ParserError
+    []
+  end
 
   # Live deploy status: push a Turbo Stream replace of the status badge whenever
   # the status changes (building → deploying → succeeded/failed), so the

@@ -52,11 +52,14 @@ class DeployPreflight
     last = @app.seed_applications.order(:created_at).last
     if last.nil?
       warn(:seeds, "Seeds", "no seed run recorded for this app — run/record seeds if it needs them")
-    elsif last.succeeded?
-      ok(:seeds, "Seeds", "last seed run succeeded #{last.applied_at&.to_date || last.created_at.to_date}")
-    else
+    elsif last.status == "failed"
       fail_row(:seeds, "Seeds",
                "the most recent seed run failed (#{last.applied_at&.to_date || last.created_at.to_date}) — resolve before deploying")
+    elsif last.proven?
+      ok(:seeds, "Seeds", "last seed run succeeded #{last.applied_at.to_date}")
+    else
+      # succeeded-without-evidence, or pending — never a free green.
+      warn(:seeds, "Seeds", "latest seed record is unproven (#{last.status}, no applied_at) — re-run to confirm")
     end
   end
 

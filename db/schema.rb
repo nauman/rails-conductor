@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_13_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_14_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -201,7 +201,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_000002) do
     t.string "commit_sha"
     t.datetime "completed_at"
     t.datetime "created_at", null: false
+    t.boolean "forced", default: false, null: false
     t.text "log"
+    t.text "preflight_snapshot"
     t.bigint "script_id"
     t.bigint "server_id"
     t.datetime "started_at"
@@ -334,7 +336,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_000002) do
     t.datetime "created_at", null: false
     t.string "digest"
     t.text "output"
-    t.string "status", default: "succeeded", null: false
+    t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
     t.index ["app_id"], name: "index_seed_applications_on_app_id"
   end

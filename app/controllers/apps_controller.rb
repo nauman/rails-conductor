@@ -84,7 +84,15 @@ class AppsController < ApplicationController
   def toggle_deploy_hold
     if @app.deploy_hold?
       @app.update!(deploy_hold: false, deploy_hold_reason: nil)
-      redirect_to @app, notice: "Deploy hold cleared."
+      # Surface any deploys that were refused while held, so the intent isn't lost —
+      # the operator can re-trigger the latest commit now that the hold is gone.
+      blocked = @app.deployments.blocked.recent
+      if blocked.any?
+        sha = blocked.first.commit_sha.to_s.first(7).presence || "the latest commit"
+        redirect_to @app, notice: "Deploy hold cleared. #{blocked.count} deploy(s) were blocked while held (latest: #{sha}). Click Deploy to ship."
+      else
+        redirect_to @app, notice: "Deploy hold cleared."
+      end
     else
       @app.update!(deploy_hold: true, deploy_hold_reason: params[:reason].presence || "Held by operator")
       redirect_to @app, alert: "Deploys held. The preflight will block until this is cleared."

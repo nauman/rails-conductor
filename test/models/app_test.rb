@@ -34,19 +34,35 @@ class AppTest < ActiveSupport::TestCase
     assert_equal 1, @app.deployments.in_progress.count, "must not create a second in-flight deployment"
   end
 
-  test "start_deployment! blocks (no job) when the preflight fails, unless forced" do
+  test "start_deployment! blocks (no job) when the preflight fails, and persists the attempt" do
     @app.update!(deploy_hold: true, deploy_hold_reason: "thread owed")
     assert_no_enqueued_jobs do
-      deployment, status, preflight = @app.start_deployment!(user: @user)
+      deployment, status, preflight = @app.start_deployment!(user: @user, commit_sha: "abc123")
       assert_equal :blocked, status
-      assert_nil deployment
+      # The refused attempt is durable + auditable, not dropped.
+      assert deployment.persisted?
+      assert_equal "blocked", deployment.status
+      assert_equal "abc123", deployment.commit_sha
+      refute deployment.in_progress?
       assert preflight.blocked?
+      assert deployment.preflight_blockers.any? { |b| b["key"] == "threads" }
     end
+  end
 
+  test "forcing past a block enqueues a deploy and records that it was forced + which blockers" do
+    @app.update!(deploy_hold: true, deploy_hold_reason: "thread owed")
     assert_enqueued_with(job: DeployAppJob) do
-      _deployment, status, = @app.start_deployment!(user: @user, force: true)
+      deployment, status, = @app.start_deployment!(user: @user, force: true)
       assert_equal :started, status
+      assert deployment.forced?, "a forced override must be recorded"
+      assert deployment.preflight_blockers.any? { |b| b["key"] == "threads" }
     end
+  end
+
+  test "a normal (unblocked) deploy is not marked forced" do
+    deployment, status, = @app.start_deployment!(user: @user, force: true)
+    assert_equal :started, status
+    refute deployment.forced?, "force is only 'forced' when it actually overrode a block"
   end
 
   test "the unique partial index forbids two in-flight deployments per app (DB invariant)" do

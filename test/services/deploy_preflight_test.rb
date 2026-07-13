@@ -77,6 +77,17 @@ class DeployPreflightTest < ActiveSupport::TestCase
     assert_equal :ok, row(check, :seeds).status
   end
 
+  test "a succeeded seed row WITHOUT evidence (no applied_at) is unproven — warns, not green" do
+    @app.seed_applications.create!(status: "succeeded", applied_at: nil)
+    assert_equal :warn, row(check, :seeds).status
+    refute check.blocked?
+  end
+
+  test "a pending seed row does not make the gate green" do
+    @app.seed_applications.create!(status: "pending")
+    assert_equal :warn, row(check, :seeds).status
+  end
+
   test "an unrecognized audit status does NOT fail open to secure — it warns" do
     @server.update!(last_audit_status: "definitely-not-a-real-status", last_audit_at: Time.current)
     assert_equal :warn, row(check, :audit).status
