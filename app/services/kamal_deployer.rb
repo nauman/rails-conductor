@@ -1,6 +1,7 @@
 require "shellwords"
 require "fileutils"
 require "base64"
+require "digest"
 
 # Deploys a kamal-managed app with **Conductor's own container as the Kamal
 # control machine** (Kamal is a control-machine tool; target servers are deploy
@@ -52,6 +53,7 @@ class KamalDeployer
     note_self_deploy if app.self_managed?
     return false unless run_kamal_deploy
     return false unless run_gated_migrations
+    return false unless run_seeds_if_requested
 
     deployment.succeed!
     log "Kamal deployment completed successfully!"
@@ -297,6 +299,43 @@ class KamalDeployer
       return false
     end
     true
+  end
+
+  # Seed writer (roadmap slot 08). One-shot: when the operator/agent has requested
+  # seeds (app.seed_on_next_deploy), run db:seed in the just-deployed container and
+  # RECORD a SeedApplication with real evidence — the db/seeds.rb digest, the run
+  # output, and the true exit status. This is what makes the preflight "seeds" gate
+  # meaningful (something finally writes the ledger). A failed seed fails the deploy
+  # (consistent with the gate). The flag is cleared whether it succeeds or fails so
+  # a stuck request can't loop.
+  def run_seeds_if_requested
+    return true unless app.seed_on_next_deploy?
+
+    log "=== running seeds (requested): bin/rails db:seed ==="
+    buffer = +""
+    result = @shell.run(*kamal_app_exec("bin/rails db:seed"), chdir: checkout_dir, env: deploy_env) do |line|
+      buffer << line << "\n"
+      log(line)
+    end
+
+    app.seed_applications.create!(
+      status:     result.success? ? "succeeded" : "failed",
+      digest:     seeds_digest,
+      applied_at: Time.current,
+      output:     buffer.last(4000)
+    )
+    app.update_columns(seed_on_next_deploy: false)
+
+    return true if result.success?
+
+    fail_with("db:seed failed (exit #{result.exit_code}) — deploy halted; seed run recorded as failed")
+    false
+  end
+
+  # SHA256 of the committed db/seeds.rb (evidence of WHICH seeds ran), or nil.
+  def seeds_digest
+    path = File.join(checkout_dir, "db", "seeds.rb")
+    File.exist?(path) ? Digest::SHA256.hexdigest(File.read(path)) : nil
   end
 
   # Run a command inside the just-deployed container (kamal app exec --reuse),

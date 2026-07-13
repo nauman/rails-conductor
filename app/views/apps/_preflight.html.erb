@@ -26,7 +26,19 @@
       </li>
     <% end %>
   </ul>
-  <div class="mt-4 flex items-center gap-2 border-t border-border/60 dark:border-border/40 pt-3">
+  <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 dark:border-border/40 pt-3">
+    <% if @app.seed_on_next_deploy? %>
+      <%= rui_button_to("Cancel seed request", toggle_seed_on_next_deploy_app_path(@app), method: :patch,
+            variant: :outline, color: :warning) %>
+      <span class="text-xs text-warning-deep dark:text-warning-bright">db:seed will run on the next deploy (recorded to the ledger).</span>
+    <% else %>
+      <%= rui_button_to("Run seeds on next deploy", toggle_seed_on_next_deploy_app_path(@app), method: :patch,
+            variant: :outline, color: :slate) %>
+      <span class="text-xs text-muted dark:text-faint">Applies + records db:seed on the next deploy.</span>
+    <% end %>
+  </div>
+
+  <div class="mt-3 flex items-center gap-2">
     <% if @app.deploy_hold? %>
       <%= rui_button_to("Clear deploy hold", toggle_deploy_hold_app_path(@app), method: :patch,
             variant: :outline, color: :slate) %>

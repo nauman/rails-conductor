@@ -18,13 +18,14 @@ class UpdateAppTool
         port:           { type: 'integer', description: 'App port' },
         notes:          { type: 'string',  description: 'Free-form deploy notes (surfaced in fleet_status + API)' },
         deploy_hold:    { type: 'boolean', description: 'Hold deploys for this app (deploy preflight blocks). Set true when a coordination thread is owed; set false to clear.' },
-        deploy_hold_reason: { type: 'string', description: 'Why the deploy is held (shown in the preflight block message).' }
+        deploy_hold_reason: { type: 'string', description: 'Why the deploy is held (shown in the preflight block message).' },
+        seed_on_next_deploy: { type: 'boolean', description: 'One-shot: run db:seed on the next deploy and record it to the seed ledger, then auto-clear.' }
       },
       required: []
     }
   }.freeze
 
-  UPDATABLE = %w[deploy_method repository_url branch domain port notes deploy_hold deploy_hold_reason].freeze
+  UPDATABLE = %w[deploy_method repository_url branch domain port notes deploy_hold deploy_hold_reason seed_on_next_deploy].freeze
 
   def initialize(user:)
     @user = user

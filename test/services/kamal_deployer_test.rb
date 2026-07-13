@@ -88,6 +88,40 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+  test "does not run seeds unless requested, and records nothing" do
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+    refute shell.runs.any? { |r| r[:command].last.include?("db:seed") }, "seeds should not run by default"
+    assert_equal 0, @app.seed_applications.count
+  end
+
+  test "seed_on_next_deploy runs db:seed, records a SeedApplication with a digest, and clears the flag" do
+    @app.update!(seed_on_next_deploy: true)
+    write_checkout_file("db/seeds.rb", "User.find_or_create_by!(email: 'a@b.co')\n")
+
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    assert shell.runs.any? { |r| r[:command].last.include?("db:seed") }, "expected a db:seed step"
+    rec = @app.seed_applications.order(:created_at).last
+    assert_equal "succeeded", rec.status
+    assert rec.digest.present?, "expected a db/seeds.rb digest as evidence"
+    assert rec.applied_at.present?
+    refute @app.reload.seed_on_next_deploy?, "the one-shot flag must be cleared"
+    assert_equal "succeeded", @deployment.reload.status
+  end
+
+  test "a failed seed run is recorded as failed and fails the deploy" do
+    @app.update!(seed_on_next_deploy: true)
+    shell = FailOnShell.new("db:seed")
+    deploy_with(shell)
+
+    rec = @app.seed_applications.order(:created_at).last
+    assert_equal "failed", rec.status
+    assert_equal "failed", @deployment.reload.status
+    refute @app.reload.seed_on_next_deploy?, "the flag is cleared even on failure (no loop)"
+  end
+
   test "generates .kamal/secrets from the app's env vars (Conductor = source of truth)" do
     deploy_with(FakeShell.new(success: true))
 

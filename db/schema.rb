@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_13_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_13_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -49,6 +49,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_000001) do
     t.bigint "organization_id"
     t.integer "port"
     t.string "repository_url"
+    t.boolean "seed_on_next_deploy", default: false, null: false
     t.boolean "self_describing", default: false, null: false
     t.boolean "self_managed", default: false, null: false
     t.integer "server_id"

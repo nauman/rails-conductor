@@ -43,6 +43,14 @@ class DeployHoldTest < ActionDispatch::IntegrationTest
     assert_match "Deploy Preflight", @response.body
   end
 
+  test "toggling seed-on-next-deploy sets and clears the one-shot flag" do
+    patch toggle_seed_on_next_deploy_app_path(@application)
+    assert @application.reload.seed_on_next_deploy?
+
+    patch toggle_seed_on_next_deploy_app_path(@application)
+    refute @application.reload.seed_on_next_deploy?
+  end
+
   test "deploying a held app is blocked; forcing overrides" do
     @application.update!(deploy_hold: true)
     assert_no_enqueued_jobs { post deploy_app_path(@application) }

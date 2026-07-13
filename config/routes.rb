@@ -131,6 +131,7 @@ Rails.application.routes.draw do
       post :generate_deploy_key
       patch :toggle_auto_deploy
       patch :toggle_deploy_hold
+      patch :toggle_seed_on_next_deploy
       get :deploy_config
       patch :toggle_self_describing
     end

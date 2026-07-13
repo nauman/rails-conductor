@@ -36,6 +36,7 @@ class ConductorAppTool
         notes:             { type: "string",  description: "create/update: free-form deploy notes" },
         deploy_hold:       { type: "boolean", description: "update: hold deploys (preflight blocks) while a thread is owed; false clears" },
         deploy_hold_reason:{ type: "string",  description: "update: why the deploy is held (shown in the preflight block)" },
+        seed_on_next_deploy:{ type: "boolean", description: "update: one-shot — run db:seed on the next deploy + record it to the seed ledger, then auto-clear" },
         organization_slug: { type: "string",  description: "create: org slug (defaults to actor's first org)" },
         organization_id:   { type: "integer", description: "create: org id (overrides organization_slug)" }
       },

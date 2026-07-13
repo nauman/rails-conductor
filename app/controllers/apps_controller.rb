@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :deploy_config, :toggle_self_describing]
+  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -69,6 +69,14 @@ class AppsController < ApplicationController
     @app.update!(auto_deploy: !@app.auto_deploy)
     state = @app.auto_deploy? ? "enabled" : "disabled"
     redirect_to @app, notice: "Auto-deploy on push #{state}."
+  end
+
+  # One-shot seed request: the next deploy runs db:seed + records a SeedApplication,
+  # then clears the flag. Makes the preflight "seeds" gate real.
+  def toggle_seed_on_next_deploy
+    @app.update!(seed_on_next_deploy: !@app.seed_on_next_deploy)
+    msg = @app.seed_on_next_deploy? ? "Seeds will run on the next deploy." : "Seed-on-next-deploy cleared."
+    redirect_to @app, notice: msg
   end
 
   # Threads gate: set/clear the deploy hold the preflight blocks on. An operator
