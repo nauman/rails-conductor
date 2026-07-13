@@ -63,6 +63,26 @@ class DeployPreflightTest < ActiveSupport::TestCase
     assert_equal :warn, row(check, :seeds).status
   end
 
+  test "the most recent seed run failing is a fail and blocks (not hidden by an older success)" do
+    @app.seed_applications.create!(status: "succeeded", applied_at: 2.days.ago)
+    @app.seed_applications.create!(status: "failed", applied_at: 1.hour.ago)
+    r = check
+    assert_equal :fail, row(r, :seeds).status
+    assert r.blocked?
+  end
+
+  test "a succeeded latest seed run is ok" do
+    @app.seed_applications.create!(status: "failed", applied_at: 2.days.ago)
+    @app.seed_applications.create!(status: "succeeded", applied_at: 1.hour.ago)
+    assert_equal :ok, row(check, :seeds).status
+  end
+
+  test "an unrecognized audit status does NOT fail open to secure — it warns" do
+    @server.update!(last_audit_status: "definitely-not-a-real-status", last_audit_at: Time.current)
+    assert_equal :warn, row(check, :audit).status
+    refute check.blocked?
+  end
+
   test "a server-less app skips the audit check without erroring" do
     @app.update_columns(server_id: nil)
     r = check(@app.reload)

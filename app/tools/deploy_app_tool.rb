@@ -36,7 +36,9 @@ class DeployAppTool
     # Single-flight + preflight gate: a duplicate trigger returns already_running
     # (the DB invariant guarantees exactly one), and a blocking preflight (at-risk
     # server / deploy hold) refuses unless force: true.
-    deployment, status, preflight = app.start_deployment!(user: @user, force: !!input[:force])
+    # MCP payloads are string-keyed; read the string key and cast ("true"/1/true).
+    force = ActiveModel::Type::Boolean.new.cast(input["force"].nil? ? input[:force] : input["force"])
+    deployment, status, preflight = app.start_deployment!(user: @user, force: force)
 
     if status == :blocked
       blockers = preflight.checks.select { |c| c.status == :fail }

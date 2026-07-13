@@ -34,6 +34,23 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal "appone", res.value[:slug]
   end
 
+  test "conductor_app action=deploy is blocked by a held preflight, and force (string key) overrides" do
+    key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
+    server = @org.servers.create!(name: "fleet", status: "online", ip_address: "192.0.2.10",
+                                  ssh_key: key, ssh_user: "deploy")
+    app = @org.apps.create!(name: "Appone", server: server, deploy_method: "kamal",
+                            repository_url: "https://github.com/me/appone.git",
+                            deploy_hold: true, deploy_hold_reason: "thread owed")
+
+    blocked = ConductorAppTool.new(user: @user).call("action" => "deploy", "app_id" => app.id)
+    assert blocked.success?, blocked.error
+    assert_equal "blocked", blocked.value[:status]
+
+    # MCP payloads are string-keyed — force must be read as "force", not :force.
+    forced = ConductorAppTool.new(user: @user).call("action" => "deploy", "app_id" => app.id, "force" => true)
+    assert_equal "started", forced.value[:status], "force:true (string key) must override the block"
+  end
+
   test "conductor_server action=register delegates to RegisterServerTool" do
     res = ConductorServerTool.new(user: @user).call(
       "action" => "register", "name" => "web-1", "ip_address" => "10.0.0.5", "ssh_user" => "deploy"
