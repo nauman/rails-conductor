@@ -51,6 +51,22 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal "started", forced.value[:status], "force:true (string key) must override the block"
   end
 
+  test "conductor_app action=deploy rejects a non-boolean force instead of coercing it to true" do
+    key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
+    server = @org.servers.create!(name: "fleet", status: "online", ip_address: "192.0.2.11",
+                                  ssh_key: key, ssh_user: "deploy")
+    app = @org.apps.create!(name: "Apptwo", server: server, deploy_method: "kamal",
+                            repository_url: "https://github.com/me/apptwo.git", deploy_hold: true)
+
+    %w[banana no 0].each do |bad|
+      res = ConductorAppTool.new(user: @user).call("action" => "deploy", "app_id" => app.id, "force" => bad)
+      refute res.success?, "force=#{bad.inspect} must be rejected, not coerced to true"
+      assert_match(/force/i, res.error)
+    end
+    # and the block still stands (nothing was force-deployed)
+    assert_equal 0, app.deployments.where.not(status: "blocked").count
+  end
+
   test "conductor_server action=register delegates to RegisterServerTool" do
     res = ConductorServerTool.new(user: @user).call(
       "action" => "register", "name" => "web-1", "ip_address" => "10.0.0.5", "ssh_user" => "deploy"

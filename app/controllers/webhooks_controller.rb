@@ -15,14 +15,15 @@ class WebhooksController < ActionController::Base
 
     head(:ok) and return unless app.auto_deploy?
     head(:ok) and return unless ref_matches_branch?(app)
-    _deployment, status = app.start_deployment!
+    deployment, status = app.start_deployment!(commit_sha: params[:after].presence)
     head(:ok) and return if status == :already_running # debounce
     if status == :blocked
       # Preflight blocked (at-risk server / deploy hold): ack the webhook but do NOT
-      # auto-deploy. Log it loudly — the skipped commit is NOT queued, so clearing
-      # the hold won't retro-deploy it; the operator must re-trigger (Deploy/Force).
-      Rails.logger.warn("[webhook] auto-deploy skipped for app=#{app.id} (#{app.name}) — " \
-                        "preflight blocked; commit #{params[:after].presence || 'HEAD'} not deployed. Re-trigger after resolving.")
+      # auto-deploy. The attempt is now a persisted Deployment (status "blocked")
+      # carrying the commit + blockers, so the intent is durable/visible in history
+      # rather than lost — the operator resolves the blocker then re-triggers.
+      Rails.logger.warn("[webhook] auto-deploy blocked for app=#{app.id} (#{app.name}); " \
+                        "recorded deployment=#{deployment&.id} commit=#{params[:after].presence || 'HEAD'}")
       head(:ok) and return
     end
 

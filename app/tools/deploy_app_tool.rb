@@ -36,8 +36,15 @@ class DeployAppTool
     # Single-flight + preflight gate: a duplicate trigger returns already_running
     # (the DB invariant guarantees exactly one), and a blocking preflight (at-risk
     # server / deploy hold) refuses unless force: true.
-    # MCP payloads are string-keyed; read the string key and cast ("true"/1/true).
-    force = ActiveModel::Type::Boolean.new.cast(input["force"].nil? ? input[:force] : input["force"])
+    # A safety override must be an explicit literal boolean. The tool registry does
+    # not enforce the JSON schema, and ActiveModel would coerce "no"/"banana"→true —
+    # so validate strictly and reject anything that isn't a real boolean.
+    raw_force = input["force"].nil? ? input[:force] : input["force"]
+    unless raw_force.nil? || raw_force == true || raw_force == false
+      return Result.fail("`force` must be a boolean (true or false); got #{raw_force.inspect}.")
+    end
+    force = raw_force == true
+
     deployment, status, preflight = app.start_deployment!(user: @user, force: force)
 
     if status == :blocked
