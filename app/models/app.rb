@@ -8,6 +8,7 @@ class App < ApplicationRecord
   has_many :backups, dependent: :nullify
   has_many :env_variables, dependent: :destroy
   has_many :deployments, dependent: :destroy
+  has_many :seed_applications, dependent: :destroy
   has_many :databases, dependent: :nullify
   has_many :database_pulls, dependent: :nullify
   has_one :deploy_key, dependent: :destroy
@@ -99,18 +100,27 @@ class App < ApplicationRecord
   # in-flight deployment instead of racing a second `kamal deploy`. Enqueues the
   # job only for a freshly-created deployment.
   #
-  # Returns [deployment, already_running] — already_running is true when a deploy
-  # was already in flight (so callers can report "already_running" / debounce).
-  def start_deployment!(user: nil)
+  # Runs the deploy preflight (migrations/seeds/audit/threads gate) then dispatches.
+  #
+  # Returns [deployment, status, preflight] where status is one of:
+  #   :started         — a fresh deployment was created + enqueued
+  #   :already_running — a deploy was already in flight (deployment is that one)
+  #   :blocked         — preflight failed and force was not set (deployment is nil)
+  # `preflight` is the DeployPreflight::Result (nil on the already_running race).
+  # Pass force: true to deploy past a blocking preflight.
+  def start_deployment!(user: nil, force: false)
     existing = deployments.in_progress.order(created_at: :desc).first
-    return [existing, true] if existing
+    return [existing, :already_running, nil] if existing
+
+    preflight = DeployPreflight.new(self).check
+    return [nil, :blocked, preflight] if preflight.blocked? && !force
 
     deployment = deployments.create!(user: user)
     DeployAppJob.perform_later(deployment.id)
-    [deployment, false]
+    [deployment, :started, preflight]
   rescue ActiveRecord::RecordNotUnique
     # Lost the race: a concurrent trigger created the in-flight deployment first.
-    [deployments.in_progress.order(created_at: :desc).first, true]
+    [deployments.in_progress.order(created_at: :desc).first, :already_running, nil]
   end
 
   def docker?

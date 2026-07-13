@@ -15,8 +15,11 @@ class WebhooksController < ActionController::Base
 
     head(:ok) and return unless app.auto_deploy?
     head(:ok) and return unless ref_matches_branch?(app)
-    _deployment, already_running = app.start_deployment!
-    head(:ok) and return if already_running # debounce
+    _deployment, status = app.start_deployment!
+    head(:ok) and return if status == :already_running # debounce
+    # Preflight blocked (at-risk server / deploy hold): ack the webhook but do NOT
+    # auto-deploy — the operator must resolve the blocker or deploy with Force.
+    head(:ok) and return if status == :blocked
 
     head :accepted
   end

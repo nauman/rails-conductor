@@ -81,6 +81,8 @@ class ServersController < ApplicationController
   # security updates, DB exposure…) over SSH. Lazy turbo-frame panel + JSON.
   def audit
     @audit = ServerAudit.new(@server).audit
+    # Persist the rollup so the deploy preflight can read posture without re-probing.
+    @server.record_audit!(@audit.status) if @audit.ok?
 
     respond_to do |format|
       format.html { render partial: "servers/audit", locals: { server: @server, audit: @audit } }

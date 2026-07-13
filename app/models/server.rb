@@ -23,6 +23,14 @@ class Server < ApplicationRecord
   # Package installs run async; push the result panel to the server page live.
   after_update_commit :broadcast_package_install, if: :saved_change_to_last_package_install_at?
 
+  # Persist a ServerAudit rollup so the deploy preflight can read posture without a
+  # live SSH probe. Called after any audit run (UI/SSH).
+  def record_audit!(status)
+    update_columns(last_audit_status: status.to_s, last_audit_at: Time.current)
+  end
+
+  def audit_fresh?(within: 7.days) = last_audit_at.present? && last_audit_at > within.ago
+
   def package_install_running? = last_package_install_status == "running"
 
   def broadcast_package_install

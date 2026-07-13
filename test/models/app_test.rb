@@ -16,8 +16,8 @@ class AppTest < ActiveSupport::TestCase
 
   test "start_deployment! creates a deployment and enqueues the job when none is in flight" do
     assert_enqueued_with(job: DeployAppJob) do
-      deployment, already_running = @app.start_deployment!(user: @user)
-      assert_not already_running
+      deployment, status, = @app.start_deployment!(user: @user)
+      assert_equal :started, status
       assert deployment.persisted?
       assert deployment.in_progress?
     end
@@ -27,11 +27,26 @@ class AppTest < ActiveSupport::TestCase
     existing, = @app.start_deployment!(user: @user)
 
     assert_no_enqueued_jobs do
-      deployment, already_running = @app.start_deployment!(user: @user)
-      assert already_running
+      deployment, status, = @app.start_deployment!(user: @user)
+      assert_equal :already_running, status
       assert_equal existing.id, deployment.id
     end
     assert_equal 1, @app.deployments.in_progress.count, "must not create a second in-flight deployment"
+  end
+
+  test "start_deployment! blocks (no job) when the preflight fails, unless forced" do
+    @app.update!(deploy_hold: true, deploy_hold_reason: "thread owed")
+    assert_no_enqueued_jobs do
+      deployment, status, preflight = @app.start_deployment!(user: @user)
+      assert_equal :blocked, status
+      assert_nil deployment
+      assert preflight.blocked?
+    end
+
+    assert_enqueued_with(job: DeployAppJob) do
+      _deployment, status, = @app.start_deployment!(user: @user, force: true)
+      assert_equal :started, status
+    end
   end
 
   test "the unique partial index forbids two in-flight deployments per app (DB invariant)" do

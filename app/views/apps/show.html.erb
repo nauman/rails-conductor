@@ -25,6 +25,8 @@
       <% if @app.deployable? %>
         <% if @app.deployments.in_progress.any? %>
           <%= rui_badge(text: "Deploying...", color: :warning, size: :lg) %>
+        <% elsif @preflight&.blocked? %>
+          <%= rui_badge(text: "Deploy blocked", color: :danger, size: :lg) %>
         <% else %>
           <%= rui_button_to("Deploy", deploy_app_path(@app), method: :post, variant: :solid, color: :success) %>
         <% end %>
@@ -40,6 +42,10 @@
       <%= rui_button("Back", url: apps_path, variant: :outline, color: :slate) %>
     </div>
   </div>
+
+  <% if @preflight %>
+    <%= render "preflight", preflight: @preflight %>
+  <% end %>
 
   <% if @app.native? %>
     <%# Service Status (Native) %>

@@ -16,13 +16,15 @@ class UpdateAppTool
         branch:         { type: 'string',  description: 'Deploy branch' },
         domain:         { type: 'string',  description: 'Public domain' },
         port:           { type: 'integer', description: 'App port' },
-        notes:          { type: 'string',  description: 'Free-form deploy notes (surfaced in fleet_status + API)' }
+        notes:          { type: 'string',  description: 'Free-form deploy notes (surfaced in fleet_status + API)' },
+        deploy_hold:    { type: 'boolean', description: 'Hold deploys for this app (deploy preflight blocks). Set true when a coordination thread is owed; set false to clear.' },
+        deploy_hold_reason: { type: 'string', description: 'Why the deploy is held (shown in the preflight block message).' }
       },
       required: []
     }
   }.freeze
 
-  UPDATABLE = %w[deploy_method repository_url branch domain port notes].freeze
+  UPDATABLE = %w[deploy_method repository_url branch domain port notes deploy_hold deploy_hold_reason].freeze
 
   def initialize(user:)
     @user = user

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_12_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_13_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -35,6 +35,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_120000) do
     t.datetime "container_started_at"
     t.string "container_status", default: "unknown"
     t.datetime "created_at", null: false
+    t.boolean "deploy_hold", default: false, null: false
+    t.string "deploy_hold_reason"
     t.string "deploy_method", default: "docker", null: false
     t.datetime "deployed_at"
     t.string "dockerfile_path", default: "Dockerfile"
@@ -325,6 +327,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_120000) do
     t.index ["script_type"], name: "index_scripts_on_script_type"
   end
 
+  create_table "seed_applications", force: :cascade do |t|
+    t.bigint "app_id", null: false
+    t.datetime "applied_at"
+    t.datetime "created_at", null: false
+    t.string "digest"
+    t.text "output"
+    t.string "status", default: "succeeded", null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_id"], name: "index_seed_applications_on_app_id"
+  end
+
   create_table "servers", force: :cascade do |t|
     t.string "agent_token"
     t.string "agent_url"
@@ -334,6 +347,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_120000) do
     t.integer "disk_percent", default: 0
     t.string "hostname"
     t.string "ip_address"
+    t.datetime "last_audit_at"
+    t.string "last_audit_status"
     t.datetime "last_package_install_at"
     t.text "last_package_install_log"
     t.string "last_package_install_packages"
@@ -437,6 +452,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_120000) do
   add_foreign_key "messages", "conversations"
   add_foreign_key "script_runs", "scripts"
   add_foreign_key "script_runs", "servers"
+  add_foreign_key "seed_applications", "apps"
   add_foreign_key "servers", "organizations"
   add_foreign_key "servers", "ssh_keys"
   add_foreign_key "ssh_keys", "organizations"

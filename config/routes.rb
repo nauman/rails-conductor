@@ -130,6 +130,7 @@ Rails.application.routes.draw do
       post :provision_database
       post :generate_deploy_key
       patch :toggle_auto_deploy
+      patch :toggle_deploy_hold
       get :deploy_config
       patch :toggle_self_describing
     end

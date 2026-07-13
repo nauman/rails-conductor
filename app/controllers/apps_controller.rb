@@ -8,6 +8,7 @@ class AppsController < ApplicationController
   def show
     @deployments = @app.deployments.recent.limit(10)
     @env_variables = @app.env_variables.order(:key)
+    @preflight = DeployPreflight.new(@app).check if @app.deployable?
   end
 
   def new
@@ -49,18 +50,37 @@ class AppsController < ApplicationController
       return redirect_to @app, alert: "App is not deployable. Configure server and repository first."
     end
 
-    _deployment, already_running = @app.start_deployment!(user: current_user)
-    if already_running
-      return redirect_to @app, alert: "A deployment is already in progress."
-    end
+    force = ActiveModel::Type::Boolean.new.cast(params[:force])
+    _deployment, status, preflight = @app.start_deployment!(user: current_user, force: force)
 
-    redirect_to @app, notice: "Deployment started. Check logs for progress."
+    case status
+    when :already_running
+      redirect_to @app, alert: "A deployment is already in progress."
+    when :blocked
+      blockers = preflight.checks.select { |c| c.status == :fail }.map { |c| "#{c.label}: #{c.detail}" }
+      redirect_to @app,
+        alert: "Deploy blocked by preflight — #{blockers.join("; ")}. Resolve, or re-run with Force to override."
+    else
+      redirect_to @app, notice: "Deployment started. Check logs for progress."
+    end
   end
 
   def toggle_auto_deploy
     @app.update!(auto_deploy: !@app.auto_deploy)
     state = @app.auto_deploy? ? "enabled" : "disabled"
     redirect_to @app, notice: "Auto-deploy on push #{state}."
+  end
+
+  # Threads gate: set/clear the deploy hold the preflight blocks on. An operator
+  # holds while a coordination thread is owed, then clears it to let deploys run.
+  def toggle_deploy_hold
+    if @app.deploy_hold?
+      @app.update!(deploy_hold: false, deploy_hold_reason: nil)
+      redirect_to @app, notice: "Deploy hold cleared."
+    else
+      @app.update!(deploy_hold: true, deploy_hold_reason: params[:reason].presence || "Held by operator")
+      redirect_to @app, alert: "Deploys held. The preflight will block until this is cleared."
+    end
   end
 
   # Self-describing deploy config (ADR 0001): the REAL config/deploy.production.yml

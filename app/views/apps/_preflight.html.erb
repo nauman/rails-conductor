@@ -1,0 +1,53 @@
+<%# Deploy preflight gate (DeployPreflight): the four deploy rituals as checks.
+    A :fail row blocks Deploy; the operator resolves it or ships with Force. %>
+<% dot = { ok: "bg-primary-tint0", warn: "bg-warning-tint0", fail: "bg-danger-tint0", skip: "bg-faint" } %>
+<% rollup = { clear: ["All clear", "text-primary dark:text-primary-sage"],
+              warnings: ["Warnings", "text-warning-deep dark:text-warning-bright"],
+              blocked: ["Blocked", "text-danger-deep dark:text-danger-bright"] } %>
+<div class="mt-6 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
+  <div class="flex items-center justify-between">
+    <h2 class="text-sm font-semibold text-ink dark:text-white">Deploy Preflight</h2>
+    <span class="text-xs font-semibold uppercase tracking-wide <%= rollup[preflight.status][1] %>">
+      <%= rollup[preflight.status][0] %>
+    </span>
+  </div>
+  <p class="mt-1 text-xs text-muted dark:text-faint">
+    Migrations, seeds, server audit, and coordination threads — checked before every deploy. A blocking row halts Deploy until resolved (or overridden with Force).
+  </p>
+  <ul class="mt-4 space-y-2">
+    <% preflight.checks.each do |c| %>
+      <li class="flex items-start gap-3">
+        <span class="mt-1 h-2 w-2 shrink-0 rounded-full <%= dot[c.status] %>"></span>
+        <div>
+          <span class="text-sm font-medium text-ink dark:text-white"><%= c.label %></span>
+          <span class="ml-2 text-xs uppercase tracking-wide text-muted dark:text-faint"><%= c.status %></span>
+          <p class="text-xs text-body dark:text-faint"><%= c.detail %></p>
+        </div>
+      </li>
+    <% end %>
+  </ul>
+  <div class="mt-4 flex items-center gap-2 border-t border-border/60 dark:border-border/40 pt-3">
+    <% if @app.deploy_hold? %>
+      <%= rui_button_to("Clear deploy hold", toggle_deploy_hold_app_path(@app), method: :patch,
+            variant: :outline, color: :slate) %>
+    <% else %>
+      <%= rui_button_to("Hold deploys", toggle_deploy_hold_app_path(@app), method: :patch,
+            variant: :outline, color: :slate,
+            data: { turbo_confirm: "Hold deploys for this app? The preflight will block until cleared." }) %>
+    <% end %>
+    <span class="text-xs text-muted dark:text-faint">Set a hold while a coordination thread is owed.</span>
+  </div>
+
+  <% if preflight.blocked? %>
+    <div class="mt-4 rounded-base border border-danger-tint2 dark:border-danger-deep bg-danger-tint3/40 dark:bg-danger-deep/10 p-3">
+      <p class="text-xs text-danger-deep dark:text-danger-bright">
+        Deploy is blocked. Resolve the red rows above, or override:
+      </p>
+      <div class="mt-2">
+        <%= rui_button_to("Deploy anyway (Force)", deploy_app_path(@app, force: true), method: :post,
+              variant: :outline, color: :danger,
+              data: { turbo_confirm: "Preflight is blocking this deploy. Force past it?" }) %>
+      </div>
+    </div>
+  <% end %>
+</div>

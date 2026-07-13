@@ -36,7 +36,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Background worker management](05-background-workers.html) | Runtime Backends | P1 | M | Planned |
 | [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | ✅ Done (2026-06-21) |
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
-| [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | Planned |
+| [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | 🔄 Seed ledger + preflight "seeds recorded?" check SHIPPED (2026-07-13, `SeedApplication`); apply/idempotency-run remain |
 | [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | **P0** | M | Planned · **Heroku-DX** |
 | [Multi-tenant MCP (anyone can deploy)](14-multi-tenant-mcp.html) | Agent-native | P1 | M | ✅ Done (2026-06-20) |
 | [MCP wire-protocol transport](15-mcp-wire-protocol.html) | Agent-native | P1 | M | Planned |
@@ -52,7 +52,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Backup restore + verification (R2)](21-backup-restore.html) | Data & Backups | P0 | M | Planned |
 | [Caddy management console + per-app multi-subdomain](22-caddy-console.html) | Routing & edge | P1 | M | Planned |
 | [Deploy-executor rework (isolate kamal from the web container)](23-deploy-executor.html) | Runtime Backends | P1 | L | Planned · **architecture** |
-| [Migration lifecycle: status, pending/drift detection, gated run, failure remediation](24-migration-lifecycle.html) | Runtime Backends | **P0** | M | 🔄 Gated run SHIPPED (KamalDeployer, 2026-07-11); status/drift/remediation remain |
+| [Migration lifecycle: status, pending/drift detection, gated run, failure remediation](24-migration-lifecycle.html) | Runtime Backends | **P0** | M | 🔄 Gated run SHIPPED (KamalDeployer, 2026-07-11); **Deploy Preflight gate SHIPPED** (2026-07-13, `DeployPreflight` — migrations/seeds/audit/threads, blocks deploy on fail, force override); status/drift/remediation remain |
 | [Two-identity servers (root=automation, deploy=app ops) + server automation/upgrades as root](25-two-identity-servers.html) | Continuous Maintenance | P1 | M | Planned · **security split** |
 
 ## Critical path
