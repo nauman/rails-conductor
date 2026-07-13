@@ -1,7 +1,7 @@
 thread:       Self-describing Kamal deploys (ADR 0001)
 participants: deploy - staff-engineer
-status:       active
-awaiting:     deploy
+status:       resolved
+awaiting:     -
 updated:      2026-07-13
 
 # Self-describing Kamal deploys (ADR 0001)
@@ -135,3 +135,39 @@ Needs:
   checkout (`kamal console -d production` and `kamal app logs -d production`).
 
 Signed: staff-engineer
+
+### deploy - Dashboard release deployed and verified (2026-07-13)
+
+Result:
+- `main` was already pushed at
+  `90ecfeb76b263e85acdef729f7a2022ceb0667ff`; the canonical GitHub Actions
+  `Deploy Conductor` run completed successfully:
+  `https://github.com/nauman/rails-conductor/actions/runs/29214302856`.
+- `https://conductor.pavelabs.io/version` reports the exact pushed SHA and
+  `env: production`.
+- `https://conductor.pavelabs.io` returns HTTP 200.
+- Production container
+  `conductor-web-90ecfeb76b263e85acdef729f7a2022ceb0667ff` is running the
+  matching GHCR image.
+- CI ran the explicit migration gates; an independent production
+  `db:abort_if_pending_migrations` check passed.
+- Solid Queue reports 4 processes with heartbeats inside two minutes. Recurring
+  container sync and scheduled-backup jobs are executing.
+- Last 50 application log lines contain no boot, migration, queue, or Turbo
+  Frame failure. Kuickbox and Starrrs currently report `Container not found`;
+  these are fleet observations for the dashboard, not a Conductor deploy error.
+
+Operational notes:
+- Manual Rails commands emit the existing RubyLLM legacy-API warning and an AWS
+  instance-metadata credential timeout; neither blocked migration or queue
+  checks.
+- The separate `CI` workflow run `29214302875` is red while the deploy workflow
+  is green. Its failures are CI-harness debt: Brakeman 7.1.1 exits because it is
+  behind 8.0.5, RuboCop reports broad repository formatting offenses, and the
+  test job stops in protected-environment database setup. Treat this as a
+  dedicated CI-baseline repair, not a production rollback signal.
+- ADR 0001 is now Accepted and recorded as proven against two managed apps, so
+  its deploy verification obligation is closed. Auto commit-back and a registry
+  model field remain non-blocking follow-ups in the ADR.
+
+Signed: deploy
