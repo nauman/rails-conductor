@@ -36,7 +36,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Background worker management](05-background-workers.html) | Runtime Backends | P1 | M | Planned |
 | [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | ✅ Done (2026-06-21) |
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
-| [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | Planned. Scaffolding only (2026-07-13): `SeedApplication` ledger table + a preflight "was a seed run recorded / did the last fail?" check exist, but **nothing writes ledger rows yet** — no apply/record workflow, no idempotency scan |
+| [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | 🔄 Apply+record SHIPPED (2026-07-13): `SeedApplication` ledger + a one-shot `seed_on_next_deploy` that runs `db:seed` in the deployed container and records status + db/seeds.rb digest + output (KamalDeployer; UI toggle + MCP). Preflight "seeds" gate now has a real writer + blocks on a failed run. Remains: standalone (no-deploy) run, idempotency scan of seeds.rb, non-kamal support |
 | [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | **P0** | M | Planned · **Heroku-DX** |
 | [Multi-tenant MCP (anyone can deploy)](14-multi-tenant-mcp.html) | Agent-native | P1 | M | ✅ Done (2026-06-20) |
 | [MCP wire-protocol transport](15-mcp-wire-protocol.html) | Agent-native | P1 | M | Planned |
