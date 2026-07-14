@@ -77,6 +77,23 @@ class ServersController < ApplicationController
     end
   end
 
+  def storage
+    @storage = ServerStorage.new(@server).load
+
+    respond_to do |format|
+      format.html { render partial: "servers/storage", locals: { server: @server, storage: @storage } }
+      format.json do
+        render json: {
+          error:    @storage.error,
+          mounts:   @storage.mounts.map(&:to_h),
+          swap:     @storage.swap,
+          memory:   @storage.memory,
+          top_dirs: @storage.top_dirs.map(&:to_h)
+        }
+      end
+    end
+  end
+
   # Read-only security + patch-posture audit (firewall, SSH hardening, pending
   # security updates, DB exposure…) over SSH. Lazy turbo-frame panel + JSON.
   def audit

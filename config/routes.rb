@@ -113,6 +113,7 @@ Rails.application.routes.draw do
       get :logs
       get :health
       get :audit
+      get :storage
       post :install_packages
       post :apply_updates
     end
