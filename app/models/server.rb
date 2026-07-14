@@ -31,6 +31,16 @@ class Server < ApplicationRecord
 
   def audit_fresh?(within: 7.days) = last_audit_at.present? && last_audit_at > within.ago
 
+  # Honest status for display. A server Conductor has never actually reached
+  # (no successful metrics/health check → last_seen_at is nil) reads "pending",
+  # not the "online" default stored at registration. Prevents never-connected
+  # servers from looking healthy.
+  def display_status
+    last_seen_at.present? ? status : "pending"
+  end
+
+  def ever_seen? = last_seen_at.present?
+
   def package_install_running? = last_package_install_status == "running"
 
   def broadcast_package_install

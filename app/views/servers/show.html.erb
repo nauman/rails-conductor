@@ -5,7 +5,7 @@
     <div>
       <div class="flex items-center gap-3">
         <h1 class="font-display text-2xl text-ink tracking-display"><%= @server.name %></h1>
-        <span class="<%= status_badge(@server.status) %>"><%= @server.status %></span>
+        <span class="<%= status_badge(@server.display_status) %>"><%= @server.display_status %></span>
       </div>
       <p class="mt-1 text-sm text-muted">
         <%= @server.provider&.titleize %> · <%= @server.region || "No region" %>

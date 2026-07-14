@@ -33,7 +33,7 @@
           <div class="flex items-center justify-between border-b border-border bg-fill px-4 py-2">
             <div class="flex min-w-0 items-center gap-2">
               <% if server %>
-                <span class="h-2 w-2 shrink-0 rounded-pill <%= server.status == 'online' ? 'bg-primary' : server.status == 'degraded' ? 'bg-warning-bright' : 'bg-danger-bright' %>"></span>
+                <span class="h-2 w-2 shrink-0 rounded-pill <%= server.display_status == 'online' ? 'bg-primary' : server.display_status == 'degraded' ? 'bg-warning-bright' : server.display_status == 'pending' ? 'bg-border-strong' : 'bg-danger-bright' %>"></span>
                 <%= link_to server.name, server_path(server), class: "truncate text-sm font-medium text-ink hover:underline" %>
               <% else %>
                 <span class="h-2 w-2 shrink-0 rounded-pill bg-faint"></span>

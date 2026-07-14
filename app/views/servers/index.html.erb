@@ -21,7 +21,7 @@
               <div class="text-sm font-semibold text-ink"><%= server.name %></div>
               <div class="text-xs text-muted"><%= server.region || server.provider || "—" %></div>
             </div>
-            <span class="<%= status_badge(server.status) %>"><%= server.status %></span>
+            <span class="<%= status_badge(server.display_status) %>"><%= server.display_status %></span>
           </div>
           <div class="mt-4 grid grid-cols-2 gap-3 text-xs text-muted">
             <div class="rounded-lg bg-fill p-3">
