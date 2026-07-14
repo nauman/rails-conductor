@@ -43,10 +43,11 @@
   </head>
 
   <body class="bg-bg text-body font-sans antialiased">
-    <div class="min-h-screen flex flex-col">
-      <%# overflow-x-clip (not overflow-hidden) contains horizontal nav overflow without
-          clipping the nav/account dropdowns, which hang down vertically. %>
-      <header class="sticky top-0 z-30 overflow-x-clip border-b border-border bg-surface/85 backdrop-blur">
+    <%# overflow-x-clip lives on the page shell (not the header) so it contains
+        horizontal overflow WITHOUT making the header a clip boundary for the
+        nav/account dropdowns that hang below it. %>
+    <div class="min-h-screen flex flex-col overflow-x-clip" data-app-shell>
+      <header class="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur">
         <div class="mx-auto max-w-[88rem] min-w-0 px-2 sm:px-4">
           <div class="flex h-16 min-w-0 items-center gap-2 sm:gap-3" data-primary-header>
             <%= link_to (user_signed_in? ? dashboard_path : root_path), class: "flex items-center gap-2.5 shrink-0" do %>

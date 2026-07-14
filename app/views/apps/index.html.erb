@@ -15,8 +15,8 @@
   <% if @apps.any? %>
     <div class="mt-6 grid gap-4 lg:grid-cols-2">
       <% @apps.each do |app| %>
-        <%= turbo_stream_from app %>
         <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+          <%= turbo_stream_from app %>
           <div class="flex items-center justify-between">
             <div>
               <div class="text-sm font-semibold text-ink"><%= app.name %></div>

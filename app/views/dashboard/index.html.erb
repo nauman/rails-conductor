@@ -269,8 +269,8 @@
         </div>
         <div class="mt-4 space-y-3">
           <% @apps.limit(4).each do |app| %>
-            <%= turbo_stream_from app %>
             <div class="rounded-card border border-border bg-bg-alt px-4 py-3">
+              <%= turbo_stream_from app %>
               <div class="flex items-center justify-between">
                 <div>
                   <div class="text-sm font-semibold text-ink"><%= app.name %></div>
