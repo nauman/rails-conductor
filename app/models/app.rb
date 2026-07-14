@@ -196,7 +196,11 @@ class App < ApplicationRecord
   end
 
   def needs_attention?
-    container_stopped? || status == "failed" || status_check_error.present?
+    return true if status == "failed" || status_check_error.present?
+
+    # A stopped container only warrants attention if the app is meant to be
+    # running — a deliberately-stopped app sitting exited is healthy.
+    status != "stopped" && container_stopped?
   end
 
   def can_sync_status?

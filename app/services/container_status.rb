@@ -34,6 +34,11 @@ class ContainerStatus
 
     if ssh.success? && result.present?
       parse_and_update(result)
+    elsif ssh.success? && app.status == "stopped"
+      # SSH worked; there's simply no container — which is exactly right for an
+      # app we deliberately stopped. Record a clean stopped state, not a failure.
+      app.update!(container_status: "exited", last_status_check_at: Time.current, status_check_error: nil)
+      true
     else
       app.update_container_status!("unknown", error: ssh.error || "Container not found")
       failure(ssh.error || "Container not found")
@@ -47,7 +52,9 @@ class ContainerStatus
   def sync_kamal
     ssh = SshConnection.new(app.server)
     filter = "label=service=#{Shellwords.escape(app.kamal_service)}"
-    running = ssh.execute("docker ps --filter #{filter} --filter status=running --format '{{.Names}}'")
+    # CreatedAt lets us tell whether the running release is newer than a failed
+    # deploy (so we don't cry "still serving the previous release" forever).
+    running = ssh.execute("docker ps --filter #{filter} --filter status=running --format '{{.CreatedAt}}'")
 
     unless ssh.success?
       app.update_container_status!("unknown", error: ssh.error || "docker ps failed")
@@ -55,8 +62,9 @@ class ContainerStatus
     end
 
     if running.to_s.strip.present?
-      app.update!(status: "running", container_status: "running",
-                  last_status_check_at: Time.current, status_check_error: failed_deploy_note)
+      started_at = parse_docker_created(running)
+      app.update!(status: "running", container_status: "running", container_started_at: started_at,
+                  last_status_check_at: Time.current, status_check_error: failed_deploy_note(started_at))
     else
       app.update!(status: "stopped", container_status: "exited",
                   last_status_check_at: Time.current, status_check_error: nil)
@@ -65,14 +73,23 @@ class ContainerStatus
   end
 
   # A container is up, but if the LATEST deployment failed we're serving the
-  # PREVIOUS release — surface that instead of a clean green "running", so the
-  # badge doesn't claim a failed deploy worked.
-  def failed_deploy_note
+  # PREVIOUS release — surface that instead of a clean green "running". BUT if
+  # the running container is newer than that failed deploy, a later deploy
+  # (often out-of-band, e.g. Conductor self-deploying via CI) already replaced
+  # it, so the old failure is stale — don't report it.
+  def failed_deploy_note(container_started_at = nil)
     dep = app.last_deployment
     return nil unless dep&.failed?
+    return nil if container_started_at && dep.completed_at && container_started_at > dep.completed_at
 
     when_failed = dep.completed_at ? " (#{dep.completed_at.strftime('%b %-d %H:%M UTC')})" : ""
     "Last deploy failed#{when_failed} — still serving the previous release."
+  end
+
+  # docker's CreatedAt looks like "2026-07-14 04:15:32 +0000 UTC" (possibly
+  # several lines if multiple containers match — take the newest).
+  def parse_docker_created(output)
+    output.to_s.lines.filter_map { |line| Time.parse(line.strip.sub(/\s+UTC\z/, "")) rescue nil }.max
   end
 
   def parse_and_update(json_output)

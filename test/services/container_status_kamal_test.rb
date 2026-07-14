@@ -30,9 +30,13 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
     assert_includes ssh.commands.first, "status=running"
   end
 
-  test "a running container with a FAILED latest deploy flags needs-attention, not clean green" do
+  # docker's `{{.CreatedAt}}` format, e.g. "2026-07-14 04:15:32 +0000 UTC".
+  def docker_created(time) = time.strftime("%Y-%m-%d %H:%M:%S %z UTC")
+
+  test "a running container with a FAILED latest deploy (older than the container's start) flags needs-attention" do
     @app.deployments.create!(status: "failed", completed_at: Time.current)
-    ssh = FakeSsh.new(output: "appone-web-old123\n")
+    # Container predates the failed deploy → we're still on the previous release.
+    ssh = FakeSsh.new(output: "#{docker_created(1.hour.ago)}\n")
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     @app.reload
@@ -40,6 +44,18 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
     assert @app.status_check_error.present?, "…but the failed last deploy must be surfaced"
     assert_match(/previous release/i, @app.status_check_error)
     assert @app.needs_attention?
+  end
+
+  test "a stale failed deploy older than the running container is NOT reported (self-deploy via CI case)" do
+    # Failed deploy weeks ago, but the running container is fresh → a later
+    # (out-of-band) deploy replaced it. Don't cry wolf.
+    @app.deployments.create!(status: "failed", completed_at: 30.days.ago)
+    ssh = FakeSsh.new(output: "#{docker_created(Time.current)}\n")
+    SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
+
+    @app.reload
+    assert_equal "running", @app.status
+    assert_nil @app.status_check_error, "a container newer than the failed deploy is not 'serving the previous release'"
   end
 
   test "a running container with a succeeded latest deploy stays clean green" do
