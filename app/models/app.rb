@@ -29,7 +29,7 @@ class App < ApplicationRecord
   scope :stopped, -> { where(status: "stopped") }
   scope :deploying, -> { where(status: "deploying") }
   scope :failed, -> { where(status: "failed") }
-  scope :deployable, -> { joins(:server).where.not(repository_url: [nil, ""]) }
+  scope :deployable, -> { joins(:server).where.not(repository_url: [ nil, "" ]) }
   # The app(s) representing Conductor itself — deploys are reconciled on boot
   # rather than observed inline (see SelfDeployReconciler).
   scope :self_managed, -> { where(self_managed: true) }
@@ -110,7 +110,7 @@ class App < ApplicationRecord
   # Pass force: true to deploy past a blocking preflight.
   def start_deployment!(user: nil, force: false, commit_sha: nil)
     existing = deployments.in_progress.order(created_at: :desc).first
-    return [existing, :already_running, nil] if existing
+    return [ existing, :already_running, nil ] if existing
 
     preflight = DeployPreflight.new(self).check
     blockers_json = preflight.blocked? ? preflight_blockers_json(preflight) : nil
@@ -120,7 +120,7 @@ class App < ApplicationRecord
       # durable + auditable instead of silently dropped. Not an in_progress state.
       blocked = deployments.create!(user: user, commit_sha: commit_sha,
                                     status: "blocked", preflight_snapshot: blockers_json)
-      return [blocked, :blocked, preflight]
+      return [ blocked, :blocked, preflight ]
     end
 
     # Record a forced override (which blockers it overrode) for the audit trail.
@@ -128,10 +128,10 @@ class App < ApplicationRecord
                                      forced: force && preflight.blocked?,
                                      preflight_snapshot: force ? blockers_json : nil)
     DeployAppJob.perform_later(deployment.id)
-    [deployment, :started, preflight]
+    [ deployment, :started, preflight ]
   rescue ActiveRecord::RecordNotUnique
     # Lost the race: a concurrent trigger created the in-flight deployment first.
-    [deployments.in_progress.order(created_at: :desc).first, :already_running, nil]
+    [ deployments.in_progress.order(created_at: :desc).first, :already_running, nil ]
   end
 
   def preflight_blockers_json(preflight)
@@ -175,7 +175,7 @@ class App < ApplicationRecord
   # stderr would otherwise be dropped — set the runtime dir and fold stderr in so
   # the UI shows the real tail (or the actual error) instead of a blank box.
   def log_tail_command(tail = 300)
-    n = [tail.to_i, 1].max
+    n = [ tail.to_i, 1 ].max
     if native?
       "XDG_RUNTIME_DIR=/run/user/$(id -u) journalctl --user -u #{service_name} -n #{n} --no-pager 2>&1"
     else
@@ -223,6 +223,13 @@ class App < ApplicationRecord
   # (kamal labels them `service=<name>`). Defaults to the slug.
   def kamal_service
     slug
+  end
+
+  # The service label on a running container doesn't always equal the slug: an
+  # adopted/Hatchbox app can have slug "calm-page" but Kamal service "calmpage".
+  # Match on the slug AND a separator-stripped variant so status sync finds it.
+  def kamal_service_candidates
+    [ kamal_service, kamal_service.gsub(/[^a-z0-9]/i, "").downcase ].uniq
   end
 
   def status_fresh?

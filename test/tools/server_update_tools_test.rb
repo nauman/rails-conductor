@@ -85,6 +85,50 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
     assert refreshed, "metrics should be refreshed on a successful connection"
   end
 
+  # --- audit / apply_updates / install_packages --------------------------
+
+  AuditCheck  = Struct.new(:label, :status, :detail, keyword_init: true)
+  AuditResult = Struct.new(:status, :checks, :error, keyword_init: true) do
+    def ok? = error.nil?
+  end
+
+  test "audit returns the graded security posture" do
+    fake_audit = Object.new
+    fake_audit.define_singleton_method(:audit) do
+      AuditResult.new(status: :secure, checks: [ AuditCheck.new(label: "Firewall (ufw)", status: :ok, detail: "active") ], error: nil)
+    end
+    ServerAudit.stub(:new, ->(*) { fake_audit }) do
+      result = ServerAuditTool.new(user: @user).call("server_id" => @server.id)
+      assert result.success?, result.error
+      assert_equal :secure, result.value[:status]
+      assert_equal "Firewall (ufw)", result.value[:checks].first[:check]
+    end
+  end
+
+  test "apply_updates marks the server updating and defaults to security scope" do
+    result = ApplyServerUpdatesTool.new(user: @user).call("server_id" => @server.id)
+    assert result.success?, result.error
+    assert_equal "security", result.value[:scope]
+    assert_equal "running", @server.reload.last_update_status
+  end
+
+  test "apply_updates accepts scope=all" do
+    result = ApplyServerUpdatesTool.new(user: @user).call("server_id" => @server.id, "scope" => "all")
+    assert_equal "all", result.value[:scope]
+  end
+
+  test "install_packages requires package names" do
+    result = InstallServerPackagesTool.new(user: @user).call("server_id" => @server.id, "packages" => "")
+    assert result.failure?
+  end
+
+  test "install_packages records the packages and marks the install running" do
+    result = InstallServerPackagesTool.new(user: @user).call("server_id" => @server.id, "packages" => "htop ncdu")
+    assert result.success?, result.error
+    assert_includes result.value[:packages], "htop"
+    assert_equal "running", @server.reload.last_package_install_status
+  end
+
   # --- scoping -----------------------------------------------------------
 
   test "a non-admin actor cannot update a server outside their orgs" do

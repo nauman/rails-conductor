@@ -20,23 +20,37 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
                              status: "stopped", repository_url: "https://x/r.git")
   end
 
+  # docker's `{{.CreatedAt}}` format, e.g. "2026-07-14 04:15:32 +0000 UTC".
+  def docker_created(time) = time.strftime("%Y-%m-%d %H:%M:%S %z UTC")
+
+  # One line of `docker ps --format '{{.Labels}}|{{.CreatedAt}}'`.
+  def ps_line(created_time, service: "appone")
+    "service=#{service},role=web,destination=|#{docker_created(created_time)}\n"
+  end
+
   test "a running kamal container marks the app running and reconciles App.status" do
-    ssh = FakeSsh.new(output: "appone-web-abc123\n")
+    ssh = FakeSsh.new(output: ps_line(Time.current))
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     assert_equal "running", @app.reload.status
     assert_equal "running", @app.container_status
-    assert_includes ssh.commands.first, "label=service=appone"
     assert_includes ssh.commands.first, "status=running"
+    assert_includes ssh.commands.first, "{{.Labels}}"
   end
 
-  # docker's `{{.CreatedAt}}` format, e.g. "2026-07-14 04:15:32 +0000 UTC".
-  def docker_created(time) = time.strftime("%Y-%m-%d %H:%M:%S %z UTC")
+  test "detects a container whose service label differs from the slug (calm-page vs calmpage)" do
+    @app.update!(slug: "calm-page")
+    # Container is labelled service=calmpage, but the app's slug is calm-page.
+    ssh = FakeSsh.new(output: ps_line(Time.current, service: "calmpage"))
+    SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
+
+    assert_equal "running", @app.reload.status, "must match the separator-stripped service name"
+  end
 
   test "a running container with a FAILED latest deploy (older than the container's start) flags needs-attention" do
     @app.deployments.create!(status: "failed", completed_at: Time.current)
     # Container predates the failed deploy → we're still on the previous release.
-    ssh = FakeSsh.new(output: "#{docker_created(1.hour.ago)}\n")
+    ssh = FakeSsh.new(output: ps_line(1.hour.ago))
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     @app.reload
@@ -50,7 +64,7 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
     # Failed deploy weeks ago, but the running container is fresh → a later
     # (out-of-band) deploy replaced it. Don't cry wolf.
     @app.deployments.create!(status: "failed", completed_at: 30.days.ago)
-    ssh = FakeSsh.new(output: "#{docker_created(Time.current)}\n")
+    ssh = FakeSsh.new(output: ps_line(Time.current))
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     @app.reload
@@ -60,7 +74,7 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
 
   test "a running container with a succeeded latest deploy stays clean green" do
     @app.deployments.create!(status: "succeeded", completed_at: Time.current)
-    ssh = FakeSsh.new(output: "appone-web-new456\n")
+    ssh = FakeSsh.new(output: ps_line(Time.current))
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     assert_nil @app.reload.status_check_error

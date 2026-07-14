@@ -45,24 +45,24 @@ class ContainerStatus
     end
   end
 
-  # Kamal apps: the container is named <service>-web-<version> and labelled
-  # `service=<service>`, so we detect it by label rather than by name. A running
-  # container means the app is live — reconcile App.status too (a Kamal deploy
-  # may have happened out-of-band, bypassing Conductor's deployer).
+  # Kamal apps: the container is labelled `service=<service>`. The service name
+  # doesn't always equal Conductor's slug — an adopted/Hatchbox app with slug
+  # "calm-page" runs as service "calmpage". So we list every running container's
+  # service label + CreatedAt and match against the app's service candidates
+  # (slug + separator-stripped variant). A running match means the app is live —
+  # reconcile App.status too (a deploy may have happened out-of-band).
   def sync_kamal
     ssh = SshConnection.new(app.server)
-    filter = "label=service=#{Shellwords.escape(app.kamal_service)}"
-    # CreatedAt lets us tell whether the running release is newer than a failed
-    # deploy (so we don't cry "still serving the previous release" forever).
-    running = ssh.execute("docker ps --filter #{filter} --filter status=running --format '{{.CreatedAt}}'")
+    running = ssh.execute(%(docker ps --filter status=running --format '{{.Labels}}|{{.CreatedAt}}'))
 
     unless ssh.success?
       app.update_container_status!("unknown", error: ssh.error || "docker ps failed")
       return failure(ssh.error || "docker ps failed")
     end
 
-    if running.to_s.strip.present?
-      started_at = parse_docker_created(running)
+    created_at = running_container_created(running, app.kamal_service_candidates)
+    if created_at
+      started_at = parse_docker_created(created_at)
       app.update!(status: "running", container_status: "running", container_started_at: started_at,
                   last_status_check_at: Time.current, status_check_error: failed_deploy_note(started_at))
     else
@@ -70,6 +70,18 @@ class ContainerStatus
                   last_status_check_at: Time.current, status_check_error: nil)
     end
     true
+  end
+
+  # From `docker ps ... {{.Labels}}|{{.CreatedAt}}` output, return the CreatedAt
+  # string of a running container whose `service` label matches a candidate.
+  def running_container_created(output, candidates)
+    wanted = candidates.map { |c| "service=#{c}" }
+    output.to_s.lines.each do |line|
+      labels, _sep, created = line.strip.rpartition("|")
+      next if labels.empty? || created.blank?
+      return created if labels.split(",").any? { |kv| wanted.include?(kv.strip) }
+    end
+    nil
   end
 
   # A container is up, but if the LATEST deployment failed we're serving the

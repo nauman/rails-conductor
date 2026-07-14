@@ -7,6 +7,9 @@ class ConductorServerTool
     "update"          => UpdateServerTool,
     "add_ssh_key"     => GenerateSshKeyTool,
     "test_connection" => TestServerConnectionTool,
+    "audit"           => ServerAuditTool,
+    "apply_updates"   => ApplyServerUpdatesTool,
+    "install_packages" => InstallServerPackagesTool,
     "run_script"      => RunScriptTool
   }.freeze
 
@@ -17,11 +20,16 @@ class ConductorServerTool
       "update (change an existing host — server_id/server_name + any of name, ip_address, ssh_user, ssh_port, provider, region, and attach an SSH key via ssh_key_id or ssh_key_name), " \
       "add_ssh_key (generate a deploy keypair on the Conductor server — optional name; returns the PUBLIC key to add to your servers' authorized_keys, private key stays in Conductor), " \
       "test_connection (verify Conductor can SSH to a host and refresh its metrics — server_id/server_name; run this after attaching a key), " \
+      "audit (read-only security/patch posture — server_id/server_name; firewall, SSH hardening, DB exposure, pending updates), " \
+      "apply_updates (apply OS updates — server_id/server_name + scope security|all; 'all' or a kernel update may reboot — DISRUPTIVE, confirm first), " \
+      "install_packages (install OS packages — server_id/server_name + packages), " \
       "run_script (run a provisioning/deploy script on a server — server_id, script_name e.g. server-provision, ruby-install, app-setup).",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[register update add_ssh_key test_connection run_script], description: "Which server operation" },
+        action:            { type: "string", enum: %w[register update add_ssh_key test_connection audit apply_updates install_packages run_script], description: "Which server operation" },
+        scope:             { type: "string", enum: %w[security all], description: "apply_updates: which updates (default security)" },
+        packages:          { type: "string", description: "install_packages: space/comma-separated package names" },
         name:              { type: "string",  description: "register: unique server name; update: rename; add_ssh_key: key name" },
         ip_address:        { type: "string",  description: "register/update: public IP or hostname" },
         ssh_user:          { type: "string",  description: "register/update: SSH login user (e.g. root, deploy)" },
