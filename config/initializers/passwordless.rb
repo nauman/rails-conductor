@@ -1,6 +1,9 @@
 Passwordless.configure do |config|
   config.parent_mailer = "ActionMailer::Base"
-  config.default_from_address = "noreply@conductor.local"
+  # Must be a sender your SMTP provider (SES) has verified, or delivery is
+  # rejected. Reuse MAILER_FROM — the same verified address ApplicationMailer
+  # uses — instead of the unroutable conductor.local default.
+  config.default_from_address = ENV.fetch("MAILER_FROM", "noreply@conductor.local")
 
   # Time-to-live for magic link tokens
   config.timeout_at = lambda { 10.minutes.from_now }
