@@ -60,8 +60,8 @@ Rails.application.routes.draw do
     end
   end
 
-  # Organizations — switch the active org (members only)
-  resources :organizations, only: [:index] do
+  # Organizations — list, create, and switch the active org (members only)
+  resources :organizations, only: [:index, :new, :create] do
     member do
       post :switch
     end

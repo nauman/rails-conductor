@@ -6,6 +6,30 @@ module ApplicationHelper
     link_to label, path, class: "#{base} #{state}"
   end
 
+  # A top-nav dropdown group. `active:` highlights the trigger when one of the
+  # group's pages is open. Yields into the menu; put `nav_menu_link`s there.
+  def nav_group(label, active:, &block)
+    trigger_state = active ? "bg-ink text-white" : "text-muted hover:text-ink hover:bg-fill-strong"
+    tag.div(data: { controller: "dropdown" }, class: "relative") do
+      button = tag.button(type: "button", data: { action: "dropdown#toggle" },
+        class: "flex items-center gap-1 px-3 py-1.5 rounded-pill transition-colors #{trigger_state}") do
+        concat label
+        concat tag.span("▾".html_safe, class: "text-[10px] opacity-70")
+      end
+      menu = tag.div(data: { dropdown_target: "menu" },
+        class: "hidden absolute left-0 mt-1.5 w-48 rounded-card border border-border bg-surface p-1 shadow-card z-40",
+        &block)
+      concat button
+      concat menu
+    end
+  end
+
+  # An item inside a `nav_group` menu.
+  def nav_menu_link(label, path, active:)
+    state = active ? "bg-fill-strong text-ink" : "text-body hover:bg-fill-strong"
+    link_to label, path, class: "block px-3 py-1.5 rounded-control text-sm #{state}"
+  end
+
   def status_badge(status)
     success = "bg-primary-tint text-primary ring-primary/20"
     warn    = "bg-warning-tint text-warning ring-warning/25"

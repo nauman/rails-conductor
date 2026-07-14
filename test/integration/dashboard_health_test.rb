@@ -104,9 +104,11 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
 
     get dashboard_path
 
-    assert_select "header.overflow-hidden"
+    # overflow-x-clip contains horizontal overflow (no page-wide scroll) while
+    # still letting the nav/account dropdowns hang down vertically.
+    assert_select "header.overflow-x-clip"
     assert_select "header [data-primary-header].min-w-0"
-    assert_select "nav[data-primary-navigation].min-w-0.overflow-x-auto"
+    assert_select "nav[data-primary-navigation].min-w-0"
     assert_select "[data-account-controls].shrink-0"
     assert_select ".grid.grid-cols-2.sm\\:grid-cols-4"
     assert_select "[data-fleet-app='Responsive app'].flex-col.sm\\:flex-row"

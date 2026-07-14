@@ -44,7 +44,9 @@
 
   <body class="bg-bg text-body font-sans antialiased">
     <div class="min-h-screen flex flex-col">
-      <header class="sticky top-0 z-30 overflow-hidden border-b border-border bg-surface/85 backdrop-blur">
+      <%# overflow-x-clip (not overflow-hidden) contains horizontal nav overflow without
+          clipping the nav/account dropdowns, which hang down vertically. %>
+      <header class="sticky top-0 z-30 overflow-x-clip border-b border-border bg-surface/85 backdrop-blur">
         <div class="mx-auto max-w-[88rem] min-w-0 px-2 sm:px-4">
           <div class="flex h-16 min-w-0 items-center gap-2 sm:gap-3" data-primary-header>
             <%= link_to (user_signed_in? ? dashboard_path : root_path), class: "flex items-center gap-2.5 shrink-0" do %>
@@ -56,22 +58,32 @@
             <% end %>
 
             <% if user_signed_in? %>
-              <nav class="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-primary-navigation aria-label="Primary navigation">
+              <%
+                data_active     = %w[/backups /database_clusters /database_pulls].any? { |p| request.path.start_with?(p) }
+                settings_active = %w[/credentials /ssh_keys /members /mcp_tokens /organizations /integrations /admin].any? { |p| request.path.start_with?(p) }
+              %>
+              <nav class="min-w-0 flex-1" data-primary-navigation aria-label="Primary navigation">
                 <div class="flex items-center gap-0.5 whitespace-nowrap text-[13px] font-medium">
                   <%= nav_link "Overview", dashboard_path, active: request.path == dashboard_path %>
-                  <%= nav_link "Chat", conversations_path, active: request.path.start_with?('/conversations') %>
                   <%= nav_link "Servers", servers_path, active: request.path.start_with?('/servers') %>
                   <%= nav_link "Apps", apps_path, active: request.path.start_with?('/apps') %>
-                  <%= nav_link "Backups", backups_path, active: request.path.start_with?('/backups') %>
-                  <%= nav_link "Databases", database_clusters_path, active: request.path.start_with?('/database_clusters') %>
-                  <%= nav_link "Pulls", database_pulls_path, active: request.path.start_with?('/database_pulls') %>
-                  <%= nav_link "Credentials", credentials_path, active: request.path.start_with?('/credentials') %>
-                  <%= nav_link "SSH Keys", ssh_keys_path, active: request.path.start_with?('/ssh_keys') %>
-                  <%= nav_link "Members", members_path, active: request.path.start_with?('/members') %>
-                  <%= nav_link "Tokens", mcp_tokens_path, active: request.path.start_with?('/mcp_tokens') %>
-                  <% if current_admin? %>
-                    <%= nav_link "Integrations", integrations_path, active: request.path.start_with?('/integrations') %>
-                    <%= nav_link "Admin", admin_organizations_path, active: request.path.start_with?('/admin') %>
+                  <%= nav_group "Data", active: data_active do %>
+                    <%= nav_menu_link "Backups", backups_path, active: request.path.start_with?('/backups') %>
+                    <%= nav_menu_link "Databases", database_clusters_path, active: request.path.start_with?('/database_clusters') %>
+                    <%= nav_menu_link "Pulls", database_pulls_path, active: request.path.start_with?('/database_pulls') %>
+                  <% end %>
+                  <%= nav_link "Chat", conversations_path, active: request.path.start_with?('/conversations') %>
+                  <%= nav_group "Settings", active: settings_active do %>
+                    <%= nav_menu_link "Members", members_path, active: request.path.start_with?('/members') %>
+                    <%= nav_menu_link "Organizations", organizations_path, active: request.path.start_with?('/organizations') %>
+                    <%= nav_menu_link "SSH Keys", ssh_keys_path, active: request.path.start_with?('/ssh_keys') %>
+                    <%= nav_menu_link "Credentials", credentials_path, active: request.path.start_with?('/credentials') %>
+                    <%= nav_menu_link "API Tokens", mcp_tokens_path, active: request.path.start_with?('/mcp_tokens') %>
+                    <% if current_admin? %>
+                      <div class="my-1 border-t border-border"></div>
+                      <%= nav_menu_link "Integrations", integrations_path, active: request.path.start_with?('/integrations') %>
+                      <%= nav_menu_link "Admin", admin_organizations_path, active: request.path.start_with?('/admin') %>
+                    <% end %>
                   <% end %>
                 </div>
               </nav>

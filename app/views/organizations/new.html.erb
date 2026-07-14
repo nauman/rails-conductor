@@ -1,0 +1,34 @@
+<% content_for :title, "New organization · Conductor" %>
+
+<div class="mx-auto max-w-md py-12 px-4">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft">
+    <div>
+      <h1 class="font-display text-xl text-ink">New organization</h1>
+      <p class="mt-1 text-sm text-muted">
+        An organization is a separate workspace — its own servers, apps, databases,
+        backups, and members. Create one to keep a client, team, or project isolated
+        from your others. You'll be its owner.
+      </p>
+    </div>
+
+    <%= form_with model: @organization, url: organizations_path, method: :post, class: "mt-6 space-y-4" do |f| %>
+      <% if @organization.errors.any? %>
+        <%= rui_alert(type: :danger) do %>
+          <%= @organization.errors.full_messages.to_sentence %>
+        <% end %>
+      <% end %>
+
+      <div>
+        <%= f.label :name, "Organization name", class: "block text-sm font-medium text-body" %>
+        <%= f.text_field :name, autofocus: true, placeholder: "e.g. Acme, client-name, side-project",
+              class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary-tint0 focus:ring-primary-tint0 sm:text-sm" %>
+        <p class="mt-1 text-xs text-faint">You can rename it anytime.</p>
+      </div>
+
+      <div class="flex items-center justify-between pt-2">
+        <%= link_to "Cancel", organizations_path, class: "text-sm font-medium text-body hover:text-ink" %>
+        <%= f.submit "Create organization", class: "cursor-pointer rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary" %>
+      </div>
+    <% end %>
+  </div>
+</div>

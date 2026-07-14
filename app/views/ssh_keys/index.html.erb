@@ -62,13 +62,48 @@
     </div>
   <% end %>
 
-  <div class="mt-8 rounded-card border border-border bg-fill p-4">
-    <h3 class="text-sm font-semibold text-body">How to use</h3>
-    <ol class="mt-2 text-sm text-body space-y-1 list-decimal list-inside">
-      <li>Generate an SSH key: <code class="bg-surface px-1.5 py-0.5 rounded text-xs">ssh-keygen -t ed25519 -C "conductor"</code></li>
-      <li>Add the public key to your server's <code class="bg-surface px-1.5 py-0.5 rounded text-xs">~/.ssh/authorized_keys</code></li>
-      <li>Paste the private key here</li>
-      <li>Assign the key to servers in their settings</li>
+  <div class="mt-8 rounded-card border border-border bg-fill p-5">
+    <h3 class="text-sm font-semibold text-body">Why Conductor needs an SSH key</h3>
+    <p class="mt-1.5 text-sm text-muted">
+      Conductor connects to your servers over SSH to deploy apps, run scripts, collect
+      metrics, and take backups — no agent required. An SSH key is a pair: a
+      <strong>public</strong> key that lives <em>on the server</em> (it says "trust whoever
+      holds the match"), and a <strong>private</strong> key that Conductor holds and keeps
+      encrypted at rest. You give Conductor the <em>private</em> key here; you put the
+      <em>public</em> key on each server.
+    </p>
+
+    <h3 class="mt-4 text-sm font-semibold text-body">Set one up (≈2 minutes)</h3>
+    <ol class="mt-2 text-sm text-body space-y-2.5 list-decimal list-inside">
+      <li>
+        <span class="font-medium">Generate a key pair</span> on your machine — this writes
+        <code class="bg-surface px-1.5 py-0.5 rounded text-xs">conductor</code> (private) and
+        <code class="bg-surface px-1.5 py-0.5 rounded text-xs">conductor.pub</code> (public):
+        <div class="mt-1.5 ml-5"><code class="block bg-surface px-2 py-1 rounded text-xs">ssh-keygen -t ed25519 -C "conductor" -f ~/.ssh/conductor</code></div>
+      </li>
+      <li>
+        <span class="font-medium">Authorize it on the server</span> — copy the
+        <em>public</em> key into the server's list of trusted keys. Easiest way:
+        <div class="mt-1.5 ml-5"><code class="block bg-surface px-2 py-1 rounded text-xs">ssh-copy-id -i ~/.ssh/conductor.pub root@YOUR_SERVER_IP</code></div>
+        <span class="text-xs text-muted">(or manually append <code class="bg-surface px-1 py-0.5 rounded text-2xs">conductor.pub</code>'s contents to <code class="bg-surface px-1 py-0.5 rounded text-2xs">~/.ssh/authorized_keys</code> on the server, as the user Conductor will log in as).</span>
+      </li>
+      <li>
+        <span class="font-medium">Give Conductor the private key</span> — click
+        <em>Add SSH Key</em> above and paste the contents of
+        <code class="bg-surface px-1.5 py-0.5 rounded text-xs">~/.ssh/conductor</code>
+        (the file <em>without</em> <code class="bg-surface px-1 py-0.5 rounded text-2xs">.pub</code>). It's encrypted before it's stored.
+      </li>
+      <li>
+        <span class="font-medium">Attach it to a server</span> — when you add or edit a
+        server, pick this key under <em>SSH Configuration</em>. Conductor will use it to
+        connect. Hit <em>Test connection</em> to confirm it works.
+      </li>
     </ol>
+
+    <p class="mt-4 text-xs text-faint">
+      Tip: use one dedicated key for Conductor (not your personal laptop key) so you can
+      revoke its access independently — just remove its line from the server's
+      <code class="bg-surface px-1 py-0.5 rounded text-2xs">authorized_keys</code>.
+    </p>
   </div>
 </section>

@@ -1,0 +1,45 @@
+<% content_for :title, "Organizations · Conductor" %>
+
+<section class="mx-auto max-w-3xl px-4 py-10">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="font-display text-2xl text-ink tracking-display">Organizations</h1>
+      <p class="mt-1 text-sm text-muted">Separate workspaces you belong to. Switch the active one or create another.</p>
+    </div>
+    <%= link_to new_organization_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      New organization
+    <% end %>
+  </div>
+
+  <div class="mt-6 rounded-large border border-border bg-surface shadow-soft">
+    <ul class="divide-y divide-border">
+      <% @organizations.each do |org| %>
+        <li class="flex items-center justify-between px-5 py-4">
+          <div class="flex items-center gap-3">
+            <span class="text-sm font-medium text-ink"><%= org.name %></span>
+            <% if org.id == current_organization&.id %>
+              <%= rui_badge(text: "active", color: :primary, size: :sm) %>
+            <% end %>
+            <% if org.owner?(current_user) %>
+              <%= rui_badge(text: "owner", color: :slate, size: :sm) %>
+            <% end %>
+          </div>
+          <div class="flex items-center gap-4 text-sm">
+            <span class="text-xs text-faint"><%= pluralize(org.users.size, "member") %></span>
+            <% if org.id == current_organization&.id %>
+              <span class="text-xs font-medium text-muted">Current</span>
+            <% else %>
+              <%= button_to "Switch", switch_organization_path(org), class: "font-medium text-primary hover:underline cursor-pointer" %>
+            <% end %>
+          </div>
+        </li>
+      <% end %>
+    </ul>
+  </div>
+
+  <p class="mt-4 text-xs text-faint">
+    Invite people into an organization from the
+    <%= link_to "Members", members_path, class: "underline hover:text-body" %> page.
+  </p>
+</section>

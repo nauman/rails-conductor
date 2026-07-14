@@ -10,89 +10,85 @@
     </div>
   <% end %>
 
+  <div class="rounded-card border border-info/30 bg-info-tint p-4">
+    <p class="text-sm text-info">
+      Register an existing server so Conductor can reach it over SSH. You only need a
+      <strong>name</strong>, its <strong>IP address</strong>, and an <strong>SSH key</strong>.
+      CPU, memory, disk, and status fill in automatically once Conductor connects — you don't
+      enter those by hand.
+    </p>
+  </div>
+
   <div class="rounded-large border border-border bg-surface p-6 shadow-soft space-y-6">
+    <h3 class="text-sm font-semibold text-ink">Basics</h3>
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
         <%= f.label :name, class: "block text-sm font-medium text-body" %>
         <%= f.text_field :name, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "edge-hel1" %>
+        <p class="mt-1 text-xs text-faint">A label for you — any name that's unique in your fleet.</p>
       </div>
 
       <div>
-        <%= f.label :ip_address, class: "block text-sm font-medium text-body" %>
-        <%= f.text_field :ip_address, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "192.168.1.1" %>
+        <%= f.label :ip_address, "IP address", class: "block text-sm font-medium text-body" %>
+        <%= f.text_field :ip_address, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "203.0.113.10" %>
+        <p class="mt-1 text-xs text-faint">The public IP Conductor connects to.</p>
       </div>
     </div>
 
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
-        <%= f.label :provider, class: "block text-sm font-medium text-body" %>
-        <%= f.select :provider, Server::PROVIDERS.map { |p| [p.titleize, p] }, { include_blank: "Select provider" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+        <%= f.label :provider, "Provider (optional)", class: "block text-sm font-medium text-body" %>
+        <%= f.select :provider, Server::PROVIDERS.map { |p| [p.titleize, p] }, { include_blank: "—" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
       </div>
 
       <div>
-        <%= f.label :region, class: "block text-sm font-medium text-body" %>
+        <%= f.label :region, "Region (optional)", class: "block text-sm font-medium text-body" %>
         <%= f.text_field :region, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "Helsinki" %>
       </div>
     </div>
-
-    <div>
-      <%= f.label :status, class: "block text-sm font-medium text-body" %>
-      <%= f.select :status, Server::STATUSES.map { |s| [s.titleize, s] }, {}, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
-    </div>
   </div>
 
   <div class="rounded-large border border-border bg-surface p-6 shadow-soft space-y-6">
-    <h3 class="text-sm font-semibold text-ink">Resource Metrics</h3>
-
-    <div class="grid gap-6 sm:grid-cols-3">
-      <div>
-        <%= f.label :cpu_percent, "CPU %", class: "block text-sm font-medium text-body" %>
-        <%= f.number_field :cpu_percent, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", min: 0, max: 100 %>
-      </div>
-
-      <div>
-        <%= f.label :memory_used_mb, "Memory Used (MB)", class: "block text-sm font-medium text-body" %>
-        <%= f.number_field :memory_used_mb, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", min: 0 %>
-      </div>
-
-      <div>
-        <%= f.label :memory_total_mb, "Memory Total (MB)", class: "block text-sm font-medium text-body" %>
-        <%= f.number_field :memory_total_mb, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", min: 0 %>
-      </div>
+    <div>
+      <h3 class="text-sm font-semibold text-ink">SSH connection</h3>
+      <p class="mt-1 text-xs text-muted">How Conductor logs in to deploy, run scripts, and read metrics.</p>
     </div>
 
     <div>
-      <%= f.label :disk_percent, "Disk %", class: "block text-sm font-medium text-body" %>
-      <%= f.number_field :disk_percent, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", min: 0, max: 100 %>
-    </div>
-  </div>
-
-  <div class="rounded-large border border-border bg-surface p-6 shadow-soft space-y-6">
-    <h3 class="text-sm font-semibold text-ink">SSH Configuration</h3>
-
-    <div>
-      <%= f.label :ssh_key_id, "SSH Key", class: "block text-sm font-medium text-body" %>
-      <%= f.collection_select :ssh_key_id, SshKey.order(:name), :id, :name, { include_blank: "Select SSH key" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
-      <p class="mt-1 text-xs text-muted">
-        <%= link_to "Manage SSH keys", ssh_keys_path, class: "text-body hover:underline" %>
-      </p>
+      <%= f.label :ssh_key_id, "SSH key", class: "block text-sm font-medium text-body" %>
+      <% if SshKey.any? %>
+        <%= f.collection_select :ssh_key_id, SshKey.order(:name), :id, :name, { include_blank: "Select SSH key" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+        <p class="mt-1 text-xs text-muted">
+          Don't see the right one? <%= link_to "Add an SSH key", new_ssh_key_path, class: "text-primary hover:underline" %>.
+        </p>
+      <% else %>
+        <div class="mt-1 rounded-lg border border-dashed border-border-strong bg-fill p-4 text-sm text-muted">
+          You haven't added an SSH key yet — Conductor needs one to connect.
+          <%= link_to "Add your first SSH key", new_ssh_key_path, class: "font-medium text-primary hover:underline" %>,
+          then come back here.
+        </div>
+      <% end %>
     </div>
 
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
-        <%= f.label :ssh_user, class: "block text-sm font-medium text-body" %>
-        <%= f.text_field :ssh_user, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "root" %>
+        <%= f.label :ssh_user, "SSH user", class: "block text-sm font-medium text-body" %>
+        <%= f.text_field :ssh_user, value: (f.object.ssh_user.presence || "root"), class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "root" %>
+        <p class="mt-1 text-xs text-faint">The account Conductor logs in as. Usually <code class="text-2xs">root</code> or <code class="text-2xs">deploy</code>.</p>
       </div>
 
       <div>
-        <%= f.label :ssh_port, class: "block text-sm font-medium text-body" %>
-        <%= f.number_field :ssh_port, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "22", min: 1, max: 65535 %>
+        <%= f.label :ssh_port, "SSH port", class: "block text-sm font-medium text-body" %>
+        <%= f.number_field :ssh_port, value: (f.object.ssh_port.presence || 22), class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", placeholder: "22", min: 1, max: 65535 %>
       </div>
     </div>
   </div>
 
-  <div class="flex items-center justify-between pt-4">
+  <div class="flex items-center justify-between pt-2">
     <%= link_to "Cancel", servers_path, class: "text-sm font-medium text-body hover:text-ink" %>
-    <%= f.submit server.persisted? ? "Update Server" : "Create Server", class: "inline-flex items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body cursor-pointer" %>
+    <%= f.submit server.persisted? ? "Save changes" : "Add server", class: "inline-flex items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body cursor-pointer" %>
   </div>
+  <% unless server.persisted? %>
+    <p class="text-right text-xs text-faint">Next: open the server and hit <em>Test connection</em> to confirm SSH works.</p>
+  <% end %>
 <% end %>
