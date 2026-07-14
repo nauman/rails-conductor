@@ -1,5 +1,5 @@
 class SshKeysController < ApplicationController
-  before_action :set_ssh_key, only: [:show, :edit, :update, :destroy]
+  before_action :set_ssh_key, only: [ :show, :edit, :update, :destroy ]
 
   def index
     @ssh_keys = current_organization.ssh_keys.order(created_at: :desc)
@@ -23,6 +23,26 @@ class SshKeysController < ApplicationController
     else
       render :new, status: :unprocessable_entity
     end
+  end
+
+  # Generate a deploy keypair on the Conductor server itself (the Hatchbox
+  # model): Conductor keeps the private key and shows you the public key to
+  # authorize on your servers. No pasting, nothing generated on your machine.
+  def generate
+    keypair = DeployKeyGenerator.generate(comment: "conductor-#{current_organization.name.parameterize}")
+    @ssh_key = current_organization.ssh_keys.new(name: params[:name].presence || "Conductor deploy key")
+    @ssh_key.private_key = keypair[:private_key]
+
+    if @ssh_key.save
+      # Store ssh-keygen's authoritative OpenSSH public key + fingerprint (the
+      # model's derived values can differ in format from an authorized_keys line).
+      @ssh_key.update_columns(public_key: keypair[:public_key], fingerprint: keypair[:fingerprint])
+      redirect_to ssh_key_path(@ssh_key), notice: "Deploy key generated. Add its public key to your servers (shown below)."
+    else
+      redirect_to new_ssh_key_path, alert: @ssh_key.errors.full_messages.to_sentence
+    end
+  rescue DeployKeyGenerator::Error => e
+    redirect_to new_ssh_key_path, alert: "Could not generate a key: #{e.message}"
   end
 
   def update

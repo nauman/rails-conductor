@@ -92,7 +92,9 @@ Rails.application.routes.draw do
   # Letter opener web (development only)
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 
-  resources :ssh_keys
+  resources :ssh_keys do
+    collection { post :generate }
+  end
 
   # Per-user, org-scoped MCP/API tokens (self-serve issuance for agents).
   resources :mcp_tokens, only: [:index, :create, :destroy]
