@@ -94,7 +94,14 @@ Conductor exposes its tools over the **Model Context Protocol** so any MCP-compa
 - **Auth:** Bearer token. Two kinds:
   - A **per-user/per-org API token** runs as that user and is scoped to the token's organization and read/write scope (multi-tenant).
   - The shared **`CONDUCTOR_MCP_TOKEN`** env var runs as the first admin user with global scope (legacy single-tenant). If neither is configured/valid, the endpoint returns `401`.
-- **Endpoints:** `GET /mcp/list` (discover tools), `POST /mcp/call` (invoke), `GET /mcp/skill` (the agent how-to — see below).
+- **Two surfaces over the same tools:**
+  - **Standard JSON-RPC transport** at `POST /mcp` — what MCP clients register natively (`initialize` / `tools/list` / `tools/call`). Register it with:
+    ```bash
+    claude mcp add --transport http conductor https://your-conductor.example.com/mcp \
+      --header "Authorization: Bearer $CONDUCTOR_MCP_TOKEN"
+    ```
+    Cursor and Claude Desktop take the same URL + header. This is the endpoint to use for real agent integration.
+  - **Custom REST surface** for quick `curl`: `GET /mcp/list` (discover), `POST /mcp/call` (invoke), `GET /mcp/skill` (the agent how-to — see below).
 
 ```bash
 # List available tools (names, descriptions, input schemas)

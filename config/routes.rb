@@ -162,7 +162,12 @@ Rails.application.routes.draw do
   # Inbound SCM push webhooks → auto-deploy (public; verified by per-app HMAC).
   post "webhooks/:provider/:app_id", to: "webhooks#receive", as: :webhook
 
-  # MCP server endpoint (JSON-RPC over HTTP, for AI agents)
+  # MCP server endpoints (for AI agents). Two surfaces over the same tools:
+  #   - Standard JSON-RPC transport at /mcp — register natively with
+  #     `claude mcp add --transport http conductor https://<host>/mcp`.
+  #   - Custom REST surface at /mcp/list|call|skill — simple curl access.
+  post "mcp", to: "mcp/rpc#handle"
+  get  "mcp", to: "mcp/rpc#stream"
   namespace :mcp do
     post :call,  to: 'server#call'
     get  :list,  to: 'server#list'
