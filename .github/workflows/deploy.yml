@@ -48,6 +48,11 @@ jobs:
       DEPLOY_SERVER_IP: ${{ vars.DEPLOY_SERVER_IP }}
       DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
       APP_HOST: ${{ vars.APP_HOST }}
+      # Mailer: verified SES sender + region. Without these the deploy.yml ERB
+      # falls back to noreply@conductor.example.com / us-east-1 (both wrong) and
+      # SES rejects every send. Non-secret, so they're repo variables.
+      MAILER_FROM: ${{ vars.MAILER_FROM }}
+      SES_SMTP_HOST: ${{ vars.SES_SMTP_HOST }}
       KAMAL_REGISTRY_SERVER: ghcr.io
       # The ghcr.io/nauman/conductor package is linked to this repo (Package settings
       # → Manage Actions access → rails-conductor: Write), so the ephemeral Actions
