@@ -48,6 +48,20 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
     assert_includes result.error, "Nothing to update"
   end
 
+  # --- add_ssh_key -------------------------------------------------------
+
+  test "add_ssh_key generates a key server-side and returns only the public half" do
+    assert_difference -> { @org.ssh_keys.count }, 1 do
+      @result = GenerateSshKeyTool.new(user: @user).call("name" => "Fleet key")
+    end
+    assert @result.success?, @result.error
+    assert @result.value[:public_key].to_s.start_with?("ssh-ed25519 ")
+    refute @result.value.key?(:private_key), "the private key must never be returned"
+
+    key = SshKey.find(@result.value[:id])
+    assert key.private_key.present?, "private key is stored (encrypted) in Conductor"
+  end
+
   # --- test_connection ---------------------------------------------------
 
   test "test_connection reports failure without touching metrics" do

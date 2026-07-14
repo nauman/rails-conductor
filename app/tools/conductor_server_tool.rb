@@ -5,6 +5,7 @@ class ConductorServerTool
   ACTIONS = {
     "register"        => RegisterServerTool,
     "update"          => UpdateServerTool,
+    "add_ssh_key"     => GenerateSshKeyTool,
     "test_connection" => TestServerConnectionTool,
     "run_script"      => RunScriptTool
   }.freeze
@@ -14,14 +15,14 @@ class ConductorServerTool
     description: "Server management. Set `action` to one of: " \
       "register (add a host to the fleet — name, ip_address, ssh_user; optional ssh_key_id, provider), " \
       "update (change an existing host — server_id/server_name + any of name, ip_address, ssh_user, ssh_port, provider, region, and attach an SSH key via ssh_key_id or ssh_key_name), " \
+      "add_ssh_key (generate a deploy keypair on the Conductor server — optional name; returns the PUBLIC key to add to your servers' authorized_keys, private key stays in Conductor), " \
       "test_connection (verify Conductor can SSH to a host and refresh its metrics — server_id/server_name; run this after attaching a key), " \
-      "run_script (run a provisioning/deploy script on a server — server_id, script_name e.g. server-provision, ruby-install, app-setup). " \
-      "Note: SSH keys are created in the UI (encrypted, never logged); this tool only attaches an existing key.",
+      "run_script (run a provisioning/deploy script on a server — server_id, script_name e.g. server-provision, ruby-install, app-setup).",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[register update test_connection run_script], description: "Which server operation" },
-        name:              { type: "string",  description: "register: unique server name; update: rename" },
+        action:            { type: "string", enum: %w[register update add_ssh_key test_connection run_script], description: "Which server operation" },
+        name:              { type: "string",  description: "register: unique server name; update: rename; add_ssh_key: key name" },
         ip_address:        { type: "string",  description: "register/update: public IP or hostname" },
         ssh_user:          { type: "string",  description: "register/update: SSH login user (e.g. root, deploy)" },
         ssh_port:          { type: "integer", description: "update: SSH port (default 22)" },

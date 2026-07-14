@@ -16,7 +16,7 @@ The surface is **seven flat tools**; each call sets `action` plus that action's 
 | `conductor_read` | `fleet_status`, `logs`, `deployment` | Read-only. Orient here first. |
 | `conductor_app` | `create`, `update`, `deploy`, `sync_status` | Mutating — confirm. `deploy` dispatches by deploy_method. |
 | `conductor_app_config` | `set_env`, `gen_deploy_key` | `gen_deploy_key` returns the PUBLIC key to add on GitHub. |
-| `conductor_server` | `register`, `update`, `test_connection`, `run_script` | `update` attaches an SSH key / sets login user; `test_connection` verifies SSH + refreshes metrics; `run_script` enqueues a ScriptRun. |
+| `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `run_script` | `add_ssh_key` generates a deploy key (returns public key); `update` attaches a key / sets login user; `test_connection` verifies SSH + refreshes metrics; `run_script` enqueues a ScriptRun. |
 | `conductor_database` | `register_cluster`, `provision` | `provision` returns a connection URL — confirm. |
 | `conductor_domain` | `add`, `remove` | `remove` is destructive — confirm. |
 | `conductor_github` | `set_token`, `set_app`, `installations` | Stores credentials Conductor-wide. |
