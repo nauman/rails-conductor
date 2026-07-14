@@ -34,12 +34,26 @@ module ActorScoped
     end
   end
 
+  # Find a server by id/name, scoped to what the actor may touch.
+  def find_server(input)
+    if input["server_id"].present?
+      visible_servers.find_by(id: input["server_id"])
+    elsif input["server_name"].present?
+      visible_servers.find_by(name: input["server_name"])
+    end
+  end
+
+  # SSH keys the actor may attach to a server (admins: all; else the actor's orgs).
+  def visible_ssh_keys
+    actor_admin? ? SshKey.all : SshKey.where(organization_id: actor_org_ids)
+  end
+
   private
 
   # When a token is bound to a specific org (Current.organization), scope to it
   # alone; otherwise fall back to all of the user's orgs.
   def actor_org_ids
-    return [Current.organization.id] if Current.organization
+    return [ Current.organization.id ] if Current.organization
     @user ? @user.organizations.ids : []
   end
 end
