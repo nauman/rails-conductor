@@ -12,7 +12,13 @@ class ApplicationController < ActionController::Base
   before_action :set_current_organization
   before_action :require_onboarding
 
-  helper_method :current_user, :user_signed_in?, :current_admin?, :current_organization
+  helper_method :current_user, :user_signed_in?, :current_admin?, :current_organization, :current_operator?
+
+  # Owner-or-admin of the active org — the boundary for privileged operations and
+  # for revealing secrets in views (OperatorPolicy is the single source).
+  def current_operator?
+    OperatorPolicy.operator?(current_user, current_organization)
+  end
 
   rescue_from ActiveRecord::RecordNotFound do |_exception|
     respond_to do |format|

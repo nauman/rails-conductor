@@ -8,6 +8,16 @@ module OperatorOnly
     before_action :require_operator!, unless: :operator_read_only_request?
   end
 
+  class_methods do
+    # For controllers whose READS also expose secrets (credentials, SSH keys):
+    # gate every action, GET included — a member must not open an edit/show page
+    # that renders a decrypted private key or API secret.
+    def operator_only_all_actions!
+      skip_before_action :require_operator!, raise: false
+      before_action :require_operator!
+    end
+  end
+
   private
 
   def operator_read_only_request?

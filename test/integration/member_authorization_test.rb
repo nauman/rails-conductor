@@ -57,6 +57,25 @@ class MemberAuthorizationTest < ActionDispatch::IntegrationTest
     assert_equal "read", token.scope, "a member must not be able to mint a deploy (execution) token"
   end
 
+  test "a plain member cannot open the credentials page (decrypted secrets)" do
+    sign_in_as(@member)
+    get credentials_path
+    assert_response :redirect
+  end
+
+  test "a plain member cannot open an SSH key edit page (would prefill the private key)" do
+    key = @org.ssh_keys.create!(name: "k", private_key: valid_private_key)
+    sign_in_as(@member)
+    get edit_ssh_key_path(key)
+    assert_response :redirect
+  end
+
+  test "an owner CAN open the credentials page" do
+    sign_in_as(@owner)
+    get credentials_path
+    assert_response :success
+  end
+
   test "an owner can create a script" do
     sign_in_as(@owner)
     assert_difference -> { Script.count }, 1 do

@@ -176,4 +176,13 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
     get api_v1_servers_path, headers: auth(read_raw)
     assert_response :success
   end
+
+  test "a member-owned deploy token cannot mutate via the API (OperatorPolicy)" do
+    member = User.create!(email: "apimember@example.com")
+    @org_a.add_member(member, role: :member)
+    raw, = ApiToken.generate(user: member, name: "m", organization: @org_a, scope: "deploy")
+    post api_v1_servers_path, headers: auth(raw), params: { server: { name: "sneaky", status: "offline" } }
+    assert_response :forbidden
+    assert_nil @org_a.servers.find_by(name: "sneaky")
+  end
 end

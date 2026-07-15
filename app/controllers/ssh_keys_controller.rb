@@ -1,5 +1,6 @@
 class SshKeysController < ApplicationController
   include OperatorOnly
+  operator_only_all_actions! # reads expose decrypted secrets — owner/admin only
   before_action :set_ssh_key, only: [ :show, :edit, :update, :destroy ]
 
   def index

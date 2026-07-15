@@ -1,5 +1,6 @@
 class CredentialsController < ApplicationController
   include OperatorOnly
+  operator_only_all_actions! # reads expose decrypted secrets — owner/admin only
   before_action :set_credential, only: [:edit, :update, :destroy]
 
   def index

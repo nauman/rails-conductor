@@ -26,13 +26,19 @@ module Api
       render json: { error: "Unauthorized" }, status: :unauthorized unless valid
     end
 
-    # Read-only tokens (scope "read") may only make safe requests. Any mutating
-    # verb (POST/PATCH/PUT/DELETE) requires a write-scoped token.
+    # Authorize mutating API requests two ways: the token must be write-scoped,
+    # AND its user must be an org owner/admin — the same OperatorPolicy the web
+    # and MCP paths use, so a member's deploy token can't mutate infrastructure.
     def enforce_token_scope!
       return if request.get? || request.head?
-      return unless @current_api_token&.read_only?
 
-      render json: { error: "This token is read-only and cannot perform writes" }, status: :forbidden
+      if @current_api_token&.read_only?
+        return render json: { error: "This token is read-only and cannot perform writes" }, status: :forbidden
+      end
+
+      unless OperatorPolicy.operator?(current_user, current_organization)
+        render json: { error: "This action requires an organization owner" }, status: :forbidden
+      end
     end
 
     def current_user
