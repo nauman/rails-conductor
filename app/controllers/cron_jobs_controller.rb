@@ -1,4 +1,5 @@
 class CronJobsController < ApplicationController
+  include OperatorOnly
   before_action :set_server
 
   # Create a scheduled job and install it into the server's crontab.

@@ -1,4 +1,5 @@
 class BackupsController < ApplicationController
+  include OperatorOnly
   before_action :set_backup, only: [:show, :edit, :update, :destroy, :run]
 
   def index

@@ -1,4 +1,5 @@
 class CredentialsController < ApplicationController
+  include OperatorOnly
   before_action :set_credential, only: [:edit, :update, :destroy]
 
   def index

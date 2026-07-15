@@ -1,4 +1,5 @@
 class DatabasePullsController < ApplicationController
+  include OperatorOnly
   before_action :set_pull, only: [:show]
 
   def index

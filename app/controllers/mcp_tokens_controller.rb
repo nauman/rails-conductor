@@ -9,6 +9,9 @@ class McpTokensController < ApplicationController
 
   def create
     scope = ApiToken::SCOPES.include?(params[:scope]) ? params[:scope] : "deploy"
+    # A non-operator can only mint read tokens — a deploy token would be useless
+    # anyway (the tool layer rejects their mutations) and shouldn't be offered.
+    scope = "read" unless OperatorPolicy.operator?(current_user, current_organization)
     name = params[:name].presence || "agent-token"
     raw, = ApiToken.generate(user: current_user, name: name,
                              organization: current_organization, scope: scope)

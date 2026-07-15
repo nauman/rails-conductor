@@ -1,4 +1,5 @@
 class EnvVariablesController < ApplicationController
+  include OperatorOnly
   before_action :set_app
   before_action :set_env_variable, only: [ :update, :destroy ]
 

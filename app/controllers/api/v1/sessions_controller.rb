@@ -5,9 +5,10 @@ module Api
       # Body: { email: "user@example.com" }
       # Sends a magic link email. When clicked, generates an API token.
       def request_token
-        # Always return the same response — never reveal whether an address has
-        # an account (no user enumeration). Token exchange is not yet enabled.
-        render json: { message: "If that email has an account, a sign-in link is on its way." }, status: :accepted
+        # Honest + non-enumerating: API token exchange isn't enabled, so this
+        # sends nothing. Same response for every address (no account disclosure).
+        render json: { error: "API token exchange is not available. Generate a token in the web UI (Tokens)." },
+               status: :not_implemented
       end
 
       # POST /api/v1/sessions/exchange

@@ -1,7 +1,5 @@
 class ScriptsController < ApplicationController
-  # Scripts are arbitrary shell run over servers' SSH identities — creating or
-  # editing them, and running them, is an owner/admin capability, not a member's.
-  before_action :require_owner!, only: [ :new, :create, :edit, :update, :destroy ]
+  include OperatorOnly
   before_action :set_script, only: [ :show, :edit, :update, :destroy ]
 
   def index

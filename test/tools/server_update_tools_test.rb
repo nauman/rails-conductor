@@ -123,6 +123,34 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
     Current.org_scoped = nil
   end
 
+  test "a plain member's token cannot run a mutating tool (operator gate)" do
+    member = User.create!(email: "toolmember@example.com")
+    @org.add_member(member, role: :member)
+    Current.organization = @org
+    Current.org_scoped = true
+    result = ToolRegistry.call("conductor_server",
+      { "action" => "run_script", "server_id" => @server.id, "script_name" => "server-provision" }, user: member)
+    assert result.failure?, "a non-owner must not execute infrastructure via MCP"
+    assert_includes result.error, "owner"
+  ensure
+    Current.organization = nil
+    Current.org_scoped = nil
+  end
+
+  test "a non-admin org owner CAN run mutating tools (the gate lets owners through)" do
+    owner = User.create!(email: "plainowner@example.com")
+    org = Organization.create_for(owner, name: "Owned Co") # owner is the org owner, not a platform admin
+    server = org.servers.create!(name: "ownbox", status: "online", ip_address: "10.1.1.1")
+    Current.organization = org
+    Current.org_scoped = true
+    result = ToolRegistry.call("conductor_server", { "action" => "audit", "server_id" => server.id }, user: owner)
+    # audit may fail on SSH, but it must NOT be blocked by the owner gate.
+    refute_includes result.error.to_s, "requires an organization owner"
+  ensure
+    Current.organization = nil
+    Current.org_scoped = nil
+  end
+
   # --- audit / apply_updates / install_packages --------------------------
 
   AuditCheck  = Struct.new(:label, :status, :detail, keyword_init: true)

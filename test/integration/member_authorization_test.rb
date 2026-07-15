@@ -41,10 +41,34 @@ class MemberAuthorizationTest < ActionDispatch::IntegrationTest
     assert_nil @server.reload.last_update_status
   end
 
+  test "a plain member cannot create an app (equivalent execution path)" do
+    sign_in_as(@member)
+    assert_no_difference -> { App.count } do
+      post apps_path, params: { app: { name: "Evil", slug: "evil", deploy_method: "docker",
+                                       repository_url: "https://github.com/m/e.git", server_id: @server.id } }
+    end
+    assert_response :redirect
+  end
+
+  test "a plain member's self-minted MCP token is capped to read scope" do
+    sign_in_as(@member)
+    post mcp_tokens_path, params: { name: "t", scope: "deploy" }
+    token = @member.api_tokens.where(organization: @org).order(:created_at).last
+    assert_equal "read", token.scope, "a member must not be able to mint a deploy (execution) token"
+  end
+
   test "an owner can create a script" do
     sign_in_as(@owner)
     assert_difference -> { Script.count }, 1 do
       post scripts_path, params: { script: { name: "legit", body: "echo ok", script_type: "provision" } }
+    end
+  end
+
+  test "an owner can create an app" do
+    sign_in_as(@owner)
+    assert_difference -> { App.count }, 1 do
+      post apps_path, params: { app: { name: "Legit", slug: "legit", deploy_method: "docker",
+                                       repository_url: "https://github.com/o/a.git", server_id: @server.id } }
     end
   end
 end

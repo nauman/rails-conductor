@@ -1,4 +1,5 @@
 class DatabasesController < ApplicationController
+  include OperatorOnly
   # Provision a database (role + database + password) on a cluster.
   def create
     cluster = current_organization.database_clusters.find(params[:database_cluster_id])

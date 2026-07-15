@@ -1,4 +1,5 @@
 class DatabaseClustersController < ApplicationController
+  include OperatorOnly
   before_action :set_cluster, only: [:show]
 
   def index

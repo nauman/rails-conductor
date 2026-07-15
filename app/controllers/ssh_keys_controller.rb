@@ -1,4 +1,5 @@
 class SshKeysController < ApplicationController
+  include OperatorOnly
   before_action :set_ssh_key, only: [ :show, :edit, :update, :destroy ]
 
   def index
