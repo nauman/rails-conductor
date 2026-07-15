@@ -2,27 +2,27 @@
 service: conductor
 
 # Name of the container image.
-image: <%= ENV["KAMAL_REGISTRY_USERNAME"] || "your-user" %>/conductor
+image: <%= ENV["KAMAL_REGISTRY_USERNAME"].presence || "your-user" %>/conductor
 
 # Deploy to these servers.
 servers:
   web:
-    - <%= ENV["DEPLOY_SERVER_IP"] || "YOUR_SERVER_IP" %>
+    - <%= ENV["DEPLOY_SERVER_IP"].presence || "YOUR_SERVER_IP" %>
 
 # Connect to the host as a non-root deploy user (set up with key auth + sudo).
 ssh:
-  user: <%= ENV["DEPLOY_SSH_USER"] || "deploy" %>
+  user: <%= ENV["DEPLOY_SSH_USER"].presence || "deploy" %>
 
 # Enable SSL auto certification via Let's Encrypt.
 # Set Cloudflare SSL/TLS to "Full" if using Cloudflare.
 proxy:
   ssl: true
-  host: <%= ENV["APP_HOST"] || "conductor.example.com" %>
+  host: <%= ENV["APP_HOST"].presence || "conductor.example.com" %>
 
 # Container registry (Docker Hub by default; override via KAMAL_REGISTRY_SERVER).
 registry:
-  server: <%= ENV["KAMAL_REGISTRY_SERVER"] || "docker.io" %>
-  username: <%= ENV["KAMAL_REGISTRY_USERNAME"] || "your-user" %>
+  server: <%= ENV["KAMAL_REGISTRY_SERVER"].presence || "docker.io" %>
+  username: <%= ENV["KAMAL_REGISTRY_USERNAME"].presence || "your-user" %>
   password:
     - KAMAL_REGISTRY_PASSWORD
 
@@ -46,20 +46,20 @@ env:
     WEB_CONCURRENCY: 2
 
     # Database connection (points at the Postgres accessory container below)
-    DATABASE_HOST: <%= ENV["DATABASE_HOST"] || "conductor-postgres" %>
-    DATABASE_USERNAME: <%= ENV["DATABASE_USERNAME"] || "conductor" %>
+    DATABASE_HOST: <%= ENV["DATABASE_HOST"].presence || "conductor-postgres" %>
+    DATABASE_USERNAME: <%= ENV["DATABASE_USERNAME"].presence || "conductor" %>
     DATABASE_NAME: conductor_production
 
     # Application host
-    APP_HOST: <%= ENV["APP_HOST"] || "conductor.example.com" %>
+    APP_HOST: <%= ENV["APP_HOST"].presence || "conductor.example.com" %>
 
     # Mailer (SES SMTP host; credentials come from secrets above)
-    MAILER_FROM: <%= ENV["MAILER_FROM"] || "noreply@conductor.example.com" %>
-    SES_SMTP_HOST: <%= ENV["SES_SMTP_HOST"] || "email-smtp.us-east-1.amazonaws.com" %>
+    MAILER_FROM: <%= ENV["MAILER_FROM"].presence || "noreply@conductor.example.com" %>
+    SES_SMTP_HOST: <%= ENV["SES_SMTP_HOST"].presence || "email-smtp.us-east-1.amazonaws.com" %>
 
     # Storage
-    AWS_REGION: <%= ENV["AWS_REGION"] || "us-east-1" %>
-    S3_BUCKET: <%= ENV["S3_BUCKET"] || "conductor-storage" %>
+    AWS_REGION: <%= ENV["AWS_REGION"].presence || "us-east-1" %>
+    S3_BUCKET: <%= ENV["S3_BUCKET"].presence || "conductor-storage" %>
 
 # Aliases are triggered with "bin/kamal <alias>".
 aliases:
@@ -85,11 +85,11 @@ builder:
 accessories:
   postgres:
     image: postgres:16
-    host: <%= ENV["DEPLOY_SERVER_IP"] || "YOUR_SERVER_IP" %>
+    host: <%= ENV["DEPLOY_SERVER_IP"].presence || "YOUR_SERVER_IP" %>
     port: "127.0.0.1:5432:5432"
     env:
       clear:
-        POSTGRES_USER: <%= ENV["DATABASE_USERNAME"] || "conductor" %>
+        POSTGRES_USER: <%= ENV["DATABASE_USERNAME"].presence || "conductor" %>
         POSTGRES_DB: conductor_production
       secret:
         - POSTGRES_PASSWORD

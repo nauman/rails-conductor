@@ -93,13 +93,16 @@ class AppDeployer
   def clone_or_pull_repo
     run("mkdir -p #{app_dir}")
 
-    # Check if repo exists
+    # Deploy the exact commit recorded on the deployment when one was given (e.g.
+    # a webhook's `after` sha) so the audit trail matches what actually shipped —
+    # not whatever HEAD happens to be. Fall back to the branch tip otherwise.
+    target = deployment.commit_sha.presence || "origin/#{app.branch}"
+
     if run("test -d #{app_dir}/.git && echo 'exists'") && ssh.output&.include?("exists")
-      # Pull latest
-      run("cd #{app_dir} && git fetch origin && git reset --hard origin/#{app.branch}")
+      run("cd #{app_dir} && git fetch origin && git reset --hard #{target}")
     else
-      # Clone fresh
-      run("rm -rf #{app_dir} && git clone --branch #{app.branch} --depth 1 #{app.repository_url} #{app_dir}")
+      run("rm -rf #{app_dir} && git clone --branch #{app.branch} #{app.repository_url} #{app_dir}")
+      run("cd #{app_dir} && git reset --hard #{target}") if deployment.commit_sha.present?
     end
   end
 

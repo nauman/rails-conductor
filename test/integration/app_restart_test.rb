@@ -32,7 +32,7 @@ class AppRestartTest < ActionDispatch::IntegrationTest
     %w[docker kamal native].each do |method|
       @managed_app.update!(deploy_method: method)
 
-      assert_enqueued_with(job: RestartAppJob, args: [@managed_app.id]) do
+      assert_enqueued_with(job: RestartAppJob, args: [ @managed_app.id ]) do
         post restart_app_path(@managed_app)
       end
     end

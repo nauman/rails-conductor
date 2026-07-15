@@ -20,7 +20,7 @@ class DeployPreflightTest < ActiveSupport::TestCase
     r = check
     assert_equal :clear, r.status
     refute r.blocked?
-    assert r.checks.all? { |c| c.status == :ok }, "all rows should be ok: #{r.checks.map { |c| [c.key, c.status] }.inspect}"
+    assert r.checks.all? { |c| c.status == :ok }, "all rows should be ok: #{r.checks.map { |c| [ c.key, c.status ] }.inspect}"
   end
 
   test "an at_risk server audit is a fail and blocks the deploy" do
@@ -69,6 +69,14 @@ class DeployPreflightTest < ActiveSupport::TestCase
     r = check
     assert_equal :fail, row(r, :seeds).status
     assert r.blocked?
+  end
+
+  test "a queued seed retry (seed_on_next_deploy) does not block the deploy that repairs it" do
+    @app.update!(seed_on_next_deploy: true)
+    @app.seed_applications.create!(status: "failed", applied_at: 1.hour.ago)
+    r = check
+    assert_equal :warn, row(r, :seeds).status, "the queued retry downgrades the fail to a warning"
+    refute r.blocked?, "the very deploy that would re-run the failed seeds must not be blocked by them"
   end
 
   test "a succeeded latest seed run is ok" do

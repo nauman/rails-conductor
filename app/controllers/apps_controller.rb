@@ -1,5 +1,5 @@
 class AppsController < ApplicationController
-  before_action :set_app, only: [:show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing]
+  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing ]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -50,7 +50,10 @@ class AppsController < ApplicationController
       return redirect_to @app, alert: "App is not deployable. Configure server and repository first."
     end
 
-    force = ActiveModel::Type::Boolean.new.cast(params[:force])
+    # Explicit truthy only — ActiveModel's Boolean cast treats any non-false
+    # string (e.g. "banana") as true, which would silently override a blocking
+    # preflight. Force must be a deliberate true.
+    force = %w[1 true t yes on].include?(params[:force].to_s.strip.downcase)
     _deployment, status, preflight = @app.start_deployment!(user: current_user, force: force)
 
     case status
@@ -74,6 +77,13 @@ class AppsController < ApplicationController
   # One-shot seed request: the next deploy runs db:seed + records a SeedApplication,
   # then clears the flag. Makes the preflight "seeds" gate real.
   def toggle_seed_on_next_deploy
+    # Only KamalDeployer consumes this flag; docker/native deploys would succeed
+    # without ever running seeds and leave the flag stuck. Don't offer a promise
+    # we can't keep.
+    unless @app.kamal?
+      return redirect_to @app, alert: "Seed-on-next-deploy is only supported for Kamal deploys (this app uses #{@app.deploy_method})."
+    end
+
     @app.update!(seed_on_next_deploy: !@app.seed_on_next_deploy)
     msg = @app.seed_on_next_deploy? ? "Seeds will run on the next deploy." : "Seed-on-next-deploy cleared."
     redirect_to @app, notice: msg

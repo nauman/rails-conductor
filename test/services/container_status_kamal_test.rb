@@ -23,9 +23,19 @@ class ContainerStatusKamalTest < ActiveSupport::TestCase
   # docker's `{{.CreatedAt}}` format, e.g. "2026-07-14 04:15:32 +0000 UTC".
   def docker_created(time) = time.strftime("%Y-%m-%d %H:%M:%S %z UTC")
 
-  # One line of `docker ps --format '{{.Labels}}|{{.CreatedAt}}'`.
+  # One line of `docker ps --format '{{.Labels}}|{{.CreatedAt}}'` + the exit marker.
   def ps_line(created_time, service: "appone")
-    "service=#{service},role=web,destination=|#{docker_created(created_time)}\n"
+    "service=#{service},role=web,destination=|#{docker_created(created_time)}\n__RC__:0"
+  end
+
+  test "a docker permission/daemon error reads as unknown, not stopped" do
+    ssh = FakeSsh.new(output: "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock\n__RC__:1")
+    SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
+
+    @app.reload
+    assert_equal "unknown", @app.container_status, "docker being inaccessible must not look 'stopped'"
+    assert @app.status_check_error.present?
+    assert_match(/docker group/i, @app.status_check_error)
   end
 
   test "a running kamal container marks the app running and reconciles App.status" do

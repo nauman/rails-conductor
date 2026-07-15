@@ -63,7 +63,9 @@
                 data_active     = %w[/backups /database_clusters /database_pulls].any? { |p| request.path.start_with?(p) }
                 settings_active = %w[/credentials /ssh_keys /members /mcp_tokens /organizations /integrations /admin].any? { |p| request.path.start_with?(p) }
               %>
-              <nav class="min-w-0 flex-1" data-primary-navigation aria-label="Primary navigation">
+              <%# Scrollable on mobile so no item is clipped/unreachable; at md+
+                  overflow is visible so the Data/Settings dropdowns can hang down. %>
+              <nav class="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:overflow-x-visible md:overflow-y-visible" data-primary-navigation aria-label="Primary navigation">
                 <div class="flex items-center gap-0.5 whitespace-nowrap text-[13px] font-medium">
                   <%= nav_link "Overview", dashboard_path, active: request.path == dashboard_path %>
                   <%= nav_link "Servers", servers_path, active: request.path.start_with?('/servers') %>

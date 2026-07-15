@@ -31,11 +31,20 @@ class ContainerStatusDockerTest < ActiveSupport::TestCase
 
   test "a running app with a missing container IS a real failure" do
     @app.update!(status: "running")
-    ssh = FakeSsh.new(output: "")
+    ssh = FakeSsh.new(output: "Error: No such object: conductor-dock\n__RC__:1")
     SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
 
     @app.reload
     assert_equal "unknown", @app.container_status
     assert @app.status_check_error.present?, "an app that should be running but has no container is a real problem"
+  end
+
+  test "a docker daemon/permission error is unknown+error, even for a stopped app" do
+    ssh = FakeSsh.new(output: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n__RC__:1")
+    SshConnection.stub(:new, ssh) { ContainerStatus.new(@app).sync! }
+
+    @app.reload
+    assert_equal "unknown", @app.container_status, "a down daemon must not read as a clean 'stopped'"
+    assert @app.status_check_error.present?
   end
 end

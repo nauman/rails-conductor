@@ -15,25 +15,22 @@ module Mcp
     include McpAuthentication
     include McpToolInvocation
 
-    # Protocol revision we implement. Clients negotiate; we echo a version we
-    # support. See https://spec.modelcontextprotocol.io.
-    PROTOCOL_VERSION = "2025-06-18"
-    SERVER_VERSION   = ENV.fetch("KAMAL_VERSION", "dev")
+    # Protocol revision we implement + the ones we still accept from clients.
+    PROTOCOL_VERSION   = "2025-06-18"
+    SUPPORTED_VERSIONS = %w[2025-06-18 2025-03-26 2024-11-05].freeze
+    SERVER_VERSION     = ENV.fetch("KAMAL_VERSION", "dev")
 
-    # POST /mcp — a single JSON-RPC request (or a batch array).
+    before_action :validate_origin!
+    before_action :validate_protocol_version!
+
+    # POST /mcp — a single JSON-RPC request. (2025-06-18 removed JSON-RPC batching.)
     def handle
       payload = parse_body
       return render_error(nil, -32700, "Parse error") if payload.nil?
+      return render_error(nil, -32600, "Batch requests are not supported (MCP #{PROTOCOL_VERSION})") if payload.is_a?(Array)
 
-      responses = Array.wrap(payload).map { |message| handle_message(message) }.compact
-
-      if responses.empty?
-        head :accepted            # all notifications — no response body
-      elsif payload.is_a?(Array)
-        render json: responses
-      else
-        render json: responses.first
-      end
+      response = handle_message(payload)
+      response ? render(json: response) : head(:accepted) # nil = a notification, no reply
     end
 
     # GET /mcp — we don't offer a server-initiated SSE stream.
@@ -43,34 +40,57 @@ module Mcp
 
     private
 
-    # Route one JSON-RPC message. Returns a response Hash, or nil for
-    # notifications (methods with no id, which must not be answered).
+    # DNS-rebinding protection (MCP transport spec): browsers attach Origin;
+    # reject any that isn't this server's own host. Native clients (claude mcp,
+    # Cursor) send no Origin and pass through untouched.
+    def validate_origin!
+      origin = request.headers["Origin"]
+      return if origin.blank? || allowed_origin?(origin)
+
+      render json: error(nil, -32600, "Origin not allowed"), status: :forbidden
+    end
+
+    def allowed_origin?(origin)
+      host = (URI(origin).host rescue nil)
+      return false if host.blank?
+
+      [ request.host, ENV["APP_HOST"].presence, "localhost", "127.0.0.1", "[::1]" ].compact.include?(host)
+    end
+
+    # Honor the negotiated MCP-Protocol-Version header (sent after initialize)
+    # instead of silently ignoring it: an unknown version is a 400.
+    def validate_protocol_version!
+      version = request.headers["MCP-Protocol-Version"]
+      return if version.blank? || SUPPORTED_VERSIONS.include?(version)
+
+      render json: error(nil, -32600, "Unsupported MCP-Protocol-Version: #{version}"), status: :bad_request
+    end
+
+    # Route one JSON-RPC message. Returns a response Hash, or nil for a
+    # notification (no reply). Never raises on malformed input.
     def handle_message(message)
-      return nil unless message.is_a?(Hash)
+      return error(nil, -32600, "Invalid Request") unless message.is_a?(Hash)
 
       id     = message["id"]
       method = message["method"].to_s
-      params = message["params"] || {}
+      params = message["params"].nil? ? {} : message["params"]
+      return error(id, -32602, "Invalid params: expected an object") unless params.is_a?(Hash)
 
       case method
-      when "initialize"
-        result(id, initialize_result)
-      when "ping"
-        result(id, {})
-      when "tools/list"
-        result(id, { tools: tool_definitions })
-      when "tools/call"
-        call_tool(id, params)
-      when /\Anotifications\//
-        nil                       # initialized / cancelled / etc. — acknowledge silently
-      else
-        error(id, -32601, "Method not found: #{method}")
+      when "initialize"          then result(id, initialize_result(params))
+      when "ping"                then result(id, {})
+      when "tools/list"          then result(id, { tools: tool_definitions })
+      when "tools/call"          then call_tool(id, params)
+      when %r{\Anotifications/}  then nil # initialized / cancelled / etc. — no reply
+      else error(id, -32601, "Method not found: #{method}")
       end
     end
 
-    def initialize_result
+    def initialize_result(params)
+      requested = params["protocolVersion"]
+      negotiated = SUPPORTED_VERSIONS.include?(requested) ? requested : PROTOCOL_VERSION
       {
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: negotiated,
         capabilities:    { tools: { listChanged: false } },
         serverInfo:      { name: "conductor", version: SERVER_VERSION }
       }

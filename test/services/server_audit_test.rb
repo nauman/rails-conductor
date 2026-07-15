@@ -26,7 +26,7 @@ class ServerAuditTest < ActiveSupport::TestCase
     r = audit(SECURE)
     assert r.ok?
     assert_equal :secure, r.status
-    assert r.checks.none? { |c| [:warn, :fail].include?(c.status) }
+    assert r.checks.none? { |c| [ :warn, :fail ].include?(c.status) }
   end
 
   test "SSH root login enabled is a fail -> at_risk" do

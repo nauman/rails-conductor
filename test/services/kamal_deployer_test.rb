@@ -133,7 +133,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     shell = FakeShell.new(success: true)
     deploy_with(shell)
 
-    assert shell.runs.any? { |r| r[:command].first(2) == ["git", "-C"] && r[:command].last == "HEAD" },
+    assert shell.runs.any? { |r| r[:command].first(2) == [ "git", "-C" ] && r[:command].last == "HEAD" },
            "expected a git rev-parse HEAD step"
     assert @deployment.reload.commit_sha.present?, "expected commit_sha recorded from git rev-parse HEAD"
   end

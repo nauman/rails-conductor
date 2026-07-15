@@ -123,4 +123,49 @@ class McpRpcTransportTest < ActionDispatch::IntegrationTest
       assert_response :method_not_allowed
     end
   end
+
+  test "a batch request is rejected (2025-06-18 removed JSON-RPC batching)" do
+    with_token do
+      json = rpc([ { jsonrpc: "2.0", id: 1, method: "ping" } ])
+      assert_equal(-32600, json["error"]["code"])
+    end
+  end
+
+  test "an Origin from another host is rejected (DNS-rebinding protection)" do
+    with_token do
+      post "/mcp", params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json,
+           headers: auth_headers.merge("Content-Type" => "application/json", "Origin" => "https://evil.example.com")
+      assert_response :forbidden
+    end
+  end
+
+  test "a same-host Origin is allowed" do
+    with_token do
+      post "/mcp", params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json,
+           headers: auth_headers.merge("Content-Type" => "application/json", "Origin" => "http://www.example.com")
+      assert_response :success
+    end
+  end
+
+  test "an unknown MCP-Protocol-Version header is a 400" do
+    with_token do
+      post "/mcp", params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json,
+           headers: auth_headers.merge("Content-Type" => "application/json", "MCP-Protocol-Version" => "1999-01-01")
+      assert_response :bad_request
+    end
+  end
+
+  test "malformed params return invalid-params, not a 500" do
+    with_token do
+      json = rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: "not-an-object" })
+      assert_equal(-32602, json["error"]["code"])
+    end
+  end
+
+  test "initialize negotiates a supported requested protocol version" do
+    with_token do
+      json = rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26" } })
+      assert_equal "2025-03-26", json["result"]["protocolVersion"]
+    end
+  end
 end

@@ -27,7 +27,7 @@ class DatabasePullServiceTest < ActiveSupport::TestCase
     end
 
     def output = @output
-    def download(remote, local) = (@downloads << [remote, local]; true)
+    def download(remote, local) = (@downloads << [ remote, local ]; true)
   end
 
   # LocalShell stub capturing the restore commands.
@@ -92,8 +92,8 @@ class DatabasePullServiceTest < ActiveSupport::TestCase
 
     assert_equal "success", pull.reload.status
     assert_equal 3, shell.runs.size
-    assert_equal ["dropdb", "--if-exists", "int_app_development"], shell.runs[0]
-    assert_equal ["createdb", "int_app_development"], shell.runs[1]
+    assert_equal [ "dropdb", "--if-exists", "int_app_development" ], shell.runs[0]
+    assert_equal [ "createdb", "int_app_development" ], shell.runs[1]
     assert_equal "pg_restore", shell.runs[2].first
     assert_includes shell.runs[2], "int_app_development"
   end

@@ -27,7 +27,7 @@ class DeployPreflight
   def initialize(app) = @app = app
 
   def check
-    Result.new(checks: [migrations_check, seeds_check, audit_check, threads_check])
+    Result.new(checks: [ migrations_check, seeds_check, audit_check, threads_check ])
   end
 
   private
@@ -52,9 +52,14 @@ class DeployPreflight
     last = @app.seed_applications.order(:created_at).last
     if last.nil?
       warn(:seeds, "Seeds", "no seed run recorded for this app — run/record seeds if it needs them")
+    elsif last.status == "failed" && @app.seed_on_next_deploy?
+      # A seed retry is explicitly queued for THIS deploy — it will re-run the
+      # failed seeds, so the failed record must not block the deploy that repairs
+      # it (otherwise the only escape is Force, which bypasses every other gate).
+      warn(:seeds, "Seeds", "the most recent seed run failed — a retry is queued for this deploy")
     elsif last.status == "failed"
       fail_row(:seeds, "Seeds",
-               "the most recent seed run failed (#{last.applied_at&.to_date || last.created_at.to_date}) — resolve before deploying")
+               "the most recent seed run failed (#{last.applied_at&.to_date || last.created_at.to_date}) — resolve it, or toggle 'seed on next deploy' to retry")
     elsif last.proven?
       ok(:seeds, "Seeds", "last seed run succeeded #{last.applied_at.to_date}")
     else

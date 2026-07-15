@@ -27,21 +27,29 @@ class ContainerStatus
 
   private
 
+  # Docker daemon is down / not installed / not reachable by the SSH user — as
+  # opposed to a container that simply isn't there. These must read "unknown +
+  # error", never a clean "stopped".
+  DOCKER_UNAVAILABLE = /cannot connect to the docker daemon|permission denied.*docker\.sock|docker: (command )?not found|is the docker daemon running/i
+
   # Docker/native apps: inspect the conductor-<slug> container directly.
   def sync_docker
     ssh = SshConnection.new(app.server)
-    result = ssh.execute("docker inspect --format '{{json .State}}' #{app.container_name} 2>/dev/null")
+    raw = ssh.execute(%(docker inspect --format '{{json .State}}' #{app.container_name} 2>&1; echo "__RC__:$?"))
+    return ssh_failure(ssh) unless ssh.success?
 
-    if ssh.success? && result.present?
-      parse_and_update(result)
-    elsif ssh.success? && app.status == "stopped"
-      # SSH worked; there's simply no container — which is exactly right for an
-      # app we deliberately stopped. Record a clean stopped state, not a failure.
+    body, rc = split_rc(raw)
+    return docker_unavailable_failure(body) if docker_unavailable?(body)
+
+    if rc.nil? ? body.start_with?("{") : (rc.zero? && body.start_with?("{"))
+      parse_and_update(body)
+    elsif app.status == "stopped"
+      # Daemon reachable, container simply absent — correct for a stopped app.
       app.update!(container_status: "exited", last_status_check_at: Time.current, status_check_error: nil)
       true
     else
-      app.update_container_status!("unknown", error: ssh.error || "Container not found")
-      failure(ssh.error || "Container not found")
+      app.update_container_status!("unknown", error: "Container not found")
+      failure("Container not found")
     end
   end
 
@@ -53,14 +61,15 @@ class ContainerStatus
   # reconcile App.status too (a deploy may have happened out-of-band).
   def sync_kamal
     ssh = SshConnection.new(app.server)
-    running = ssh.execute(%(docker ps --filter status=running --format '{{.Labels}}|{{.CreatedAt}}'))
+    raw = ssh.execute(%(docker ps --filter status=running --format '{{.Labels}}|{{.CreatedAt}}' 2>&1; echo "__RC__:$?"))
+    return ssh_failure(ssh) unless ssh.success?
 
-    unless ssh.success?
-      app.update_container_status!("unknown", error: ssh.error || "docker ps failed")
-      return failure(ssh.error || "docker ps failed")
-    end
+    body, rc = split_rc(raw)
+    # `docker ps` returns 0 even with zero containers, so a non-zero exit (or a
+    # daemon/permission error) means Docker is unavailable — not "stopped".
+    return docker_unavailable_failure(body) if docker_unavailable?(body) || (rc && !rc.zero?)
 
-    created_at = running_container_created(running, app.kamal_service_candidates)
+    created_at = running_container_created(body, app.kamal_service_candidates)
     if created_at
       started_at = parse_docker_created(created_at)
       app.update!(status: "running", container_status: "running", container_started_at: started_at,
@@ -70,6 +79,35 @@ class ContainerStatus
                   last_status_check_at: Time.current, status_check_error: nil)
     end
     true
+  end
+
+  # Split a "<output>\n__RC__:<n>" trailer off. rc is nil if no marker (test
+  # stubs) — callers treat nil leniently as "assume ok".
+  def split_rc(raw)
+    s = raw.to_s
+    rc = s[/__RC__:(\d+)\s*\z/, 1]&.to_i
+    [ s.sub(/__RC__:\d+\s*\z/, "").strip, rc ]
+  end
+
+  def docker_unavailable?(body)
+    body.to_s.match?(DOCKER_UNAVAILABLE)
+  end
+
+  def docker_unavailable_failure(body)
+    hint = if body.to_s.match?(/permission denied/i)
+      "Docker not accessible to '#{app.server&.ssh_user_or_default || 'the SSH user'}' — add them to the docker group"
+    elsif body.to_s.match?(/cannot connect|daemon running/i)
+      "Docker daemon not reachable on #{app.server&.name}"
+    else
+      body.to_s.lines.first.to_s.strip.presence || "docker command failed"
+    end
+    app.update_container_status!("unknown", error: hint)
+    failure(hint)
+  end
+
+  def ssh_failure(ssh)
+    app.update_container_status!("unknown", error: ssh.error || "SSH command failed")
+    failure(ssh.error || "SSH command failed")
   end
 
   # From `docker ps ... {{.Labels}}|{{.CreatedAt}}` output, return the CreatedAt

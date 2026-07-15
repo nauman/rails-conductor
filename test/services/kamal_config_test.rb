@@ -25,7 +25,7 @@ class KamalConfigTest < ActiveSupport::TestCase
     refute_match(/YOUR_SERVER_IP|your-user|\|\| /, yaml, "must not emit placeholder defaults")
     o = YAML.load(yaml)
     assert_equal "appone", o["service"]
-    assert_equal ["192.0.2.10"], o["servers"]["web"]
+    assert_equal [ "192.0.2.10" ], o["servers"]["web"]
     assert_equal "deploy", o["ssh"]["user"]
     assert_equal "appone.example.com", o["proxy"]["host"]
     assert_equal true, o["proxy"]["ssl"]
@@ -36,7 +36,7 @@ class KamalConfigTest < ActiveSupport::TestCase
     o = overlay
     assert_equal "docker.io", o["registry"]["server"], "defaults to Kamal's default registry"
     assert_equal "nauman", o["registry"]["username"]
-    assert_equal ["KAMAL_REGISTRY_PASSWORD"], o["registry"]["password"]
+    assert_equal [ "KAMAL_REGISTRY_PASSWORD" ], o["registry"]["password"]
   end
 
   test "env is split: secrets listed, clear excludes deploy-coordinate keys" do

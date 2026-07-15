@@ -56,7 +56,7 @@ class ServerHealthAndPackagesTest < ActionDispatch::IntegrationTest
     fake = Object.new
     def fake.execute_with_status(_c) = { success: true, exit_code: 0, stdout: "Setting up htop ...", stderr: "" }
 
-    SshConnection.stub(:new, fake) { InstallPackagesJob.perform_now(@server.id, ["htop"]) }
+    SshConnection.stub(:new, fake) { InstallPackagesJob.perform_now(@server.id, [ "htop" ]) }
 
     @server.reload
     assert_equal "succeeded", @server.last_package_install_status

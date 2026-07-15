@@ -14,15 +14,9 @@ class TestServerConnectionTool
     return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless server
 
     ssh = SshConnection.new(server)
-    unless ssh.test
-      return Result.ok({
-        server:        server.name,
-        connected:     false,
-        error:         ssh.error,
-        message:       "SSH connection to #{server.name} failed: #{ssh.error}",
-        _organization: server.organization
-      })
-    end
+    # A failed probe is a failure — return Result.fail so the MCP layer reports
+    # isError:true and doesn't log a successful call for a broken connection.
+    return Result.fail("SSH connection to #{server.name} failed: #{ssh.error}") unless ssh.test
 
     # Connected — pull metrics so the fleet stops showing this host as pending.
     refreshed = ServerMetrics.new(server).fetch_and_update!

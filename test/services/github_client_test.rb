@@ -9,7 +9,7 @@ class GithubClientTest < ActiveSupport::TestCase
     def get(path) = record(:get, path)
     def delete(path) = record(:delete, path)
     def post(path) = (req = Req.new; yield req if block_given?; record(:post, path, req.body))
-    def record(verb, path, body = nil) = (@calls << [verb, path, body]; @responses.shift)
+    def record(verb, path, body = nil) = (@calls << [ verb, path, body ]; @responses.shift)
     Req = Struct.new(:body)
   end
 

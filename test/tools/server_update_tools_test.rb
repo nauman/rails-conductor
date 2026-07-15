@@ -64,12 +64,11 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
 
   # --- test_connection ---------------------------------------------------
 
-  test "test_connection reports failure without touching metrics" do
+  test "test_connection reports a failed probe as an error (isError), not a success" do
     SshConnection.stub(:new, ->(_s) { FakeSsh.new(ok: false, error: "Authentication failed") }) do
       result = TestServerConnectionTool.new(user: @user).call("server_id" => @server.id)
-      assert result.success?, result.error
-      assert_equal false, result.value[:connected]
-      assert_includes result.value[:error], "Authentication failed"
+      assert result.failure?, "a broken connection must be a failure, not a logged success"
+      assert_includes result.error, "Authentication failed"
     end
   end
 

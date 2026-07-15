@@ -1,7 +1,7 @@
 require "shellwords"
 
 class ServersController < ApplicationController
-  before_action :set_server, only: [:show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates]
+  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates ]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key).order(created_at: :desc)
@@ -44,6 +44,9 @@ class ServersController < ApplicationController
     ssh = SshConnection.new(@server)
 
     if ssh.test
+      # Refresh metrics so a successful test also updates last_seen_at — otherwise
+      # the server keeps displaying "pending" despite a working connection.
+      ServerMetrics.new(@server).fetch_and_update!
       redirect_to @server, notice: "SSH connection successful!"
     else
       redirect_to @server, alert: "SSH connection failed: #{ssh.error}"
