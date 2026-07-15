@@ -9,7 +9,7 @@ thread reply or handoff target. See `docs/dev/THREADS.md` for the convention.
 | `operator` | human | Nauman must decide, approve a deploy, or unblock (`localvault`, GitHub secrets, prod access) |
 | `deploy` | role | The deployment agent owes the next push/deploy/verify or a deploy-config question (see `docs/agents/deploy.agent.md`) |
 | `staff-engineer` | role | Implementation judgment or code review is needed (see `docs/agents/staff_engineer.md`) |
-| `specification` | role | Cross-surface spec, roadmap, plan, or ADR alignment is needed |
+| `specification` | role | Cross-surface spec, roadmap, plan, or ADR alignment is needed (see `docs/agents/specification.agent.md`) |
 | `review` | role | Fresh-context review is needed before merge or publish |
 | `claude` | alias | Claude Code owes the next implementation or docs reply |
 | `codex` | alias | Codex owes the next implementation or docs reply |
