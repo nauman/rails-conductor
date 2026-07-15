@@ -154,4 +154,27 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
     get api_v1_servers_path, headers: auth(raw)
     assert_response :forbidden
   end
+
+  # --- Membership revocation + scope (audit P1-4) ---
+
+  test "a token stops working once its user is removed from the token's org" do
+    membership = @org_a.memberships.find_by(user: @user_a)
+    membership.destroy
+    get api_v1_server_path(@server_a), headers: auth(@raw_a)
+    assert_response :unauthorized
+  end
+
+  test "a read-only token cannot perform writes" do
+    read_raw, = ApiToken.generate(user: @user_a, name: "ro", organization: @org_a, scope: "read")
+    post run_api_v1_scripts_path, headers: auth(read_raw), params: { script_id: 1 }
+    assert_response :forbidden
+    assert_match(/read-only/i, json["error"])
+  end
+
+  test "a read-only token can still read" do
+    read_raw, = ApiToken.generate(user: @user_a, name: "ro2", organization: @org_a, scope: "read")
+    get api_v1_servers_path, headers: auth(read_raw)
+    assert_response :success
+  end
+
 end

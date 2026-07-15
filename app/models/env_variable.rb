@@ -18,4 +18,10 @@ class EnvVariable < ApplicationRecord
   def to_docker_env
     "-e #{key}=#{Shellwords.escape(value)}"
   end
+
+  # Same shape as to_docker_env but with secret values masked — for anything
+  # that gets logged/displayed (deploy logs must never carry decrypted secrets).
+  def to_docker_env_redacted
+    "-e #{key}=#{secret? ? "[REDACTED]" : Shellwords.escape(value)}"
+  end
 end

@@ -56,8 +56,10 @@ class AppDeployer
     )
   end
 
-  def run(command)
-    log "> #{command}"
+  # `display` is what gets logged/broadcast — pass a redacted variant for any
+  # command that embeds secrets, so decrypted values never reach the log.
+  def run(command, display: command)
+    log "> #{display}"
     ssh.execute(command)
     if ssh.success?
       log ssh.output if ssh.output.present?
@@ -122,22 +124,25 @@ class AppDeployer
   end
 
   def start_container
-    env_flags = app.env_variables.map(&:to_docker_env).join(" ")
     port = app.port || 3000
 
-    docker_run = [
+    prefix = [
       "docker run -d",
       "--name #{app.container_name}",
       "--restart unless-stopped",
-      "-p #{port}:#{port}",
-      env_flags,
+      "-p #{port}:#{port}"
+    ]
+    suffix = [
       "-e PORT=#{port}",
       "-e RAILS_ENV=production",
       "-e RAILS_LOG_TO_STDOUT=true",
       "#{app.image_name}:latest"
-    ].join(" ")
+    ]
+    docker_run = (prefix + [ app.env_variables.map(&:to_docker_env).join(" ") ] + suffix).join(" ")
+    # Redact secret env values in the logged/broadcast copy.
+    display    = (prefix + [ app.env_variables.map(&:to_docker_env_redacted).join(" ") ] + suffix).join(" ")
 
-    if run(docker_run)
+    if run(docker_run, display: display)
       # Get container ID
       run("docker ps -q -f name=#{app.container_name}")
       if ssh.output.present?

@@ -2,6 +2,7 @@ module Api
   class BaseController < ActionController::API
     before_action :authenticate_api_token!
     before_action :require_organization!
+    before_action :enforce_token_scope!
 
     rescue_from ActiveRecord::RecordNotFound do |exception|
       render json: { error: "#{exception.model || 'Record'} not found" }, status: :not_found
@@ -17,9 +18,21 @@ module Api
       token = request.headers["Authorization"]&.sub(/\ABearer\s+/, "")
       @current_api_token = ApiToken.authenticate(token)
 
-      unless @current_api_token
-        render json: { error: "Unauthorized" }, status: :unauthorized
-      end
+      # Revoke on membership removal: a valid token whose user has left the
+      # token's org grants nothing (matches the MCP endpoint's rule).
+      org = @current_api_token&.organization
+      valid = @current_api_token && (org.nil? || @current_api_token.user.organizations.exists?(id: org.id))
+
+      render json: { error: "Unauthorized" }, status: :unauthorized unless valid
+    end
+
+    # Read-only tokens (scope "read") may only make safe requests. Any mutating
+    # verb (POST/PATCH/PUT/DELETE) requires a write-scoped token.
+    def enforce_token_scope!
+      return if request.get? || request.head?
+      return unless @current_api_token&.read_only?
+
+      render json: { error: "This token is read-only and cannot perform writes" }, status: :forbidden
     end
 
     def current_user
