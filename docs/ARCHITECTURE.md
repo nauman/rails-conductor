@@ -62,9 +62,9 @@ flowchart LR
     J -->|kamal| KD["KamalDeployer<br/>kamal deploy as control machine"]
 ```
 
-## The edge: Caddy is the standard
+## The edge: Caddy for dynamic routing, kamal-proxy stays for Kamal
 
-Conductor standardizes the edge on **Caddy**, driven live via the Caddy **Admin API** (`CaddyClient`, port 2019) — add/remove domains and per-app subdomains without a redeploy. Kamal apps historically front with **kamal-proxy** (the `proxy:` block in `deploy.yml`); the direction (roadmap slot 18) is per-app choice with **Caddy as default across all three runtimes**.
+Conductor uses **Caddy**, driven live via the Caddy **Admin API** (`CaddyClient`, port 2019), to add/remove domains and per-app subdomains without a redeploy. Per **ADR 0002**, Kamal apps keep fronting with **kamal-proxy** (the `proxy:` block in `deploy.yml`) — replacing it would mean rebuilding its battle-tested zero-downtime deploy handoff. Caddy is *added* narrowly for dynamic subdomains and native runtimes; it is **not** a default replacement for kamal-proxy.
 
 ```mermaid
 flowchart LR

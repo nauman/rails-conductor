@@ -17,6 +17,7 @@ This is a compact feature snapshot. For the full capability map, use `docs/plans
 - [x] API token authentication and external API surface
 - [x] Recurring ops baseline for metrics refresh, container sync, and scheduled backups
 - [x] SSH-backed Caddy route management for managed add/remove domain tooling
+- [x] Kamal as a runtime backend: through-Conductor Kamal deploys (control-machine build over SSH), self-describing deploy.yml/.kamal secrets generation, gated post-deploy migrate, and MCP-driven deploys
 
 ## Partial Capabilities
 
@@ -33,7 +34,6 @@ This is a compact feature snapshot. For the full capability map, use `docs/plans
 
 - [ ] Managed-app Active Storage introspection and blob cleanup
 - [ ] Portainer integration or deep Docker inventory UI
-- [ ] Kamal as a runtime backend beyond an assessment document
 
 ## Next Major Capabilities
 

@@ -13,7 +13,7 @@ Partial — org models, scoping, and switching shipped; onboarding, invitations,
 - `Current.organization` is set per request; a nav switcher changes the active org.
 - `Server`, `App`, `Credential`, `Backup`, `SshKey` carry `organization_id` and are loaded/created strictly via `current_organization`. The dashboard is scoped too. Cross-org access returns 404.
 - Signup is invite-only (no auto-account creation).
-- Gap: the JSON API (`/api/v1/*`) is not yet org-scoped.
+- The JSON API (`/api/v1/*`) is org-scoped: requests operate within the token's organization, tokens are rejected once their user leaves that org, and read-only tokens cannot write. Action Cable is authenticated and org-scoped too.
 
 ## Goal
 

@@ -37,7 +37,7 @@ curl -s https://<your-conductor-host>/mcp/list \
 # Fleet snapshot
 curl -s https://<your-conductor-host>/mcp/call \
   -H "Authorization: Bearer $CONDUCTOR_MCP_TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"fleet_status","input":{}}'
+  -d '{"name":"conductor_read","input":{"action":"fleet_status"}}'
 ```
 
 ## Connect an agent (Claude / Cursor)
@@ -49,14 +49,21 @@ claude mcp add --transport http conductor https://<your-conductor-host>/mcp \
   --header "Authorization: Bearer $CONDUCTOR_MCP_TOKEN"
 ```
 
-The agent then sees `deploy_app`, `deployment_log`, and the rest as native tools.
+The agent then sees `conductor_app`, `conductor_read`, and the rest as native tools.
 
 ## The toolset
 
-**Deploy & inspect** — `deploy_app`, `deployment_log`, `sync_app_status`, `recent_logs`, `fleet_status`, `run_script`
-**App lifecycle** — `create_app`, `update_app`, `set_env_variable`, `add_domain`, `remove_domain`
-**Infra** — `register_server`, `register_database_cluster`, `provision_database`
-**Git auth (private repos)** — `set_github_app`, `github_installations`, `set_github_token`, `generate_deploy_key`
+The surface is **seven flat tools**, each taking an `action` (fewer tools keeps agent tool-selection accurate). Always trust `GET /mcp/list` over this table.
+
+| Tool | Actions |
+|------|---------|
+| `conductor_read` | `fleet_status`, `logs`, `deployment` (read-only) |
+| `conductor_app` | `create`, `update`, `deploy`, `sync_status` |
+| `conductor_app_config` | `set_env`, `gen_deploy_key` |
+| `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `audit`, `apply_updates`, `install_packages`, `run_script` |
+| `conductor_database` | `register_cluster`, `provision` |
+| `conductor_domain` | `add`, `remove` |
+| `conductor_github` | `set_token`, `set_app`, `installations` |
 
 Call `GET /mcp/list` for each tool's exact input schema.
 
@@ -67,23 +74,23 @@ H=https://<your-conductor-host>/mcp/call
 A=(-H "Authorization: Bearer $CONDUCTOR_MCP_TOKEN" -H "Content-Type: application/json")
 
 # 1. Point the app at its repo (kamal build over SSH, public or private repo)
-curl -s "$H" "${A[@]}" -d '{"name":"update_app","input":{
-  "app_name":"My App","deploy_method":"kamal",
+curl -s "$H" "${A[@]}" -d '{"name":"conductor_app","input":{
+  "action":"update","app_name":"My App","deploy_method":"kamal",
   "repository_url":"https://github.com/acme/my-app.git","branch":"main"}}'
 
 # 2. (Private repo) mint a deploy key, then add it to the repo:
 #    gh repo deploy-key add <public_key> --repo acme/my-app --title conductor
-curl -s "$H" "${A[@]}" -d '{"name":"generate_deploy_key","input":{"app_name":"My App"}}'
+curl -s "$H" "${A[@]}" -d '{"name":"conductor_app_config","input":{"action":"gen_deploy_key","app_name":"My App"}}'
 
 # 3. Load the app's env (RAILS_MASTER_KEY, DB password, …); secrets are redacted in logs
-curl -s "$H" "${A[@]}" -d '{"name":"set_env_variable","input":{
-  "app_name":"My App","key":"RAILS_MASTER_KEY","value":"…","secret":true}}'
+curl -s "$H" "${A[@]}" -d '{"name":"conductor_app_config","input":{
+  "action":"set_env","app_name":"My App","key":"RAILS_MASTER_KEY","value":"…","secret":true}}'
 
 # 4. Deploy — returns a deployment_id
-curl -s "$H" "${A[@]}" -d '{"name":"deploy_app","input":{"app_name":"My App"}}'
+curl -s "$H" "${A[@]}" -d '{"name":"conductor_app","input":{"action":"deploy","app_name":"My App"}}'
 
 # 5. Stream the result
-curl -s "$H" "${A[@]}" -d '{"name":"deployment_log","input":{"deployment_id":42}}'
+curl -s "$H" "${A[@]}" -d '{"name":"conductor_read","input":{"action":"deployment","deployment_id":42}}'
 ```
 
 Conductor's container clones the repo, generates `.kamal/secrets` from the env you loaded, **builds on the target's Docker daemon over SSH**, and deploys behind the shared proxy. See [Deploy an app](deploy-an-app) and [Connect GitHub](connect-github).
@@ -92,10 +99,10 @@ Conductor's container clones the repo, generates `.kamal/secrets` from the env y
 
 Two kinds of bearer token work:
 
-- **Per-user / per-org token (recommended).** An `ApiToken` bound to a user + organization. MCP runs the call **as that user, scoped to their organizations** — `deploy_app`, `set_env_variable`, `fleet_status`, logs, domains, etc. only see and act on apps/servers in orgs the user belongs to. One org's token can't touch another org's resources. This is how "anyone can deploy *their own* apps" works.
+- **Per-user / per-org token (recommended).** An `ApiToken` bound to a user + organization. MCP runs the call **as that user, scoped to their organizations** — `conductor_app`, `conductor_app_config`, `conductor_read`, logs, domains, etc. only see and act on apps/servers in orgs the user belongs to. One org's token can't touch another org's resources. This is how "anyone can deploy *their own* apps" works.
 - **Legacy shared token.** The instance `CONDUCTOR_MCP_TOKEN` env var runs as the first admin with **global** scope. Treat it like a root credential; rotate by changing the env var and redeploying.
 
-Mint one self-serve in the **Tokens** page (top nav → *Tokens*, or `/mcp_tokens`): name it, pick a **scope** — `deploy` (full) or `read` (read-only: `fleet_status` / `recent_logs` / `deployment_log` only) — and copy the token (shown once). Tokens are **bound to the active org**, so they can only see and act on that org's apps. Revoke anytime.
+Mint one self-serve in the **Tokens** page (top nav → *Tokens*, or `/mcp_tokens`): name it, pick a **scope** — `deploy` (full) or `read` (read-only: `conductor_read` only) — and copy the token (shown once). Tokens are **bound to the active org**, so they can only see and act on that org's apps. Revoke anytime.
 
 (Console equivalent: `ApiToken.generate(user:, name:, organization:, scope: "deploy")`.)
 
