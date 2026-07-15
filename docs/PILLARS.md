@@ -1,6 +1,6 @@
 # Conductor Pillars
 
-Conductor is a control plane for self-hosted Rails operations — one place to run, monitor, and maintain apps across mixed infrastructure (Kamal + Docker, or native Caddy + Puma). The product is organized around six pillars. This doc is the map for understanding what each area does, how far along it is, and where contributions are most welcome.
+Conductor is a control plane for self-hosted Rails operations — one place to run, monitor, and maintain apps across mixed infrastructure (Kamal + Docker, or native Caddy + Puma). The product is organized around **seven pillars**; the seventh — **agent-native control** — is the headline differentiator that leads the moat. This doc is the map for understanding what each area does, how far along it is, and where contributions are most welcome.
 
 > New here? Read `docs/VISION.md` for the why, then pick a pillar below. Each lists what exists today and concrete places to help.
 
@@ -14,6 +14,7 @@ Conductor is a control plane for self-hosted Rails operations — one place to r
 | 4 | Provisioning and providers | Hetzner, Cloudflare, R2, SES, bootstrap flows | Early — mostly planned |
 | 5 | Data and backups | Postgres backup, restore, monitoring | Backups work; restore is the gap |
 | 6 | Continuous maintenance | Health checks, updates, drift detection, alerts | Recurring jobs run; depth pending |
+| 7 | Agent-native control | Operate the whole fleet over MCP — every op a tool, org-scoped, audited, secretless | MCP surface shipped; secretless deploys pending |
 
 Maturity is qualitative and moves often. For the current detailed assessment, see `docs/analysis/pillars-audit-2026-03-19.md`.
 
@@ -61,11 +62,18 @@ Maturity is qualitative and moves often. For the current detailed assessment, se
 - **Today:** Recurring ops baseline (metrics refresh, container sync, scheduled backups), dashboard issue detection, and critical-failure email alerts.
 - **Where help is wanted:** Drift detection, auto-updates, certificate monitoring, historical metrics/trends, recurring-failure surfacing, and notifications beyond email (webhooks/Slack).
 
+## 7. Agent-native Control
+
+**The moat.** The whole fleet is operable by an AI agent end-to-end over MCP — every action a tool, every tool org-scoped, audited, and least-privilege — deploying *secretlessly* so neither human nor agent needs to handle secret values. This is the pillar Hatchbox (a hosted panel) and ONCE (a single-machine TUI) cannot copy, and it leads the moat: it's defensible by *architecture*, not just effort.
+
+- **Today:** A seven-tool MCP server (flat `action`-enum tools) exposing every operation, with a standard JSON-RPC transport (`claude mcp add`), org-scoped multi-tenant auth (read/deploy scopes, membership-revoked, owner-gated execution), and a redacted audit log — plus the AI chat that plans-and-executes fleet ops.
+- **Where help is wanted:** Secretless / vault-resolved deploys (values resolved at deploy time, never stored or logged — roadmap 16), broader tool coverage, and richer agent-facing skill docs.
+
 ---
 
 ## How Pillars Relate
 
-Pillar 1 (Fleet control) **displays** everything; Pillar 6 (Continuous maintenance) **monitors** everything. The other four are the systems being displayed and monitored. A change in routing or data shows up in the dashboard and gets watched by maintenance — so most features touch more than one pillar.
+Pillar 1 (Fleet control) **displays** everything; Pillar 6 (Continuous maintenance) **monitors** everything; Pillar 7 (Agent-native control) **exposes** everything as MCP tools so an agent can drive it. The other four (Runtime backends, Routing and edge, Provisioning, Data and backups) are the systems being displayed, monitored, and exposed. A change in routing or data shows up in the dashboard, gets watched by maintenance, and is drivable as a tool — so most features touch more than one pillar.
 
 ## Picking Up Work
 
