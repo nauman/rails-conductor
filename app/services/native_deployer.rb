@@ -39,7 +39,7 @@ class NativeDeployer
   end
 
   def run_script(script_name, step_label)
-    script = Script.find_by(name: script_name)
+    script = Script.visible_to(app.organization).find_by(name: script_name)
     unless script
       return fail_with("Built-in script '#{script_name}' not found")
     end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_15_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -324,9 +324,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_000002) do
     t.datetime "created_at", null: false
     t.text "description"
     t.string "name", null: false
+    t.bigint "organization_id"
     t.string "script_type", default: "provision", null: false
     t.datetime "updated_at", null: false
-    t.index ["name"], name: "index_scripts_on_name", unique: true
+    t.index ["name", "organization_id"], name: "index_scripts_on_name_and_organization_id", unique: true
+    t.index ["organization_id"], name: "index_scripts_on_organization_id"
     t.index ["script_type"], name: "index_scripts_on_script_type"
   end
 
@@ -455,6 +457,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_000002) do
   add_foreign_key "messages", "conversations"
   add_foreign_key "script_runs", "scripts"
   add_foreign_key "script_runs", "servers"
+  add_foreign_key "scripts", "organizations"
   add_foreign_key "seed_applications", "apps"
   add_foreign_key "servers", "organizations"
   add_foreign_key "servers", "ssh_keys"

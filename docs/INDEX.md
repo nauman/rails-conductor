@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | **Architecture** | **`docs/ARCHITECTURE.md`** | **The deployment matrix (Docker/Native/Kamal × Caddy edge × standalone/fleet) with mermaid diagrams — read first** |
 | Usage | `docs/USAGE.md` | Getting started and the web UI / API / MCP / chat surfaces |
-| Pillars | `docs/PILLARS.md` | Six pillars, current maturity, and contribution entry points |
+| Pillars | `docs/PILLARS.md` | Seven pillars, current maturity, and contribution entry points |
 | Agents | `docs/agents/00-roster.md` | The `awaiting:` address book — read first on boot; names usable in thread headers |
 | Agents | `docs/agents/staff_engineer.md` | Engineering brief: TDD-first, vanilla-Rails/Hotwire defaults, Conductor conventions |
 | Agents | `docs/agents/deploy.agent.md` | Deploy agent: GHCR CI backbone, kamal-proxy edge, `localvault` secrets, `/version` verify |

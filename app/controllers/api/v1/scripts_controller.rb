@@ -2,17 +2,17 @@ module Api
   module V1
     class ScriptsController < Api::BaseController
       def index
-        scripts = Script.all
+        scripts = Script.visible_to(current_organization)
         render json: scripts.map { |s| script_json(s) }
       end
 
       def show
-        script = Script.find(params[:id])
+        script = Script.visible_to(current_organization).find(params[:id])
         render json: script_json(script)
       end
 
       def run
-        script = Script.find(params[:script_id])
+        script = Script.visible_to(current_organization).find(params[:script_id])
         server = current_organization.servers.find(params[:server_id])
         script_run = ScriptRun.create!(
           script: script,

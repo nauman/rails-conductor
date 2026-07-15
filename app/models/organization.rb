@@ -18,6 +18,7 @@ class Organization < ApplicationRecord
   has_many :backups, dependent: :nullify
   has_many :ssh_keys, dependent: :nullify
   has_many :database_pulls, dependent: :nullify
+  has_many :scripts, dependent: :destroy
 
   validates :name, presence: true
 

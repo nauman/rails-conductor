@@ -76,11 +76,38 @@ class MemberAuthorizationTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "an owner can create a script" do
+  test "an owner can create a script (owned by their org)" do
     sign_in_as(@owner)
     assert_difference -> { Script.count }, 1 do
       post scripts_path, params: { script: { name: "legit", body: "echo ok", script_type: "provision" } }
     end
+    assert_equal @org, Script.find_by(name: "legit").organization
+  end
+
+  test "an org owner (non-admin) cannot edit a built-in script" do
+    builtin = Script.create!(name: "test-builtin", body: "echo built", script_type: "provision", built_in: true)
+    sign_in_as(@owner) # owner of @org, not a platform admin
+    patch script_path(builtin), params: { script: { body: "echo pwned" } }
+    assert_redirected_to scripts_path
+    assert_equal "echo built", builtin.reload.body, "built-ins are admin-only, must not change"
+  end
+
+  test "an org owner cannot edit another org's script (404)" do
+    other = Organization.create!(name: "Other Script Org")
+    theirs = other.scripts.create!(name: "theirs", body: "echo theirs", script_type: "provision")
+    sign_in_as(@owner)
+    patch script_path(theirs), params: { script: { body: "echo pwned" } }
+    assert_response :not_found
+    assert_equal "echo theirs", theirs.reload.body
+  end
+
+  test "a platform admin CAN edit a built-in script" do
+    builtin = Script.create!(name: "test-builtin2", body: "echo built", script_type: "provision", built_in: true)
+    admin = User.create!(email: "admin@example.com", admin: true)
+    admin.ensure_personal_organization!
+    sign_in_as(admin)
+    patch script_path(builtin), params: { script: { body: "echo updated" } }
+    assert_equal "echo updated", builtin.reload.body
   end
 
   test "an owner can create an app" do

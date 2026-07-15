@@ -5,7 +5,12 @@ class DowngradeNonOperatorDeployTokens < ActiveRecord::Migration[8.1]
   def up
     ApiToken.reset_column_information
     ApiToken.where(scope: "deploy").find_each do |token|
-      next if OperatorPolicy.operator?(token.user, token.organization)
+      # Resolve the SAME org Api::BaseController uses at request time: a token
+      # with no bound org falls back to the user's first org. (The original
+      # version passed token.organization — nil here — and wrongly downgraded
+      # valid owner tokens; migration 20260715000004 repairs those.)
+      org = token.organization || token.user&.organizations&.first
+      next if OperatorPolicy.operator?(token.user, org)
 
       token.update_columns(scope: "read")
     end

@@ -169,7 +169,7 @@ class ServersController < ApplicationController
   end
 
   def provision
-    script = Script.find(params[:script_id])
+    script = Script.visible_to(current_organization).find(params[:script_id])
     run = ScriptRun.create!(
       server: @server,
       script: script,

@@ -65,7 +65,7 @@ See [`docs/USAGE.md`](docs/USAGE.md) for the full walkthrough of the web UI, JSO
 ## Documentation
 
 - [`docs/USAGE.md`](docs/USAGE.md) — how to use Conductor
-- [`docs/PILLARS.md`](docs/PILLARS.md) — the six product pillars and where help is wanted
+- [`docs/PILLARS.md`](docs/PILLARS.md) — the seven product pillars and where help is wanted
 - [`docs/scenarios/`](docs/scenarios/) — end-to-end product flows (publish a route, restore a backup, create a server, connect a domain, move an app, detect drift)
 - [`docs/plans/INDEX.md`](docs/plans/INDEX.md) — capability plans grouped by pillar
 - [`docs/VISION.md`](docs/VISION.md) — the longer-term direction
