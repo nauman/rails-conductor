@@ -1,9 +1,9 @@
 module Api
   module V1
     class TokensController < Api::BaseController
-      # GET /api/v1/tokens - list current user's tokens
+      # GET /api/v1/tokens - list the caller's tokens in the active org only.
       def index
-        tokens = current_user.api_tokens
+        tokens = current_user.api_tokens.where(organization: current_organization)
         render json: tokens.map { |t|
           {
             id: t.id,
@@ -14,9 +14,9 @@ module Api
         }
       end
 
-      # DELETE /api/v1/tokens/:id - revoke a token
+      # DELETE /api/v1/tokens/:id - revoke a token in the active org.
       def destroy
-        token = current_user.api_tokens.find(params[:id])
+        token = current_user.api_tokens.where(organization: current_organization).find(params[:id])
         token.destroy
         render json: { message: "Token revoked" }
       end

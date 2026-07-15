@@ -78,4 +78,14 @@ class ApplicationController < ActionController::Base
 
     redirect_to root_path, alert: "Admin access required."
   end
+
+  # Owner-or-admin gate for privileged operations (running scripts, provisioning,
+  # OS updates) — arbitrary command execution over a server's SSH identity is not
+  # a plain-member capability.
+  def require_owner!
+    return if current_admin?
+    return if current_organization&.owner?(current_user)
+
+    redirect_to root_path, alert: "This action requires an organization owner."
+  end
 end

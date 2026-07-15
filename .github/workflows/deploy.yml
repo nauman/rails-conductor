@@ -88,10 +88,19 @@ jobs:
       - name: kamal deploy
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          # Fixed, known box — don't fail host-key verification (net-ssh reads this).
-          { echo "Host ${DEPLOY_SERVER_IP}"; echo "  StrictHostKeyChecking no"; echo "  UserKnownHostsFile /dev/null"; } >> ~/.ssh/config
+          # Verify the fixed box's host key instead of trusting anything. Pin from
+          # the DEPLOY_KNOWN_HOSTS variable (ssh-keyscan output) when set; otherwise
+          # fall back to a keyscan (TOFU) — either way, not `StrictHostKeyChecking no`.
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "${DEPLOY_SERVER_IP}" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          { echo "Host ${DEPLOY_SERVER_IP}"; echo "  StrictHostKeyChecking accept-new"; echo "  UserKnownHostsFile ~/.ssh/known_hosts"; } >> ~/.ssh/config
           chmod 600 ~/.ssh/config
           # Load the key into an agent IN THIS SHELL so kamal's net-ssh uses it
           # (passed via env + stdin — avoids interpolation/file-fidelity issues).

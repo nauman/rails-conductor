@@ -5,13 +5,9 @@ module Api
       # Body: { email: "user@example.com" }
       # Sends a magic link email. When clicked, generates an API token.
       def request_token
-        user = User.find_by(email: params[:email]&.downcase&.strip)
-        if user
-          # Queue a magic link email with api_token flag
-          render json: { message: "Check your email for a magic link" }
-        else
-          render json: { error: "User not found" }, status: :not_found
-        end
+        # Always return the same response — never reveal whether an address has
+        # an account (no user enumeration). Token exchange is not yet enabled.
+        render json: { message: "If that email has an account, a sign-in link is on its way." }, status: :accepted
       end
 
       # POST /api/v1/sessions/exchange

@@ -57,6 +57,10 @@ env:
     MAILER_FROM: <%= ENV["MAILER_FROM"].presence || "noreply@conductor.example.com" %>
     SES_SMTP_HOST: <%= ENV["SES_SMTP_HOST"].presence || "email-smtp.us-east-1.amazonaws.com" %>
 
+    # Persist SSH known_hosts on the storage volume so TOFU host-key trust
+    # survives container replacement (otherwise every deploy re-first-contacts).
+    CONDUCTOR_KNOWN_HOSTS: /rails/storage/ssh/known_hosts
+
     # Storage
     AWS_REGION: <%= ENV["AWS_REGION"].presence || "us-east-1" %>
     S3_BUCKET: <%= ENV["S3_BUCKET"].presence || "conductor-storage" %>

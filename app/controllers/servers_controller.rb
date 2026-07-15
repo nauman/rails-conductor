@@ -2,6 +2,9 @@ require "shellwords"
 
 class ServersController < ApplicationController
   before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates ]
+  # Executing on a server (running a script, installing packages, applying OS
+  # updates) is an owner/admin capability, not a plain member's.
+  before_action :require_owner!, only: [ :provision, :install_packages, :apply_updates ]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key).order(created_at: :desc)
