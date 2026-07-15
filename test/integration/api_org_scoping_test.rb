@@ -98,7 +98,7 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
   end
 
   test "scripts run cannot target another org's server" do
-    script = Script.create!(name: "echo", script_type: "setup", body: "echo hi")
+    script = @org_a.scripts.create!(name: "echo", script_type: "setup", body: "echo hi")
     assert_no_difference -> { ScriptRun.count } do
       post run_api_v1_scripts_path,
         params: { script_id: script.id, server_id: @server_b.id },
@@ -108,7 +108,7 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
   end
 
   test "scripts run works on caller's own server" do
-    script = Script.create!(name: "echo2", script_type: "setup", body: "echo hi")
+    script = @org_a.scripts.create!(name: "echo2", script_type: "setup", body: "echo hi")
     assert_difference -> { ScriptRun.count }, 1 do
       post run_api_v1_scripts_path,
         params: { script_id: script.id, server_id: @server_a.id },

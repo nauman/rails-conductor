@@ -1,24 +1,18 @@
 class RestoreWronglyDowngradedDeployTokens < ActiveRecord::Migration[8.1]
-  # Repair for the org-less bug in 20260715000002: that pass compared the token's
-  # bound org (nil for org-less tokens) against OperatorPolicy, so it downgraded
-  # valid owner deploy tokens whose org resolves — at request time — to the user's
-  # first org. Production already ran the buggy version, so those tokens now read
-  # "read" and are indistinguishable from naturally read-only ones.
+  # SUPERSEDED — intentionally a no-op. The original version promoted every
+  # org-less "read" token held by an operator to "deploy" to recover tokens the
+  # 20260715000002 bug downgraded. But that query can't tell a bug victim from a
+  # token deliberately issued read-only (monitoring, low-trust integrations), so
+  # it silently granted write to those bearers. Promoting an existing bearer
+  # token is never a safe recovery.
   #
-  # Restore the precise victims: an org-less token now at "read" whose user IS an
-  # operator of the resolved fallback org. Trade-off: a rare intentionally-read
-  # org-less token held by an operator would also flip to deploy — low impact,
-  # since that operator can mint a deploy token anyway and this only touches their
-  # own token, never grants cross-tenant reach.
+  # Migration 20260715000005 instead fails CLOSED (any ambiguous org-less
+  # operator write token -> read); owners who need deploy re-mint an org-bound
+  # deploy token. This class stays as a no-op so already-migrated databases keep
+  # a consistent schema_migrations history.
   def up
-    ApiToken.reset_column_information
-    ApiToken.where(scope: "read", organization_id: nil).find_each do |token|
-      org = token.user&.organizations&.first
-      token.update_columns(scope: "deploy") if OperatorPolicy.operator?(token.user, org)
-    end
   end
 
   def down
-    # One-way repair; no inverse.
   end
 end

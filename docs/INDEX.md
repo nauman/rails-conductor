@@ -7,7 +7,7 @@
 - **`docs/ARCHITECTURE.md` — READ FIRST. The deployment matrix (3 runtimes × Caddy edge × topology) with mermaid diagrams. Understand this before touching deploy code.**
 - `docs/README.md` — overview and structure
 - `docs/USAGE.md` — how to use Conductor (web UI, API, MCP, chat)
-- `docs/PILLARS.md` — the six product pillars and where help is wanted
+- `docs/PILLARS.md` — the seven product pillars and where help is wanted
 - `AGENTS.md` — collaborator rules and doc maintenance
 
 ## Library Map

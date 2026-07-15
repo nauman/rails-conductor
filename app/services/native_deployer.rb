@@ -39,7 +39,9 @@ class NativeDeployer
   end
 
   def run_script(script_name, step_label)
-    script = Script.visible_to(app.organization).find_by(name: script_name)
+    # System deploy steps are built-ins; never let a tenant script by the
+    # same name shadow them (deterministic resolution).
+    script = Script.where(built_in: true, organization_id: nil).find_by(name: script_name)
     unless script
       return fail_with("Built-in script '#{script_name}' not found")
     end

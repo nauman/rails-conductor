@@ -35,7 +35,7 @@ class CrossTenantIsolationTest < ActionDispatch::IntegrationTest
   end
 
   test "cannot view another org's script run (404)" do
-    script = Script.create!(name: "probe", body: "echo hi", script_type: "provision")
+    script = @other.scripts.create!(name: "probe", body: "echo hi", script_type: "provision")
     run = ScriptRun.create!(server: @other_server, script: script, user: @other_actor)
     get script_run_path(run)
     assert_response :not_found

@@ -15,7 +15,7 @@ class MemberAuthorizationTest < ActionDispatch::IntegrationTest
     @member = User.create!(email: "member@example.com")
     @org.add_member(@member, role: :member)
     @server = @org.servers.create!(name: "box", status: "online", ip_address: "10.0.0.1")
-    @script = Script.create!(name: "danger", body: "echo hi", script_type: "provision")
+    @script = @org.scripts.create!(name: "danger", body: "echo hi", script_type: "provision")
   end
 
   test "a plain member cannot create a script" do
@@ -108,6 +108,20 @@ class MemberAuthorizationTest < ActionDispatch::IntegrationTest
     sign_in_as(admin)
     patch script_path(builtin), params: { script: { body: "echo updated" } }
     assert_equal "echo updated", builtin.reload.body
+  end
+
+  test "a non-built-in script must belong to an organization" do
+    s = Script.new(name: "no-org", body: "echo x", script_type: "provision", built_in: false)
+    refute s.valid?
+    assert_includes s.errors[:organization], "can't be blank"
+  end
+
+  test "a legacy org-less custom script is quarantined (visible to no tenant)" do
+    orphan = Script.new(name: "legacy", body: "echo legacy", script_type: "provision", built_in: false)
+    orphan.save!(validate: false) # simulate a pre-migration nil-org row
+    assert_not Script.visible_to(@org).exists?(orphan.id), "orphan must not leak to any org"
+    other = Organization.create!(name: "Unrelated")
+    assert_not Script.visible_to(other).exists?(orphan.id), "orphan must not leak cross-tenant"
   end
 
   test "an owner can create an app" do

@@ -1,15 +1,23 @@
 class Script < ApplicationRecord
   TYPES = %w[provision deploy setup maintenance].freeze
 
-  belongs_to :organization, optional: true # nil = global built-in (admin-owned)
+  belongs_to :organization, optional: true # nil allowed ONLY for built-ins (global)
   has_many :script_runs, dependent: :nullify
 
   validates :name, presence: true, uniqueness: { scope: :organization_id }
   validates :body, presence: true
   validates :script_type, inclusion: { in: TYPES }
+  # Only built-ins may be global. A tenant script must name its owning org, or it
+  # would be exposed to (and runnable by) every other tenant via visible_to.
+  validates :organization, presence: true, unless: :built_in?
 
-  # Scripts an org may see and run: global built-ins + the org's own.
-  scope :visible_to, ->(org) { where(organization_id: [ nil, org&.id ].uniq) }
+  # Scripts an org may see and run: global built-ins + the org's own. A
+  # non-built-in row with a nil org is an orphan and is visible to NO ONE
+  # (quarantined) — nil is global only when built_in is true.
+  scope :visible_to, ->(org) {
+    global = where(built_in: true, organization_id: nil)
+    org ? global.or(where(organization_id: org.id)) : global
+  }
 
   # A global/built-in script is platform-admin-only; an org script is editable by
   # an operator (owner/admin) of the owning org. Never editable across tenants.

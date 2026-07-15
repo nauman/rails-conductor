@@ -29,7 +29,7 @@ class RunScriptTool
     return Result.fail("Server not found: #{input['server_id']}") unless server
 
     script = Script.visible_to(server.organization).find_by(name: input['script_name'])
-    return Result.fail("Script not found: #{input['script_name']}. Available: #{Script.pluck(:name).join(', ')}") unless script
+    return Result.fail("Script not found: #{input['script_name']}. Available: #{Script.visible_to(server.organization).pluck(:name).join(', ')}") unless script
 
     run = ScriptRun.create!(server: server, script: script, user: @user)
     ScriptRunJob.perform_later(run.id)
