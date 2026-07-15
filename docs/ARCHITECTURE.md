@@ -34,16 +34,19 @@ flowchart TB
     end
 
     subgraph SRV["Fleet server"]
-        CADDY["Caddy — edge<br/>TLS · routing · per-app subdomains"]
-        subgraph APPS["App runtimes · behind Caddy · app server = Puma"]
+        CADDY["Caddy — edge for Native/Docker<br/>TLS · routing · per-app subdomains"]
+        KP["kamal-proxy — edge for Kamal<br/>(ADR 0002)"]
+        subgraph APPS["App runtimes · app server = Puma"]
             NAT["Native<br/>Puma + systemd<br/>&lt;app&gt;-server units"]
             KAM["Kamal<br/>containers"]
             DOC["Docker<br/>containers"]
         end
-        CADDY --> NAT & KAM & DOC
+        CADDY --> NAT & DOC
+        KP --> KAM
     end
 
     Internet -->|HTTPS| CADDY
+    Internet -->|HTTPS| KP
     KD -. "SSH · kamal deploy" .-> KAM
     ND -. "SSH · systemctl / journalctl" .-> NAT
     AD -. "SSH · docker run" .-> DOC
@@ -68,10 +71,11 @@ Conductor uses **Caddy**, driven live via the Caddy **Admin API** (`CaddyClient`
 
 ```mermaid
 flowchart LR
-    NET(["HTTPS"]) --> C["Caddy<br/>one edge for the whole box"]
+    NET(["HTTPS"]) --> C["Caddy<br/>edge for Native + Docker"]
     C -->|reverse_proxy localhost:PORT| P1["Native · Puma (systemd)"]
     C -->|reverse_proxy| P2["Docker · container"]
-    C -->|reverse_proxy| P3["Kamal · container<br/>(or kamal-proxy)"]
+    NET -->|HTTPS| KP["kamal-proxy<br/>edge for Kamal (ADR 0002)"]
+    KP --> P3["Kamal · container"]
 ```
 
 ## Control plane vs data plane

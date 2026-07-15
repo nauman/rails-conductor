@@ -1,6 +1,6 @@
 # 00 · Conductor delivery sequence — 15 slots, 4 waves
 
-**Decision surface:** [`00-delivery-sequence.html`](./00-delivery-sequence.html) — interactive: foundation-audit donut, wave gantt, per-wave bar chart, dependency graph, 14-entry filterable table. **Open this to scan or sequence.**
+**Decision surface:** [`00-delivery-sequence.html`](./00-delivery-sequence.html) — interactive: foundation-audit donut, wave gantt, per-wave bar chart, dependency graph, 15-entry filterable table. **Open this to scan or sequence.**
 
 > ↪ **Filed 2026-06-20 as a delivery overlay, not a renumber.** The `plan-*.html` pages in `docs/roadmap/` are authoring order (when each gap got specced). They are NOT a delivery order. This file groups them into dependency **waves** so backlog work has a sensible pick order. Plan IDs stay stable; waves are an overlay, not a rewrite.
 
@@ -45,7 +45,7 @@ Wave 0 is **shipped and live-validated** (2026-06-19): the KamalDeployer control
 ## How this stays in sync
 
 - When a slot moves between waves, edit `ITEMS` in `00-delivery-sequence.html` AND the wave table above.
-- When a new plan is added, append to `ITEMS` (`id`, `title`, `status`, `wave`, `deps`) AND bump the title counts (`14 slots`, `14 entries`).
+- When a new plan is added, append to `ITEMS` (`id`, `title`, `status`, `wave`, `deps`) AND bump the title counts (`15 slots`, `15 entries`).
 - When a slot ships, status flips `spec → partial → shipped`; wave assignment doesn't change post-ship.
 - Treat the counts as one fact stated in three places (title, accounting line, ITEMS length) — change all three together, `.md` and `.html`, in one commit.
 
