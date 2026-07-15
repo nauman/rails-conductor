@@ -35,6 +35,7 @@
 | Scripts | `docs/scripts/ralph-doc-loop.md` | Minimal doc update loop |
 | Scripts | `docs/scripts/ralph-doc-prompt.sh` | Emits a compact prompt for doc updates |
 | Scripts | `docs/scripts/ralph-doc-check.sh` | Sanity checks for required docs |
+| Scripts | `docs/scripts/docs-doctor.rb` | Canonical docs gate (delivery-sequence components + link integrity + mirror sync); runs in CI |
 
 ## How to Use
 

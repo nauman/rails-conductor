@@ -40,6 +40,25 @@ jobs:
       - name: Scan for security vulnerabilities in JavaScript dependencies
         run: bin/importmap audit
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # Canonical docs gate — enforces the delivery-sequence contract
+      # (foundation donut, graph/table filters, slot-row targets, detail dialog,
+      # SVG edges), link integrity, and plans/roadmap mirror sync. Uses only the
+      # Ruby stdlib. Previously an out-of-repo auditor, so CI stayed green while
+      # the page missed components; this makes the gate visible.
+      - name: Validate canonical docs
+        run: ruby docs/scripts/docs-doctor.rb
+
   lint:
     runs-on: ubuntu-latest
     env:
