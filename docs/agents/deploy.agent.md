@@ -70,7 +70,7 @@ without the endpoint returns 404 pre-deploy.)
 - `docker login -p` empty / 401 → `KAMAL_REGISTRY_PASSWORD` missing.
 - `incorrect username or password` → `KAMAL_REGISTRY_SERVER`/`USERNAME` unset (defaulting to docker.io).
 - `403 Forbidden` pushing to GHCR → package not linked to repo (playbook gotcha 1).
-- `HostKeyMismatch` → fresh runner doesn't trust the box → `StrictHostKeyChecking no`.
+- `HostKeyMismatch` → the box's key changed or the `DEPLOY_KNOWN_HOSTS` pin is stale → refresh the pinned key variable (never `StrictHostKeyChecking no`).
 - `Authentication failed for user deploy` → wrong/unauthorized SSH key → use `conductor_fleet`.
 - Reading a bare secret grabbed a stale value → use the `conductor.<KEY>` namespace in `localvault`.
 

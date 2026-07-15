@@ -4,7 +4,7 @@
 
 ## The one-paragraph model
 
-Conductor (a Rails app) is the **control plane**. It never runs your app traffic; it *instructs* servers over SSH and manages the edge over an API. On each fleet server, **Caddy is the edge** (TLS, routing, per-app subdomains), and behind Caddy your app runs in one of **three runtimes**. The app server underneath is always **Puma**.
+Conductor (a Rails app) is the **control plane**. It never runs your app traffic; it *instructs* servers over SSH and manages the edge over an API. On each fleet server the edge is runtime-dependent: **Kamal apps front with kamal-proxy** (per ADR 0002), while native/dynamic routing uses **Caddy** (TLS, per-app subdomains). Behind the edge your app runs in one of **three runtimes**; the app server underneath is always **Puma**.
 
 ## Three axes (do not collapse them)
 

@@ -34,7 +34,7 @@ Set vault secrets cleanly (value never printed): `localvault unlock devops && lo
 
 ## The 5 hard-won gotchas (all solved 2026-06-27)
 1. **GHCR push 403 with the Actions `GITHUB_TOKEN`** — the `ghcr.io/nauman/conductor` package was created out-of-band and isn't linked to the repo, so the Actions token can't write it. Workaround: `KAMAL_REGISTRY_PASSWORD` = a token that OWNS the package. ⚠️ The `gho_` gh token rotates with the gh session → CI 403s again → re-set the secret. **Durable fix:** GitHub → your packages → `conductor` → **Package settings → Manage Actions access → add `rails-conductor` (Write)**, then revert the workflow's `KAMAL_REGISTRY_PASSWORD` to `${{ secrets.GITHUB_TOKEN }}` (never rotates). Or a dedicated `write:packages` classic PAT.
-2. **The box uses SSH CERTIFICATE auth** (CA-trusted), not plain `authorized_keys`. A personal key's raw pubkey isn't authorized (auth fails) even though it works locally via its cert. CI must use a key that's in `authorized_keys` directly → the dedicated **`conductor_fleet`** key (it is). Workflow loads it into an ssh-agent in the deploy step + `StrictHostKeyChecking no` + `UserKnownHostsFile /dev/null` for the fixed IP (avoids HostKeyMismatch on fresh runners).
+2. **The box uses SSH CERTIFICATE auth** (CA-trusted), not plain `authorized_keys`. A personal key's raw pubkey isn't authorized (auth fails) even though it works locally via its cert. CI must use a key that's in `authorized_keys` directly → the dedicated **`conductor_fleet`** key (it is). Workflow loads it into an ssh-agent in the deploy step + the pinned host key from the `DEPLOY_KNOWN_HOSTS` variable (ssh-keyscan output) with `StrictHostKeyChecking yes` — it fails closed if the pin is missing (never `StrictHostKeyChecking no`).
 3. **Vault secrets are namespaced `conductor.*`** in devops — NOT bare names. Reading bare `DATABASE_PASSWORD` may grab a different/stale value. Always use `conductor.<KEY>`.
 4. **Registry config (`KAMAL_REGISTRY_SERVER=ghcr.io`, `KAMAL_REGISTRY_USERNAME=nauman`)** is set in the workflow env (the fleet moved off Docker Hub to GHCR, 2026-06-18). Without it, kamal defaults to `docker.io`/`your-user` → "incorrect username or password".
 5. **Migrations** — the image entrypoint runs `db:prepare` on boot, but the CI now ALSO runs `db:migrate` + `db:abort_if_pending_migrations` as an explicit, fail-loud, gated step. A failed migration now fails the deploy instead of leaving prod's DB lagging the code (the recurring 500 root cause).
@@ -46,7 +46,7 @@ Set vault secrets cleanly (value never printed): `localvault unlock devops && lo
 - **`docker login -p` empty / 401** → `KAMAL_REGISTRY_PASSWORD` missing.
 - **`incorrect username or password`** → `KAMAL_REGISTRY_SERVER`/`USERNAME` not set (defaulting to docker.io).
 - **`403 Forbidden` pushing to ghcr** → package not linked to repo (gotcha 1).
-- **`HostKeyMismatch`** → fresh runner doesn't trust the box → `StrictHostKeyChecking no`.
+- **`HostKeyMismatch`** → the box's key changed or the `DEPLOY_KNOWN_HOSTS` pin is stale → re-run `ssh-keyscan -H <ip>` and update the variable (do NOT disable host checking).
 - **`Authentication failed for user deploy`** → wrong/unauthorized SSH key → use `conductor_fleet`.
 - **`Deploy lock found`** → stale lock from a killed self-deploy → `kamal lock release` (CI's concurrency guard prevents new ones; self-deploy auto-releases since commit 7e6011f).
 - **prod 500s after deploy** → check migrations ran (now gated in CI).
