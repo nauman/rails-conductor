@@ -155,6 +155,28 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  test "an org-less token is coerced to read scope (no org-less writers)" do
+    _raw, tok = ApiToken.generate(user: @user_a, name: "unbound", scope: "deploy")
+    assert_nil tok.organization
+    assert_equal "read", tok.scope, "an org-less token must never be deploy-scoped"
+  end
+
+  test "an org-less deploy token is invalid at the model level" do
+    tok = ApiToken.new(user: @user_a, name: "bad", token_digest: "d1",
+                       organization: nil, scope: "deploy")
+    assert_not tok.valid?
+    assert_match(/org-less tokens are read-only/, tok.errors[:scope].join)
+  end
+
+  test "an org-less token cannot mutate via API v1" do
+    raw, = ApiToken.generate(user: @user_a, name: "unbound-write", scope: "deploy")
+    assert_no_difference -> { @org_a.servers.count } do
+      post api_v1_servers_path, params: { server: { name: "x", ip_address: "1.2.3.4" } },
+           headers: auth(raw)
+    end
+    assert_includes [ 401, 403, 404, 422 ], response.status
+  end
+
   # --- Membership revocation + scope (audit P1-4) ---
 
   test "a token stops working once its user is removed from the token's org" do

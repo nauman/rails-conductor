@@ -8,6 +8,11 @@ class ApiToken < ApplicationRecord
   # Org-less tokens are allowed (they fall back to the user's first org at
   # request time), so this only fires when an organization is present.
   validate :user_must_belong_to_organization
+  # An org-less token falls back to the user's first org at request time, so a
+  # deploy (write) scope on it would apply to whatever org it lands on. Forbid
+  # that combination at the model level — org-less tokens are read-only for every
+  # caller (console, API issuance, future flows), not just the one-time cleanup.
+  validate :org_less_tokens_are_read_only
 
   # Generate a new API token for a user.
   # Returns [raw_token, api_token_record].
@@ -20,6 +25,10 @@ class ApiToken < ApplicationRecord
   def self.generate(user:, name:, organization: nil, scope: "deploy")
     raw_token = SecureRandom.urlsafe_base64(32)
     digest = Digest::SHA256.hexdigest(raw_token)
+
+    # Without a bound org, write scope is unsafe (see the validation) — coerce to
+    # read so the default-deploy signature can't silently mint an org-less writer.
+    scope = "read" if organization.nil?
 
     record = create!(user: user, name: name, token_digest: digest,
                      organization: organization, scope: scope)
@@ -47,5 +56,11 @@ class ApiToken < ApplicationRecord
     return if user.organizations.exists?(organization.id)
 
     errors.add(:organization, "must be one the user belongs to")
+  end
+
+  def org_less_tokens_are_read_only
+    return unless organization.nil? && scope == "deploy"
+
+    errors.add(:scope, "deploy requires an organization; org-less tokens are read-only")
   end
 end

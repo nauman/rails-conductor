@@ -12,6 +12,13 @@
 #
 # Exit 0 = all checks pass. Exit 1 = at least one failure (details printed).
 #
+# This script is the AUTHORITATIVE, in-repo definition of the docs contract:
+# the component identifiers and checks below ARE the canonical gate. If an
+# external harness disagrees, reconcile it to this file (or replace this file
+# wholesale) — the contract must have a single source of truth, and per the
+# decision to bring the gate in-repo, that source is here + CI, not an
+# out-of-repo tool.
+#
 # Usage: ruby docs/scripts/docs-doctor.rb
 
 DOCS_ROOT = File.expand_path("..", __dir__)
@@ -34,7 +41,6 @@ REQUIRED_COMPONENTS = {
 }.freeze
 
 failures = []
-slot_id_sets = {}
 
 def read(rel)
   File.read(File.join(DOCS_ROOT, rel))
@@ -82,14 +88,24 @@ TARGETS.each do |rel|
     resolved = File.expand_path(target, dir)
     failures << "#{rel}: broken link -> #{href}" unless File.exist?(resolved)
   end
-
-  # 4. Collect slot IDs for the mirror-sync check
-  slot_id_sets[rel] = html.scan(/\{id:"(\d+)"/).flatten.sort
 end
 
-# 5. Mirrored copies must carry the same slot set (no drift between plans/roadmap)
-if slot_id_sets.values.uniq.size > 1
-  failures << "mirror drift: #{TARGETS.join(' and ')} have different slot sets"
+# 5. Mirrored copies must be identical once the link-path prefix is normalized.
+#    plans/ sits one directory up from roadmap/, so its intra-doc links carry a
+#    "../roadmap/" prefix; strip that and the two files must be byte-for-byte
+#    equal. This catches ALL drift — title, status, wave, deps, markup, and
+#    script — not just the slot-ID set.
+if TARGETS.all? { |t| File.exist?(File.join(DOCS_ROOT, t)) }
+  roadmap = read("roadmap/00-delivery-sequence.html")
+  plans   = read("plans/00-delivery-sequence.html")
+  normalized_plans = plans.gsub("../roadmap/", "")
+  if normalized_plans != roadmap
+    # Surface the first differing line so drift is actionable, not just flagged.
+    r_lines = roadmap.lines
+    diff_at = normalized_plans.lines.each_with_index.find { |line, i| line != r_lines[i] }
+    where = diff_at ? " (first diff near line #{diff_at[1] + 1})" : ""
+    failures << "mirror drift: plans and roadmap copies differ beyond the link prefix#{where}"
+  end
 end
 
 puts "Canonical docs doctor — #{TARGETS.size} target(s), #{REQUIRED_COMPONENTS.size} components each"
