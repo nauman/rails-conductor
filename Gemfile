@@ -24,7 +24,7 @@ gem "tailwindcss-rails"
 gem "passwordless", "~> 1.0"
 
 # Multi-provider AI (Anthropic, OpenAI, Ollama)
-gem "ruby_llm", "~> 1.3"
+gem "ruby_llm", "~> 1.16"
 
 # SSH connectivity
 gem "net-ssh", "~> 7.2"
