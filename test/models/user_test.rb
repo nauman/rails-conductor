@@ -19,6 +19,21 @@ class UserTest < ActiveSupport::TestCase
     end
   end
 
+  test "an invited email can sign in directly — user created + invitation accepted" do
+    owner = User.create!(email: "owner@example.com")
+    org = Organization.create_for(owner, name: "Acme")
+    org.invitations.create!(email: "invitee@example.com", role: "member", invited_by: owner)
+
+    user = nil
+    assert_difference -> { User.count }, 1 do
+      user = User.fetch_resource_for_passwordless("Invitee@Example.com") # case-insensitive
+    end
+
+    assert_equal "invitee@example.com", user.email
+    assert_includes user.organizations, org, "should join the org they were invited to"
+    assert org.invitations.pending.where(email: "invitee@example.com").none?, "invitation should be marked accepted"
+  end
+
   test "ensure_personal_organization! creates one org owned by the user" do
     user = User.create!(email: "solo@example.com")
     assert_difference -> { Organization.count }, 1 do

@@ -14,7 +14,19 @@ class User < ApplicationRecord
     if User.count.zero?
       create!(email: normalized_email, admin: true).tap(&:ensure_personal_organization!)
     else
-      find_by(email: normalized_email)
+      find_by(email: normalized_email) || accept_pending_invitation(normalized_email)
+    end
+  end
+
+  # An invited address has no User until the invite is accepted, so a normal
+  # magic-link sign-in would fail with "we couldn't find a user". If a pending
+  # invitation exists, create the user and accept it here so sign-in just works.
+  # Still invite-gated: no invitation → nil (no self-signup, no user enumeration).
+  def self.accept_pending_invitation(email)
+    return nil unless Invitation.pending.exists?(email: email)
+
+    create!(email: email).tap do |user|
+      Invitation.pending.where(email: email).find_each { |invitation| invitation.accept!(user) }
     end
   end
 
