@@ -1,4 +1,6 @@
 class App < ApplicationRecord
+  include OrganizationConsistency
+
   STATUSES = %w[running stopped deploying failed].freeze
   CONTAINER_STATUSES = %w[unknown running exited dead restarting paused].freeze
   DEPLOY_METHODS = %w[docker native kamal].freeze
@@ -28,6 +30,7 @@ class App < ApplicationRecord
   # execute yet would defeat the preflight's failed-seed gate. Enforce here so
   # every path (UI, MCP, direct) obeys, not just the controller.
   validate :seed_flag_kamal_only
+  validate_same_organization :server
 
   def seed_flag_kamal_only
     errors.add(:seed_on_next_deploy, "is only supported for Kamal deploys") if seed_on_next_deploy? && !kamal?

@@ -1,4 +1,6 @@
 class Backup < ApplicationRecord
+  include OrganizationConsistency
+  validate_same_organization :server, :app, :credential
   PROVIDERS = %w[cloudflare_r2 aws_s3 backblaze_b2 local].freeze
   STATUSES = %w[pending running completed failed warning].freeze
   SCHEDULES = %w[hourly daily weekly monthly].freeze

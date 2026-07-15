@@ -1,6 +1,6 @@
 class EnvVariablesController < ApplicationController
   before_action :set_app
-  before_action :set_env_variable, only: [:update, :destroy]
+  before_action :set_env_variable, only: [ :update, :destroy ]
 
   def create
     @env_variable = @app.env_variables.build(env_variable_params)
@@ -28,7 +28,9 @@ class EnvVariablesController < ApplicationController
   private
 
   def set_app
-    @app = App.find(params[:app_id])
+    # Scope through the current org so a foreign app id 404s instead of letting
+    # a member read/write another tenant's env vars.
+    @app = current_organization.apps.find(params[:app_id])
   end
 
   def set_env_variable

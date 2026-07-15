@@ -37,8 +37,9 @@ class DatabaseClustersTest < ActionDispatch::IntegrationTest
 
   test "cannot view another org's cluster" do
     other = Organization.create!(name: "Other")
+    their_server = other.servers.create!(name: "their-box", status: "online", ip_address: "10.8.8.8")
     theirs = other.database_clusters.create!(
-      server: @server, name: "x", container_name: "c", admin_username: "u", admin_password: "p"
+      server: their_server, name: "x", container_name: "c", admin_username: "u", admin_password: "p"
     )
     get database_cluster_path(theirs)
     assert_response :not_found

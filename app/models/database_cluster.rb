@@ -1,4 +1,6 @@
 class DatabaseCluster < ApplicationRecord
+  include OrganizationConsistency
+  validate_same_organization :server
   belongs_to :organization
   belongs_to :server
   has_many :databases, dependent: :destroy
