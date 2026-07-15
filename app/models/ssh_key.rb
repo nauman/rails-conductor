@@ -6,7 +6,9 @@ class SshKey < ApplicationRecord
 
   has_many :servers, dependent: :nullify
 
-  validates :name, presence: true, uniqueness: true
+  # Scoped per-org so the recommended default ("Conductor deploy key") works in
+  # every organization, not just the first to claim the name.
+  validates :name, presence: true, uniqueness: { scope: :organization_id }
   validates :private_key, presence: true
 
   before_save :extract_key_metadata

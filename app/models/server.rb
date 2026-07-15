@@ -13,12 +13,22 @@ class Server < ApplicationRecord
   validates :name, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
   validates :provider, inclusion: { in: PROVIDERS }, allow_blank: true
+  # Defense in depth against cross-tenant key assignment: an attached key must
+  # belong to the same org as the server (skipped for legacy null-org records).
+  validate :ssh_key_matches_organization
+
+  def ssh_key_matches_organization
+    return if ssh_key.nil? || organization_id.nil? || ssh_key.organization_id.nil?
+    return if ssh_key.organization_id == organization_id
+
+    errors.add(:ssh_key, "must belong to the same organization as the server")
+  end
 
   scope :online, -> { where(status: "online") }
   scope :degraded, -> { where(status: "degraded") }
   scope :offline, -> { where(status: "offline") }
   scope :recently_seen, -> { where("last_seen_at > ?", 5.minutes.ago) }
-  scope :with_ssh, -> { where.not(ssh_key_id: nil).where.not(ip_address: [nil, ""]) }
+  scope :with_ssh, -> { where.not(ssh_key_id: nil).where.not(ip_address: [ nil, "" ]) }
 
   # Package installs run async; push the result panel to the server page live.
   after_update_commit :broadcast_package_install, if: :saved_change_to_last_package_install_at?

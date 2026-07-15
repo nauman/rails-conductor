@@ -85,6 +85,31 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
     assert refreshed, "metrics should be refreshed on a successful connection"
   end
 
+  test "update rejects an ssh_key_id belonging to another organization (IDOR)" do
+    other = Organization.create_for(User.create!(email: "o2@example.com"), name: "Other Co")
+    other_key = other.ssh_keys.create!(name: "theirs", private_key: valid_private_key)
+    Current.organization = @org
+    Current.org_scoped = true
+    result = UpdateServerTool.new(user: @user).call("server_id" => @server.id, "ssh_key_id" => other_key.id)
+    assert result.failure?, "must not attach another org's key by raw id"
+    assert_nil @server.reload.ssh_key_id
+  ensure
+    Current.organization = nil
+    Current.org_scoped = nil
+  end
+
+  test "an org-scoped admin token cannot see servers outside its org" do
+    other = Organization.create_for(User.create!(email: "o3@example.com"), name: "Other Co")
+    other_server = other.servers.create!(name: "theirs-box", status: "offline")
+    Current.organization = @org
+    Current.org_scoped = true
+    result = UpdateServerTool.new(user: @user).call("server_id" => other_server.id, "ssh_user" => "root")
+    assert result.failure?, "org-bound token must not reach another org's server even as admin"
+  ensure
+    Current.organization = nil
+    Current.org_scoped = nil
+  end
+
   # --- audit / apply_updates / install_packages --------------------------
 
   AuditCheck  = Struct.new(:label, :status, :detail, keyword_init: true)

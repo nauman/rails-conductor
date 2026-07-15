@@ -21,8 +21,14 @@ module McpAuthentication
     token = request.headers["Authorization"]&.sub(/\ABearer\s+/, "")
 
     if (api_token = ApiToken.authenticate(token))
+      org = api_token.organization
+      # Revoke on membership removal: a token stays valid in the DB, but its user
+      # must still belong to the org it's scoped to, or it grants nothing.
+      return render_unauthorized if org && !api_token.user.organizations.exists?(id: org.id)
+
       @mcp_user = api_token.user
-      Current.organization = api_token.organization
+      Current.organization = org
+      Current.org_scoped = org.present? # token binding confines even admins to this org
       Current.read_only = api_token.read_only?
       return
     end

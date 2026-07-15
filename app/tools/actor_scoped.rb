@@ -4,10 +4,14 @@
 # Admins (the legacy shared CONDUCTOR_MCP_TOKEN runs as the first admin) keep
 # global access, preserving existing single-tenant behaviour.
 module ActorScoped
-  # Global scope for admins and for a nil actor (a trusted internal/system call;
-  # the MCP server never passes nil — auth always resolves a real user first).
+  # Global (all-org) scope is ONLY for the legacy shared token — an admin actor
+  # with no bound organization (Current.organization is nil), or a nil actor
+  # (trusted internal call). A per-user/per-org API token binds Current.organization,
+  # so even an admin using an org-scoped token stays confined to that org — admin
+  # status must not let an org-A token reach org-B resources.
   def actor_admin?
-    @user.nil? || @user.admin?
+    return true if @user.nil?
+    @user.admin? && !Current.org_scoped
   end
 
   # Servers this actor may touch.

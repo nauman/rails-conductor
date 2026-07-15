@@ -18,7 +18,15 @@ class UpdateServerTool
     attrs = UPDATABLE.each_with_object({}) { |k, h| h[k] = input[k] if input.key?(k) }
 
     if input.key?("ssh_key_id")
-      attrs["ssh_key_id"] = input["ssh_key_id"]
+      if input["ssh_key_id"].nil?
+        attrs["ssh_key_id"] = nil # explicit detach
+      else
+        # Resolve through the scoped collection — never trust a raw id, or a
+        # tenant could attach another org's private key to a server.
+        key = visible_ssh_keys.find_by(id: input["ssh_key_id"])
+        return Result.fail("SSH key not found: #{input['ssh_key_id']}") unless key
+        attrs["ssh_key_id"] = key.id
+      end
     elsif input["ssh_key_name"].present?
       key = visible_ssh_keys.find_by(name: input["ssh_key_name"])
       return Result.fail("SSH key not found: #{input['ssh_key_name']}. Available: #{visible_ssh_keys.pluck(:name).join(', ').presence || '(none — add one in the UI)'}") unless key
