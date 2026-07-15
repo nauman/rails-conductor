@@ -1,0 +1,17 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "Mass Assignment",
+      "fingerprint": "820dc42ac9b69f21f5343da15ec5fbb937dfdd7ee41578c242206ccfa1f9725d",
+      "file": "app/controllers/invitations_controller.rb",
+      "note": "False positive: params permit :role, but the action does not mass-assign — it sets role from an explicit %w[member owner] allowlist (create! builds email:/role: individually), so no privilege escalation is possible."
+    },
+    {
+      "warning_type": "HTTP Verb Confusion",
+      "fingerprint": "96d8d5feee3beed210974aebcfa1df9ba7d78774b78c2f1efbda8483c139c5de",
+      "file": "app/controllers/application_controller.rb",
+      "note": "Reviewed: the standard return_to pattern. request.get? being false for HEAD only means the return path isn't stored for a HEAD request, which is harmless."
+    }
+  ],
+  "brakeman_version": "7.1.1"
+}
