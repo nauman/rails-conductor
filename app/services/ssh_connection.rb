@@ -1,4 +1,5 @@
 require "net/scp"
+require "fileutils"
 
 class SshConnection
   TIMEOUT = 10
@@ -181,11 +182,15 @@ class SshConnection
       port: server.ssh_port_or_default,
       timeout: TIMEOUT,
       non_interactive: true,
-      verify_host_key: :never
+      # Trust-on-first-use: record a host's key the first time, then REJECT if a
+      # known host's key later changes (MITM protection) — instead of the old
+      # `:never`, which trusted any presented key. Matches the Kamal policy.
+      verify_host_key: :accept_new,
+      user_known_hosts_file: known_hosts_path
     }
 
     if server.ssh_key.private_key.present?
-      options[:key_data] = [server.ssh_key.private_key]
+      options[:key_data] = [ server.ssh_key.private_key ]
 
       if server.ssh_key.passphrase.present?
         options[:passphrase] = server.ssh_key.passphrase
@@ -193,6 +198,15 @@ class SshConnection
     end
 
     options
+  end
+
+  # Managed known_hosts file for TOFU host-key verification. Overridable via
+  # CONDUCTOR_KNOWN_HOSTS; defaults to the SSH user's ~/.ssh/known_hosts (the
+  # dir is ensured so :accept_new can record a first-seen key).
+  def known_hosts_path
+    path = ENV["CONDUCTOR_KNOWN_HOSTS"].presence || File.expand_path("~/.ssh/known_hosts")
+    FileUtils.mkdir_p(File.dirname(path))
+    path
   end
 
   def failure(message)
