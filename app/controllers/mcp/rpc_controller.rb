@@ -74,16 +74,24 @@ module Mcp
       id     = message["id"]
       method = message["method"].to_s
       params = message["params"].nil? ? {} : message["params"]
-      return error(id, -32602, "Invalid params: expected an object") unless params.is_a?(Hash)
 
-      case method
-      when "initialize"          then result(id, initialize_result(params))
-      when "ping"                then result(id, {})
-      when "tools/list"          then result(id, { tools: tool_definitions })
-      when "tools/call"          then call_tool(id, params)
-      when %r{\Anotifications/}  then nil # initialized / cancelled / etc. — no reply
-      else error(id, -32601, "Method not found: #{method}")
-      end
+      response =
+        if !params.is_a?(Hash)
+          error(id, -32602, "Invalid params: expected an object")
+        else
+          case method
+          when "initialize"          then result(id, initialize_result(params))
+          when "ping"                then result(id, {})
+          when "tools/list"          then result(id, { tools: tool_definitions })
+          when "tools/call"          then call_tool(id, params)
+          when %r{\Anotifications/}  then nil # initialized / cancelled / etc.
+          else error(id, -32601, "Method not found: #{method}")
+          end
+        end
+
+      # A message with no id is a notification: suppress EVERY reply — success
+      # and error alike (MCP: accepted notifications get 202, no body).
+      id.nil? ? nil : response
     end
 
     def initialize_result(params)
@@ -101,9 +109,10 @@ module Mcp
     # not a protocol error.
     def call_tool(id, params)
       name = params["name"].to_s
-      args = params["arguments"] || {}
+      args = params["arguments"].nil? ? {} : params["arguments"]
 
       return error(id, -32602, "Missing tool name") if name.blank?
+      return error(id, -32602, "Invalid params: 'arguments' must be an object") unless args.is_a?(Hash)
 
       outcome = invoke_tool(name, args)
       text    = outcome.success? ? json_text(presentable_value(outcome.value)) : outcome.error.to_s

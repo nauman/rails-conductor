@@ -14,6 +14,19 @@ class AppTest < ActiveSupport::TestCase
     @user = user
   end
 
+  test "seed_on_next_deploy is rejected on a non-Kamal app (model-enforced, every path)" do
+    docker = @org.apps.create!(name: "Dock", slug: "dock", server: @server, deploy_method: "docker",
+                               repository_url: "https://github.com/x/y.git")
+    docker.seed_on_next_deploy = true
+    refute docker.valid?, "docker/native apps must not accept the seed flag"
+    assert_match(/Kamal/i, docker.errors[:seed_on_next_deploy].join)
+  end
+
+  test "seed_on_next_deploy is allowed on a Kamal app" do
+    @app.seed_on_next_deploy = true
+    assert @app.valid?, @app.errors.full_messages.join(", ")
+  end
+
   test "start_deployment! creates a deployment and enqueues the job when none is in flight" do
     assert_enqueued_with(job: DeployAppJob) do
       deployment, status, = @app.start_deployment!(user: @user)

@@ -168,4 +168,21 @@ class McpRpcTransportTest < ActionDispatch::IntegrationTest
       assert_equal "2025-03-26", json["result"]["protocolVersion"]
     end
   end
+
+  test "malformed nested arguments (a string) return invalid-params, not a 500" do
+    with_token do
+      json = rpc({ jsonrpc: "2.0", id: 1, method: "tools/call",
+                   params: { name: "conductor_read", arguments: "not-an-object" } })
+      assert_equal(-32602, json["error"]["code"])
+    end
+  end
+
+  test "an id-less message never gets an error reply (notification semantics) — 202, no body" do
+    with_token do
+      post "/mcp", params: { jsonrpc: "2.0", method: "does/not/exist" }.to_json,
+           headers: auth_headers.merge("Content-Type" => "application/json")
+      assert_response :accepted
+      assert response.body.blank?, "an id-less notification must not receive an error body"
+    end
+  end
 end

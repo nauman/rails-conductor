@@ -6,6 +6,7 @@ class ServerHealthAndPackagesTest < ActionDispatch::IntegrationTest
   class FakeSsh
     def initialize(output) = @output = output
     def execute(_cmd) = @output
+    def test = true
     def success? = true
     def error = nil
   end
@@ -83,5 +84,16 @@ class ServerHealthAndPackagesTest < ActionDispatch::IntegrationTest
   test "apply_updates defaults an unknown scope to security (safe)" do
     post apply_updates_server_path(@server), params: { scope: "everything" }
     assert_equal "security", @server.reload.last_update_scope
+  end
+
+  test "a successful connection test refreshes metrics so the server stops reading 'pending'" do
+    @server.update_columns(last_seen_at: nil, status: "offline")
+    metrics = "CPU:5\nMEM_USED:1024\nMEM_TOTAL:4096\nDISK:30\nUPTIME:1000\n"
+    SshConnection.stub(:new, FakeSsh.new(metrics)) do
+      post test_connection_server_path(@server)
+    end
+    @server.reload
+    assert_not_nil @server.last_seen_at, "a working test_connection must update last_seen_at"
+    assert_equal "online", @server.display_status
   end
 end

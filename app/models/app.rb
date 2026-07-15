@@ -24,6 +24,14 @@ class App < ApplicationRecord
   validates :slug, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
+  # Only KamalDeployer runs seeds — the flag on a docker/native app would never
+  # execute yet would defeat the preflight's failed-seed gate. Enforce here so
+  # every path (UI, MCP, direct) obeys, not just the controller.
+  validate :seed_flag_kamal_only
+
+  def seed_flag_kamal_only
+    errors.add(:seed_on_next_deploy, "is only supported for Kamal deploys") if seed_on_next_deploy? && !kamal?
+  end
 
   scope :running, -> { where(status: "running") }
   scope :stopped, -> { where(status: "stopped") }

@@ -52,10 +52,11 @@ class DeployPreflight
     last = @app.seed_applications.order(:created_at).last
     if last.nil?
       warn(:seeds, "Seeds", "no seed run recorded for this app — run/record seeds if it needs them")
-    elsif last.status == "failed" && @app.seed_on_next_deploy?
+    elsif last.status == "failed" && @app.seed_on_next_deploy? && @app.kamal?
       # A seed retry is explicitly queued for THIS deploy — it will re-run the
       # failed seeds, so the failed record must not block the deploy that repairs
       # it (otherwise the only escape is Force, which bypasses every other gate).
+      # Only Kamal actually runs seeds, so the downgrade is Kamal-only.
       warn(:seeds, "Seeds", "the most recent seed run failed — a retry is queued for this deploy")
     elsif last.status == "failed"
       fail_row(:seeds, "Seeds",

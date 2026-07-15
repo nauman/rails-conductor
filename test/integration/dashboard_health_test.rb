@@ -109,6 +109,8 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
     assert_select "[data-app-shell].overflow-x-clip"
     assert_select "header [data-primary-header].min-w-0"
     assert_select "nav[data-primary-navigation].min-w-0"
+    # Scrollable on mobile so no nav item is clipped/unreachable.
+    assert_select "nav[data-primary-navigation].overflow-x-auto"
     assert_select "[data-account-controls].shrink-0"
     assert_select ".grid.grid-cols-2.sm\\:grid-cols-4"
     assert_select "[data-fleet-app='Responsive app'].flex-col.sm\\:flex-row"

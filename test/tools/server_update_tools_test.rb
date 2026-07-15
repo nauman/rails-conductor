@@ -97,6 +97,20 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
     Current.org_scoped = nil
   end
 
+  test "an org-scoped admin token cannot CREATE resources in another org" do
+    other = Organization.create_for(User.create!(email: "o4@example.com"), name: "Other Co")
+    Current.organization = @org
+    Current.org_scoped = true
+    result = RegisterServerTool.new(user: @user).call(
+      "name" => "sneaky-box", "ip_address" => "1.2.3.4", "ssh_user" => "root", "organization_id" => other.id
+    )
+    assert result.failure?, "org-bound token must not create in another org, even as admin"
+    assert_equal 0, other.servers.count
+  ensure
+    Current.organization = nil
+    Current.org_scoped = nil
+  end
+
   test "an org-scoped admin token cannot see servers outside its org" do
     other = Organization.create_for(User.create!(email: "o3@example.com"), name: "Other Co")
     other_server = other.servers.create!(name: "theirs-box", status: "offline")
