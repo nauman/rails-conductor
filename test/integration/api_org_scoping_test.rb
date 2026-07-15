@@ -176,5 +176,4 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
     get api_v1_servers_path, headers: auth(read_raw)
     assert_response :success
   end
-
 end
