@@ -212,23 +212,28 @@ class KamalDeployer
     result = @shell.run("bash", "-lc",
                         "git ls-remote #{esc(repo_url)} #{esc("refs/heads/#{branch}")}", env: git_env)
     return nil unless result.success?
-    result.output.to_s.split(/\s+/).first.presence
+    # Extract the sha, ignoring any credential-helper / progress noise the combined
+    # stdout+stderr stream may carry ahead of it.
+    result.output.to_s[/\b[0-9a-f]{40}\b/]
   rescue StandardError
     nil
   end
 
-  # Refuse to build a tree that isn't the commit we pinned. Turns a silently-stale
-  # "succeeded" deploy into a loud, actionable failure. Skipped only when we could
-  # not resolve a target (legacy behavior preserved).
+  # Surface a drift between the pinned target and what actually synced. ADVISORY
+  # ONLY — logs loudly but never blocks the deploy. (A hard fail here caused a
+  # self-deploy retry loop, since the deploy job runs inside the container being
+  # replaced.) The real guarantee is verifying the running image SHA after the
+  # deploy; this just makes drift visible in the log. Sha is regex-extracted so
+  # stream noise in `rev-parse` output can't cause a false signal.
   def verify_synced_head
     return true if @target_sha.blank?
     result = @shell.run("git", "-C", checkout_dir, "rev-parse", "HEAD")
-    head = result.output.to_s.strip
-    return true if result.success? && head == @target_sha
-
-    fail_with("checkout drift: synced #{head[0, 12]} but pinned target is " \
-              "#{@target_sha[0, 12]} — refusing to ship a stale image")
-    false
+    head = result.output.to_s[/\b[0-9a-f]{40}\b/]
+    unless result.success? && head == @target_sha
+      log "WARNING: checkout drift — synced #{head.to_s[0, 12].presence || '(unknown)'} " \
+          "but pinned target is #{@target_sha[0, 12]}. Proceeding; verify the running image SHA."
+    end
+    true
   end
 
   # Clone auth precedence: GitHub App installation token (https) → deploy key

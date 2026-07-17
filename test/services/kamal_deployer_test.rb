@@ -174,16 +174,16 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.status
   end
 
-  test "fails loud on checkout drift — synced HEAD != pinned target — instead of shipping stale" do
+  test "warns (advisory only) on checkout drift but does not block the deploy — avoids self-deploy retry loops" do
     target = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     drifted = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     shell = ShaShell.new(target_sha: target, head_sha: drifted)
     deploy_with(shell)
 
-    assert_equal "failed", @deployment.reload.status, "drift must fail the deploy, not report succeeded"
-    assert_match(/drift/i, @deployment.log.to_s)
-    refute shell.runs.any? { |r| r[:command].last.to_s.include?("kamal deploy") },
-           "must not run kamal deploy after detecting drift"
+    assert_match(/drift/i, @deployment.log.to_s, "drift must be surfaced in the log")
+    assert_equal "succeeded", @deployment.reload.status, "drift is advisory — must not fail/loop the deploy"
+    assert shell.runs.any? { |r| r[:command].last.to_s.include?("kamal deploy") },
+           "deploy proceeds after logging the drift warning"
   end
 
   test "fails fast with a clear message when a deploy.yml secret is missing from env vars" do
