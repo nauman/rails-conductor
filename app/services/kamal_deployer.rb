@@ -43,7 +43,21 @@ class KamalDeployer
     @askpass_file = @clone_token ? write_askpass(@clone_token) : nil
     @ssh_home = setup_ssh_home
 
+    # Pin the intended target commit up front, straight from the remote, so the
+    # build is deterministic and visible. A plain `fetch + reset --hard origin/<branch>`
+    # ships whatever the moving branch ref resolves to at fetch time — which can lag
+    # the batch the operator meant to ship — and nothing downstream asserts otherwise,
+    # so a stale image can boot under a green "succeeded". See the drift guard below.
+    @target_sha = resolve_target_sha
+    if @target_sha.present?
+      deployment.update!(commit_sha: @target_sha)
+      log "Target commit: #{@target_sha} (#{app.branch.presence || 'main'} @ origin, resolved via ls-remote)"
+    else
+      log "WARNING: could not resolve target commit via ls-remote; falling back to origin/#{app.branch.presence || 'main'} (no drift guard)"
+    end
+
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
+    return false unless verify_synced_head
     record_commit_sha
     return false unless verify_required_secrets
     materialize_master_key
@@ -175,15 +189,46 @@ class KamalDeployer
         "when the new release boots (commit #{deployment.commit_sha.to_s[0, 12]})."
   end
 
-  # Idempotent: clone on first deploy, otherwise hard-reset to the branch's head.
+  # Idempotent: clone on first deploy, otherwise fetch + hard-reset. Resets to the
+  # exact pinned @target_sha (deterministic) when we resolved one, else to the branch
+  # head (legacy fallback). Resetting to a specific sha the fetch didn't deliver fails
+  # loud — which is correct: better a failed deploy than a silently stale image.
   def sync_repo_command
     branch = app.branch.presence || "main"
+    target = @target_sha.presence || "origin/#{branch}"
     script = if Dir.exist?(File.join(checkout_dir, ".git"))
-      "cd #{esc(checkout_dir)} && git fetch origin && git checkout #{esc(branch)} && git reset --hard origin/#{esc(branch)}"
+      "cd #{esc(checkout_dir)} && git fetch origin && git checkout #{esc(branch)} && git reset --hard #{esc(target)}"
     else
-      "git clone --branch #{esc(branch)} #{esc(repo_url)} #{esc(checkout_dir)}"
+      "git clone --branch #{esc(branch)} #{esc(repo_url)} #{esc(checkout_dir)} && " \
+        "git -C #{esc(checkout_dir)} reset --hard #{esc(target)}"
     end
     ["bash", "-lc", script]
+  end
+
+  # The authoritative branch tip at trigger time, read straight from the remote.
+  # Used to pin the checkout deterministically and to assert the build shipped it.
+  def resolve_target_sha
+    branch = app.branch.presence || "main"
+    result = @shell.run("bash", "-lc",
+                        "git ls-remote #{esc(repo_url)} #{esc("refs/heads/#{branch}")}", env: git_env)
+    return nil unless result.success?
+    result.output.to_s.split(/\s+/).first.presence
+  rescue StandardError
+    nil
+  end
+
+  # Refuse to build a tree that isn't the commit we pinned. Turns a silently-stale
+  # "succeeded" deploy into a loud, actionable failure. Skipped only when we could
+  # not resolve a target (legacy behavior preserved).
+  def verify_synced_head
+    return true if @target_sha.blank?
+    result = @shell.run("git", "-C", checkout_dir, "rev-parse", "HEAD")
+    head = result.output.to_s.strip
+    return true if result.success? && head == @target_sha
+
+    fail_with("checkout drift: synced #{head[0, 12]} but pinned target is " \
+              "#{@target_sha[0, 12]} — refusing to ship a stale image")
+    false
   end
 
   # Clone auth precedence: GitHub App installation token (https) → deploy key

@@ -138,6 +138,54 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert @deployment.reload.commit_sha.present?, "expected commit_sha recorded from git rev-parse HEAD"
   end
 
+  # Returns a chosen sha for `git ls-remote` (the pinned target) and a chosen HEAD
+  # for `git rev-parse HEAD` (what actually synced) — so we can simulate drift.
+  class ShaShell
+    attr_reader :runs
+    def initialize(target_sha:, head_sha:)
+      @target_sha = target_sha
+      @head_sha = head_sha
+      @runs = []
+    end
+
+    def run(*command, chdir: nil, env: {})
+      @runs << { command: command, chdir: chdir, env: env }
+      last = command.last.to_s
+      out =
+        if last.include?("ls-remote") then "#{@target_sha}\trefs/heads/main"
+        elsif command.first(2) == [ "git", "-C" ] && last == "HEAD" then @head_sha
+        else "out"
+        end
+      yield out if block_given?
+      LocalShell::Result.new(success: true, exit_code: 0, output: out)
+    end
+  end
+
+  test "pins the ls-remote target sha and hard-resets to that exact sha (deterministic)" do
+    sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+    shell = ShaShell.new(target_sha: sha, head_sha: sha)
+    deploy_with(shell)
+
+    assert shell.runs.any? { |r| r[:command].last.to_s.include?("git ls-remote") },
+           "expected an ls-remote step to resolve the target"
+    assert shell.runs.any? { |r| r[:command].last.to_s.include?("reset --hard #{sha}") },
+           "expected reset --hard to the pinned target sha, not a moving branch ref"
+    assert_equal sha, @deployment.reload.commit_sha
+    assert_equal "succeeded", @deployment.status
+  end
+
+  test "fails loud on checkout drift — synced HEAD != pinned target — instead of shipping stale" do
+    target = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    drifted = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    shell = ShaShell.new(target_sha: target, head_sha: drifted)
+    deploy_with(shell)
+
+    assert_equal "failed", @deployment.reload.status, "drift must fail the deploy, not report succeeded"
+    assert_match(/drift/i, @deployment.log.to_s)
+    refute shell.runs.any? { |r| r[:command].last.to_s.include?("kamal deploy") },
+           "must not run kamal deploy after detecting drift"
+  end
+
   test "fails fast with a clear message when a deploy.yml secret is missing from env vars" do
     checkout = File.join(@workspace, @app.slug)
     FileUtils.mkdir_p(File.join(checkout, "config"))
