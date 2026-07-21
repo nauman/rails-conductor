@@ -18,6 +18,7 @@ This is a compact feature snapshot. For the full capability map, use `docs/plans
 - [x] Recurring ops baseline for metrics refresh, container sync, and scheduled backups
 - [x] SSH-backed Caddy route management for managed add/remove domain tooling
 - [x] Kamal as a runtime backend: through-Conductor Kamal deploys (control-machine build over SSH), self-describing deploy.yml/.kamal secrets generation, gated post-deploy migrate, and MCP-driven deploys
+- [x] Organization-scoped MCP tools with JSON-RPC Streamable HTTP core, read/deploy token scopes, and audit logging
 
 ## Partial Capabilities
 
@@ -26,7 +27,8 @@ This is a compact feature snapshot. For the full capability map, use `docs/plans
 - [ ] R2 backup uploads without full bucket-management workflows
 - [ ] Monitoring data with recurring freshness but without trend history or recurring-failure surfacing
 - [ ] Caddy routing without route persistence, deploy hooks, reconciliation, or certificate lifecycle
-- [ ] Log visibility without runtime log storage or deeper filtering
+- [ ] Bounded app-log snapshot polling without a true ActionCable/SSH follow stream, search, or runtime storage
+- [ ] One-shot Kamal seed application and evidence ledger without idempotency scanning, standalone execution, or Docker/native support
 - [ ] Server bootstrap and provider provisioning without full end-to-end automation
 - [ ] Postgres recovery planning without shipped restore execution
 

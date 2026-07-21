@@ -94,7 +94,7 @@
 <nav class="toc-panel" id="toc-panel" aria-label="Table of contents"></nav>
 
 <dialog class="detail-dialog" id="detail-dialog" aria-label="Slot detail">
-  <div class="dd-body" id="dd-body"></div>
+  <div id="detail"><div class="dd-body" id="dd-body"></div></div>
   <div class="dd-actions"><form method="dialog"><button class="dd-close" type="submit">Close ✕</button></form></div>
 </dialog>
 
@@ -107,7 +107,7 @@
   <div class="section-mark">Foundation audit · Wave 0</div>
   <div class="card">
     <div class="donut-wrap">
-      <div id="foundation-donut"></div>
+      <div class="donut" id="foundation-donut"></div>
       <div class="legend" id="donut-legend"></div>
     </div>
     <div class="grid fcards" id="foundation"></div>
@@ -121,37 +121,37 @@
 
   <div class="section-mark">Dependency graph</div>
   <p class="sub">Arrows point from a slot to what it depends on. Filter by wave or status; click a node for detail.</p>
-  <div class="chips" id="graph-filters"></div>
+  <div id="graphFilters"><div class="chips" id="graph-filters"></div></div>
   <div class="card"><div class="graph" id="graph"><svg class="edges" id="edges"></svg></div></div>
 
   <div class="section-mark">All slots</div>
-  <div class="chips" id="table-filters"></div>
-  <div class="card" style="padding:6px 10px"><table><thead><tr><th>Slot</th><th>Title</th><th>Wave</th><th>Status</th><th>Depends on</th></tr></thead><tbody id="tbody"></tbody></table></div>
+  <div id="tableFilters"><div class="chips" id="table-filters"></div></div>
+  <div class="card" style="padding:6px 10px"><table><thead><tr><th>Slot</th><th>Title</th><th>Wave</th><th>Status</th><th>Depends on</th></tr></thead><tbody id="slotRows"></tbody></table></div>
 </div>
 
 <script>
 const WAVES = [
-  {w:0, theme:"Foundation — must ship first", color:"var(--w0)", c:"#3a5a3f"},
+  {w:0, theme:"Foundation — close clone-auth parity", color:"var(--w0)", c:"#3a5a3f"},
   {w:1, theme:"Close the push → deploy loop", color:"var(--w1)", c:"#3a4f7a"},
   {w:2, theme:"Operational parity", color:"var(--w2)", c:"#8a6a1f"},
   {w:3, theme:"Breadth & scale", color:"var(--w3)", c:"#8b5cf6"},
 ];
 const ITEMS = [
   {id:"01", title:'Kamal control machine', status:'shipped', wave:0, deps:[], plan:'../roadmap/01-kamal-control-machine.html'},
-  {id:"02", title:'GitHub App & deploy keys', status:'shipped', wave:0, deps:[], plan:'../roadmap/02-github-app.html'},
+  {id:"02", title:'GitHub App & deploy keys', status:'partial', wave:0, deps:[], plan:'../roadmap/02-github-app.html'},
   {id:"03", title:'Auto-deploy on git push', status:'shipped', wave:1, deps:['02','01'], plan:'../roadmap/03-auto-deploy-push.html'},
   {id:"09", title:'In-container task runner', status:'spec', wave:1, deps:['01'], plan:'../roadmap/09-app-task-runner.html'},
   {id:"04", title:'Rollbacks & release history', status:'spec', wave:2, deps:['01'], plan:'../roadmap/04-rollbacks.html'},
-  {id:"05", title:'Background worker management', status:'spec', wave:2, deps:['01'], plan:'../roadmap/05-background-workers.html'},
-  {id:"06", title:'Live app log streaming', status:'shipped', wave:2, deps:['01'], plan:'../roadmap/06-app-logs.html'},
-  {id:"08", title:'Seed management & idempotency', status:'spec', wave:2, deps:['09','01'], plan:'../roadmap/08-seed-management.html'},
+  {id:"05", title:'Background worker management', status:'partial', wave:2, deps:['01'], plan:'../roadmap/05-background-workers.html'},
+  {id:"06", title:'Live app log streaming', status:'partial', wave:2, deps:['01'], plan:'../roadmap/06-app-logs.html'},
+  {id:"08", title:'Seed management & idempotency', status:'partial', wave:2, deps:['09','01'], plan:'../roadmap/08-seed-management.html'},
   {id:"10", title:'Deploy hooks (pre/post)', status:'spec', wave:2, deps:['01','03'], plan:'../roadmap/10-deploy-hooks.html'},
   {id:"07", title:'Server provisioning (provider APIs)', status:'spec', wave:3, deps:[], plan:'../roadmap/07-server-provisioning.html'},
   {id:"11", title:'Web console (rails console / shell)', status:'spec', wave:3, deps:['01'], plan:'../roadmap/11-web-console.html'},
-  {id:"12", title:'Alerts & notifications', status:'spec', wave:3, deps:['06'], plan:'../roadmap/12-alerts.html'},
+  {id:"12", title:'Alerts & notifications', status:'partial', wave:3, deps:['06'], plan:'../roadmap/12-alerts.html'},
   {id:"13", title:'Redis & MySQL accessories', status:'spec', wave:3, deps:['01'], plan:'../roadmap/13-accessories.html'},
   {id:"14", title:'Multi-tenant MCP (anyone deploys)', status:'shipped', wave:3, deps:['02'], plan:'../roadmap/14-multi-tenant-mcp.html'},
-  {id:"15", title:'MCP wire-protocol transport', status:'spec', wave:3, deps:['14'], plan:'../roadmap/15-mcp-wire-protocol.html'},
+  {id:"15", title:'MCP wire-protocol transport', status:'partial', wave:3, deps:['14'], plan:'../roadmap/15-mcp-wire-protocol.html'},
 ];
 const byId = Object.fromEntries(ITEMS.map(i=>[i.id,i]));
 const STC = {shipped:"#2c7a4d", spec:"#9ca3af", partial:"#e8a53b"};
@@ -245,7 +245,7 @@ WAVES.forEach(wv=>{
 const svg = document.getElementById('edges');
 function drawEdges(){
   const box = graph.getBoundingClientRect();
-  let p = '';
+  svg.replaceChildren();
   ITEMS.forEach(i=>i.deps.forEach(d=>{
     const a = document.getElementById('node-'+i.id), b = document.getElementById('node-'+d);
     if(!a||!b) return;
@@ -253,10 +253,15 @@ function drawEdges(){
     const x1=ra.left-box.left, y1=ra.top-box.top+ra.height/2;
     const x2=rb.right-box.left, y2=rb.top-box.top+rb.height/2;
     const mx=(x1+x2)/2;
-    p += `<path d="M${x2},${y2} C${mx},${y2} ${mx},${y1} ${x1},${y1}" fill="none" stroke="${waveColor(i.wave)}" stroke-width="1.5" opacity=".4"/>`;
-    p += `<circle cx="${x1}" cy="${y1}" r="2.5" fill="${waveColor(i.wave)}"/>`;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M${x2},${y2} C${mx},${y2} ${mx},${y1} ${x1},${y1}`);
+    path.setAttribute("fill", "none"); path.setAttribute("stroke", waveColor(i.wave));
+    path.setAttribute("stroke-width", "1.5"); path.setAttribute("opacity", ".4");
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", x1); dot.setAttribute("cy", y1); dot.setAttribute("r", "2.5");
+    dot.setAttribute("fill", waveColor(i.wave));
+    svg.append(path, dot);
   }));
-  svg.innerHTML = p;
 }
 
 // ── Filters: shared wave + status filter, applied to graph nodes and table rows
@@ -273,14 +278,14 @@ function renderFilters(kind, mount){
     WAVES.map(wv=>chip(kind,'wave',String(wv.w),`W${wv.w}`, wv.c)).join('');
   const statusChips = `<span class="flabel" style="margin-left:10px">Status</span>` +
     chip(kind,'status','all','All','ink') +
-    ['shipped','spec'].map(s=>chip(kind,'status',s,STLABEL[s],STC[s])).join('');
+    ['shipped','partial','spec'].map(s=>chip(kind,'status',s,STLABEL[s],STC[s])).join('');
   mount.innerHTML = waveChips + statusChips;
 }
 function applyFilters(kind){
   const st = filterState[kind];
   const match = el => (st.wave==='all'||el.dataset.wave===st.wave) && (st.status==='all'||el.dataset.status===st.status);
   if(kind==='graph') document.querySelectorAll('.node').forEach(n=>n.classList.toggle('dim', !match(n)));
-  else document.querySelectorAll('#tbody tr.slot-row').forEach(tr=>tr.classList.toggle('hide', !match(tr)));
+  else document.querySelectorAll('#slotRows tr.slot-row').forEach(tr=>tr.classList.toggle('hide', !match(tr)));
 }
 function wireFilters(kind, id){
   const mount = document.getElementById(id);
@@ -293,7 +298,7 @@ function wireFilters(kind, id){
 }
 
 // Table (slot-row targets) + detail on click
-const tbody = document.getElementById('tbody');
+const tbody = document.getElementById('slotRows');
 tbody.innerHTML = ITEMS.slice().sort((a,b)=>a.wave-b.wave || a.id.localeCompare(b.id)).map(i=>`
   <tr class="slot-row" id="slot-row-${i.id}" data-slot="${i.id}" data-wave="${i.wave}" data-status="${i.status}">
     <td class="id">${i.id}</td>

@@ -7,7 +7,8 @@
 ## Source of Truth
 
 - Strategy: `docs/VISION.md`
-- Current reality: `docs/analysis/pillars-audit-2026-03-19.md`
+- Current reality: `docs/STATUS.md`
+- Historical baseline: `docs/analysis/pillars-audit-2026-03-19.md`
 - User use cases: `docs/scenarios/INDEX.md`
 - Session history: `docs/sessions/INDEX.md`
 - Legacy feature inventory: `docs/backlogs/prd.json`
@@ -77,4 +78,4 @@
 - Treat each plan as a PRD for one capability area.
 - Update status here when a plan moves from deferred to active, or from partial to implemented.
 - Record shipped work in `docs/sessions/INDEX.md` and linked session docs, then reflect it here.
-- Keep `docs/analysis/pillars-audit-2026-03-19.md` aligned with this index.
+- Keep `docs/STATUS.md` aligned with this index; preserve dated audits as historical snapshots.

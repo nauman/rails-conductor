@@ -20,7 +20,7 @@ Conductor is the **control plane for self-hosted Rails ops across a fleet** — 
 ## Recently shipped
 
 - **Deploy Kamal apps through Conductor (control machine)** — **live-validated 2026-06-19**: Conductor's container clones the repo and builds on the target's docker daemon over SSH, then deploys. First clean end-to-end deploy proven on a real app. (See [01-kamal-control-machine.html](01-kamal-control-machine.html).)
-- **GitHub App & deploy keys (private repos)** — cross-org installation tokens + auto-installed deploy keys, plus a browser **Integrations** page to configure the GitHub App. (See [02-github-app.html](02-github-app.html).)
+- **GitHub App & deploy keys (private repos), Kamal slice** — short-lived installation tokens + auto-installed deploy keys, plus a browser **Integrations** page. Native/raw-Docker clone auth and commit-status reporting remain. (See [02-github-app.html](02-github-app.html).)
 - Cron / scheduled jobs, server hardening/auto-update/audit, Postgres clusters (per-app DB on a shared cluster), MCP server + token + audit log (secret-redacted), org-scoped `/api/v1` + org-aware MCP, kamal env bridge + status sync. `app-one.example.com` + `app-three.example.com` live on the shared fleet box (multi-app proven).
 
 ## Backlog — gaps to fully replace Hatchbox
@@ -30,19 +30,19 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | Plan | Pillar | Priority | Effort | Status |
 |---|---|---|---|---|
 | [Deploy Kamal apps through Conductor (control machine)](01-kamal-control-machine.html) | Runtime Backends | P0 | M | ✅ Done (2026-06-19) |
-| [GitHub App & deploy keys (private repos)](02-github-app.html) | Provider Automation | P0 | M | ✅ Done |
+| [GitHub App & deploy keys (private repos)](02-github-app.html) | Provider Automation | P0 | M | 🟡 Partial — Kamal shipped; Native/raw-Docker parity remains |
 | [Auto-deploy on git push](03-auto-deploy-push.html) | Runtime Backends | P0 | M | ✅ Done (2026-06-20) |
 | [Rollbacks & release history](04-rollbacks.html) | Runtime Backends | P1 | M | Planned |
-| [Background worker management](05-background-workers.html) | Runtime Backends | P1 | M | Planned |
-| [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | ✅ Done (2026-06-21) |
+| [Background worker management](05-background-workers.html) | Runtime Backends | P1 | M | 🟡 Partial — Solid Queue visibility only; control remains |
+| [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | 🟡 Partial — bounded polling shipped; follow stream remains |
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
 | [Seed management & idempotency check](08-seed-management.html) | Runtime Backends | P1 | S | 🔄 Apply+record SHIPPED (2026-07-13): `SeedApplication` ledger + a one-shot `seed_on_next_deploy` that runs `db:seed` in the deployed container and records status + db/seeds.rb digest + output (KamalDeployer; UI toggle + MCP). Preflight "seeds" gate now has a real writer + blocks on a failed run. Remains: standalone (no-deploy) run, idempotency scan of seeds.rb, non-kamal support |
 | [In-container task runner (db:seed / rake / migrate)](09-app-task-runner.html) | Agent-native | **P0** | M | Planned · **Heroku-DX** |
 | [Multi-tenant MCP (anyone can deploy)](14-multi-tenant-mcp.html) | Agent-native | P1 | M | ✅ Done (2026-06-20) |
-| [MCP wire-protocol transport](15-mcp-wire-protocol.html) | Agent-native | P1 | M | Planned |
+| [MCP wire-protocol transport](15-mcp-wire-protocol.html) | Agent-native | P1 | M | 🟡 Partial — JSON-RPC core shipped; resource/SSE/live-client evidence remain |
 | [Deploy hooks (pre/post commands)](10-deploy-hooks.html) | Runtime Backends | P2 | S | Planned |
 | [Web console (rails console / shell)](11-web-console.html) | Fleet Control | **P1** | M | Planned · **Heroku-DX** |
-| [Alerts & notifications](12-alerts.html) | Continuous Maintenance | P2 | M | Planned |
+| [Alerts & notifications](12-alerts.html) | Continuous Maintenance | P2 | M | 🟡 Partial — global failure emails only; org pipeline remains |
 | [Redis & MySQL accessories](13-accessories.html) | Data & Backups | P2 | M | Planned |
 | [Secretless deploys (vault-resolved secrets)](16-secretless-deploys.html) | Agent-native | P1 | M | Planned |
 | [Reactive statuses everywhere (Turbo Streams)](17-reactive-statuses.html) | Fleet Control | P1 | M | 🔄 In progress (slice 1 done 2026-06-22) |
@@ -57,8 +57,8 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 
 ## Critical path
 
-The two P0 deploy blockers (Kamal control machine, GitHub App) are **done**. Remaining P0:
+The Kamal control-machine path and GitHub webhook auto-deploy are shipped. The next P0 product slice is:
 
-1. [Auto-deploy on push](03-auto-deploy-push.html) — the signature Hatchbox loop: push → webhook → deploy.
+1. [In-container task runner](09-app-task-runner.html) — UI/MCP execution for seed, migrate, rake, and runner commands; required to finish runtime-agnostic seed management.
 
-Then P1 parity (rollbacks, workers, app logs, provisioning, **seed management**, **in-container task runner**) closes the rest of the gap while the agent/MCP surface keeps the differentiation. The seed-management and task-runner items were surfaced live: a Conductor deploy runs `db:prepare` only, so an app whose demo login depends on seed-created data silently broke until seeds were run by hand.
+In parallel, finish slot 02 clone-auth parity for Native/raw-Docker deploys. Then P1 parity—rollbacks, managed workers, true app-log streaming, provisioning, and seed idempotency—closes the remaining trust and Heroku-DX gaps.

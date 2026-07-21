@@ -29,7 +29,8 @@
 | Plans | `docs/plans/INDEX.md` | Master PRD map and capability plans by pillar |
 | Scenarios | `docs/scenarios/INDEX.md` | User-driven use cases with actors and flows |
 | Scenario | `docs/scenarios/sc-008-beta-access.md` | Hosted beta intake: waitlist, manual approval, and free access guardrails |
-| Analysis | `docs/analysis/pillars-audit-2026-03-19.md` | Current-state audit, plan status, and gap map |
+| Status | `docs/STATUS.md` | Current shipped/partial/missing product reality |
+| Analysis | `docs/analysis/pillars-audit-2026-03-19.md` | Historical March 2026 baseline; not current status |
 | Sessions | `docs/sessions/INDEX.md` | Session-level implementation history and current handoff docs |
 | Scripts | `docs/scripts/agent-thread-status.sh` | Read-only report of thread obligations (OWED BY ME / WAITING ON OTHERS) |
 | Scripts | `docs/scripts/ralph-doc-loop.md` | Minimal doc update loop |

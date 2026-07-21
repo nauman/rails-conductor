@@ -29,7 +29,7 @@ Read in this order:
 5. `docs/dev/ROADMAP.md`
 6. `docs/dev/FEATURES.md`
 7. `docs/plans/INDEX.md`
-8. `docs/analysis/pillars-audit-2026-03-19.md`
+8. `docs/STATUS.md` (use dated audits only for historical comparison)
 9. The specific plan, scenario, or code files touched by the selected slice
 
 ## Copy-Paste Goal
@@ -46,7 +46,7 @@ You are continuing Conductor development in /Users/your-user/Code/02-addons/79-c
 Goal: complete one smallest valuable slice toward the Conductor roadmap, with an audit trail.
 
 Context rules:
-- Read docs/INDEX.md, docs/ARCHITECTURE.md, docs/dev/INDEX.md, docs/infra/INDEX.md, docs/dev/ROADMAP.md, docs/dev/FEATURES.md, docs/plans/INDEX.md, and docs/analysis/pillars-audit-2026-03-19.md.
+- Read docs/INDEX.md, docs/ARCHITECTURE.md, docs/dev/INDEX.md, docs/infra/INDEX.md, docs/dev/ROADMAP.md, docs/dev/FEATURES.md, docs/plans/INDEX.md, and docs/STATUS.md.
 - Skim only the specific plan, scenario, and code files needed for the selected slice.
 - Respect existing AGENTS.md instructions, Rails patterns, Turbo/Importmaps/Tailwind conventions, and org-scoped tenancy.
 

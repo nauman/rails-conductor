@@ -54,7 +54,7 @@
     <span class="badge">Pillar: Runtime Backends</span>
     <span class="badge p1">Priority: P1</span>
     <span class="badge">Effort: S</span>
-    <span class="badge planned">Status: In progress — apply+record shipped (2026-07-13); idempotency scan + standalone run remain</span>
+    <span class="badge progress">Status: Partial — apply+record shipped (2026-07-13); idempotency scan + standalone run remain</span>
   </div>
 </header>
 <div class="card">
@@ -63,9 +63,10 @@
   <p>The second half of the problem is <em>safety</em>: seeds are only safe to run repeatedly if they're idempotent (<code>find_or_create_by</code>, upserts). Many real seed files mix idempotent reference data with non-idempotent demo generators that insert duplicate rows every run. Running such a seed on every deploy would silently bloat the database.</p>
 
   <h2>Current state</h2>
-  <p>The Kamal entrypoint runs <code>./bin/rails db:prepare</code> only; seeds are out of band. Conductor has no concept of an app's seed step, no per-app toggle, and no exec path into the app container (see <a href="09-app-task-runner.html">in-container task runner</a>). Today running seeds means an operator dropping to a terminal and remembering <code>kamal app exec --reuse "… bin/rails db:seed"</code> with the right env flags.</p>
+  <p>Conductor now has a one-shot <code>seed_on_next_deploy</code> flag for Kamal apps. After gated migrations, <code>KamalDeployer</code> runs <code>bin/rails db:seed</code>, streams output into the deployment log, records a <code>SeedApplication</code> with status, digest, output, and timestamp, and fails the deploy when seeding fails. The flag is available in the web UI and MCP surface.</p>
+  <p>Still missing: a standalone no-deploy seed run, an idempotency probe and override workflow, repeat-on-every-deploy configuration, and Docker/native runtime support. Those remaining slices depend on the generic <a href="09-app-task-runner.html">in-container task runner</a>.</p>
 
-  <h2>Proposed design</h2>
+  <h2>Remaining design</h2>
   <p>Two coupled features:</p>
   <ul>
     <li><strong>Run-seeds-on-deploy toggle</strong> — a per-app boolean (with optional env, e.g. <code>SEED_DEMO=1</code>) that, when set, runs <code>db:seed</code> as a post-migrate deploy step via the task runner, with the output streamed into the deployment log.</li>
@@ -75,10 +76,10 @@
 
   <h2>Implementation slices</h2>
   <ol class="slices">
-    <li>Per-app <code>run_seeds_on_deploy</code> flag + optional seed env; surface it on the app page and via MCP/<code>update_app</code>.</li>
-    <li>Deploy step: after migrations, if enabled, invoke the task runner's <code>db:seed</code> and stream output to the deployment log.</li>
-    <li>Idempotency probe: run seeds twice in a transaction (rolled back), capture per-table row-count deltas, return a pass/fail report with offending tables.</li>
-    <li>UI + gate: show the idempotency verdict on the app page; block on-deploy seeding for non-idempotent seeds until the operator overrides.</li>
+    <li><strong>Partial —</strong> one-shot per-app <code>seed_on_next_deploy</code> flag in UI/MCP; repeat-on-every-deploy and optional seed env remain.</li>
+    <li><strong>Done for Kamal —</strong> post-migration <code>db:seed</code>, streamed output, failure propagation, and evidence ledger.</li>
+    <li><strong>Remaining —</strong> idempotency probe: run seeds twice in a safe context, capture row-count deltas, and report offending tables.</li>
+    <li><strong>Remaining —</strong> idempotency verdict UI/override gate, standalone run, and Docker/native execution.</li>
   </ol>
 
   <h2>Acceptance criteria</h2>

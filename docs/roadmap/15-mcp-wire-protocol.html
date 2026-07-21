@@ -54,24 +54,25 @@
     <span class="badge">Pillar: Agent-native</span>
     <span class="badge p1">Priority: P1</span>
     <span class="badge">Effort: M</span>
-    <span class="badge planned">Status: Planned</span>
+    <span class="badge progress">Status: Partial — JSON-RPC Streamable HTTP core shipped</span>
   </div>
 </header>
 <div class="card">
   <h2>Problem</h2>
-  <p>Conductor exposes a <strong>custom HTTP API</strong> at <code>/mcp/list</code> + <code>/mcp/call</code> (<code>{name, input} → {result}</code>). It's perfect for a shell-capable agent (Claude Code) hitting it with <code>curl</code>, and that's how every deploy so far has run. But it is <strong>not the MCP wire protocol</strong> — no JSON-RPC 2.0 envelope, no <code>initialize</code> / <code>tools/list</code> / <code>tools/call</code> methods, no SSE / streamable-HTTP transport. So <strong>Claude Desktop and Cursor can't connect to it natively</strong> as an MCP server; "anyone can deploy from their agent" only holds for agents that can run a shell.</p>
+  <p>Conductor now speaks the core MCP wire protocol at <code>POST /mcp</code>. The remaining work is transport/resource completeness and live-client evidence, not the JSON-RPC envelope itself.</p>
 
   <h2>Current state</h2>
-  <p><code>Mcp::ServerController</code> (<code>app/controllers/mcp/server_controller.rb</code>) renders plain JSON for <code>list</code>/<code>call</code>/<code>skill</code>, with per-user/per-org bearer auth (slot 14) and a redacted audit log (<code>McpCall</code>). The tool set + schemas already come from <code>ToolRegistry</code>, and the judgment layer is served at <code>/mcp/skill</code>. Everything needed is present except the protocol envelope and transport.</p>
+  <p><code>Mcp::RpcController</code> implements JSON-RPC 2.0 <code>initialize</code>, <code>ping</code>, <code>tools/list</code>, <code>tools/call</code>, notification semantics, protocol-version negotiation, origin validation, shared bearer authentication, org scoping, read-only enforcement, and audit logging. The custom <code>/mcp/list</code>, <code>/mcp/call</code>, and <code>/mcp/skill</code> endpoints remain available.</p>
+  <p><code>GET /mcp</code> currently returns 405 because the server does not offer server-initiated SSE. The skill is not exposed as an MCP resource/prompt, and the repository has protocol integration tests but no recorded Claude Desktop/Cursor end-to-end acceptance run.</p>
 
-  <h2>Proposed design</h2>
-  <p>Add a spec-compliant MCP endpoint alongside the existing custom API (keep the latter for curl/CI). Implement the <strong>Streamable HTTP transport</strong>: a single <code>POST /mcp</code> accepting JSON-RPC 2.0, handling <code>initialize</code>, <code>tools/list</code> (map <code>ToolRegistry.definitions</code> → MCP tool descriptors), and <code>tools/call</code> (dispatch to <code>ToolRegistry.call</code>, wrap the result as MCP content), with SSE for streaming/notifications. Reuse the slot-14 bearer auth + org scoping unchanged. Expose the skill via an MCP <code>resource</code> (or a prompt) so connected clients pull it automatically.</p>
+  <h2>Remaining design</h2>
+  <p>Add MCP resource/prompt exposure for the skill, decide whether any server-initiated feature justifies SSE, and record a real-client end-to-end connection/deploy check. Keep the existing custom API for curl/CI.</p>
 
   <h2>Implementation slices</h2>
   <ol class="slices">
-    <li>JSON-RPC 2.0 envelope + <code>initialize</code> handshake (capabilities, serverInfo).</li>
-    <li><code>tools/list</code> from <code>ToolRegistry.definitions</code>; <code>tools/call</code> → <code>ToolRegistry.call</code>, result wrapped as MCP <code>content</code>; errors as JSON-RPC errors.</li>
-    <li>Streamable-HTTP transport (POST + SSE) at <code>POST /mcp</code>; reuse bearer auth + Current org/scope.</li>
+    <li><strong>Done —</strong> JSON-RPC 2.0 envelope, <code>initialize</code>, version negotiation, and protocol errors.</li>
+    <li><strong>Done —</strong> <code>tools/list</code> and <code>tools/call</code> over authenticated JSON Streamable HTTP with shared org/scope enforcement.</li>
+    <li>Implement SSE only when server-initiated messages are required; document the supported JSON response mode explicitly.</li>
     <li>Expose <code>/mcp/skill</code> as an MCP resource/prompt; document the one-line Claude Desktop / Cursor connect config in the <a href="/docs/mcp">MCP guide</a>.</li>
   </ol>
 

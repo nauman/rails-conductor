@@ -1,5 +1,7 @@
 # Conductor Pillars Audit — March 19, 2026
 
+> Historical baseline only. This audit describes the repository as of 2026-03-19 and is intentionally not maintained as current truth. See `docs/STATUS.md` for the current shipped/partial/missing map.
+
 ## Product Thesis
 
 Conductor is building toward a control plane for self-hosted Rails operations: one system to manage

@@ -16,7 +16,7 @@ Conductor is a control plane for self-hosted Rails operations — one place to r
 | 6 | Continuous maintenance | Health checks, updates, drift detection, alerts | Recurring jobs run; depth pending |
 | 7 | Agent-native control | Operate the whole fleet over MCP — every op a tool, org-scoped, audited, secretless | MCP surface shipped; secretless deploys pending |
 
-Maturity is qualitative and moves often. For the current detailed assessment, see `docs/analysis/pillars-audit-2026-03-19.md`.
+Maturity is qualitative and moves often. For the current detailed assessment, see `docs/STATUS.md`; the March pillars audit is retained as a historical baseline.
 
 ---
 
@@ -29,10 +29,10 @@ Maturity is qualitative and moves often. For the current detailed assessment, se
 
 ## 2. Runtime Backends
 
-**Deploy your way.** Conductor coordinates deployment tools as execution backends rather than forcing one model. Docker-over-SSH works today; native Puma/systemd and Kamal as a first-class backend are in progress.
+**Deploy your way.** Conductor coordinates deployment tools as execution backends rather than forcing one model. Docker-over-SSH, native Puma/systemd, and Kamal control-machine dispatch exist, with runtime-specific parity gaps.
 
-- **Today:** Docker deployment pipeline over SSH, deploy log streaming via ActionCable, provisioning scripts (`server-provision`, `ruby-install`, `app-setup`, `app-deploy`, `systemd-setup`).
-- **Where help is wanted:** Native Puma/systemd deploy completion, deeper Kamal lifecycle support, and rollback.
+- **Today:** Docker deployment over SSH, native Puma/systemd dispatch, Kamal control-machine deploys, auto-deploy webhooks, deploy log streaming, and one-shot Kamal seed application.
+- **Where help is wanted:** Runtime-agnostic private-repo auth and task execution, managed workers, true app-log follow streaming, deploy hooks, and rollback.
 
 ## 3. Routing and Edge
 
@@ -80,4 +80,4 @@ Pillar 1 (Fleet control) **displays** everything; Pillar 6 (Continuous maintenan
 1. Skim this page and pick a pillar that interests you.
 2. Open `docs/plans/INDEX.md` for the capability plans (PRDs) grouped by pillar, with current status.
 3. Read `docs/scenarios/` for end-to-end user flows that show how a pillar is meant to feel in practice.
-4. Check `docs/analysis/pillars-audit-2026-03-19.md` for the honest current-state gaps.
+4. Check `docs/STATUS.md` for current gaps; use dated audits only for historical comparison.

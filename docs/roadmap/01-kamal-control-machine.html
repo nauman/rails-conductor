@@ -54,7 +54,7 @@
     <span class="badge">Pillar: Runtime Backends</span>
     <span class="badge p0">Priority: P0</span>
     <span class="badge">Effort: M</span>
-    <span class="badge progress">Status: In progress — code redesigned, infra pending</span>
+    <span class="badge done">Status: Shipped — live-validated 2026-06-19</span>
   </div>
 </header>
 
@@ -74,29 +74,22 @@
     <li>materializes the target server's SSH key (from <code>SshKey#private_key</code>) so Kamal's net-ssh can reach the box, and cleans it up afterward;</li>
     <li>runs <code>kamal deploy</code> as a local subprocess via <code>LocalShell</code> (Open3, streamed to the deploy log), with Conductor's env injected (<code>DEPLOY_SERVER_IP</code>, registry creds, …).</li>
   </ul>
-  <p>Orchestration is unit-tested (<code>test/services/kamal_deployer_test.rb</code>, <code>local_shell_test.rb</code>) with an injected shell. <strong>What's not yet validated is the runtime environment</strong> inside Conductor's deployed container.</p>
+  <p>Orchestration is unit-tested (<code>test/services/kamal_deployer_test.rb</code>, <code>local_shell_test.rb</code>) and the through-Conductor path has been live-validated against managed Kamal apps.</p>
 
-  <h2>Proposed design — remaining infra</h2>
-  <p>To make a real through-Conductor Kamal deploy succeed in production:</p>
-  <pre><code># config/deploy.yml (Conductor itself)
-volumes:
-  - "/var/run/docker.sock:/var/run/docker.sock"   # build/push from the container
-  - "conductor_kamal_workspace:/rails/tmp/kamal"   # persist checkouts between deploys</code></pre>
+  <h2>Shipped design</h2>
+  <p>The production implementation builds through Kamal's configured builder path, keeps the checkout workspace inside Conductor, and materializes ephemeral SSH/Git credentials only for the deploy:</p>
   <ul>
-    <li><strong>Docker access:</strong> mount the host's <code>/var/run/docker.sock</code> so <code>kamal</code> can build/push (the host already has buildx). The deploy user is in the docker group.</li>
-    <li><strong>kamal on PATH:</strong> confirm <code>kamal</code> resolves in the app checkout (it runs from the app dir; fall back to the app's <code>bin/kamal</code> or invoke via Conductor's bundle).</li>
-    <li><strong>Repo auth:</strong> private repos need a deploy key / token at clone time — see <a href="02-github-app.html">GitHub App &amp; deploy keys</a>.</li>
-    <li><strong>SSH to target:</strong> the materialized key must be wired into Kamal's net-ssh (deploy.yml <code>ssh.keys</code> / an ssh-config / ssh-agent). This is the main integration point to validate.</li>
-    <li><strong>Registry:</strong> Conductor's container logs into Docker Hub using <code>KAMAL_REGISTRY_PASSWORD</code> from the app's env.</li>
+    <li><strong>Kamal runtime:</strong> the bundled Kamal command runs from Conductor's control-machine workspace.</li>
+    <li><strong>Repo auth:</strong> GitHub App installation tokens or per-app deploy keys authenticate private Kamal checkouts; see <a href="02-github-app.html">slot 02</a>.</li>
+    <li><strong>SSH to target:</strong> the server identity is materialized for the deploy, wired through the generated SSH home/config, then removed in cleanup.</li>
+    <li><strong>Registry:</strong> required registry credentials are validated before deploy and injected without logging their values.</li>
   </ul>
 
   <h2>Implementation slices</h2>
   <ol class="slices">
-    <li><strong>Done —</strong> control-machine redesign: <code>LocalShell</code> + <code>KamalDeployer</code> run kamal locally; generate secrets; materialize/cleanup the SSH key; stream logs. Unit-tested.</li>
-    <li>Mount <code>docker.sock</code> + a persistent workspace volume into Conductor's container; redeploy Conductor.</li>
-    <li>Wire the target SSH key into Kamal's net-ssh and confirm <code>kamal</code> resolves from the app checkout.</li>
-    <li>Validate end-to-end: deploy <code>app-one</code> via the <code>deploy_app</code> MCP tool; confirm the deploy log streams and the release boots; status-sync flips to <code>running</code>.</li>
-    <li>Add a <code>deployment_log</code> MCP tool / API so deploy progress is observable over MCP (today only <code>recent_logs</code> reads ScriptRuns).</li>
+    <li><strong>Done —</strong> <code>LocalShell</code> + <code>KamalDeployer</code> run Kamal from Conductor, generate secrets/config, materialize and clean identities, and stream persisted deployment logs.</li>
+    <li><strong>Done —</strong> private-repo authentication for the Kamal checkout through GitHub App tokens or deploy keys.</li>
+    <li><strong>Done —</strong> end-to-end deploy, failure lifecycle, status sync, gated migrations, and deployment-log MCP visibility.</li>
   </ol>
 
   <h2>Acceptance criteria</h2>
