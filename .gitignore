@@ -38,6 +38,7 @@
 !/app/assets/builds/.keep
 .inventlist.yml
 .claude/
+.kuickr/
 
 # Rust build artifacts (never commit)
 conductor-cli/target/
