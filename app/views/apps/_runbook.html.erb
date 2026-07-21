@@ -1,0 +1,52 @@
+<%# Per-app deploy runbook + checklist. Each app deploys differently; this is the
+    human-facing mirror of the conductor_runbook MCP tool. %>
+<div id="runbook" class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body shadow-soft overflow-hidden">
+  <div class="p-4 border-b border-border dark:border-border bg-fill dark:bg-fill flex items-center justify-between">
+    <h3 class="text-sm font-semibold text-ink dark:text-white">Deploy runbook &amp; checklist</h3>
+    <% done = app.deploy_checklist_items.count(&:done?) %>
+    <%= rui_badge(text: "#{done}/#{app.deploy_checklist_items.size} done", color: done == app.deploy_checklist_items.size && app.deploy_checklist_items.any? ? :success : :slate, size: :sm) %>
+  </div>
+
+  <%# Runbook (markdown source, shown verbatim) %>
+  <div class="p-4 border-b border-border dark:border-border">
+    <%= form_with url: update_runbook_app_path(app), method: :patch do |f| %>
+      <label class="block text-xs font-medium text-body dark:text-faint mb-1">Runbook (markdown) — read before deploying</label>
+      <%= f.text_area "app[deploy_runbook]", value: app.deploy_runbook, rows: app.deploy_runbook.present? ? 8 : 3,
+            class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm font-mono",
+            placeholder: "## Deploy steps\n1. Boot the db accessory\n2. Restore prod DB\n3. kamal deploy" %>
+      <div class="mt-2 text-right"><%= f.rui_button("Save runbook", color: :primary, size: :sm) %></div>
+    <% end %>
+  </div>
+
+  <%# Checklist %>
+  <div class="p-4">
+    <% if app.deploy_checklist_items.any? %>
+      <ul class="divide-y divide-border dark:divide-border mb-3">
+        <% app.deploy_checklist_items.each do |item| %>
+          <li class="flex items-center gap-3 py-2">
+            <%= form_with model: [app, item], method: :patch, class: "flex items-center" do |f| %>
+              <%= f.hidden_field :done, value: false %>
+              <%= f.check_box :done, checked: item.done, onchange: "this.form.requestSubmit()",
+                    class: "rounded border-border-strong dark:border-border-strong text-ink focus:ring-primary" %>
+            <% end %>
+            <span class="flex-1 text-sm <%= item.done ? 'line-through text-faint dark:text-muted' : 'text-ink dark:text-white' %>">
+              <%= item.content %>
+              <% unless item.required %><span class="text-xs text-muted">(optional)</span><% end %>
+            </span>
+            <%= rui_button_to("Remove", app_deploy_checklist_item_path(app, item), method: :delete, variant: :link, color: :danger, size: :sm) %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="text-sm text-muted dark:text-faint mb-3">No checklist steps yet.</p>
+    <% end %>
+
+    <%= form_with model: [app, DeployChecklistItem.new], class: "flex items-end gap-3" do |f| %>
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-body dark:text-faint mb-1">Add a step</label>
+        <%= f.text_field :content, class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm", placeholder: "Restore prod DB into platepose-db" %>
+      </div>
+      <%= f.rui_button("Add", color: :primary, size: :sm) %>
+    <% end %>
+  </div>
+</div>

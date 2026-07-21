@@ -21,7 +21,7 @@ class FleetStatusTool
   end
 
   def call(input = {})
-    servers = visible_servers.includes(:apps, :script_runs)
+    servers = visible_servers.includes(:script_runs, apps: :deploy_checklist_items)
     # Optional org scoping: keeps admin-global behavior by default.
     servers = servers.where(organization_id: input['organization_id']) if input['organization_id'].present?
 
@@ -36,7 +36,7 @@ class FleetStatusTool
         memory:      server.formatted_memory,
         disk:        server.disk_percent,
         last_seen:   server.last_seen_at&.strftime('%Y-%m-%d %H:%M UTC'),
-        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, notes: a.notes } }
+        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, notes: a.notes, runbook: a.deploy_runbook.present?, checklist: a.runbook_summary[:checklist_progress] } }
       }
     end
 

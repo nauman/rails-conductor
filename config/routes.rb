@@ -137,11 +137,13 @@ Rails.application.routes.draw do
       patch :toggle_seed_on_next_deploy
       get :deploy_config
       patch :toggle_self_describing
+      patch :update_runbook
     end
     collection do
       post :sync_all
     end
     resources :env_variables, only: [:create, :update, :destroy]
+    resources :deploy_checklist_items, only: [:create, :update, :destroy]
   end
   resources :deployments, only: [:show]
   resources :backups do

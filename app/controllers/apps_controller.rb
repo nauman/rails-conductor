@@ -1,6 +1,6 @@
 class AppsController < ApplicationController
   include OperatorOnly
-  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing ]
+  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook ]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -128,6 +128,11 @@ class AppsController < ApplicationController
 
   # Opt this app into ADR 0001: deploys write the generated overlay + secrets and
   # run `kamal deploy -d production`. Default off — flipping is per-app + reversible.
+  def update_runbook
+    @app.update(deploy_runbook: params.require(:app).permit(:deploy_runbook)[:deploy_runbook])
+    redirect_to app_path(@app, anchor: "runbook"), notice: "Deploy runbook saved."
+  end
+
   def toggle_self_describing
     @app.update!(self_describing: !@app.self_describing)
     state = @app.self_describing? ? "enabled" : "disabled"

@@ -38,6 +38,10 @@ class DeploymentLogTool
       started_at:    deployment.started_at,
       completed_at:  deployment.completed_at,
       log:           log,
+      # Surface the app's deploy runbook + checklist so the agent watching a
+      # deploy can follow the app-specific steps.
+      runbook:       app&.deploy_runbook,
+      checklist:     app ? app.runbook_summary[:checklist] : [],
       _organization: app&.organization || app&.server&.organization
     })
   end

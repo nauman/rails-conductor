@@ -11,9 +11,21 @@ class App < ApplicationRecord
   has_many :env_variables, dependent: :destroy
   has_many :deployments, dependent: :destroy
   has_many :seed_applications, dependent: :destroy
+  has_many :deploy_checklist_items, -> { order(:position) }, dependent: :destroy
   has_many :databases, dependent: :nullify
   has_many :database_pulls, dependent: :nullify
   has_one :deploy_key, dependent: :destroy
+
+  # Deploy runbook + checklist snapshot for MCP/API/views. Read this before
+  # deploying — each app deploys differently.
+  def runbook_summary
+    items = deploy_checklist_items.to_a
+    {
+      runbook: deploy_runbook,
+      checklist: items.map { |i| { id: i.id, content: i.content, required: i.required, done: i.done } },
+      checklist_progress: { done: items.count(&:done?), total: items.size }
+    }
+  end
 
   # A valid Postgres identifier base derived from the app, e.g. "calm_page".
   def database_base_name

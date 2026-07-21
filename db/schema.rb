@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_000005) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_21_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -38,6 +38,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_000005) do
     t.boolean "deploy_hold", default: false, null: false
     t.string "deploy_hold_reason"
     t.string "deploy_method", default: "docker", null: false
+    t.text "deploy_runbook"
     t.datetime "deployed_at"
     t.string "dockerfile_path", default: "Dockerfile"
     t.string "domain"
@@ -184,6 +185,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_000005) do
     t.index ["app_id"], name: "index_databases_on_app_id"
     t.index ["database_cluster_id"], name: "index_databases_on_database_cluster_id"
     t.index ["organization_id"], name: "index_databases_on_organization_id"
+  end
+
+  create_table "deploy_checklist_items", force: :cascade do |t|
+    t.bigint "app_id", null: false
+    t.string "content", null: false
+    t.datetime "created_at", null: false
+    t.boolean "done", default: false, null: false
+    t.datetime "done_at"
+    t.integer "position", default: 0, null: false
+    t.boolean "required", default: true, null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_id", "position"], name: "index_deploy_checklist_items_on_app_id_and_position"
+    t.index ["app_id"], name: "index_deploy_checklist_items_on_app_id"
   end
 
   create_table "deploy_keys", force: :cascade do |t|
@@ -442,6 +456,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_000005) do
   add_foreign_key "databases", "apps"
   add_foreign_key "databases", "database_clusters"
   add_foreign_key "databases", "organizations"
+  add_foreign_key "deploy_checklist_items", "apps"
   add_foreign_key "deploy_keys", "apps"
   add_foreign_key "deployments", "apps"
   add_foreign_key "deployments", "scripts"
