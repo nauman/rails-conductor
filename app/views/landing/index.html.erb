@@ -1,37 +1,136 @@
-<div class="mx-auto max-w-5xl px-6">
-  <!-- Hero -->
-  <section class="py-20 text-center">
-    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-large bg-primary font-display text-3xl text-white">C</div>
-    <p class="text-2xs font-semibold uppercase tracking-label text-faint">Self-hosted Ruby on Rails ops</p>
-    <h1 class="mt-3 font-display text-5xl text-ink tracking-display sm:text-6xl">
-      The control plane for<br>self-hosted Ruby on Rails
+<div class="mx-auto max-w-6xl px-6">
+  <!-- ─────────────────────────────  Hero  ───────────────────────────── -->
+  <section class="pt-20 pb-16 text-center">
+    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-large bg-primary font-display text-3xl text-white shadow-soft">C</div>
+    <p class="text-2xs font-semibold uppercase tracking-label text-faint">Self-hosted Ruby on Rails ops · agent-native</p>
+    <h1 class="mt-3 font-display text-5xl leading-[1.05] text-ink tracking-display sm:text-6xl">
+      The control plane for<br>self-hosted <span class="text-primary">Ruby on Rails</span>
     </h1>
-    <p class="mx-auto mt-5 max-w-2xl text-lg text-muted">
-      Conductor runs, monitors, and maintains your <strong class="text-body">Ruby on Rails</strong> apps across your own servers —
-      deploys, routing, Postgres, backups, and security — one place instead of five dashboards and a pile of SSH.
+    <p class="mx-auto mt-6 max-w-2xl text-lg text-muted">
+      Conductor runs, monitors, and maintains your Rails apps across servers you own —
+      deploys, routing, Postgres, backups, and security. One control plane instead of
+      five dashboards and a pile of SSH, drivable by <strong class="text-body">you or an AI agent</strong>.
     </p>
-    <div class="mt-8 flex items-center justify-center gap-3">
-      <%= link_to "Sign in", user_sign_in_path, class: "rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary" %>
-      <%= link_to "Docs", "/docs", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
-      <%= link_to "View on GitHub", "https://github.com/nauman/rails-conductor", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <%= link_to "Sign in", user_sign_in_path, class: "rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-strong" %>
+      <%= link_to "Read the docs", "/docs", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
+      <%= link_to "View on GitHub ↗", "https://github.com/nauman/rails-conductor", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
     </div>
-    <p class="mt-3 text-xs text-faint">Source-available · run it on your own infrastructure</p>
+    <p class="mt-4 text-xs text-faint">Source-available · runs on your own infrastructure · no vendor lock-in</p>
+
+    <!-- primitives you already trust -->
+    <div class="mx-auto mt-10 flex max-w-3xl flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-2xs uppercase tracking-label text-faint">
+      <% %w[Kamal Docker Puma Caddy Postgres S3/R2 SES GitHub].each_with_index do |t, i| %>
+        <% if i > 0 %><span class="text-border-strong">·</span><% end %>
+        <span><%= t %></span>
+      <% end %>
+    </div>
   </section>
 
-  <!-- Pillars -->
-  <section class="grid gap-5 pb-20 sm:grid-cols-2 lg:grid-cols-3">
-    <% [
-      ["Fleet control", "See every server and app — health, last deploy, and issues — at a glance."],
-      ["Deploy your way", "Docker/Kamal and native Puma/Caddy under one control plane."],
-      ["Routing & edge", "Manage Caddy routes and domains with live TLS."],
-      ["Databases", "Hatchbox-style Postgres: a database + role per app, from the UI."],
-      ["Backups & data", "Scheduled database backups to S3/R2."],
-      ["Maintenance", "Hardening, auto-updates, and drift checks across the fleet."]
-    ].each do |title, body| %>
-      <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-        <h3 class="text-sm font-semibold text-ink"><%= title %></h3>
-        <p class="mt-1 text-sm text-muted"><%= body %></p>
+  <!-- ────────────────  Product texture: agent-native terminal  ──────────────── -->
+  <section class="pb-20">
+    <div class="mx-auto max-w-3xl overflow-hidden rounded-large border border-border shadow-soft">
+      <div class="flex items-center gap-2 border-b border-white/10 bg-ink px-4 py-2.5">
+        <span class="h-2.5 w-2.5 rounded-full bg-danger-bright/80"></span>
+        <span class="h-2.5 w-2.5 rounded-full bg-warning-bright/80"></span>
+        <span class="h-2.5 w-2.5 rounded-full bg-primary-strong/80"></span>
+        <span class="ml-2 font-mono text-2xs text-white/50">agent → conductor · MCP</span>
       </div>
-    <% end %>
+      <pre class="overflow-x-auto bg-ink px-5 py-4 font-mono text-xs leading-relaxed text-white/90"><span class="text-white/40"># an agent reconnects and picks up exactly where it left off — one read</span>
+<span class="text-primary-sage">POST</span> /mcp/call  <span class="text-white/50">{ "name": "conductor_read", "input": { "action": "situation" } }</span>
+<span class="text-white/40">← in_flight:       deployment #123 · calm.page · deploying</span>
+<span class="text-white/40">← needs_attention: app "kuickr" · seed run failed · runbook attached</span>
+
+<span class="text-white/40"># then it ships — with the same guardrails you get in the UI</span>
+<span class="text-primary-sage">POST</span> /mcp/call  <span class="text-white/50">{ "name": "conductor_app", "input": { "action": "deploy", "app_name": "calm.page" } }</span>
+<span class="text-white/40">← preflight: migrations ✓ seeds ✓ audit ✓ threads ✓ · #124 · https 200</span></pre>
+    </div>
+    <p class="mx-auto mt-4 max-w-2xl text-center text-sm text-muted">
+      Every action is exposed over MCP, and it's <strong class="text-body">resumable</strong>: an agent that
+      disconnects reads the fleet's situation and continues — in-flight work, a needs-attention worklist,
+      and each app's own runbook. Actions are idempotent, so retries never double-fire.
+    </p>
   </section>
 </div>
+
+<!-- ────────────────────  Three ways it's different  ──────────────────── -->
+<section class="border-y border-border bg-surface">
+  <div class="mx-auto max-w-6xl px-6 py-16">
+    <p class="text-center text-2xs font-semibold uppercase tracking-label text-faint">Not another dashboard</p>
+    <h2 class="mt-2 text-center font-display text-3xl text-ink tracking-display">Built for how Rails is run now</h2>
+    <div class="mt-10 grid gap-5 md:grid-cols-3">
+      <% [
+        [:primary, "Agent-native & resumable", "The whole surface is over MCP, and it survives disconnects: an agent reads the fleet situation, picks up in-flight work, and follows each app's own runbook. Idempotent by design.", "conductor_read · situation · conductor_runbook"],
+        [:accent, "Secretless deploys", "Config in your repo carries every non-secret coordinate; real secrets stay in your vault behind a pointer. Clone the repo and bin/kamal just works.", "config/deploy.production.yml · .kamal/secrets"],
+        [:info, "Yours to run", "Source-available and self-hosted on servers you already own. A Hatchbox-class control plane with no per-app pricing and no lock-in.", "your Hetzner · DO · bare metal"]
+      ].each do |accent, title, body, mono| %>
+        <div class="rounded-large border border-border bg-body p-6 shadow-soft">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-card bg-<%= accent %>-tint">
+            <span class="h-2.5 w-2.5 rounded-full bg-<%= accent %>"></span>
+          </span>
+          <h3 class="mt-4 font-display text-xl text-ink"><%= title %></h3>
+          <p class="mt-2 text-sm text-muted"><%= body %></p>
+          <p class="mt-4 font-mono text-2xs text-faint"><%= mono %></p>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────────────  Capabilities  ──────────────────────── -->
+<div class="mx-auto max-w-6xl px-6">
+  <section class="py-16">
+    <p class="text-center text-2xs font-semibold uppercase tracking-label text-faint">Everything the fleet needs</p>
+    <h2 class="mt-2 text-center font-display text-3xl text-ink tracking-display">One place, end to end</h2>
+    <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <% [
+        [:primary, "Fleet control", "Every server and app in one view — health, last deploy, and what's running where, live."],
+        [:info, "Deploy your way", "Kamal, Docker, or native Puma under one control plane — with a preflight gate that blocks a risky ship before it happens."],
+        [:accent, "Routing & edge", "Caddy routes and domains with live TLS; wildcard subdomains and custom domains."],
+        [:warning, "Databases", "Hatchbox-style Postgres — a database and role per app, provisioned from the UI."],
+        [:primary, "Backups & data", "Scheduled database backups to S3 or R2, with restore you can actually run."],
+        [:accent, "Per-app runbooks", "Every app carries its own deploy runbook + checklist — because each one ships differently. Readable by you and the agent."],
+        [:danger, "Maintenance & power", "Server audits, security auto-updates, drift checks, and reboots — with a passwordless-sudo readiness check so ops just work."]
+      ].each do |accent, title, body| %>
+        <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+          <div class="flex items-center gap-2.5">
+            <span class="h-2 w-2 rounded-full bg-<%= accent %>"></span>
+            <h3 class="text-sm font-semibold text-ink"><%= title %></h3>
+          </div>
+          <p class="mt-2 text-sm text-muted"><%= body %></p>
+        </div>
+      <% end %>
+    </div>
+  </section>
+</div>
+
+<!-- ─────────────────────  Connected services  ───────────────────── -->
+<section class="border-t border-border bg-surface">
+  <div class="mx-auto max-w-4xl px-6 py-14 text-center">
+    <h2 class="font-display text-2xl text-ink tracking-display">Plugs into what you already use</h2>
+    <p class="mx-auto mt-2 max-w-xl text-sm text-muted">
+      Connect your accounts once — Conductor wires the rest of the fleet to them.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <% ["Cloudflare R2", "Amazon SES", "Amazon SNS", "Hetzner", "DigitalOcean", "Caddy", "GitHub", "Postgres"].each do |svc| %>
+        <span class="rounded-full border border-border bg-body px-4 py-1.5 font-mono text-xs text-body"><%= svc %></span>
+      <% end %>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────────────────  CTA  ──────────────────────────── -->
+<section class="bg-primary-tint">
+  <div class="mx-auto max-w-3xl px-6 py-16 text-center">
+    <h2 class="font-display text-3xl text-ink tracking-display sm:text-4xl">Take the fleet back.</h2>
+    <p class="mx-auto mt-3 max-w-xl text-muted">
+      Point Conductor at your servers over SSH and get deploys, routing, databases,
+      backups, and security in one control plane — yours to run and yours to script.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <%= link_to "Sign in", user_sign_in_path, class: "rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-primary-strong" %>
+      <%= link_to "View on GitHub ↗", "https://github.com/nauman/rails-conductor", class: "rounded-md border border-border-strong bg-body px-6 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
+    </div>
+    <p class="mt-5 font-mono text-2xs uppercase tracking-label text-faint">Source-available · self-hosted · agent-native</p>
+  </div>
+</section>
