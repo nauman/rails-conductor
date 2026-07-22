@@ -5,8 +5,19 @@ class SystemUpdaterTest < ActiveSupport::TestCase
     attr_reader :ran
     def initialize(result) = (@result = result)
     def execute_with_status(command)
+      # The passwordless-sudo pre-check probes `sudo -n true` first; treat it as
+      # available here so the apt command under test is what gets exercised.
+      return { success: true, exit_code: 0, stdout: "", stderr: "" } if command == "sudo -n true"
       @ran = command
       @result
+    end
+  end
+
+  # A server where sudo requires a password — every command (incl. the pre-check)
+  # fails the way OpenSSH surfaces it.
+  class NoSudoSsh
+    def execute_with_status(_command)
+      { success: false, exit_code: 1, stdout: "", stderr: "sudo: a password is required" }
     end
   end
 
@@ -19,6 +30,14 @@ class SystemUpdaterTest < ActiveSupport::TestCase
   end
 
   def ok = { success: true, exit_code: 0, stdout: "done", stderr: "" }
+
+  test "without passwordless sudo it fails with actionable guidance and never runs apt" do
+    ssh = NoSudoSsh.new
+    res = SystemUpdater.new(@server, scope: "all", ssh: ssh).apply
+    refute res.success?
+    assert_match(/NOPASSWD|passwordless sudo/i, res.error)
+    assert_match(/sudoers/i, res.error)
+  end
 
   test "security scope uses unattended-upgrade (the safe, no-bounce path)" do
     ssh = FakeSsh.new(ok)

@@ -2,7 +2,7 @@ require "shellwords"
 
 class ServersController < ApplicationController
   include OperatorOnly
-  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates ]
+  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates, :sudo_check, :reboot ]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key, :apps).order(created_at: :desc)
@@ -146,6 +146,23 @@ class ServersController < ApplicationController
                     last_update_log: nil, last_update_at: Time.current)
     ApplyUpdatesJob.perform_later(@server.id, scope)
     redirect_to @server, notice: "Applying #{scope} updates on #{@server.name}… the result will appear below."
+  end
+
+  # Passwordless-sudo readiness ("Prepare server"): privileged ops (updates, reboot)
+  # need a NOPASSWD grant. Show whether it's set + the one-time command to set it.
+  def sudo_check
+    @ready = ServerSudo.ready?(SshConnection.new(@server)) if @server.ssh_configured?
+    @grant_command = ServerSudo.grant_command(@server)
+    render partial: "servers/sudo_check", locals: { server: @server, ready: @ready, grant_command: @grant_command }
+  end
+
+  def reboot
+    result = ServerReboot.new(@server).reboot!
+    if result.success?
+      redirect_to @server, notice: result.message
+    else
+      redirect_to @server, alert: result.message
+    end
   end
 
   # Live tail of the host's logs over SSH. Defaults to the systemd journal

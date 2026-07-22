@@ -114,6 +114,8 @@ Rails.application.routes.draw do
       get :health
       get :audit
       get :storage
+      get :sudo_check
+      post :reboot
       post :install_packages
       post :apply_updates
     end

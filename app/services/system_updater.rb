@@ -23,6 +23,11 @@ class SystemUpdater
   def apply
     return failure("SSH not configured for this server.") unless server.ssh_configured?
 
+    # Updates need root. We run apt via `sudo -n` (non-interactive) — if the SSH
+    # user can't sudo without a password, apt dies with a cryptic "sudo: a password
+    # is required". Pre-check and return an actionable fix instead of that noise.
+    return failure(ServerSudo.remediation(server)) unless ServerSudo.ready?(@ssh)
+
     res = @ssh.execute_with_status(command)
     output = [res[:stdout], res[:stderr]].map(&:to_s).reject(&:blank?).join("\n").strip
     if res[:success] && res[:exit_code].to_i.zero?
