@@ -38,6 +38,7 @@ class FleetStatusTool
         load:        server.load_average&.to_f,
         uptime:      server.formatted_uptime,
         last_seen:   server.last_seen_at&.strftime('%Y-%m-%d %H:%M UTC'),
+        edge:        server.edge_detected? ? { type: server.edge_type, detail: server.edge_detail } : nil,
         apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, notes: a.notes, runbook: a.deploy_runbook.present?, checklist: a.runbook_summary[:checklist_progress] } }
       }
     end

@@ -90,6 +90,21 @@
             <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Port</dt>
             <dd class="mt-1 text-ink"><%= @server.ssh_port_or_default %></dd>
           </div>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Web edge</dt>
+            <dd class="mt-1 text-ink">
+              <% if @server.edge_detected? %>
+                <span class="inline-flex items-center gap-1.5">
+                  <%= rui_badge(text: @server.edge_label, color: @server.edge_type == "caddy" ? :primary : (@server.edge_type == "kamal_proxy" ? :slate : :warning), size: :sm) %>
+                </span>
+                <% if @server.edge_detail.present? %>
+                  <span class="block mt-1 text-xs text-muted"><%= @server.edge_detail %></span>
+                <% end %>
+              <% else %>
+                <span class="text-muted text-xs">Not yet detected — run Test connection</span>
+              <% end %>
+            </dd>
+          </div>
         </dl>
       </div>
     <% end %>

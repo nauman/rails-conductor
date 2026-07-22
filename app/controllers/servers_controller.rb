@@ -51,6 +51,7 @@ class ServersController < ApplicationController
       # Refresh metrics so a successful test also updates last_seen_at — otherwise
       # the server keeps displaying "pending" despite a working connection.
       ServerMetrics.new(@server).fetch_and_update!
+      EdgeDetector.new(@server).detect_and_update! # best-effort: record the web edge
       redirect_to @server, notice: "SSH connection successful!"
     else
       redirect_to @server, alert: "SSH connection failed: #{ssh.error}"
@@ -61,6 +62,7 @@ class ServersController < ApplicationController
     metrics_service = ServerMetrics.new(@server)
 
     if metrics_service.fetch_and_update!
+      EdgeDetector.new(@server).detect_and_update! # keep the edge fresh too
       redirect_to @server, notice: "Metrics refreshed successfully."
     else
       redirect_to @server, alert: "Failed to refresh metrics: #{metrics_service.error}"

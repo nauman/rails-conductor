@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_23_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -364,6 +364,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_000001) do
     t.integer "cpu_percent", default: 0
     t.datetime "created_at", null: false
     t.integer "disk_percent", default: 0
+    t.datetime "edge_checked_at"
+    t.string "edge_detail"
+    t.string "edge_type"
     t.string "hostname"
     t.string "ip_address"
     t.datetime "last_audit_at"

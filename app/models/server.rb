@@ -115,6 +115,17 @@ class Server < ApplicationRecord
     caddy_port.presence || 2019
   end
 
+  EDGE_LABELS = { "caddy" => "Caddy", "kamal_proxy" => "kamal-proxy", "other" => "Other", "none" => "None" }.freeze
+
+  # Human label for the detected web edge (what routes :80/:443 on this box).
+  def edge_label
+    EDGE_LABELS[edge_type] || "Unknown"
+  end
+
+  def edge_detected?
+    edge_type.present? && edge_type != "unknown"
+  end
+
   def metrics_fresh?
     metrics_updated_at.present? && metrics_updated_at > 5.minutes.ago
   end

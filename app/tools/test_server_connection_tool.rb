@@ -20,6 +20,7 @@ class TestServerConnectionTool
 
     # Connected — pull metrics so the fleet stops showing this host as pending.
     refreshed = ServerMetrics.new(server).fetch_and_update!
+    EdgeDetector.new(server).detect_and_update! # record what fronts :80/:443
     server.reload
 
     Result.ok({
@@ -28,6 +29,7 @@ class TestServerConnectionTool
       status:            server.display_status,
       last_seen:         server.last_seen_at,
       metrics_refreshed: refreshed,
+      edge:              server.edge_detected? ? { type: server.edge_type, detail: server.edge_detail } : nil,
       message:           "SSH connection to #{server.name} succeeded.",
       _organization:     server.organization
     })
