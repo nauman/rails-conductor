@@ -13,7 +13,15 @@
   </div>
 
   <% if @servers.any? %>
-    <div class="mt-6 grid gap-4 lg:grid-cols-3">
+    <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted">
+      <span><span class="font-semibold text-ink"><%= @servers.size %></span> server<%= "s" unless @servers.size == 1 %></span>
+      <span class="text-faint">·</span>
+      <span><span class="font-semibold text-ink"><%= @online_count %></span> online</span>
+      <span class="text-faint">·</span>
+      <span><span class="font-semibold text-ink"><%= @running_app_count %>/<%= @app_count %></span> app<%= "s" unless @app_count == 1 %> running</span>
+    </div>
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-3">
       <% @servers.each do |server| %>
         <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
           <div class="flex items-center justify-between">
@@ -41,7 +49,39 @@
               <div class="mt-1 text-sm font-semibold text-ink"><%= server.formatted_uptime %></div>
             </div>
           </div>
-          <div class="mt-4 flex items-center gap-2">
+          <% apps = server.apps.sort_by { |a| [ a.status == "running" ? 0 : 1, a.name.downcase ] } %>
+          <% running = apps.count { |a| a.status == "running" } %>
+          <div class="mt-4">
+            <div class="flex items-center gap-2">
+              <span class="text-xs uppercase tracking-wide text-faint">Apps</span>
+              <% if apps.any? %>
+                <span class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold <%= running == apps.size ? "bg-primary-tint3 text-primary-deep" : "bg-warning-tint3 text-warning-deep" %>">
+                  <%= running %>/<%= apps.size %> running
+                </span>
+              <% end %>
+            </div>
+            <% if apps.any? %>
+              <ul class="mt-2 space-y-1.5">
+                <% apps.first(5).each do |app| %>
+                  <li class="flex items-center gap-2 text-xs">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full <%= { "running" => "bg-primary-tint0", "failed" => "bg-danger-tint0", "deploying" => "bg-warning-tint0" }[app.status] || "bg-faint" %>"
+                          title="<%= app.status %>"></span>
+                    <%= link_to app.name, app_path(app), class: "font-medium text-body hover:text-ink" %>
+                    <% if app.domain.present? %>
+                      <span class="ml-auto truncate text-faint"><%= app.domain %></span>
+                    <% end %>
+                  </li>
+                <% end %>
+              </ul>
+              <% if apps.size > 5 %>
+                <%= link_to "+#{apps.size - 5} more", server_path(server), class: "mt-1.5 inline-block text-xs font-medium text-muted hover:text-ink" %>
+              <% end %>
+            <% else %>
+              <p class="mt-1 text-xs text-faint">No apps yet</p>
+            <% end %>
+          </div>
+
+          <div class="mt-4 flex items-center gap-2 border-t border-border/60 pt-3">
             <%= link_to "View", server_path(server), class: "text-xs font-medium text-body hover:text-ink" %>
             <span class="text-faint">·</span>
             <%= link_to "Edit", edit_server_path(server), class: "text-xs font-medium text-body hover:text-ink" %>

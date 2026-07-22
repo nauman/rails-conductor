@@ -5,7 +5,10 @@ class ServersController < ApplicationController
   before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates ]
 
   def index
-    @servers = current_organization.servers.includes(:ssh_key).order(created_at: :desc)
+    @servers = current_organization.servers.includes(:ssh_key, :apps).order(created_at: :desc)
+    @online_count = @servers.count { |s| s.display_status == "online" }
+    @app_count = @servers.sum { |s| s.apps.size }
+    @running_app_count = @servers.sum { |s| s.apps.count { |a| a.status == "running" } }
   end
 
   def show
