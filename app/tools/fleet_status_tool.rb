@@ -35,6 +35,8 @@ class FleetStatusTool
         cpu:         server.cpu_percent,
         memory:      server.formatted_memory,
         disk:        server.disk_percent,
+        load:        server.load_average&.to_f,
+        uptime:      server.formatted_uptime,
         last_seen:   server.last_seen_at&.strftime('%Y-%m-%d %H:%M UTC'),
         apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, notes: a.notes, runbook: a.deploy_runbook.present?, checklist: a.runbook_summary[:checklist_progress] } }
       }

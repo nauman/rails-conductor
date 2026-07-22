@@ -130,6 +130,7 @@ class Server < ApplicationRecord
       memory_total_mb: metrics[:memory_total_mb],
       disk_percent: metrics[:disk_percent],
       uptime_seconds: metrics[:uptime_seconds],
+      load_average: metrics[:load_average],
       status: "online",
       last_seen_at: Time.current,
       metrics_updated_at: Time.current

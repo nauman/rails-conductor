@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_21_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -377,6 +377,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_000001) do
     t.text "last_update_log"
     t.string "last_update_scope"
     t.string "last_update_status"
+    t.decimal "load_average", precision: 6, scale: 2
     t.integer "memory_total_mb", default: 0
     t.integer "memory_used_mb", default: 0
     t.datetime "metrics_updated_at"
