@@ -1,0 +1,88 @@
+# Fleet situation — the "pick up where you left off" snapshot for a reconnecting
+# agent. MCP is stateless and agents disconnect; rather than session state, this
+# assembles a lean orientation from the durable record so a fresh agent knows, in
+# ONE read: what's running now, what needs a decision, and what just happened.
+#
+# Read-only. Org-scoped like fleet_status. Pairs with the idempotent, single-flight
+# action layer (start_deployment! dedupes; blocked/forced attempts persist) so the
+# agent can safely resume by re-issuing.
+class FleetSituation
+  # server_scope is an already-ACL'd relation (e.g. the actor's visible servers),
+  # so the situation never leaks across tenants.
+  def initialize(server_scope: Server.all, recent_limit: 8)
+    @server_scope = server_scope
+    @recent_limit = [ recent_limit.to_i, 25 ].min.clamp(1, 25)
+  end
+
+  def snapshot
+    {
+      in_flight:       in_flight,
+      needs_attention: needs_attention,
+      recent:          recent,
+      hint: "Resume by addressing needs_attention (each carries the app + next action). " \
+            "For an in-flight deployment, poll conductor_read action=deployment with its id. " \
+            "Actions are single-flight/idempotent — re-issuing a deploy returns already_running, not a duplicate."
+    }
+  end
+
+  private
+
+  def servers = @server_scope
+
+  def apps
+    App.where(server_id: servers.select(:id))
+  end
+
+  # What's happening right now.
+  def in_flight
+    ops = []
+    Deployment.in_progress.where(app_id: apps.select(:id)).includes(:app).find_each do |d|
+      ops << { type: "deployment", id: d.id, app: d.app&.name, status: d.status,
+               started_at: d.started_at&.iso8601, forced: d.forced }
+    end
+    servers.find_each do |s|
+      ops << { type: "server_update", server: s.name, scope: s.last_update_scope, status: "running" } if s.update_running?
+      ops << { type: "package_install", server: s.name, status: "running" } if s.package_install_running?
+    end
+    ops
+  end
+
+  # What needs a human/agent decision — the resume worklist.
+  def needs_attention
+    items = []
+    apps.includes(:server, :deployments, :seed_applications).find_each do |app|
+      last = app.deployments.order(created_at: :desc).first
+      if last&.status == "blocked"
+        items << attn("blocked_deploy", app, deployment_id: last.id, blockers: last.preflight_blockers)
+      elsif last&.status == "failed"
+        items << attn("failed_deploy", app, deployment_id: last.id)
+      end
+
+      seed = app.seed_applications.order(:created_at).last
+      items << attn("failed_seed", app, when: seed.created_at.to_date.to_s) if seed&.status == "failed"
+
+      items << attn("deploy_hold", app, reason: app.deploy_hold_reason) if app.deploy_hold?
+    end
+    servers.find_each do |s|
+      items << { kind: "at_risk_server", server: s.name, detail: "last audit graded at_risk — resolve before deploying" } if s.last_audit_status == "at_risk"
+    end
+    items
+  end
+
+  # What just happened — terminal events, newest first.
+  def recent
+    Deployment.where(app_id: apps.select(:id))
+              .where.not(status: %w[pending building deploying])
+              .order(created_at: :desc).limit(@recent_limit).includes(:app)
+              .map do |d|
+      { id: d.id, app: d.app&.name, status: d.status, commit: d.commit_sha&.first(7),
+        forced: d.forced, at: (d.completed_at || d.created_at)&.iso8601 }
+    end
+  end
+
+  def attn(kind, app, **extra)
+    { kind: kind, app: app.name, app_id: app.id,
+      runbook: app.deploy_runbook.present?,
+      checklist: app.runbook_summary[:checklist_progress] }.merge(extra)
+  end
+end
