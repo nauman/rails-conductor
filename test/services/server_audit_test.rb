@@ -43,9 +43,17 @@ class ServerAuditTest < ActiveSupport::TestCase
     assert_equal :at_risk, r.status
   end
 
-  test "pending security updates are a fail" do
+  test "pending security updates warn (attention), not block — patches are not active exposure" do
     r = audit(SECURE.sub("SEC_UPDATES:0", "SEC_UPDATES:3"))
-    assert_equal :fail, r.checks.find { |c| c.key == :security_updates }.status
+    assert_equal :warn, r.checks.find { |c| c.key == :security_updates }.status
+    assert_equal :attention, r.status, "pending updates alone must not grade at_risk (would block deploys)"
+  end
+
+  test "active exposure still blocks: public DB or SSH root/password → at_risk" do
+    %w[SSH_ROOT:no|SSH_ROOT:yes SSH_PASSWORD:no|SSH_PASSWORD:yes DB_PUBLIC:|DB_PUBLIC:0.0.0.0:5432].each do |pair|
+      from, to = pair.split("|")
+      assert_equal :at_risk, audit(SECURE.sub(from, to)).status, "#{to} should be at_risk"
+    end
   end
 
   test "fail2ban off + reboot required warn -> attention" do

@@ -58,7 +58,12 @@ class ServerAudit
       check(:ssh_root,     "SSH root login",        p["SSH_ROOT"] == "no",        "disabled", "ENABLED"),
       check(:ssh_password, "SSH password auth",     p["SSH_PASSWORD"] == "no",    "disabled (key-only)", "ENABLED"),
       check(:db_exposure,  "Database exposure",     p["DB_PUBLIC"].to_s.strip.empty?, "not internet-facing", "PUBLIC: #{p['DB_PUBLIC']}"),
-      check(:security_updates, "Security updates",  p["SEC_UPDATES"].to_i.zero?,  "none pending", "#{p['SEC_UPDATES']} pending"),
+      # Pending security updates are *attention*, not *at_risk*: patches are worth
+      # applying, but a pending patch is not active exposure. Blocking a deploy on
+      # them couples every ship to host patch state — so warn, don't block. The
+      # things that DO block below are active exposure (root login, password auth,
+      # public DB, firewall off).
+      check(:security_updates, "Security updates",  p["SEC_UPDATES"].to_i.zero?,  "none pending", "#{p['SEC_UPDATES']} pending", level: :warn),
       check(:auto_upgrades, "Automatic updates",    p["AUTOUPGRADE"] == "active", "active", "off", level: :warn),
       check(:reboot,       "Reboot",                p["REBOOT"].to_s.strip != "yes", "not required", "required", level: :warn),
       info(:updates,       "Other updates",         "#{p['UPDATES'].to_i} upgradable")
