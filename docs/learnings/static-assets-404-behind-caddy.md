@@ -58,6 +58,20 @@ Then a normal `kamal deploy` (or push env + boot). Assets return 200 with a long
 cache TTL. Any app deployed with `proxy: false` behind a reverse proxy that does
 not itself serve `public/` needs this — it is not platform-specific.
 
+## Two gotchas when applying the fix
+
+1. **Redeploy can't blue-green with a fixed host port.** A `proxy: false` role that
+   publishes a fixed port (e.g. `9050:80`) can't boot a new container while the old
+   one holds that port — `kamal deploy` fails with `Bind for 0.0.0.0:9050 failed:
+   port is already allocated`. Apply env/image changes with a brief-downtime swap:
+   `kamal app stop && kamal app boot` (seconds). The first deploy works because
+   there's no old container to conflict with.
+2. **Cloudflare caches the 404.** Assets are cacheable, so a proxied CDN (Cloudflare)
+   will have cached the pre-fix `404`. After the origin serves `200`, the edge may
+   still return the stale `404` until its TTL lapses or you purge — verify against
+   the origin (`curl --resolve <host>:443:<origin-ip> …`) before assuming the fix
+   failed, and purge the CDN cache (or append `?v=` to confirm) if needed.
+
 ## Runbook / feature blueprint
 
 - **Per-app runbook:** add a "Known errors → fixes" entry: *unstyled page /
