@@ -73,6 +73,15 @@ class ServerHealthAndPackagesTest < ActionDispatch::IntegrationTest
     assert_match "secure", @response.body
   end
 
+  test "storage frame renders (regression: :storage must be in set_server, else @server is nil → 500)" do
+    probe = "===DF===\n/dev/sda1 100 40 60 40 /\n===SWAP===\n0 0 0\n===MEM===\n8000 4000 4000\n===TOPDIRS===\n"
+    SshConnection.stub(:new, FakeSsh.new(probe)) { get storage_server_path(@server) }
+
+    assert_response :success
+    assert_match "Storage", @response.body
+    assert_match(/turbo-frame id=.#{ActionView::RecordIdentifier.dom_id(@server, :storage)}/, @response.body)
+  end
+
   test "apply_updates (security) marks running and enqueues the job" do
     assert_enqueued_with(job: ApplyUpdatesJob) do
       post apply_updates_server_path(@server), params: { scope: "security" }

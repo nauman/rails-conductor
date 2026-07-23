@@ -2,7 +2,7 @@ require "shellwords"
 
 class ServersController < ApplicationController
   include OperatorOnly
-  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :install_packages, :audit, :apply_updates, :sudo_check, :reboot ]
+  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :storage, :audit, :install_packages, :apply_updates, :sudo_check, :reboot ]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key, :apps).order(created_at: :desc)
