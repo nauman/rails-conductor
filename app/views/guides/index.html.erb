@@ -2,6 +2,11 @@
 <article>
   <h1>Conductor docs</h1>
   <p class="lead">Guides for running self-hosted Rails apps and servers with Conductor.</p>
+  <p style="margin:12px 0 20px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;color:#475569;">
+    📚 The full, always-current docs hub lives at
+    <%= link_to "kuickr.co/conductor", "https://kuickr.co/conductor/docs/00-index.md", target: "_blank", rel: "noopener", style: "font-weight:600;color:#0f172a;" %>.
+    The guides below are the essentials, rendered in-app.
+  </p>
   <ul>
     <% @guides.each do |g| %>
       <li style="margin:10px 0;">
