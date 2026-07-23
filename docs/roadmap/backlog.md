@@ -32,7 +32,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Deploy Kamal apps through Conductor (control machine)](01-kamal-control-machine.html) | Runtime Backends | P0 | M | ✅ Done (2026-06-19) |
 | [GitHub App & deploy keys (private repos)](02-github-app.html) | Provider Automation | P0 | M | 🟡 Partial — Kamal shipped; Native/raw-Docker parity remains |
 | [Auto-deploy on git push](03-auto-deploy-push.html) | Runtime Backends | P0 | M | ✅ Done (2026-06-20) |
-| [Rollbacks & release history](04-rollbacks.html) | Runtime Backends | P1 | M | Planned |
+| [Rollbacks & release history](04-rollbacks.html) | Runtime Backends | P1 | M | 🟡 Partial — Kamal one-click rollback + release history; native deferred |
 | [Background worker management](05-background-workers.html) | Runtime Backends | P1 | M | 🟡 Partial — Solid Queue visibility only; control remains |
 | [Live app log streaming in the UI](06-app-logs.html) | Fleet Control | P1 | M | 🟡 Partial — bounded polling shipped; follow stream remains |
 | [Server provisioning via provider APIs](07-server-provisioning.html) | Provider Automation | P1 | L | Planned |
