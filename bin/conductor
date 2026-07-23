@@ -1,0 +1,90 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# conductor — a tiny, dependency-free CLI for Conductor's MCP endpoint, built so
+# secrets NEVER pass through argv or an agent's tool-call payload (i.e. never the
+# transcript). The secret value is read from STDIN and placed straight into the
+# HTTPS request body; it is never printed, never logged, never an argument.
+#
+# Config (from the environment — never the command line):
+#   CONDUCTOR_URL         e.g. https://conductor.example.com   (required)
+#   CONDUCTOR_MCP_TOKEN   a Conductor MCP/API bearer token     (required)
+#
+# Usage:
+#   # Set a secret env var — value piped in, so it never appears in argv/transcript:
+#   localvault exec --map MYAPP.master_key=V -- \
+#     bash -c 'printf %s "$V" | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret'
+#
+#   # Generic: call any tool with its input JSON on stdin (keeps secret fields off argv):
+#   printf '{"action":"set_env","app_name":"My App","key":"K","value":"..."}' \
+#     | bin/conductor call conductor_app_config
+#
+# The response is printed (Conductor redacts secret fields in both its reply and its
+# audit log), but the value you sent is never echoed back by this tool.
+
+require "json"
+require "net/http"
+require "uri"
+
+def die(msg, code = 1)
+  warn "conductor: #{msg}"
+  exit code
+end
+
+BASE  = ENV["CONDUCTOR_URL"].to_s.sub(%r{/+\z}, "")
+TOKEN = ENV["CONDUCTOR_MCP_TOKEN"].to_s
+die "set CONDUCTOR_URL (e.g. https://conductor.example.com)" if BASE.empty?
+die "set CONDUCTOR_MCP_TOKEN (export it; do not pass secrets on the command line)" if TOKEN.empty?
+
+def post_call(name, input)
+  uri = URI("#{BASE}/mcp/call")
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = uri.scheme == "https"
+  req = Net::HTTP::Post.new(uri)
+  req["Authorization"] = "Bearer #{TOKEN}"
+  req["Content-Type"]  = "application/json"
+  req.body = JSON.generate(name: name, input: input)
+  res = http.request(req)
+  puts res.body
+  die "HTTP #{res.code}", 2 unless res.code.to_i.between?(200, 299)
+end
+
+cmd = ARGV.shift
+
+case cmd
+when "set-env"
+  # set-env <app> <key> [--secret] [--raw]
+  app = ARGV.shift or die "usage: set-env <app> <key> [--secret] [--raw]"
+  key = ARGV.shift or die "usage: set-env <app> <key> [--secret] [--raw]"
+  flags  = ARGV
+  secret = flags.include?("--secret")
+  value  = $stdin.read
+  # Strip a single trailing newline (shell pipes/heredocs add one); --raw keeps bytes.
+  value = value.sub(/\n\z/, "") unless flags.include?("--raw")
+  die "no value on stdin — pipe the secret in (printf %s \"$VAR\" | ...)" if value.empty?
+  input = { action: "set_env", app_name: app, key: key, value: value }
+  input[:secret] = true if secret
+  post_call("conductor_app_config", input)
+
+when "call"
+  # call <tool>  — full input JSON read from stdin
+  name = ARGV.shift or die "usage: call <tool_name>   (input JSON on stdin)"
+  raw  = $stdin.read
+  input = raw.strip.empty? ? {} : JSON.parse(raw)
+  post_call(name, input)
+
+when "--help", "-h", nil
+  puts <<~USAGE
+    conductor — secret-safe CLI for Conductor's MCP endpoint
+
+    Env:  CONDUCTOR_URL, CONDUCTOR_MCP_TOKEN
+
+    Commands:
+      set-env <app> <key> [--secret] [--raw]   value read from STDIN
+      call <tool>                              input JSON read from STDIN
+
+    Secrets are read from STDIN so they never touch argv or a transcript.
+  USAGE
+else
+  die "unknown command '#{cmd}' (try --help)"
+end

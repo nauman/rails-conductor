@@ -20,7 +20,7 @@ class ConductorAppConfigTool
         app_id:            { type: "integer", description: "target app by id" },
         app_name:          { type: "string",  description: "target app by name" },
         key:               { type: "string",  description: "set_env: variable name (UPPER_SNAKE_CASE)" },
-        value:             { type: "string",  description: "set_env: variable value" },
+        value:             { type: "string",  description: "set_env: variable value. For SECRETS, do NOT paste the literal here (it enters the transcript) — instead pipe it in via `bin/conductor set-env <app> <key> --secret` (stdin → TLS body), never argv. See docs/guides/mcp.md." },
         secret:            { type: "boolean", description: "set_env: mark the value secret (masked in UI)" },
         organization_slug: { type: "string",  description: "set_env: org slug fallback when the app is unscoped" },
         organization_id:   { type: "integer", description: "set_env: org id fallback (overrides slug)" }

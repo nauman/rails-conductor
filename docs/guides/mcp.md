@@ -98,6 +98,34 @@ curl -s "$H" "${A[@]}" -d '{"name":"conductor_read","input":{"action":"deploymen
 
 Conductor's container clones the repo, generates `.kamal/secrets` from the env you loaded, **builds on the target's Docker daemon over SSH**, and deploys behind the shared proxy. See [Deploy an app](deploy-an-app) and [Connect GitHub](connect-github).
 
+## Setting secrets without leaking them (agents)
+
+`set_env` needs the value. When an **agent** calls the tool directly, that value lands in
+the tool-call payload — i.e. in the conversation transcript. Conductor already redacts
+`value` in its **reply** and its **audit log** (`\Avalue\z` is a sensitive key), but the
+transcript exposure is on the *client* side, before the request is even sent.
+
+The fix is to never let the secret pass through the model at all: read it from **stdin**
+and put it straight into the HTTPS body. The bundled `bin/conductor` CLI does exactly
+that — the value is never an argv element, never printed, never logged:
+
+```bash
+export CONDUCTOR_URL=https://<your-conductor-host>
+export CONDUCTOR_MCP_TOKEN=<token>          # export it — never pass a secret on argv
+
+# Pipe the secret in from your vault; the literal never appears in the command text:
+localvault exec --map MYAPP.master_key=V -- \
+  bash -c 'printf %s "$V" | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret'
+
+# Generic form — any tool, input JSON on stdin (keeps secret fields off argv):
+printf '{"action":"set_env","app_name":"My App","key":"K","value":"…"}' \
+  | bin/conductor call conductor_app_config
+```
+
+Because the agent only ever types `$V` / `printf %s "$V"`, the actual secret flows
+**vault → env → stdin → TLS body** and touches neither argv nor the transcript. Requires
+only Ruby stdlib (no gems) and the two env vars above.
+
 ## Tokens & scope
 
 Two kinds of bearer token work:
