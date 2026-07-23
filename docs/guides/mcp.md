@@ -53,19 +53,22 @@ The agent then sees `conductor_app`, `conductor_read`, and the rest as native to
 
 ## The toolset
 
-The surface is **seven flat tools**, each taking an `action` (fewer tools keeps agent tool-selection accurate). Always trust `GET /mcp/list` over this table.
+The surface is **eight flat tools**, each taking an `action` (fewer tools keeps agent tool-selection accurate). Always trust `GET /mcp/list` over this table.
 
 | Tool | Actions |
 |------|---------|
-| `conductor_read` | `fleet_status`, `logs`, `deployment` (read-only) |
+| `conductor_read` | `fleet_status`, `situation`, `logs`, `deployment`, `cloudflare` (read-only) |
 | `conductor_app` | `create`, `update`, `deploy`, `sync_status` |
 | `conductor_app_config` | `set_env`, `gen_deploy_key` |
 | `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `audit`, `apply_updates`, `install_packages`, `run_script` |
 | `conductor_database` | `register_cluster`, `provision` |
-| `conductor_domain` | `add`, `remove` |
+| `conductor_domain` | `add`, `remove`, `put_behind_cloudflare` |
 | `conductor_github` | `set_token`, `set_app`, `installations` |
+| `conductor_runbook` | per-app deploy/runbook notes |
 
 Call `GET /mcp/list` for each tool's exact input schema.
+
+**Cloudflare over MCP.** `conductor_read action=cloudflare` is the discovery entry point — it returns connected accounts, the zones they own, which apps are proxyable, the read-only Cloudflare MCP attach commands, and how to proxy a domain. `conductor_domain action=put_behind_cloudflare` (app_id/app_name, optional ssl_mode) does the cutover through Conductor's audited `CloudflareClient`. See [Cloudflare + MCP](cloudflare-mcp).
 
 ## Worked example — deploy an app
 

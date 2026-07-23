@@ -10,7 +10,8 @@ class ConductorReadTool
     "fleet_status" => FleetStatusTool,
     "situation"    => FleetSituationTool,
     "logs"         => RecentLogsTool,
-    "deployment"   => DeploymentLogTool
+    "deployment"   => DeploymentLogTool,
+    "cloudflare"   => CloudflareStatusTool
   }.freeze
 
   DEFINITION = {
@@ -19,12 +20,13 @@ class ConductorReadTool
       "fleet_status (all servers + their apps/health, incl. cpu/memory/disk/load/uptime), " \
       "situation (RESUME point — in-flight ops, needs-attention worklist, recent events; call first on reconnect), " \
       "logs (recent script-run/deployment logs — server_id, script_run_id, limit), " \
-      "deployment (one deployment's status + log — deployment_id, app_id, app_name, tail). " \
+      "deployment (one deployment's status + log — deployment_id, app_id, app_name, tail), " \
+      "cloudflare (Cloudflare integration: connected accounts, owned zones, read-only MCP attach commands, proxyable apps, how to proxy a domain). " \
       "Call this before any mutating action to pick the server/app and confirm health.",
     input_schema: {
       type: "object",
       properties: {
-        action:          { type: "string", enum: %w[fleet_status situation logs deployment], description: "Which read to perform" },
+        action:          { type: "string", enum: %w[fleet_status situation logs deployment cloudflare], description: "Which read to perform" },
         recent_limit:    { type: "integer", description: "situation: recent terminal deployments to include (default 8, max 25)" },
         organization_id: { type: "integer", description: "Optional org scope (fleet_status, logs)" },
         server_id:       { type: "integer", description: "logs: filter by server" },
