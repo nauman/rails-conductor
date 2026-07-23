@@ -27,6 +27,28 @@ class AppTest < ActiveSupport::TestCase
     assert @app.valid?, @app.errors.full_messages.join(", ")
   end
 
+  test "log_tail_command for a Kamal app resolves the container by service label, not conductor-<slug>" do
+    cmd = @app.log_tail_command(300)
+    # Kamal containers are never named conductor-<slug> — must not guess that.
+    refute_includes cmd, "conductor-appone"
+    # Resolves by the service candidate (slug) the same way status sync does.
+    assert_includes cmd, "label=service=$s"
+    assert_includes cmd, "appone"
+    assert_includes cmd, "docker logs --tail 300"
+  end
+
+  test "log_tail_command for a docker app uses the conductor-<slug> container name" do
+    docker = @org.apps.create!(name: "Dock", slug: "dock", server: @server, deploy_method: "docker",
+                               repository_url: "https://github.com/x/y.git")
+    assert_equal "docker logs --tail 300 conductor-dock 2>&1", docker.log_tail_command(300)
+  end
+
+  test "log_tail_command for a native app tails the user journal" do
+    native = @org.apps.create!(name: "Nat", slug: "nat", server: @server, deploy_method: "native",
+                               repository_url: "https://github.com/x/z.git")
+    assert_includes native.log_tail_command(300), "journalctl --user -u nat-server"
+  end
+
   test "start_deployment! creates a deployment and enqueues the job when none is in flight" do
     assert_enqueued_with(job: DeployAppJob) do
       deployment, status, = @app.start_deployment!(user: @user)

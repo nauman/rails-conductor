@@ -13,11 +13,14 @@
         <% if @app.native? %>
           <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
 journalctl --user -u <%= @app.service_name %> -n <%= @tail %> -f</pre>
+        <% elsif @app.kamal? %>
+          <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
+# Kamal names the container <service>-<role>-<version> — resolve it by the service label:
+docker logs -f --tail <%= @tail %> $(docker ps -q -f label=service=<%= @app.kamal_service %> | head -1)
+# or from the app repo: kamal app logs -f</pre>
         <% else %>
           <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
-docker ps --filter label=service=<%= @app.service_name %>   # find this app's container
-docker logs -f --tail <%= @tail %> <%= @app.container_name %>
-# or from the app repo: kamal app logs -f</pre>
+docker logs -f --tail <%= @tail %> <%= @app.container_name %></pre>
         <% end %>
       </details>
     </div>
@@ -34,7 +37,7 @@ docker logs -f --tail <%= @tail %> <%= @app.container_name %>
   <div class="mt-8 rounded-large border border-border-strong bg-ink shadow-soft overflow-hidden" id="log-container">
     <div class="p-4 border-b border-border-strong flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <h3 class="text-sm font-semibold text-white font-mono">docker logs <%= @app.container_name %></h3>
+        <h3 class="text-sm font-semibold text-white font-mono"><%= @app.log_source_label %></h3>
         <span id="refresh-indicator" class="hidden">
           <svg class="h-4 w-4 text-faint animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

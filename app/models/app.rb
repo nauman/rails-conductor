@@ -207,8 +207,34 @@ class App < ApplicationRecord
     n = [ tail.to_i, 1 ].max
     if native?
       "XDG_RUNTIME_DIR=/run/user/$(id -u) journalctl --user -u #{service_name} -n #{n} --no-pager 2>&1"
+    elsif kamal?
+      kamal_log_command(n)
     else
       "docker logs --tail #{n} #{container_name} 2>&1"
+    end
+  end
+
+  # Kamal names its own containers (<service>-<role>-<version>) — never
+  # conductor-<slug> — and the `service` label isn't always the slug (an adopted
+  # app with slug "calm-page" can run as service "calmpage"). So resolve the
+  # running container by matching any service candidate against the label — the
+  # same lookup ContainerStatus uses — instead of guessing a fixed name.
+  def kamal_log_command(n)
+    cands = kamal_service_candidates.map { |c| Shellwords.escape(c) }.join(" ")
+    names = kamal_service_candidates.join(", ")
+    %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s" -f status=running | head -n1); [ -n "$cid" ] && break; done; ) \
+      "if [ -n \"$cid\" ]; then docker logs --tail #{n} \"$cid\" 2>&1; " \
+      "else echo \"No running container found (service: #{names}) on this host\"; fi"
+  end
+
+  # Human label for the log source, matching what log_tail_command actually reads.
+  def log_source_label
+    if native?
+      "journalctl --user -u #{service_name}"
+    elsif kamal?
+      "docker logs (service: #{kamal_service})"
+    else
+      "docker logs #{container_name}"
     end
   end
 
