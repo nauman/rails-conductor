@@ -52,4 +52,22 @@ class CredentialTest < ActiveSupport::TestCase
   test "zones_list is empty and safe before verification" do
     assert_equal [], @cf.zones_list
   end
+
+  test "verify_ses! passes when the SES client accepts, records verified_at" do
+    client = Object.new
+    client.define_singleton_method(:verify) { SesClient::Result.new(ok: true, data: { "host" => "h" }) }
+    ses = @org.credentials.create!(name: "ses", provider: "amazon_ses", api_key: "u", api_secret: "p", region: "us-east-1")
+    assert ses.ses?
+    assert ses.verifiable?
+    assert_nil ses.verify_ses!(client: client)
+    assert ses.verified?
+  end
+
+  test "verify_ses! returns the SMTP error on bad creds" do
+    client = Object.new
+    client.define_singleton_method(:verify) { SesClient::Result.new(ok: false, error: "535 auth invalid") }
+    ses = @org.credentials.create!(name: "ses", provider: "amazon_ses", api_key: "u", api_secret: "bad")
+    assert_equal "535 auth invalid", ses.verify_ses!(client: client)
+    refute ses.verified?
+  end
 end

@@ -1,5 +1,5 @@
 class Credential < ApplicationRecord
-  PROVIDERS = %w[cloudflare aws hetzner digitalocean stripe sendgrid github github_app].freeze
+  PROVIDERS = %w[cloudflare amazon_ses aws hetzner digitalocean stripe sendgrid github github_app].freeze
 
   belongs_to :organization, optional: true
 
@@ -33,7 +33,20 @@ class Credential < ApplicationRecord
   CLOUDFLARE_MCP_URL = "https://mcp.cloudflare.com/mcp".freeze
 
   def cloudflare? = provider == "cloudflare"
+  def ses? = provider == "amazon_ses"
+  def verifiable? = cloudflare? || ses?
   def verified? = verified_at.present?
+
+  # Amazon SES (SMTP): api_key = SMTP username, api_secret = SMTP password, region →
+  # host, endpoint = optional host override. Verify does a real SMTP auth.
+  def verify_ses!(client: nil)
+    client ||= SesClient.new(api_key, api_secret, region, endpoint: endpoint)
+    r = client.verify
+    return r.error unless r.ok?
+
+    update!(verified_at: Time.current)
+    nil
+  end
 
   def zones_list
     JSON.parse(zones.presence || "[]")

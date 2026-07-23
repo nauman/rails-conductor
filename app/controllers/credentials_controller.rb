@@ -37,16 +37,21 @@ class CredentialsController < ApplicationController
     redirect_to credentials_path, notice: "Credential deleted."
   end
 
-  # Verify a Cloudflare token + cache its account/zones (multi-account resolution).
+  # Verify a connection's credentials. Cloudflare → token + cache zones; SES → SMTP auth.
   def verify
-    unless @credential.cloudflare?
-      return redirect_to credentials_path, alert: "Verify is only for Cloudflare connections."
-    end
+    error, ok_msg =
+      if @credential.cloudflare?
+        [ @credential.verify_cloudflare!, "verified — #{@credential.zones_list.size} zone(s) found." ]
+      elsif @credential.ses?
+        [ @credential.verify_ses!, "verified — SES SMTP credentials accepted." ]
+      else
+        return redirect_to credentials_path, alert: "Verify isn't available for #{@credential.provider.titleize}."
+      end
 
-    if (error = @credential.verify_cloudflare!)
-      redirect_to credentials_path, alert: "Cloudflare verify failed: #{error}"
+    if error
+      redirect_to credentials_path, alert: "#{@credential.name} verify failed: #{error}"
     else
-      redirect_to credentials_path, notice: "#{@credential.name} verified — #{@credential.zones_list.size} zone(s) found."
+      redirect_to credentials_path, notice: "#{@credential.name} #{ok_msg}"
     end
   end
 
