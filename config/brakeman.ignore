@@ -11,6 +11,12 @@
       "fingerprint": "96d8d5feee3beed210974aebcfa1df9ba7d78774b78c2f1efbda8483c139c5de",
       "file": "app/controllers/application_controller.rb",
       "note": "Reviewed: the standard return_to pattern. request.get? being false for HEAD only means the return path isn't stored for a HEAD request, which is harmless."
+    },
+    {
+      "warning_type": "Mass Assignment",
+      "fingerprint": "8ec6ab7e65ca955a4c9fb57aaeeb2e0634662a67f480089165cdea2d60cadb46",
+      "file": "app/controllers/credentials_controller.rb",
+      "note": "False positive: :account_id here is the Cloudflare/provider account IDENTIFIER string on the credential (a data field), NOT a Rails association/foreign key. It cannot reassign ownership — the credential's organization is set from Current.organization, never from params. Brakeman flags it only via the generic *_id heuristic."
     }
   ],
   "brakeman_version": "7.1.1"
