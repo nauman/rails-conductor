@@ -35,6 +35,9 @@ class DeploymentLogTool
       app:           app&.name,
       status:        deployment.status,
       commit_sha:    deployment.commit_sha,
+      # The actionable failure reason (last ERROR: line), so a failed deploy is
+      # self-explanatory without scanning the whole log. Nil unless failed.
+      failure_reason: deployment.failure_reason,
       started_at:    deployment.started_at,
       completed_at:  deployment.completed_at,
       log:           log,

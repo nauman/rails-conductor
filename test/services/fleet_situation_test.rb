@@ -39,6 +39,23 @@ class FleetSituationTest < ActiveSupport::TestCase
     assert snap[:needs_attention].any? { |i| i[:kind] == "failed_seed" && i[:app] == "Appone" }
   end
 
+  test "a failed deploy carries the actionable reason inline" do
+    d = @app.deployments.create!(status: "building")
+    d.fail!("Missing required env var(s): SES_SMTP_USERNAME, SES_SMTP_PASSWORD.")
+    item = snap[:needs_attention].find { |i| i[:kind] == "failed_deploy" && i[:app] == "Appone" }
+    assert item, "expected a failed_deploy attention item"
+    assert_equal d.id, item[:deployment_id]
+    assert_includes item[:reason], "SES_SMTP_USERNAME"
+  end
+
+  test "a down public URL surfaces in needs_attention with the status/error detail" do
+    @app.site_checks.create!(checked_at: Time.current, up: false, status_code: 502, error: "Bad Gateway")
+    item = snap[:needs_attention].find { |i| i[:kind] == "site_down" && i[:app] == "Appone" }
+    assert item, "expected a site_down attention item"
+    assert_includes item[:detail], "502"
+    assert_includes item[:detail], "Bad Gateway"
+  end
+
   test "recent lists terminal deployments newest-first, excluding in-flight" do
     @app.deployments.create!(status: "succeeded", commit_sha: "aaaaaaa1")
     @app.deployments.create!(status: "deploying") # in-flight, excluded from recent

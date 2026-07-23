@@ -102,6 +102,19 @@ class Deployment < ApplicationRecord
     update!(log: (log || "") + new_line)
   end
 
+  # The actionable "why" a failed deploy failed: the last ERROR: line appended to
+  # the log, with the timestamp + "ERROR:" prefix stripped. Lets callers (the MCP
+  # situation read, alerts) surface the reason inline instead of making the agent
+  # fetch and parse the whole log. Nil if there's no recorded error line.
+  def failure_reason
+    return nil if log.blank?
+
+    line = log.lines.reverse_each.find { |l| l.include?("ERROR:") }
+    return nil unless line
+
+    line.sub(/\A\[[^\]]*\]\s*/, "").sub(/\AERROR:\s*/, "").strip.presence
+  end
+
   def start!
     update!(status: "building", started_at: Time.current)
   end

@@ -55,13 +55,23 @@ class FleetSituation
       if last&.status == "blocked"
         items << attn("blocked_deploy", app, deployment_id: last.id, blockers: last.preflight_blockers)
       elsif last&.status == "failed"
-        items << attn("failed_deploy", app, deployment_id: last.id)
+        # Carry the reason inline so the agent gets the actionable "why" (e.g.
+        # "Missing required env var(s): …") without a second read to parse the log.
+        items << attn("failed_deploy", app, deployment_id: last.id, reason: last.failure_reason)
       end
 
       seed = app.seed_applications.order(:created_at).last
       items << attn("failed_seed", app, when: seed.created_at.to_date.to_s) if seed&.status == "failed"
 
       items << attn("deploy_hold", app, reason: app.deploy_hold_reason) if app.deploy_hold?
+
+      # A down public URL is an incident the operator sees in the UI — surface it here
+      # too, with the status code / error so the agent knows what actually failed.
+      check = app.latest_site_check
+      if check&.status == :down
+        detail = [ check.status_code && "HTTP #{check.status_code}", check.error.presence ].compact.join(" — ").presence || "unreachable"
+        items << attn("site_down", app, detail: detail, checked_at: check.checked_at&.iso8601)
+      end
     end
     servers.find_each do |s|
       items << { kind: "at_risk_server", server: s.name, detail: "last audit graded at_risk — resolve before deploying" } if s.last_audit_status == "at_risk"
