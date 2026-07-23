@@ -11,6 +11,7 @@ class App < ApplicationRecord
   has_many :env_variables, dependent: :destroy
   has_many :deployments, dependent: :destroy
   has_many :seed_applications, dependent: :destroy
+  has_many :site_checks, dependent: :destroy
   has_many :deploy_checklist_items, -> { order(:position) }, dependent: :destroy
   has_many :databases, dependent: :nullify
   has_many :database_pulls, dependent: :nullify
@@ -104,6 +105,11 @@ class App < ApplicationRecord
     return nil unless domain
     ssl_enabled? ? "https://#{domain}" : "http://#{domain}"
   end
+
+  # Site latency/uptime monitoring — anything with a public URL is monitorable.
+  def monitorable? = url.present?
+  def latest_site_check = site_checks.recent.first
+  def site_status = latest_site_check&.status # :up / :slow / :down / nil
 
   def server_name
     server&.name || "—"

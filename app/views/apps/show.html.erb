@@ -47,6 +47,10 @@
     <%= render "preflight", preflight: @preflight %>
   <% end %>
 
+  <% if @app.monitorable? %>
+    <%= render "site_monitor", app: @app %>
+  <% end %>
+
   <% if @app.native? %>
     <%# Service Status (Native) %>
     <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">

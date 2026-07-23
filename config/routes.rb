@@ -137,6 +137,7 @@ Rails.application.routes.draw do
       patch :toggle_auto_deploy
       patch :toggle_deploy_hold
       patch :toggle_seed_on_next_deploy
+      post :check_site
       get :deploy_config
       patch :toggle_self_describing
       patch :update_runbook

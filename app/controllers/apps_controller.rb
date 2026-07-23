@@ -1,6 +1,6 @@
 class AppsController < ApplicationController
   include OperatorOnly
-  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook ]
+  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site ]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -73,6 +73,16 @@ class AppsController < ApplicationController
     @app.update!(auto_deploy: !@app.auto_deploy)
     state = @app.auto_deploy? ? "enabled" : "disabled"
     redirect_to @app, notice: "Auto-deploy on push #{state}."
+  end
+
+  # Ping the site now (on-demand) — same check the recurring monitor runs.
+  def check_site
+    if @app.monitorable?
+      c = SiteMonitor.new(@app).check!
+      redirect_to @app, notice: "Checked #{@app.domain} — #{c.status} (#{c.total_ms}ms)."
+    else
+      redirect_to @app, alert: "This app has no public domain to check."
+    end
   end
 
   # One-shot seed request: the next deploy runs db:seed + records a SeedApplication,

@@ -1,0 +1,73 @@
+<%# Site latency/uptime monitor — the automated curl-diagnosis, graphed. Shows
+    Up/Slow/Down, a TTFB sparkline, and a breakdown so you can see WHAT's slow
+    (high network/TLS = distance → CDN; high server = the app). %>
+<% checks = app.site_checks.recent.limit(40).to_a.reverse
+   latest = checks.last %>
+<div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <h2 class="text-sm font-semibold text-ink">Site response</h2>
+      <% badge = { up: %w[bg-primary-tint text-primary-strong Up], slow: %w[bg-warning-tint text-warning-deep Slow], down: %w[bg-danger-tint text-danger-deep Down] }[app.site_status] %>
+      <% if badge %>
+        <span class="rounded-full <%= badge[0] %> <%= badge[1] %> px-2 py-0.5 text-2xs font-semibold uppercase tracking-label"><%= badge[2] %></span>
+      <% else %>
+        <span class="rounded-full bg-fill px-2 py-0.5 text-2xs font-semibold text-muted">No checks yet</span>
+      <% end %>
+    </div>
+    <%= button_to "Check now", check_site_app_path(app), method: :post,
+          class: "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" %>
+  </div>
+
+  <% if latest %>
+    <%# Sparkline of TTFB (chronological). Down samples plot at the top in danger. %>
+    <% vals = checks.map { |c| c.up ? c.ttfb_ms.to_i : nil }
+       present = vals.compact
+       max = [ present.max || 1, 1 ].max
+       w, h = 260, 40
+       pts = checks.each_with_index.map { |c, i|
+         x = checks.size == 1 ? 0 : (i.to_f / (checks.size - 1) * w).round(1)
+         y = c.up ? (h - (c.ttfb_ms.to_f / max) * h).round(1) : 0
+         "#{x},#{y}"
+       }.join(" ") %>
+    <svg viewBox="0 0 <%= w %> <%= h %>" class="mt-4 h-10 w-full" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="<%= pts %>" fill="none" stroke="currentColor"
+                class="<%= app.site_status == :down ? "text-danger" : app.site_status == :slow ? "text-warning" : "text-primary" %>" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <div class="mt-1 flex justify-between text-2xs text-faint">
+      <span><%= checks.first.checked_at.strftime("%b %-d %H:%M") %></span>
+      <span>TTFB · last <%= checks.size %> checks · peak <%= max %>ms</span>
+    </div>
+
+    <%# Breakdown of the latest check — what's slow. %>
+    <dl class="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+      <% [
+        [ "Network (TCP RTT)", latest.connect_ms, "distance to origin" ],
+        [ "Server time", latest.server_ms, "the app itself" ],
+        [ "First byte (TTFB)", latest.ttfb_ms, "server + network" ],
+        [ "Total", latest.total_ms, "full HTML fetch" ]
+      ].each do |label, ms, hint| %>
+        <div>
+          <dt class="text-2xs font-semibold uppercase tracking-label text-faint"><%= label %></dt>
+          <dd class="mt-0.5 font-mono text-sm text-ink"><%= ms %><span class="text-xs text-faint">ms</span></dd>
+          <dd class="text-2xs text-muted"><%= hint %></dd>
+        </div>
+      <% end %>
+    </dl>
+
+    <% if latest.up %>
+      <p class="mt-4 text-xs text-muted">
+        <% if latest.connect_ms.to_i > 150 && latest.server_ms < 400 %>
+          <span class="font-medium text-body">Likely network/distance</span> — the origin is far and there's no CDN in front. A CDN (edge caching + closer TLS) is the biggest win.
+        <% elsif latest.server_ms >= 400 %>
+          <span class="font-medium text-body">Likely the app</span> — server time is high. Check slow queries / N+1 / boot cost.
+        <% else %>
+          Responding quickly.
+        <% end %>
+      </p>
+    <% else %>
+      <p class="mt-4 text-xs text-danger-deep"><%= latest.error %></p>
+    <% end %>
+  <% else %>
+    <p class="mt-4 text-xs text-muted">No checks recorded yet — the monitor runs every 5 minutes, or hit “Check now”.</p>
+  <% end %>
+</div>

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_23_091020) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -402,6 +402,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_091020) do
     t.index ["status"], name: "index_servers_on_status"
   end
 
+  create_table "site_checks", force: :cascade do |t|
+    t.bigint "app_id", null: false
+    t.datetime "checked_at", null: false
+    t.integer "connect_ms"
+    t.datetime "created_at", null: false
+    t.integer "dns_ms"
+    t.string "error"
+    t.integer "status_code"
+    t.integer "tls_ms"
+    t.integer "total_ms"
+    t.integer "ttfb_ms"
+    t.boolean "up", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_id", "checked_at"], name: "index_site_checks_on_app_id_and_checked_at"
+    t.index ["app_id"], name: "index_site_checks_on_app_id"
+  end
+
   create_table "ssh_keys", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "fingerprint"
@@ -482,6 +499,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_091020) do
   add_foreign_key "seed_applications", "apps"
   add_foreign_key "servers", "organizations"
   add_foreign_key "servers", "ssh_keys"
+  add_foreign_key "site_checks", "apps"
   add_foreign_key "ssh_keys", "organizations"
   add_foreign_key "tool_executions", "messages"
 end
