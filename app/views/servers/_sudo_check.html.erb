@@ -4,7 +4,22 @@
 <%= turbo_frame_tag dom_id(server, :sudo_check) do %>
   <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
     <div class="flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-ink">Privileged ops readiness</h3>
+      <div class="flex items-center gap-1.5">
+        <h3 class="text-sm font-semibold text-ink">Privileged ops readiness</h3>
+        <%# Info popover (zero-JS <details>): what/how/why, so any operator has context. %>
+        <details class="relative">
+          <summary class="flex cursor-pointer list-none items-center text-faint hover:text-ink [&::-webkit-details-marker]:hidden" aria-label="About privileged ops readiness">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 16v-4M12 8h.01"/></svg>
+          </summary>
+          <div class="absolute left-0 z-20 mt-2 w-80 rounded-large border border-border bg-surface p-4 text-left shadow-soft">
+            <p class="text-xs font-semibold text-ink">Why this panel exists</p>
+            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">What:</span> OS updates &amp; reboots need root. Conductor runs them over SSH.</p>
+            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">How:</span> as the <span class="font-mono">deploy</span> user via <span class="font-mono">sudo -n</span> (no prompt), using a one-time sudo grant scoped to just those commands — no permanent root SSH.</p>
+            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">Why scoped:</span> never blanket <span class="font-mono">NOPASSWD: ALL</span> (that's passwordless root). Note: scoped <span class="font-mono">apt-get</span> can still be shell-escaped — harden with root-owned wrapper scripts or a separate root identity.</p>
+            <%= link_to "Full guide + hardening →", guide_path("privileged-ops"), class: "mt-2.5 inline-block text-xs font-medium text-primary hover:text-primary-strong" %>
+          </div>
+        </details>
+      </div>
       <% if ready.nil? %>
         <span class="rounded-full bg-fill px-2 py-0.5 text-2xs font-semibold text-muted">SSH not configured</span>
       <% elsif ready %>
