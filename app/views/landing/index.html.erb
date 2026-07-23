@@ -175,12 +175,12 @@
       <% [
         [:primary, :grid, "Fleet control", "Every server and app in one view — health, last deploy, and what's running where, live."],
         [:info, :deploy, "Deploy your way", "Kamal, Docker, or native Puma under one control plane — with a preflight gate that blocks a risky ship before it happens."],
-        [:accent, :globe, "Routing & edge", "Caddy routes and domains with live TLS; wildcard subdomains and custom domains."],
+        [:accent, :globe, "Routing & edge", "Caddy routes custom domains to your apps with automatic TLS (Let's Encrypt).", "Wildcard / dynamic subdomains"],
         [:warning, :database, "Databases", "Hatchbox-style Postgres — a database and role per app, provisioned from the UI."],
         [:primary, :archive, "Backups & data", "Scheduled database backups to S3-compatible object storage, kept off the box."],
         [:accent, :book, "Per-app runbooks", "Every app carries its own deploy runbook + checklist — because each one ships differently. Readable by you and the agent."],
         [:danger, :bolt, "Maintenance & power", "Server audits, security auto-updates, drift checks, and reboots — with a passwordless-sudo readiness check so ops just work."]
-      ].each_with_index do |(accent, icon, title, body), i| %>
+      ].each_with_index do |(accent, icon, title, body, soon), i| %>
         <div class="rounded-large border border-border bg-surface p-5 shadow-soft"
              data-controller="reveal" data-reveal-delay-value="<%= i * 70 %>">
           <div class="flex items-center gap-2.5">
@@ -188,6 +188,9 @@
             <h3 class="text-sm font-semibold text-ink"><%= title %></h3>
           </div>
           <p class="mt-2 text-sm text-body"><%= body %></p>
+          <% if soon %>
+            <p class="mt-2 text-2xs font-medium text-faint"><span class="rounded-full bg-fill px-1.5 py-0.5 uppercase tracking-label">Soon</span> <%= soon %></p>
+          <% end %>
         </div>
       <% end %>
     </div>

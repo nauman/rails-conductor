@@ -24,10 +24,21 @@ class SesClient
     @authenticator.call(@host, @username, @password)
     Result.new(ok: true, data: { "host" => @host, "region" => @region })
   rescue => e
-    Result.new(ok: false, error: e.message)
+    Result.new(ok: false, error: "#{e.message} (tried #{@host})#{auth_hint(e.message)}")
   end
 
   private
+
+  # A 535 with valid-looking SMTP username/password almost always means the region is
+  # wrong: SES SMTP passwords are derived per-region and only authenticate against the
+  # region they were created in. Point at the fix instead of a bare "invalid".
+  def auth_hint(message)
+    return "" unless message.to_s.match?(/535|authentication credentials/i)
+
+    ". If the SMTP username/password are correct, set this credential's Region to the " \
+    "AWS region where the SMTP credentials were created (e.g. us-east-1, eu-west-1) — " \
+    "SES SMTP passwords are region-specific."
+  end
 
   def smtp_auth(host, user, pass)
     smtp = Net::SMTP.new(host, PORT)
