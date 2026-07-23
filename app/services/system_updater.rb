@@ -37,14 +37,11 @@ class SystemUpdater
     end
   end
 
+  # Run the vetted, root-owned wrapper (installed by ServerSudo.grant_command). The
+  # apt flags / needrestart handling live INSIDE the wrapper, not here, so the
+  # deploy user's NOPASSWD grant can't be turned into an arbitrary apt-get invocation.
   def command
-    if scope == "all"
-      "sudo -n DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get update -qq && " \
-        "sudo -n DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get -y " \
-        "-o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef upgrade"
-    else
-      "sudo -n unattended-upgrade -v"
-    end
+    scope == "all" ? "sudo -n #{ServerSudo::ALL_UPDATES}" : "sudo -n #{ServerSudo::SECURITY_UPDATES}"
   end
 
   private

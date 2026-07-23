@@ -15,9 +15,9 @@ class ServerReboot
     return failure("SSH not configured for this server.") unless @server.ssh_configured?
     return failure(ServerSudo.remediation(@server)) unless ServerSudo.ready?(@ssh)
 
-    # systemctl reboot on modern systems; fall back to /sbin/reboot. The command is
+    # Run the vetted root-owned reboot wrapper (systemctl reboot). The command is
     # accepted, then the connection drops — we don't read success from that.
-    @ssh.execute_with_status("sudo -n systemctl reboot || sudo -n reboot")
+    @ssh.execute_with_status("sudo -n #{ServerSudo::REBOOT}")
     Result.new(success: true,
                message: "Reboot sent to #{@server.name}. It will drop offline for a moment and come back.")
   end

@@ -14,8 +14,8 @@
           <div class="absolute left-0 z-20 mt-2 w-80 rounded-large border border-border bg-surface p-4 text-left shadow-soft">
             <p class="text-xs font-semibold text-ink">Why this panel exists</p>
             <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">What:</span> OS updates &amp; reboots need root. Conductor runs them over SSH.</p>
-            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">How:</span> as the <span class="font-mono">deploy</span> user via <span class="font-mono">sudo -n</span> (no prompt), using a one-time sudo grant scoped to just those commands — no permanent root SSH.</p>
-            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">Why scoped:</span> never blanket <span class="font-mono">NOPASSWD: ALL</span> (that's passwordless root). Note: scoped <span class="font-mono">apt-get</span> can still be shell-escaped — harden with root-owned wrapper scripts or a separate root identity.</p>
+            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">How:</span> as the <span class="font-mono">deploy</span> user via <span class="font-mono">sudo -n</span> (no prompt), using a one-time grant of a few root-owned wrapper scripts — no permanent root SSH.</p>
+            <p class="mt-1.5 text-xs text-muted"><span class="font-medium text-body">Why safe:</span> <span class="font-mono">NOPASSWD</span> is granted only on those fixed wrapper scripts (no args) — never blanket sudo, and no shell escape (unlike a raw <span class="font-mono">apt-get</span> grant).</p>
             <%= link_to "Full guide + hardening →", guide_path("privileged-ops"), class: "mt-2.5 inline-block text-xs font-medium text-primary hover:text-primary-strong" %>
           </div>
         </details>

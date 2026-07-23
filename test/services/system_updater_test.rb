@@ -5,9 +5,9 @@ class SystemUpdaterTest < ActiveSupport::TestCase
     attr_reader :ran
     def initialize(result) = (@result = result)
     def execute_with_status(command)
-      # The passwordless-sudo pre-check probes `sudo -n true` first; treat it as
-      # available here so the apt command under test is what gets exercised.
-      return { success: true, exit_code: 0, stdout: "", stderr: "" } if command == "sudo -n true"
+      # The readiness pre-check probes the no-op wrapper first; treat it as available
+      # here so the update wrapper under test is what gets exercised.
+      return { success: true, exit_code: 0, stdout: "", stderr: "" } if command.include?("conductor-check")
       @ran = command
       @result
     end
@@ -39,26 +39,25 @@ class SystemUpdaterTest < ActiveSupport::TestCase
     assert_match(/sudoers/i, res.error)
   end
 
-  test "security scope uses unattended-upgrade (the safe, no-bounce path)" do
+  test "security scope runs the security-updates wrapper (not raw apt-get)" do
     ssh = FakeSsh.new(ok)
     res = SystemUpdater.new(@server, scope: "security", ssh: ssh).apply
     assert res.success?
-    assert_includes ssh.ran, "unattended-upgrade"
-    refute_includes ssh.ran, "apt-get -y"
+    assert_includes ssh.ran, ServerSudo::SECURITY_UPDATES
+    refute_includes ssh.ran, "apt-get"
   end
 
-  test "all scope runs apt-get upgrade, keeps configs, and does not auto-restart services" do
+  test "all scope runs the all-updates wrapper (apt flags live inside the wrapper)" do
     ssh = FakeSsh.new(ok)
     SystemUpdater.new(@server, scope: "all", ssh: ssh).apply
-    assert_includes ssh.ran, "apt-get -y"
-    assert_includes ssh.ran, "--force-confold"
-    assert_includes ssh.ran, "NEEDRESTART_MODE=l"
+    assert_includes ssh.ran, ServerSudo::ALL_UPDATES
+    refute_includes ssh.ran, "apt-get" # the deploy user can't inject apt flags
   end
 
   test "an unknown scope falls back to security (safe default)" do
     ssh = FakeSsh.new(ok)
     SystemUpdater.new(@server, scope: "everything", ssh: ssh).apply
-    assert_includes ssh.ran, "unattended-upgrade"
+    assert_includes ssh.ran, ServerSudo::SECURITY_UPDATES
   end
 
   test "a non-zero exit surfaces as a failure with output" do
