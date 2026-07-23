@@ -27,10 +27,22 @@ class Credential < ApplicationRecord
 
   # --- Cloudflare connections (multi-account) ---
 
-  # Cloudflare's hosted API MCP server (per Cloudflare's agent-setup). Auth is OAuth,
-  # triggered on first tool use — no token in the command (the stored token is for
-  # Conductor's OWN direct API calls: verify/zones/put-behind-Cloudflare).
-  CLOUDFLARE_MCP_URL = "https://mcp.cloudflare.com/mcp".freeze
+  # Cloudflare exposes ~15 capability-scoped hosted MCP servers. We deliberately attach
+  # ONLY the read/diagnose ones — never the broad `mcp.cloudflare.com/mcp` aggregate or
+  # the mutating `bindings` (Workers deploy/delete) / DNS-edit / cache-purge servers.
+  #
+  # The security model mirrors Conductor's sudo wrappers: agents get a non-destructive
+  # surface for diagnosis, and every CONFIG MUTATION we actually need (turn the proxy
+  # on, set SSL mode) flows through Conductor's own narrow, audited `CloudflareClient`
+  # — NOT through MCP. Auth is OAuth on first tool use; no token in the attach command
+  # (the stored token is for Conductor's OWN direct calls: verify/zones/put-behind).
+  CLOUDFLARE_MCP_SERVERS = {
+    "docs"          => "https://docs.mcp.cloudflare.com/mcp",            # docs (no auth)
+    "dns-analytics" => "https://dns-analytics.mcp.cloudflare.com/mcp",   # zone/DNS analytics (read)
+    "observability" => "https://observability.mcp.cloudflare.com/mcp",   # logs/metrics (read)
+    "graphql"       => "https://graphql.mcp.cloudflare.com/mcp",         # analytics GraphQL (read)
+    "radar"         => "https://radar.mcp.cloudflare.com/mcp"            # internet insights (read)
+  }.freeze
 
   def cloudflare? = provider == "cloudflare"
   def ses? = provider == "amazon_ses"
@@ -69,9 +81,18 @@ class Credential < ApplicationRecord
     nil
   end
 
-  # Client-side attach command (OAuth — no token in the command). Named per account
-  # so you can add one connection per account and authorize each in its own OAuth.
+  # Client-side attach commands (OAuth — no token in the command), one per read-only
+  # scoped server. Named per account + capability so you can attach one connection per
+  # account and authorize each in its own OAuth flow. Returns the list of commands.
+  def cloudflare_mcp_commands
+    slug = name.parameterize
+    CLOUDFLARE_MCP_SERVERS.map do |cap, url|
+      %(claude mcp add --transport http cf-#{slug}-#{cap} #{url})
+    end
+  end
+
+  # Backwards-compatible single string (all attach commands, newline-joined).
   def cloudflare_mcp_command
-    %(claude mcp add --transport http cloudflare-#{name.parameterize} #{CLOUDFLARE_MCP_URL})
+    cloudflare_mcp_commands.join("\n")
   end
 end

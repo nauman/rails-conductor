@@ -14,12 +14,20 @@ class CredentialTest < ActiveSupport::TestCase
     c
   end
 
-  test "cloudflare? + OAuth attach command uses the hosted URL, per-account name, NO token" do
+  test "cloudflare? + OAuth attach attaches ONLY read-only scoped servers, per-account, NO token" do
     assert @cf.cloudflare?
     cmd = @cf.cloudflare_mcp_command
-    assert_equal "https://mcp.cloudflare.com/mcp", Credential::CLOUDFLARE_MCP_URL
-    assert_includes cmd, Credential::CLOUDFLARE_MCP_URL
-    assert_includes cmd, "cloudflare-inventlist" # named per account
+
+    # Only the curated read-only servers — one attach line each.
+    assert_equal Credential::CLOUDFLARE_MCP_SERVERS.size, cmd.lines.size
+    Credential::CLOUDFLARE_MCP_SERVERS.each_value { |url| assert_includes cmd, url }
+    assert_includes cmd, "cf-inventlist-docs" # named per account + capability
+
+    # Never the broad aggregate or any mutating server.
+    refute_includes cmd, "https://mcp.cloudflare.com/mcp", "must not attach the broad aggregate"
+    refute_includes cmd, "bindings.mcp.cloudflare.com", "must not attach the Workers-mutating server"
+
+    # OAuth only — no secret material in the command.
     refute_includes cmd, "cf-token-xyz", "OAuth attach must not embed the token"
     refute_includes cmd, "Bearer"
   end

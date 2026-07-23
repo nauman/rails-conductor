@@ -25,21 +25,32 @@ side, and each domain resolves to whichever account owns its zone.
 
 ## 2. Attach Cloudflare's MCP
 
-Cloudflare hosts **remote MCP servers** (you connect a client to them; Conductor
-doesn't self-host them). Auth is **OAuth — it triggers automatically on first tool
-use**, so there's no token in the attach command. The main one wraps the Cloudflare
-API behind `search()` / `execute()` (DNS records / proxied status, `update_zone_setting`
-for SSL mode, and more).
+Cloudflare hosts **~15 capability-scoped remote MCP servers** (you connect a client to
+them; Conductor doesn't self-host them). Auth is **OAuth — it triggers automatically on
+first tool use**, so there's no token in the attach command.
 
-**Servers** (per Cloudflare's agent-setup):
+Conductor attaches **only the read/diagnose servers** — never the broad
+`mcp.cloudflare.com/mcp` aggregate, and never the mutating ones (`bindings` = Workers
+deploy/delete, DNS-edit, cache-purge). This is the same least-privilege stance as the
+[privileged-ops sudo wrappers](privileged-ops): agents get a **non-destructive** surface
+for diagnosis, while the few config changes Conductor actually needs — turning the proxy
+on, setting SSL mode — flow through Conductor's own narrow, audited `CloudflareClient`,
+**not** through MCP. So a connected agent can read a zone's analytics but structurally
+**cannot** delete a zone, redeploy a Worker, or purge cache.
 
-| Name | URL |
-| --- | --- |
-| `cloudflare` (main API) | `https://mcp.cloudflare.com/mcp` |
-| `cloudflare-docs` (public, no auth) | `https://docs.mcp.cloudflare.com/mcp` |
-| `cloudflare-bindings` | `https://bindings.mcp.cloudflare.com/mcp` |
-| `cloudflare-builds` | `https://builds.mcp.cloudflare.com/mcp` |
-| `cloudflare-observability` | `https://observability.mcp.cloudflare.com/mcp` |
+**Servers Conductor attaches** (all read-only):
+
+| Name | URL | Purpose |
+| --- | --- | --- |
+| `docs` (public, no auth) | `https://docs.mcp.cloudflare.com/mcp` | Cloudflare docs |
+| `dns-analytics` | `https://dns-analytics.mcp.cloudflare.com/mcp` | zone/DNS analytics |
+| `observability` | `https://observability.mcp.cloudflare.com/mcp` | logs / metrics |
+| `graphql` | `https://graphql.mcp.cloudflare.com/mcp` | analytics GraphQL |
+| `radar` | `https://radar.mcp.cloudflare.com/mcp` | internet insights |
+
+**Deliberately omitted:** `mcp.cloudflare.com/mcp` (broad aggregate), `bindings`
+(Workers), and any DNS-edit / cache-purge server — those can mutate config, so they're
+not part of the attach set. Mutations are Conductor's job, done via vetted actions.
 
 **Claude Code — use the plugin** (recommended):
 
@@ -49,26 +60,33 @@ claude plugin install cloudflare@cloudflare
 # then run /reload-plugins inside Claude
 ```
 
-**Other MCP clients — add the server** (OAuth on first use). Name it per account so
-you can authorize each account in its own OAuth flow — the Credentials page shows a
-ready-to-copy command per connected account:
+**Other MCP clients — add the servers** (OAuth on first use). Each is named per account
++ capability so you can authorize each account in its own OAuth flow — the Credentials
+page shows the ready-to-copy commands (one per read-only server) per connected account:
 
 ```
-claude mcp add --transport http cloudflare-<account> https://mcp.cloudflare.com/mcp
+claude mcp add --transport http cf-<account>-docs          https://docs.mcp.cloudflare.com/mcp
+claude mcp add --transport http cf-<account>-dns-analytics https://dns-analytics.mcp.cloudflare.com/mcp
+claude mcp add --transport http cf-<account>-observability https://observability.mcp.cloudflare.com/mcp
+claude mcp add --transport http cf-<account>-graphql       https://graphql.mcp.cloudflare.com/mcp
+claude mcp add --transport http cf-<account>-radar         https://radar.mcp.cloudflare.com/mcp
 ```
 
-Once attached, your agent has **Conductor's tools and Cloudflare's** over the same
-fleet — inspect a zone, flip a record to proxied, read DNS analytics, inline.
+Once attached, your agent has **Conductor's tools and Cloudflare's read surface** over
+the same fleet — inspect a zone, read DNS analytics, diagnose slowness inline. To
+*change* anything (proxy on/off, SSL mode), use Conductor's own action below.
 
 > For headless/CI automation with a token instead of OAuth, see the self-runnable
 > **Code Mode** server at `github.com/cloudflare/mcp`.
 
 ## Direct actions vs MCP
 
-- **Conductor's own buttons** (e.g. the upcoming "Put behind Cloudflare") call the
-  Cloudflare API **directly** with the stored token — deterministic, no agent needed.
-- **Cloudflare's MCP** is for **agent-driven, ad-hoc** work (debugging, analytics,
-  one-off changes). They share the same per-account token you connected.
+- **Conductor's own buttons** ("Put behind Cloudflare", per-site or fleet) call the
+  Cloudflare API **directly** through `CloudflareClient` with the stored token — a
+  narrow, audited surface: only `set_proxied` + `set_ssl_mode`. Deterministic, logged,
+  no agent needed. **This is the only path that mutates Cloudflare config.**
+- **Cloudflare's MCP** (the read-only servers above) is for **agent-driven, ad-hoc
+  diagnosis** — analytics, logs, docs. It cannot change config; that's by design.
 
 ## Security
 
