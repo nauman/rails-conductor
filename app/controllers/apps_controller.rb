@@ -1,6 +1,6 @@
 class AppsController < ApplicationController
   include OperatorOnly
-  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site ]
+  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site, :put_behind_cloudflare ]
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -73,6 +73,24 @@ class AppsController < ApplicationController
     @app.update!(auto_deploy: !@app.auto_deploy)
     state = @app.auto_deploy? ? "enabled" : "disabled"
     redirect_to @app, notice: "Auto-deploy on push #{state}."
+  end
+
+  # Put this app's domain behind Cloudflare (proxy the DNS record + set SSL mode).
+  def put_behind_cloudflare
+    res = CloudflareCutover.new(@app).put_behind!
+    redirect_to @app, (res.ok? ? { notice: res.message } : { alert: res.message })
+  end
+
+  # Fleet-wide: put every monitorable app behind Cloudflare (skips ones already done
+  # via Cloudflare's idempotent PATCH). Reports a per-app summary.
+  def put_all_behind_cloudflare
+    apps = current_organization.apps.select(&:monitorable?)
+    results = apps.map { |a| [ a.name, CloudflareCutover.new(a).put_behind! ] }
+    ok = results.count { |_, r| r.ok? }
+    failed = results.reject { |_, r| r.ok? }.map { |n, r| "#{n}: #{r.message}" }
+    notice = "Put behind Cloudflare — #{ok}/#{results.size} succeeded."
+    notice += " Issues: #{failed.join(' · ')}" if failed.any?
+    redirect_to apps_path, notice: notice
   end
 
   # Ping the site now (on-demand) — same check the recurring monitor runs.

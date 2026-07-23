@@ -31,3 +31,24 @@ class CloudflareClientTest < ActiveSupport::TestCase
     assert_equal({ "id" => "z1", "name" => "calm.page", "account_id" => "acct1" }, res.data.first)
   end
 end
+
+class CloudflareClientWriteTest < ActiveSupport::TestCase
+  class FakeHttp
+    attr_reader :patched
+    def initialize(responses) = (@responses = responses; @patched = [])
+    def get(path) = @responses.fetch(path)
+    def patch(path, body) = (@patched << [path, body]; { "success" => true, "result" => body })
+  end
+
+  test "set_proxied PATCHes the record with proxied:true" do
+    http = FakeHttp.new({})
+    CloudflareClient.new("t", http: http).set_proxied("z1", "rec1", true)
+    assert_equal [ "/zones/z1/dns_records/rec1", { proxied: true } ], http.patched.first
+  end
+
+  test "set_ssl_mode PATCHes the zone ssl setting" do
+    http = FakeHttp.new({})
+    CloudflareClient.new("t", http: http).set_ssl_mode("z1", "full")
+    assert_equal [ "/zones/z1/settings/ssl", { value: "full" } ], http.patched.first
+  end
+end

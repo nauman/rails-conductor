@@ -14,8 +14,13 @@
         <span class="rounded-full bg-fill px-2 py-0.5 text-2xs font-semibold text-muted">No checks yet</span>
       <% end %>
     </div>
-    <%= button_to "Check now", check_site_app_path(app), method: :post,
-          class: "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" %>
+    <div class="flex items-center gap-2">
+      <%= button_to "Put behind Cloudflare", put_behind_cloudflare_app_path(app), method: :post,
+            form: { data: { turbo_confirm: "Proxy #{app.domain} through Cloudflare (SSL: Full)? Speeds up far-away visitors via edge caching." } },
+            class: "rounded-lg border border-primary bg-surface px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary-tint" %>
+      <%= button_to "Check now", check_site_app_path(app), method: :post,
+            class: "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" %>
+    </div>
   </div>
 
   <% if latest %>

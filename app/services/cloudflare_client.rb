@@ -31,6 +31,32 @@ class CloudflareClient
     Result.new(ok: true, data: body["result"].map { |z| { "id" => z["id"], "name" => z["name"], "account_id" => z.dig("account", "id") } })
   end
 
+  # --- P2: put behind Cloudflare (proxy the DNS record + set SSL mode) ---
+
+  # The A/CNAME record for a hostname in a zone (proxied status lives on it).
+  def dns_record(zone_id, name)
+    body = get("/zones/#{zone_id}/dns_records?name=#{name}")
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"].first) # nil if the host has no record
+  end
+
+  # Flip a record's orange cloud on/off (partial PATCH — proxied only).
+  def set_proxied(zone_id, record_id, proxied)
+    body = patch("/zones/#{zone_id}/dns_records/#{record_id}", { proxied: proxied })
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
+  # Zone SSL mode: "off" | "flexible" | "full" | "strict".
+  def set_ssl_mode(zone_id, mode)
+    body = patch("/zones/#{zone_id}/settings/ssl", { value: mode })
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
   private
 
   def failure(body)
@@ -41,8 +67,19 @@ class CloudflareClient
   def get(path)
     return @http.get(path) if @http # test seam
 
-    uri = URI("#{API}#{path}")
-    req = Net::HTTP::Get.new(uri)
+    request(Net::HTTP::Get.new(URI("#{API}#{path}")))
+  end
+
+  def patch(path, body)
+    return @http.patch(path, body) if @http # test seam
+
+    req = Net::HTTP::Patch.new(URI("#{API}#{path}"))
+    req.body = body.to_json
+    request(req)
+  end
+
+  def request(req)
+    uri = req.uri
     req["Authorization"] = "Bearer #{@token}"
     req["Content-Type"] = "application/json"
     res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 8, read_timeout: 12) { |h| h.request(req) }

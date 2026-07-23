@@ -6,10 +6,15 @@
       <h1 class="font-display text-2xl text-ink tracking-display">Apps</h1>
       <p class="mt-1 text-sm text-muted">Deployed Rails applications.</p>
     </div>
-    <%= link_to new_app_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      Add App
-    <% end %>
+    <div class="flex items-center gap-2">
+      <%= button_to "Put fleet behind Cloudflare", put_all_behind_cloudflare_apps_path, method: :post,
+            form: { data: { turbo_confirm: "Proxy every app's domain through Cloudflare (SSL: Full)? Speeds up far-away visitors." } },
+            class: "inline-flex items-center gap-2 rounded-lg border border-primary bg-surface px-4 py-2 text-sm font-medium text-primary hover:bg-primary-tint" %>
+      <%= link_to new_app_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add App
+      <% end %>
+    </div>
   </div>
 
   <% if @apps.any? %>

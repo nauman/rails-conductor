@@ -140,12 +140,14 @@ Rails.application.routes.draw do
       patch :toggle_deploy_hold
       patch :toggle_seed_on_next_deploy
       post :check_site
+      post :put_behind_cloudflare
       get :deploy_config
       patch :toggle_self_describing
       patch :update_runbook
     end
     collection do
       post :sync_all
+      post :put_all_behind_cloudflare
     end
     resources :env_variables, only: [:create, :update, :destroy]
     resources :deploy_checklist_items, only: [:create, :update, :destroy]
