@@ -10,7 +10,8 @@ class ServerStorage
   end
 
   # Sections are delimited so parsing stays robust. `du -x` stays on the root
-  # filesystem; --max-depth=2 + timeout keep it bounded on big Docker hosts.
+  # filesystem; --max-depth=1 + a short timeout keep the whole probe well under the
+  # HTTP request budget so a slow disk can't hang the frame into "Content missing".
   PROBE = <<~BASH.freeze
     echo "===DF==="
     df -PB1 -x tmpfs -x devtmpfs -x overlay -x squashfs 2>/dev/null | tail -n +2
@@ -21,7 +22,7 @@ class ServerStorage
     echo "===MEM==="
     free -b | awk '/Mem/{print $2, $3, $7}'
     echo "===TOPDIRS==="
-    timeout 20 du -x -B1 --max-depth=2 / 2>/dev/null | sort -rn | head -15
+    timeout 8 du -x -B1 --max-depth=1 / 2>/dev/null | sort -rn | head -15
   BASH
 
   attr_reader :server, :error
