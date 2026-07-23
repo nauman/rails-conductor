@@ -3,7 +3,7 @@ class DeployAppTool
 
   DEFINITION = {
     name: 'deploy_app',
-    description: "Deploy an app to its latest commit. Creates a Deployment and dispatches by the app's deploy_method (native, docker, or kamal).",
+    description: "Deploy an app to the latest commit on origin/<branch> — the REMOTE, not any local checkout. Push your commits first; unpushed local work is NOT shipped. Creates a Deployment (dispatched by deploy_method: native, docker, or kamal); the resolved commit is recorded as commit_sha — verify it matches your intended commit.",
     input_schema: {
       type: 'object',
       properties: {
@@ -69,13 +69,19 @@ class DeployAppTool
       })
     end
 
+    branch = app.branch.presence || "main"
     Result.ok({
       deployment_id: deployment.id,
       app:           app.name,
       server:        app.server.name,
       deploy_method: app.deploy_method,
+      branch:        branch,
       status:        'started',
       message:       "Deploying #{app.name} (#{app.deploy_method}) on #{app.server.name}. Deployment ID: #{deployment.id}",
+      # Conductor builds from the REMOTE (origin/<branch>), not any local checkout —
+      # unpushed commits are NOT shipped. The resolved SHA is recorded as commit_sha.
+      ships_from:    "origin/#{branch}",
+      verify:        "Confirm the shipped commit: conductor_read action=deployment (deployment_id: #{deployment.id}) → commit_sha should match your intended commit. If you committed locally, push first.",
       preflight:     preflight_payload(preflight),
       # _organization: the org this call touched. The MCP controller reads this to
       # log the affected org on the McpCall, then strips it before responding.
