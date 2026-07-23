@@ -15,9 +15,16 @@
       <% end %>
     </div>
     <div class="flex items-center gap-2">
-      <%= button_to "Put behind Cloudflare", put_behind_cloudflare_app_path(app), method: :post,
-            form: { data: { turbo_confirm: "Proxy #{app.domain} through Cloudflare (SSL: Full)? Speeds up far-away visitors via edge caching." } },
-            class: "rounded-lg border border-primary bg-surface px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary-tint" %>
+      <% if app.behind_cdn? %>
+        <span class="inline-flex items-center gap-1 rounded-lg border border-primary bg-primary-tint px-3 py-1.5 text-xs font-medium text-primary-strong" title="Responses are served through Cloudflare (cf-ray present)">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.3 3.3 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+          Behind Cloudflare
+        </span>
+      <% else %>
+        <%= button_to "Put behind Cloudflare", put_behind_cloudflare_app_path(app), method: :post,
+              form: { data: { turbo_confirm: "Proxy #{app.domain} through Cloudflare (SSL: Full)? Speeds up far-away visitors via edge caching." } },
+              class: "rounded-lg border border-primary bg-surface px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary-tint" %>
+      <% end %>
       <%= button_to "Check now", check_site_app_path(app), method: :post,
             class: "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" %>
     </div>
@@ -61,10 +68,12 @@
 
     <% if latest.up %>
       <p class="mt-4 text-xs text-muted">
-        <% if latest.connect_ms.to_i > 150 && latest.server_ms < 400 %>
+        <% if latest.server_ms >= 400 %>
+          <span class="font-medium text-body">Likely the app</span> — server time is high. Check slow queries / N+1 / boot cost<%= app.behind_cdn? ? " (Cloudflare can't speed up dynamic responses)" : "" %>.
+        <% elsif latest.connect_ms.to_i > 150 && !app.behind_cdn? %>
           <span class="font-medium text-body">Likely network/distance</span> — the origin is far and there's no CDN in front. A CDN (edge caching + closer TLS) is the biggest win.
-        <% elsif latest.server_ms >= 400 %>
-          <span class="font-medium text-body">Likely the app</span> — server time is high. Check slow queries / N+1 / boot cost.
+        <% elsif app.behind_cdn? %>
+          Served through Cloudflare — static assets edge-cache; this timing is the edge→origin leg for the dynamic HTML.
         <% else %>
           Responding quickly.
         <% end %>

@@ -110,6 +110,10 @@ class App < ApplicationRecord
   def monitorable? = url.present?
   def latest_site_check = site_checks.recent.first
   def site_status = latest_site_check&.status # :up / :slow / :down / nil
+  # Is the site currently served through a CDN/Cloudflare (per the latest check's
+  # response headers)? Drives the monitor panel — don't re-recommend Cloudflare when
+  # it's already in front.
+  def behind_cdn? = latest_site_check&.via_cdn == true
 
   def server_name
     server&.name || "—"

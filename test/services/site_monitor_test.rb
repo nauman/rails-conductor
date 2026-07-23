@@ -24,6 +24,18 @@ class SiteMonitorTest < ActiveSupport::TestCase
     assert c.checked_at.present?
   end
 
+  test "detects a Cloudflare-fronted response from headers (via_cdn)" do
+    headers = "HTTP/2 200\r\nserver: cloudflare\r\ncf-ray: a1fb-SYD\r\n\r\n"
+    c = SiteMonitor.new(@app, runner: ->(_url) { "#{headers}\n200 0.002 0.020 0.040 0.100 0.150" }).check!
+    assert c.up
+    assert c.via_cdn, "expected via_cdn when cf-ray/server:cloudflare present"
+    assert @app.reload.behind_cdn?
+  end
+
+  test "a plain-origin response (no CDN headers) is not via_cdn" do
+    refute run_with("200 0.002 0.320 0.650 0.970 1.100").via_cdn
+  end
+
   test "a fast 200 under the slow threshold is :up, a slow one is :slow" do
     assert_equal :up,   run_with("200 0 0.1 0.2 0.3 0.4").status
     assert_equal :slow, run_with("200 0 0.3 0.6 2.5 3.0").status # ttfb 2500ms > 1500
