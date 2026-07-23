@@ -4,7 +4,7 @@
     <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-large bg-primary font-display text-3xl text-white shadow-soft">C</div>
     <p class="text-2xs font-semibold uppercase tracking-label text-faint">Self-hosted Ruby on Rails ops · agent-native</p>
     <h1 class="mt-3 font-display text-5xl leading-[1.05] text-ink tracking-display sm:text-6xl">
-      The control plane for<br>self-hosted <span class="text-primary">Ruby on Rails</span>
+      The control plane for<br>self-hosted <span class="text-primary">Ruby on Rails</span><span class="ml-1.5 inline-block h-[0.78em] w-[3px] translate-y-[0.06em] rounded-sm bg-primary/70 animate-pulse align-middle" aria-hidden="true"></span>
     </h1>
     <p class="mx-auto mt-6 max-w-2xl text-lg text-muted">
       Conductor runs, monitors, and maintains your Rails apps across servers you own —
@@ -17,6 +17,24 @@
       <%= link_to "View on GitHub ↗", "https://github.com/nauman/rails-conductor", class: "rounded-md border border-border-strong px-5 py-2.5 text-sm font-medium text-body hover:bg-fill" %>
     </div>
     <p class="mt-4 text-xs text-faint">Source-available · runs on your own infrastructure · no vendor lock-in</p>
+
+    <!-- count-up stats (product facts, not fleet numbers) -->
+    <div class="mx-auto mt-12 grid max-w-2xl grid-cols-3 gap-6">
+      <% [
+        [3, "", "Deploy runtimes", "Kamal · Docker · native"],
+        [4, "", "Preflight gates", "migrations · seeds · audit · threads"],
+        [100, "%", "Yours to run", "self-hosted · no lock-in"]
+      ].each do |target, suffix, label, sub| %>
+        <div>
+          <div class="font-display text-4xl text-ink tracking-display sm:text-5xl"
+               data-controller="counter"
+               data-counter-target-value="<%= target %>"
+               data-counter-suffix-value="<%= suffix %>"><%= target %><%= suffix %></div>
+          <div class="mt-1 text-2xs font-semibold uppercase tracking-label text-muted"><%= label %></div>
+          <div class="text-2xs text-faint"><%= sub %></div>
+        </div>
+      <% end %>
+    </div>
 
     <!-- primitives you already trust -->
     <div class="mx-auto mt-10 flex max-w-3xl flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-2xs uppercase tracking-label text-faint">
