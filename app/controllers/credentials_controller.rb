@@ -1,7 +1,7 @@
 class CredentialsController < ApplicationController
   include OperatorOnly
   operator_only_all_actions! # reads expose decrypted secrets — owner/admin only
-  before_action :set_credential, only: [:edit, :update, :destroy]
+  before_action :set_credential, only: [:edit, :update, :destroy, :verify]
 
   def index
     @credentials = current_organization.credentials.order(created_at: :desc)
@@ -35,6 +35,19 @@ class CredentialsController < ApplicationController
   def destroy
     @credential.destroy
     redirect_to credentials_path, notice: "Credential deleted."
+  end
+
+  # Verify a Cloudflare token + cache its account/zones (multi-account resolution).
+  def verify
+    unless @credential.cloudflare?
+      return redirect_to credentials_path, alert: "Verify is only for Cloudflare connections."
+    end
+
+    if (error = @credential.verify_cloudflare!)
+      redirect_to credentials_path, alert: "Cloudflare verify failed: #{error}"
+    else
+      redirect_to credentials_path, notice: "#{@credential.name} verified — #{@credential.zones_list.size} zone(s) found."
+    end
   end
 
   private

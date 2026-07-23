@@ -123,7 +123,9 @@ Rails.application.routes.draw do
       collection { post :schedule_script }
     end
   end
-  resources :credentials, except: [:show]
+  resources :credentials, except: [:show] do
+    member { post :verify }
+  end
   resources :apps do
     member do
       post :deploy

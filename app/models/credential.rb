@@ -24,4 +24,39 @@ class Credential < ApplicationRecord
     return nil if api_secret.blank?
     "#{api_secret[0..3]}•••••#{api_secret[-4..]}"
   end
+
+  # --- Cloudflare connections (multi-account) ---
+
+  # Cloudflare's official API MCP server (entire CF API behind search/execute).
+  CLOUDFLARE_MCP_URL = "https://api.mcp.cloudflare.com/mcp".freeze
+
+  def cloudflare? = provider == "cloudflare"
+  def verified? = verified_at.present?
+
+  def zones_list
+    JSON.parse(zones.presence || "[]")
+  rescue JSON::ParserError
+    []
+  end
+
+  # Verify the token and cache the account id + zone list, so Conductor can resolve
+  # which connected account owns a given domain. Returns nil on success, else an
+  # error string.
+  def verify_cloudflare!(client: nil)
+    client ||= CloudflareClient.new(api_key)
+    v = client.verify
+    return v.error unless v.ok?
+
+    z = client.zones
+    return z.error unless z.ok?
+
+    update!(account_id: z.data.first&.dig("account_id"), zones: z.data.to_json, verified_at: Time.current)
+    nil
+  end
+
+  # Client-side attach command: adds Cloudflare's MCP with THIS account's token as
+  # the bearer (the automation path; OAuth is the alternative — see the guide).
+  def cloudflare_mcp_command
+    %(claude mcp add --transport http cloudflare-#{name.parameterize} #{CLOUDFLARE_MCP_URL} --header "Authorization: Bearer #{api_key}")
+  end
 end

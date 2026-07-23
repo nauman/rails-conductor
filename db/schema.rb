@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_110000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -106,6 +106,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
   end
 
   create_table "credentials", force: :cascade do |t|
+    t.string "account_id"
     t.boolean "active", default: true
     t.text "api_key"
     t.text "api_secret"
@@ -114,6 +115,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.bigint "organization_id"
     t.string "provider", null: false
     t.datetime "updated_at", null: false
+    t.datetime "verified_at"
+    t.text "zones"
     t.index ["active"], name: "index_credentials_on_active"
     t.index ["organization_id"], name: "index_credentials_on_organization_id"
     t.index ["provider"], name: "index_credentials_on_provider"
