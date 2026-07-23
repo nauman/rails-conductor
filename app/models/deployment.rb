@@ -14,6 +14,29 @@ class Deployment < ApplicationRecord
   scope :failed, -> { where(status: "failed") }
   scope :in_progress, -> { where(status: %w[pending building deploying]) }
   scope :blocked, -> { where(status: "blocked") }
+  # Successful deploys that shipped a rollback-able release (a version tag Kamal
+  # can boot again on the host), newest first.
+  scope :rollbackable, -> { successful.where.not(release_version: [nil, ""]).recent }
+
+  def rollback?
+    kind == "rollback"
+  end
+
+  # The release identifier this deployment shipped — what a rollback targets.
+  # Kamal's version is the deployed sha; fall back to it if release_version is
+  # unset (deploys from before the column existed).
+  def target_version
+    release_version.presence || commit_sha.presence
+  end
+
+  # Can the app be rolled back TO this deployment's release? It must have shipped
+  # a version and not be the release currently running (the latest success).
+  # Backend support (Kamal-only for now) is gated by the caller.
+  def rollback_target?
+    return false unless succeeded? && target_version.present?
+
+    app.deployments.successful.order(:created_at).last&.id != id
+  end
 
   # The parsed preflight blockers captured when this deploy was blocked or forced.
   def preflight_blockers

@@ -147,7 +147,9 @@ Rails.application.routes.draw do
     resources :env_variables, only: [:create, :update, :destroy]
     resources :deploy_checklist_items, only: [:create, :update, :destroy]
   end
-  resources :deployments, only: [:show]
+  resources :deployments, only: [:show] do
+    member { post :rollback }
+  end
   resources :backups do
     member do
       post :run

@@ -69,8 +69,54 @@ class KamalDeployer
     return false unless run_gated_migrations
     return false unless run_seeds_if_requested
 
+    # Record the version this release booted — for Kamal that's the deployed sha,
+    # which Kamal tags its images with and `kamal rollback <version>` can boot again.
+    deployment.update!(release_version: deployment.commit_sha) if deployment.commit_sha.present?
     deployment.succeed!
     log "Kamal deployment completed successfully!"
+    broadcast_status("succeeded")
+    true
+  rescue StandardError => e
+    fail_with("Unexpected error: #{e.message}")
+  ensure
+    cleanup_key
+  end
+
+  # Boot a previously-shipped Kamal release again. Kamal retains prior versioned
+  # images on the target host, so this reuses the same workspace / SSH / secrets
+  # setup as #deploy! but runs `kamal rollback <version>` — no git rebuild, just
+  # re-booting the image already tagged <version> on the host.
+  def rollback!(version)
+    deployment.start!
+    log "Rolling back #{app.name} to release #{version} via Kamal (control machine: Conductor)"
+
+    return fail_with("App has no repository_url") if app.repository_url.blank?
+    return fail_with("App has no target host") if app.server&.ip_address.blank?
+    return fail_with("No release version to roll back to") if version.blank?
+
+    deployment.mark_deploying!
+    deployment.update!(commit_sha: version, release_version: version)
+    FileUtils.mkdir_p(workspace)
+    @key_file = write_ssh_key
+    @deploy_key_file = write_deploy_key
+    @clone_token = resolve_clone_token
+    @askpass_file = @clone_token ? write_askpass(@clone_token) : nil
+    @ssh_home = setup_ssh_home
+
+    # Kamal reads config/deploy.yml + .kamal/secrets from the checkout to know the
+    # host/registry/service — sync the repo (current branch HEAD; config only, the
+    # target image is NOT rebuilt) and materialize secrets, exactly as a deploy would.
+    return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
+    return false unless verify_required_secrets
+    materialize_master_key
+    write_secrets_file
+    write_self_describing_config if app.self_describing?
+    log_ssh_diagnostics
+
+    return false unless run_kamal_rollback(version)
+
+    deployment.succeed!
+    log "Rollback to #{version} completed successfully!"
     broadcast_status("succeeded")
     true
   rescue StandardError => e
@@ -315,9 +361,31 @@ class KamalDeployer
     false
   end
 
+  # `kamal rollback <version>` — boots the image already tagged <version> on the
+  # host. Same stale-lock recovery as deploy (a killed run can strand the lock).
+  def run_kamal_rollback(version)
+    log "Running: kamal rollback #{version}"
+    result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    return true if result.success?
+
+    if result.output.to_s.include?("Deploy lock found")
+      log "Stale kamal lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
+      @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      return true if result.success?
+    end
+
+    fail_with("kamal rollback failed (exit #{result.exit_code}) — the target version's image may no longer be retained on the host")
+    false
+  end
+
   # `kamal deploy` from the checkout; prefer the bundled binstub.
   def kamal_command
     ["bash", "-lc", "#{kamal_bin} deploy#{destination_flag}"]
+  end
+
+  def kamal_rollback_command(version)
+    ["bash", "-lc", "#{kamal_bin} rollback #{esc(version)}#{destination_flag}"]
   end
 
   def kamal_lock_release_command

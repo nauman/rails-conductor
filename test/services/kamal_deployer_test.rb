@@ -61,6 +61,10 @@ class KamalDeployerTest < ActiveSupport::TestCase
     KamalDeployer.new(@app, @deployment, shell: shell).tap(&:deploy!)
   end
 
+  def rollback_with(shell, version: "deadbeefcafe1234")
+    KamalDeployer.new(@app, @deployment, shell: shell).tap { |d| d.rollback!(version) }
+  end
+
   def with_env(vars)
     old = vars.to_h { |k, _| [ k, ENV[k] ] }
     vars.each { |k, v| ENV[k] = v }
@@ -86,6 +90,31 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert kamal_run, "expected a kamal deploy step"
     assert_equal File.join(@workspace, "appone"), kamal_run[:chdir]
     assert_equal "succeeded", @deployment.reload.status
+  end
+
+  test "rollback! syncs config then runs kamal rollback <version>, not kamal deploy, and succeeds" do
+    shell = FakeShell.new(success: true)
+    rollback_with(shell, version: "abc123def456")
+
+    cmds = shell.runs.map { |r| r[:command].last }
+    rollback_run = shell.runs.find { |r| r[:command].last.include?("kamal rollback abc123def456") }
+    assert rollback_run, "expected a `kamal rollback <version>` step"
+    assert_equal File.join(@workspace, "appone"), rollback_run[:chdir]
+    refute cmds.any? { |c| c.include?("kamal deploy") }, "rollback must not build/deploy"
+    assert_equal "succeeded", @deployment.reload.status
+    assert_equal "abc123def456", @deployment.reload.release_version
+  end
+
+  test "rollback! fails loud when kamal rollback fails" do
+    rollback_with(FailOnShell.new("kamal rollback"))
+    assert_equal "failed", @deployment.reload.status
+  end
+
+  test "rollback! aborts before touching the host when no version is given" do
+    shell = FakeShell.new(success: true)
+    KamalDeployer.new(@app, @deployment, shell: shell).rollback!("")
+    assert_equal "failed", @deployment.reload.status
+    refute shell.runs.any? { |r| r[:command].last.to_s.include?("kamal rollback") }
   end
 
   test "does not run seeds unless requested, and records nothing" do
