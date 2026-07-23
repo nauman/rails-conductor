@@ -25,27 +25,43 @@ side, and each domain resolves to whichever account owns its zone.
 
 ## 2. Attach Cloudflare's MCP
 
-Cloudflare hosts **remote MCP servers** — you connect a client to them; Conductor
-doesn't self-host them. The most useful is the **API MCP server**, which wraps the
-entire Cloudflare API (2,500+ endpoints incl. DNS records / proxied status and
-`update_zone_setting` for SSL mode) behind two tools, `search()` and `execute()`.
+Cloudflare hosts **remote MCP servers** (you connect a client to them; Conductor
+doesn't self-host them). Auth is **OAuth — it triggers automatically on first tool
+use**, so there's no token in the attach command. The main one wraps the Cloudflare
+API behind `search()` / `execute()` (DNS records / proxied status, `update_zone_setting`
+for SSL mode, and more).
 
-Each connected account's card shows a ready-to-run attach command using **that
-account's token as the bearer**:
+**Servers** (per Cloudflare's agent-setup):
+
+| Name | URL |
+| --- | --- |
+| `cloudflare` (main API) | `https://mcp.cloudflare.com/mcp` |
+| `cloudflare-docs` (public, no auth) | `https://docs.mcp.cloudflare.com/mcp` |
+| `cloudflare-bindings` | `https://bindings.mcp.cloudflare.com/mcp` |
+| `cloudflare-builds` | `https://builds.mcp.cloudflare.com/mcp` |
+| `cloudflare-observability` | `https://observability.mcp.cloudflare.com/mcp` |
+
+**Claude Code — use the plugin** (recommended):
 
 ```
-claude mcp add --transport http cloudflare-<account> https://api.mcp.cloudflare.com/mcp \
-  --header "Authorization: Bearer <token>"
+claude plugin marketplace add cloudflare/skills
+claude plugin install cloudflare@cloudflare
+# then run /reload-plugins inside Claude
 ```
 
-**OAuth alternative** (no token in the command): add the server URL and let your MCP
-client redirect you to Cloudflare to authorize interactively —
-`claude mcp add --transport http cloudflare https://api.mcp.cloudflare.com/mcp`.
-Cloudflare also hosts product-specific servers (docs, observability, radar, DNS
-analytics, audit logs…) at `https://<service>.mcp.cloudflare.com/mcp`.
+**Other MCP clients — add the server** (OAuth on first use). Name it per account so
+you can authorize each account in its own OAuth flow — the Credentials page shows a
+ready-to-copy command per connected account:
+
+```
+claude mcp add --transport http cloudflare-<account> https://mcp.cloudflare.com/mcp
+```
 
 Once attached, your agent has **Conductor's tools and Cloudflare's** over the same
-fleet — e.g. inspect a zone, flip a record to proxied, or read DNS analytics inline.
+fleet — inspect a zone, flip a record to proxied, read DNS analytics, inline.
+
+> For headless/CI automation with a token instead of OAuth, see the self-runnable
+> **Code Mode** server at `github.com/cloudflare/mcp`.
 
 ## Direct actions vs MCP
 

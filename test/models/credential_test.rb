@@ -7,12 +7,14 @@ class CredentialTest < ActiveSupport::TestCase
     @cf = @org.credentials.create!(name: "InventList", provider: "cloudflare", api_key: "cf-token-xyz")
   end
 
-  test "cloudflare? + attach command carries the account token and URL" do
+  test "cloudflare? + OAuth attach command uses the hosted URL, per-account name, NO token" do
     assert @cf.cloudflare?
     cmd = @cf.cloudflare_mcp_command
+    assert_equal "https://mcp.cloudflare.com/mcp", Credential::CLOUDFLARE_MCP_URL
     assert_includes cmd, Credential::CLOUDFLARE_MCP_URL
-    assert_includes cmd, "Bearer cf-token-xyz"
     assert_includes cmd, "cloudflare-inventlist" # named per account
+    refute_includes cmd, "cf-token-xyz", "OAuth attach must not embed the token"
+    refute_includes cmd, "Bearer"
   end
 
   test "verify_cloudflare! caches account_id + zones and marks verified" do

@@ -27,8 +27,10 @@ class Credential < ApplicationRecord
 
   # --- Cloudflare connections (multi-account) ---
 
-  # Cloudflare's official API MCP server (entire CF API behind search/execute).
-  CLOUDFLARE_MCP_URL = "https://api.mcp.cloudflare.com/mcp".freeze
+  # Cloudflare's hosted API MCP server (per Cloudflare's agent-setup). Auth is OAuth,
+  # triggered on first tool use — no token in the command (the stored token is for
+  # Conductor's OWN direct API calls: verify/zones/put-behind-Cloudflare).
+  CLOUDFLARE_MCP_URL = "https://mcp.cloudflare.com/mcp".freeze
 
   def cloudflare? = provider == "cloudflare"
   def verified? = verified_at.present?
@@ -54,9 +56,9 @@ class Credential < ApplicationRecord
     nil
   end
 
-  # Client-side attach command: adds Cloudflare's MCP with THIS account's token as
-  # the bearer (the automation path; OAuth is the alternative — see the guide).
+  # Client-side attach command (OAuth — no token in the command). Named per account
+  # so you can add one connection per account and authorize each in its own OAuth.
   def cloudflare_mcp_command
-    %(claude mcp add --transport http cloudflare-#{name.parameterize} #{CLOUDFLARE_MCP_URL} --header "Authorization: Bearer #{api_key}")
+    %(claude mcp add --transport http cloudflare-#{name.parameterize} #{CLOUDFLARE_MCP_URL})
   end
 end
