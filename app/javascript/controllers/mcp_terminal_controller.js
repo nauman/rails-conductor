@@ -1,27 +1,32 @@
 import { Controller } from "@hotwired/stimulus"
 
 // A tabbed MCP terminal. Each tab is a scene (a short agent session) that types
-// itself out line-by-line with a trailing cursor. Scene 0 auto-plays when the
-// terminal scrolls into view; clicking a tab replays that scene. Progressive
-// enhancement (all scenes render in HTML) + prefers-reduced-motion aware.
+// itself out line-by-line with a trailing cursor. Auto-advances through the scenes
+// on a loop once it scrolls into view; pauses while hovered; a tab click jumps to
+// that scene and continues the loop from there. Progressive enhancement (all
+// scenes render in HTML) + prefers-reduced-motion aware (shows one scene, no loop).
 export default class extends Controller {
   static targets = ["tab", "scene", "cursor"]
-  static values = { delay: { type: Number, default: 420 } }
+  static values = { delay: { type: Number, default: 420 }, hold: { type: Number, default: 2400 } }
 
   connect() {
     this.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     this.timers = []
+    this.index = 0
+    this.paused = false
     this.#activate(0)
 
     if (this.reduced) return this.#reveal(0)
 
     this.#hide(0)
+    this.onEnter = () => { this.paused = true; clearTimeout(this.advanceTimer) }
+    this.onLeave = () => { this.paused = false; this.#scheduleNext() }
+    this.element.addEventListener("mouseenter", this.onEnter)
+    this.element.addEventListener("mouseleave", this.onLeave)
+
     this.observer = new IntersectionObserver((entries) => {
       entries.forEach((e) => {
-        if (e.isIntersecting) {
-          this.observer.disconnect()
-          this.#play(0)
-        }
+        if (e.isIntersecting) { this.observer.disconnect(); this.#play(0) }
       })
     }, { threshold: 0.3 })
     this.observer.observe(this.element)
@@ -30,6 +35,9 @@ export default class extends Controller {
   disconnect() {
     this.observer?.disconnect()
     this.#clear()
+    clearTimeout(this.advanceTimer)
+    this.element.removeEventListener("mouseenter", this.onEnter)
+    this.element.removeEventListener("mouseleave", this.onLeave)
   }
 
   select(event) {
@@ -69,6 +77,8 @@ export default class extends Controller {
 
   #play(i) {
     this.#clear()
+    clearTimeout(this.advanceTimer)
+    this.index = i
     this.#activate(i)
     if (this.reduced) return this.#reveal(i)
 
@@ -81,5 +91,15 @@ export default class extends Controller {
         if (this.hasCursorTarget) line.appendChild(this.cursorTarget)
       }, idx * this.delayValue))
     })
+    this.#scheduleNext()
+  }
+
+  #scheduleNext() {
+    if (this.paused || this.reduced) return
+    const total = this.#lines(this.index).length * this.delayValue + this.holdValue
+    clearTimeout(this.advanceTimer)
+    this.advanceTimer = setTimeout(() => {
+      this.#play((this.index + 1) % this.sceneTargets.length)
+    }, total)
   }
 }
