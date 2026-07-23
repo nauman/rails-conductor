@@ -7,6 +7,13 @@ class CredentialTest < ActiveSupport::TestCase
     @cf = @org.credentials.create!(name: "InventList", provider: "cloudflare", api_key: "cf-token-xyz")
   end
 
+  # A CloudflareClient stub whose zones() returns the given result.
+  def zones_client(ok:, data: [], error: nil)
+    c = Object.new
+    c.define_singleton_method(:zones) { CloudflareClient::Result.new(ok: ok, data: data, error: error) }
+    c
+  end
+
   test "cloudflare? + OAuth attach command uses the hosted URL, per-account name, NO token" do
     assert @cf.cloudflare?
     cmd = @cf.cloudflare_mcp_command
@@ -18,11 +25,7 @@ class CredentialTest < ActiveSupport::TestCase
   end
 
   test "verify_cloudflare! caches account_id + zones and marks verified" do
-    client = Object.new
-    client.define_singleton_method(:verify) { CloudflareClient::Result.new(ok: true, data: {}) }
-    client.define_singleton_method(:zones) do
-      CloudflareClient::Result.new(ok: true, data: [ { "id" => "z1", "name" => "calm.page", "account_id" => "acct1" } ])
-    end
+    client = zones_client(ok: true, data: [ { "id" => "z1", "name" => "calm.page", "account_id" => "acct1" } ])
 
     assert_nil @cf.verify_cloudflare!(client: client) # nil = success
     assert @cf.verified?
@@ -30,9 +33,18 @@ class CredentialTest < ActiveSupport::TestCase
     assert_equal [ "calm.page" ], @cf.zones_list.map { |z| z["name"] }
   end
 
-  test "verify_cloudflare! returns the error string on a bad token" do
-    client = Object.new
-    client.define_singleton_method(:verify) { CloudflareClient::Result.new(ok: false, error: "Invalid API Token") }
+  test "verifies via zones even when /user/tokens/verify would reject an account-scoped token" do
+    # The account-scoped token bug: verify() would fail, but zones() works — so we
+    # must NOT gate on verify(). This client's verify() blows up if called.
+    client = zones_client(ok: true, data: [ { "id" => "z", "name" => "kuickr.co", "account_id" => "a" } ])
+    client.define_singleton_method(:verify) { raise "must not call /user/tokens/verify" }
+
+    assert_nil @cf.verify_cloudflare!(client: client)
+    assert @cf.verified?
+  end
+
+  test "verify_cloudflare! returns the error string when zones can't be read" do
+    client = zones_client(ok: false, error: "Invalid API Token")
     assert_equal "Invalid API Token", @cf.verify_cloudflare!(client: client)
     refute @cf.verified?
   end

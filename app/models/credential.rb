@@ -41,14 +41,14 @@ class Credential < ApplicationRecord
     []
   end
 
-  # Verify the token and cache the account id + zone list, so Conductor can resolve
-  # which connected account owns a given domain. Returns nil on success, else an
-  # error string.
+  # Verify the token by LISTING ZONES — which is what we actually need, and works for
+  # every valid token. (We deliberately do NOT gate on /user/tokens/verify: that
+  # user-scoped endpoint returns "Invalid API Token" for account-scoped tokens that
+  # are perfectly valid for zone operations.) Caches account id + zones so Conductor
+  # can resolve which connected account owns a domain. Returns nil on success, else
+  # an error string.
   def verify_cloudflare!(client: nil)
     client ||= CloudflareClient.new(api_key)
-    v = client.verify
-    return v.error unless v.ok?
-
     z = client.zones
     return z.error unless z.ok?
 
