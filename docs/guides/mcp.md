@@ -134,6 +134,11 @@ vault kv get -field=master_key secret/myapp | bin/conductor set-env "My App" RAI
 aws secretsmanager get-secret-value --secret-id myapp/master_key --query SecretString --output text \
   | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret   # AWS Secrets Manager
 
+# localvault (zero-infra vault with an inject mode) — https://inventlist.com/tools/localvault
+# install: brew install inventlist/tap/localvault
+localvault exec --map myapp.master_key=V -- \
+  bash -c 'printf %s "$V" | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret'
+
 # Generic form — any tool, input JSON on stdin (keeps secret fields off argv):
 printf '{"action":"set_env","app_name":"My App","key":"K","value":"…"}' \
   | bin/conductor call conductor_app_config
