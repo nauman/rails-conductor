@@ -15,6 +15,6 @@ class CreateSiteChecks < ActiveRecord::Migration[8.1]
       t.string   :error
       t.timestamps
     end
-    add_index :site_checks, [:app_id, :checked_at]
+    add_index :site_checks, [ :app_id, :checked_at ]
   end
 end

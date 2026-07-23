@@ -3,7 +3,7 @@ require "test_helper"
 class SesClientTest < ActiveSupport::TestCase
   test "verify succeeds when SMTP auth accepts the creds; derives the regional host" do
     seen = nil
-    auth = ->(host, user, pass) { seen = [host, user, pass] } # no raise = accepted
+    auth = ->(host, user, pass) { seen = [ host, user, pass ] } # no raise = accepted
     r = SesClient.new("USER", "PASS", "ap-southeast-2", authenticator: auth).verify
     assert r.ok?
     assert_equal [ "email-smtp.ap-southeast-2.amazonaws.com", "USER", "PASS" ], seen

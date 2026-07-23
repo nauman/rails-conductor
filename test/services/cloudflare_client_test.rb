@@ -37,7 +37,7 @@ class CloudflareClientWriteTest < ActiveSupport::TestCase
     attr_reader :patched
     def initialize(responses) = (@responses = responses; @patched = [])
     def get(path) = @responses.fetch(path)
-    def patch(path, body) = (@patched << [path, body]; { "success" => true, "result" => body })
+    def patch(path, body) = (@patched << [ path, body ]; { "success" => true, "result" => body })
   end
 
   test "set_proxied PATCHes the record with proxied:true" do

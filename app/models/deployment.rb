@@ -16,7 +16,7 @@ class Deployment < ApplicationRecord
   scope :blocked, -> { where(status: "blocked") }
   # Successful deploys that shipped a rollback-able release (a version tag Kamal
   # can boot again on the host), newest first.
-  scope :rollbackable, -> { successful.where.not(release_version: [nil, ""]).recent }
+  scope :rollbackable, -> { successful.where.not(release_version: [ nil, "" ]).recent }
 
   def rollback?
     kind == "rollback"
