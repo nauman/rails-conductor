@@ -1,22 +1,23 @@
 require "test_helper"
 
 class DocsTest < ActionDispatch::IntegrationTest
-  test "the docs index is public and lists guides" do
+  HUB = "https://kuickr.co/conductor/docs/00-index.md".freeze
+
+  test "the docs index 301-redirects to the kuickr hub (public, no auth)" do
     get "/docs"
-    assert_response :success
-    assert_match "Conductor docs", @response.body
-    assert_match "Connect GitHub", @response.body
+    assert_response :moved_permanently
+    assert_redirected_to HUB
   end
 
-  test "a guide page renders the markdown publicly (no auth)" do
+  test "a guide slug 301-redirects to the kuickr hub too (no in-app copy to drift)" do
     get "/docs/connect-github"
-    assert_response :success
-    assert_match "Connect GitHub", @response.body
-    assert_match "GitHub App", @response.body
+    assert_response :moved_permanently
+    assert_redirected_to HUB
   end
 
-  test "an unknown guide returns 404" do
+  test "even an unknown slug redirects rather than 404 (docs live on kuickr now)" do
     get "/docs/does-not-exist"
-    assert_response :not_found
+    assert_response :moved_permanently
+    assert_redirected_to HUB
   end
 end
