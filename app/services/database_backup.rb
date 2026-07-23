@@ -91,12 +91,15 @@ class DatabaseBackup
 
   def upload_to_r2(ssh, local_path, filename)
     cred = backup.credential
-    # R2 is S3-compatible, use aws cli with custom endpoint
-    endpoint = "https://#{cred.api_secret}.r2.cloudflarestorage.com"
+    # R2 is S3-compatible. The endpoint host is the Cloudflare ACCOUNT ID (not the
+    # secret key), and R2 requires region "auto". Credentials: api_key = R2 access
+    # key id, api_secret = R2 secret access key, account_id = CF account id.
+    endpoint = "https://#{cred.account_id}.r2.cloudflarestorage.com"
 
     upload_cmd = <<~BASH
       AWS_ACCESS_KEY_ID=#{cred.api_key} \
       AWS_SECRET_ACCESS_KEY=#{cred.api_secret} \
+      AWS_DEFAULT_REGION=auto \
       aws s3 cp #{local_path} s3://#{backup.bucket_name}/#{filename} \
         --endpoint-url #{endpoint}
     BASH
