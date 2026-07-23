@@ -107,24 +107,41 @@ transcript exposure is on the *client* side, before the request is even sent.
 
 The fix is to never let the secret pass through the model at all: read it from **stdin**
 and put it straight into the HTTPS body. The bundled `bin/conductor` CLI does exactly
-that — the value is never an argv element, never printed, never logged:
+that — the value is read from stdin, so it is never an argv element, never printed, never
+logged. It needs only **Ruby stdlib** (no gems) and two env vars:
 
 ```bash
 export CONDUCTOR_URL=https://<your-conductor-host>
-export CONDUCTOR_MCP_TOKEN=<token>          # export it — never pass a secret on argv
+export CONDUCTOR_MCP_TOKEN=<token>          # mint one at /mcp_tokens
+```
 
-# Pipe the secret in from your vault; the literal never appears in the command text:
-localvault exec --map MYAPP.master_key=V -- \
-  bash -c 'printf %s "$V" | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret'
+The value comes from **stdin**, so you can pipe it from *any* source you already use — a
+file, an env var, or a secrets manager (1Password CLI, HashiCorp Vault, AWS Secrets
+Manager, `pass`, …). Conductor is deliberately unopinionated here: anything that can print
+a secret to stdout works, so you keep your existing secret store. The literal never
+appears in the command text:
+
+```bash
+# From a file (the file is the secret's home; nothing on argv):
+bin/conductor set-env "My App" RAILS_MASTER_KEY --secret < config/master.key
+
+# From an already-exported env var:
+printf %s "$RAILS_MASTER_KEY" | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret
+
+# From a secrets manager — pipe its output straight in. Examples:
+op read op://vault/myapp/master_key | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret   # 1Password CLI
+vault kv get -field=master_key secret/myapp | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret   # HashiCorp Vault
+aws secretsmanager get-secret-value --secret-id myapp/master_key --query SecretString --output text \
+  | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret   # AWS Secrets Manager
 
 # Generic form — any tool, input JSON on stdin (keeps secret fields off argv):
 printf '{"action":"set_env","app_name":"My App","key":"K","value":"…"}' \
   | bin/conductor call conductor_app_config
 ```
 
-Because the agent only ever types `$V` / `printf %s "$V"`, the actual secret flows
-**vault → env → stdin → TLS body** and touches neither argv nor the transcript. Requires
-only Ruby stdlib (no gems) and the two env vars above.
+Whatever the source, the secret flows **source → stdin → TLS body** and touches neither
+argv nor an agent's transcript. There's no dependency on any particular vault — `set-env`
+reads whatever you pipe it.
 
 ## Tokens & scope
 

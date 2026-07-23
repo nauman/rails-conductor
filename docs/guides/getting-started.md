@@ -19,7 +19,7 @@ Register a server  →  Add an app  →  Connect GitHub  →  Deploy  →  Point
 3. **Add an app.** Give it a name, repository URL, server, and a **deploy method** — `kamal`, `native`, or `docker`.
 4. **[Connect GitHub](connect-github).** So Conductor can clone private repos.
 5. **Set env vars.** `SECRET_KEY_BASE`, `DATABASE_URL`, API keys — managed per app in Conductor.
-6. **[Deploy](deploy-an-app).** From the UI, the CLI, or an agent.
+6. **[Deploy](deploy-an-app).** From the UI or an agent (an MCP endpoint any agent can drive).
 7. **Point a domain.** Conductor manages routing + TLS (Let's Encrypt) via the shared proxy.
 
 ## Topologies
@@ -31,10 +31,10 @@ Conductor doesn't force one layout:
 
 Deploy method and topology are independent choices.
 
-## Drive it three ways
+## Drive it two ways (CLI in progress)
 
 - **Web UI** — the dashboard at `/dashboard`.
-- **CLI** — scripted operations.
-- **MCP** — AI agents call Conductor's tools (e.g. `register_server`, `provision_database`, `create_app`, `deploy_app`) to run the whole loop programmatically.
+- **MCP** — the full toolset over HTTP: AI agents (or your own scripts via `curl`) call Conductor's tools to run the whole loop programmatically. See [Deploy via MCP](mcp).
+- **CLI** *(early / in progress)* — `bin/conductor` currently covers secret-safe `set-env` and a generic `call <tool>` passthrough over the MCP endpoint. A fuller command set is planned; until then, script against MCP directly.
 
 Next: **[Deploy an app](deploy-an-app)**.
