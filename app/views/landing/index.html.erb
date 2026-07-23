@@ -1,3 +1,21 @@
+<%
+  # Small inline icon set (stroke, currentColor) so cards carry a real glyph.
+  icon_paths = {
+    command:     '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 9.5l3 2.5-3 2.5"/><path d="M12.5 14.5h4.5"/>',
+    lock:        '<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/>',
+    server:      '<rect x="4" y="4.5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/><path d="M7.5 7.5h.01M7.5 16h.01"/>',
+    grid:        '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    deploy:      '<path d="M12 16V6"/><path d="M8 10l4-4 4 4"/><path d="M5 19h14"/>',
+    globe:       '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.5 2.4 2.5 14.6 0 17M12 3.5c-2.5 2.4-2.5 14.6 0 17"/>',
+    database:    '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 12c0 1.66 3.13 3 7 3s7-1.34 7-3"/>',
+    archive:     '<rect x="4" y="5" width="16" height="4" rx="1"/><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9"/><path d="M10 13h4"/>',
+    book:        '<path d="M8 4h8a2 2 0 012 2v13a1 1 0 01-1 1H7a1 1 0 01-1-1V6a2 2 0 012-2z"/><path d="M9 9h6M9 12.5h6M9 16h4"/>',
+    bolt:        '<path d="M13 3L5 13h5l-1 8 8-10h-5l1-8z"/>'
+  }
+  svg_icon = ->(name) {
+    "<svg class=\"h-[18px] w-[18px]\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" viewBox=\"0 0 24 24\" aria-hidden=\"true\">#{icon_paths[name]}</svg>"
+  }
+%>
 <div class="mx-auto max-w-6xl px-6">
   <!-- ─────────────────────────────  Hero  ───────────────────────────── -->
   <section class="pt-20 pb-16 text-center">
@@ -48,29 +66,68 @@
   <!-- ────────────────  Product texture: agent-native terminal  ──────────────── -->
   <section class="pb-20">
     <div class="mx-auto max-w-3xl overflow-hidden rounded-large border border-border shadow-soft"
-         data-controller="terminal" data-terminal-delay-value="480">
-      <div class="flex items-center gap-2 border-b border-white/10 bg-ink px-4 py-2.5">
-        <span class="h-2.5 w-2.5 rounded-full bg-danger-bright/80"></span>
-        <span class="h-2.5 w-2.5 rounded-full bg-warning-bright/80"></span>
-        <span class="h-2.5 w-2.5 rounded-full bg-primary-strong/80"></span>
-        <span class="ml-2 font-mono text-2xs text-white/50">agent → conductor · MCP</span>
+         data-controller="mcp-terminal" data-mcp-terminal-delay-value="430">
+      <%# window chrome + scene tabs %>
+      <div class="flex items-center gap-3 border-b border-white/10 bg-ink px-4 py-2.5">
+        <div class="flex items-center gap-1.5">
+          <span class="h-2.5 w-2.5 rounded-full bg-danger-bright/80"></span>
+          <span class="h-2.5 w-2.5 rounded-full bg-warning-bright/80"></span>
+          <span class="h-2.5 w-2.5 rounded-full bg-primary-strong/80"></span>
+        </div>
+        <div class="ml-1 flex items-center gap-1" role="tablist" aria-label="Example MCP sessions">
+          <% ["Resume", "Ship", "Operate"].each_with_index do |t, i| %>
+            <button type="button" role="tab" data-mcp-terminal-target="tab" data-index="<%= i %>"
+                    data-action="mcp-terminal#select"
+                    class="rounded-md px-2.5 py-1 font-mono text-2xs text-white/45 transition-colors hover:text-white/80"><%= t %></button>
+          <% end %>
+        </div>
+        <span class="ml-auto hidden font-mono text-2xs text-white/35 sm:block">agent → conductor · MCP</span>
       </div>
-      <div class="overflow-x-auto bg-ink px-5 py-4 font-mono text-xs leading-relaxed text-white/90">
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-white/40"># an agent reconnects and picks up exactly where it left off — one read</span></span>
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-primary-sage">POST</span> /mcp/call  <span class="text-white/50">{ "name": "conductor_read", "input": { "action": "situation" } }</span></span>
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-white/40">← in_flight:       deployment #123 · calm.page · deploying</span></span>
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-white/40">← needs_attention: app "kuickr" · seed run failed · runbook attached</span></span>
-        <span class="block h-3" data-terminal-target="line"></span>
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-white/40"># then it ships — with the same guardrails you get in the UI</span></span>
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-primary-sage">POST</span> /mcp/call  <span class="text-white/50">{ "name": "conductor_app", "input": { "action": "deploy", "app_name": "calm.page" } }</span></span>
-        <span class="block whitespace-pre-wrap" data-terminal-target="line"><span class="text-white/40">← preflight: migrations ✓ seeds ✓ audit ✓ threads ✓ · #124 · https 200</span></span>
-        <span class="ml-1 inline-block h-3.5 w-2 translate-y-0.5 bg-primary-sage/80 animate-pulse" data-terminal-target="cursor"></span>
+
+      <%# scenes — each a short agent session that types itself out %>
+      <div class="overflow-x-auto bg-ink px-5 py-4 font-mono text-xs leading-relaxed text-white/90 min-h-[188px]">
+        <%
+          req  = ->(tool, args) { "<span class=\"text-primary-sage\">→</span> <span class=\"text-white/80\">#{tool}</span> <span class=\"text-white/45\">#{args}</span>" }
+          res  = ->(text) { "<span class=\"text-white/45\">← #{text}</span>" }
+          note = ->(text) { "<span class=\"text-white/35\"># #{text}</span>" }
+          scenes = [
+            [ # Resume
+              note.("reconnect — one read to see exactly where things stand"),
+              req.("conductor_read", "· action: situation"),
+              res.("in_flight:       deploy #128 · acme.com · deploying (2/4 preflight)"),
+              res.("needs_attention: shop · seed run failed · runbook attached"),
+              res.("recent:          blog #127 ✓ · docs #126 ✓")
+            ],
+            [ # Ship
+              note.("ship the latest commit — the preflight gate runs first"),
+              req.("conductor_app", "· action: deploy · app_name: acme.com"),
+              res.("preflight: migrations ✓ · seeds ✓ · audit ✓ · threads ✓"),
+              res.("build → push → release · gated db:migrate ✓"),
+              res.("deploy #128 · kamal · https 200 · 1m52s")
+            ],
+            [ # Operate
+              note.("check the fleet, then read an app's own runbook"),
+              req.("conductor_read", "· action: fleet_status"),
+              res.("app-01 · online · cpu 6% · load 0.18 · disk 26% · 4 apps"),
+              req.("conductor_runbook", "· action: get · app_name: shop"),
+              res.("runbook: 5 steps · checklist 4/5 · \"migrate before assets\"")
+            ]
+          ]
+        %>
+        <% scenes.each_with_index do |lines, i| %>
+          <div data-mcp-terminal-target="scene" data-index="<%= i %>"<%= " hidden".html_safe if i > 0 %>>
+            <% lines.each do |line| %>
+              <span class="block whitespace-pre-wrap" data-line><%= line.html_safe %></span>
+            <% end %>
+          </div>
+        <% end %>
+        <span class="ml-1 inline-block h-3.5 w-2 translate-y-0.5 bg-primary-sage/80 animate-pulse" data-mcp-terminal-target="cursor"></span>
       </div>
     </div>
     <p class="mx-auto mt-4 max-w-2xl text-center text-sm text-muted">
-      Every action is exposed over MCP, and it's <strong class="text-body">resumable</strong>: an agent that
-      disconnects reads the fleet's situation and continues — in-flight work, a needs-attention worklist,
-      and each app's own runbook. Actions are idempotent, so retries never double-fire.
+      <span class="text-body">Switch tabs</span> to watch an agent <strong class="text-body">resume</strong> after a
+      disconnect, <strong class="text-body">ship</strong> through the preflight gate, and <strong class="text-body">operate</strong>
+      the fleet — all over MCP, all idempotent, so retries never double-fire.
     </p>
   </section>
 </div>
@@ -82,14 +139,14 @@
     <h2 class="mt-2 text-center font-display text-3xl text-ink tracking-display">Built for how Rails is run now</h2>
     <div class="mt-10 grid gap-5 md:grid-cols-3">
       <% [
-        [:primary, "Agent-native & resumable", "The whole surface is over MCP, and it survives disconnects: an agent reads the fleet situation, picks up in-flight work, and follows each app's own runbook. Idempotent by design.", "conductor_read · situation · conductor_runbook"],
-        [:accent, "Secretless deploys", "Config in your repo carries every non-secret coordinate; real secrets stay in your vault behind a pointer. Clone the repo and bin/kamal just works.", "config/deploy.production.yml · .kamal/secrets"],
-        [:info, "Yours to run", "Source-available and self-hosted on servers you already own. A Hatchbox-class control plane with no per-app pricing and no lock-in.", "your Hetzner · DO · bare metal"]
-      ].each_with_index do |(accent, title, body, mono), i| %>
+        [:primary, :command, "Agent-native & resumable", "The whole surface is over MCP, and it survives disconnects: an agent reads the fleet situation, picks up in-flight work, and follows each app's own runbook. Idempotent by design.", "conductor_read · situation · conductor_runbook"],
+        [:accent, :lock, "Secretless deploys", "Config in your repo carries every non-secret coordinate; real secrets stay in your vault behind a pointer. Clone the repo and bin/kamal just works.", "config/deploy.production.yml · .kamal/secrets"],
+        [:info, :server, "Yours to run", "Source-available and self-hosted on servers you already own. A Hatchbox-class control plane with no per-app pricing and no lock-in.", "your servers · your cloud · bare metal"]
+      ].each_with_index do |(accent, icon, title, body, mono), i| %>
         <div class="rounded-large border border-border bg-surface p-6 shadow-soft"
              data-controller="reveal" data-reveal-delay-value="<%= i * 90 %>">
-          <span class="inline-flex h-8 w-8 items-center justify-center rounded-card bg-<%= accent %>-tint">
-            <span class="h-2.5 w-2.5 rounded-full bg-<%= accent %>"></span>
+          <span class="inline-flex h-9 w-9 items-center justify-center rounded-card bg-<%= accent %>-tint text-<%= accent %>">
+            <%= svg_icon.(icon).html_safe %>
           </span>
           <h3 class="mt-4 font-display text-xl text-ink"><%= title %></h3>
           <p class="mt-2 text-sm text-muted"><%= body %></p>
@@ -107,18 +164,18 @@
     <h2 class="mt-2 text-center font-display text-3xl text-ink tracking-display">One place, end to end</h2>
     <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       <% [
-        [:primary, "Fleet control", "Every server and app in one view — health, last deploy, and what's running where, live."],
-        [:info, "Deploy your way", "Kamal, Docker, or native Puma under one control plane — with a preflight gate that blocks a risky ship before it happens."],
-        [:accent, "Routing & edge", "Caddy routes and domains with live TLS; wildcard subdomains and custom domains."],
-        [:warning, "Databases", "Hatchbox-style Postgres — a database and role per app, provisioned from the UI."],
-        [:primary, "Backups & data", "Scheduled database backups to S3 or R2, with restore you can actually run."],
-        [:accent, "Per-app runbooks", "Every app carries its own deploy runbook + checklist — because each one ships differently. Readable by you and the agent."],
-        [:danger, "Maintenance & power", "Server audits, security auto-updates, drift checks, and reboots — with a passwordless-sudo readiness check so ops just work."]
-      ].each_with_index do |(accent, title, body), i| %>
+        [:primary, :grid, "Fleet control", "Every server and app in one view — health, last deploy, and what's running where, live."],
+        [:info, :deploy, "Deploy your way", "Kamal, Docker, or native Puma under one control plane — with a preflight gate that blocks a risky ship before it happens."],
+        [:accent, :globe, "Routing & edge", "Caddy routes and domains with live TLS; wildcard subdomains and custom domains."],
+        [:warning, :database, "Databases", "Hatchbox-style Postgres — a database and role per app, provisioned from the UI."],
+        [:primary, :archive, "Backups & data", "Scheduled database backups to S3-compatible object storage, kept off the box."],
+        [:accent, :book, "Per-app runbooks", "Every app carries its own deploy runbook + checklist — because each one ships differently. Readable by you and the agent."],
+        [:danger, :bolt, "Maintenance & power", "Server audits, security auto-updates, drift checks, and reboots — with a passwordless-sudo readiness check so ops just work."]
+      ].each_with_index do |(accent, icon, title, body), i| %>
         <div class="rounded-large border border-border bg-surface p-5 shadow-soft"
              data-controller="reveal" data-reveal-delay-value="<%= i * 70 %>">
           <div class="flex items-center gap-2.5">
-            <span class="h-2 w-2 rounded-full bg-<%= accent %>"></span>
+            <span class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-card bg-<%= accent %>-tint text-<%= accent %>"><%= svg_icon.(icon).html_safe %></span>
             <h3 class="text-sm font-semibold text-ink"><%= title %></h3>
           </div>
           <p class="mt-2 text-sm text-muted"><%= body %></p>
@@ -135,10 +192,23 @@
     <p class="mx-auto mt-2 max-w-xl text-sm text-muted">
       Connect your accounts once — Conductor wires the rest of the fleet to them.
     </p>
+
+    <%# Available today %>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-      <% ["Cloudflare R2", "Amazon SES", "Amazon SNS", "Hetzner", "DigitalOcean", "Caddy", "GitHub", "Postgres"].each_with_index do |svc, i| %>
+      <% ["GitHub", "Postgres", "Caddy"].each_with_index do |svc, i| %>
         <span class="rounded-full border border-border bg-surface px-4 py-1.5 font-mono text-xs text-body"
               data-controller="reveal" data-reveal-delay-value="<%= i * 55 %>"><%= svc %></span>
+      <% end %>
+    </div>
+
+    <%# Roadmap — honest about what isn't wired yet %>
+    <p class="mt-8 text-2xs font-semibold uppercase tracking-label text-faint">Coming soon</p>
+    <div class="mt-3 flex flex-wrap items-center justify-center gap-3">
+      <% ["Cloudflare R2", "Amazon SES", "Amazon SNS", "Hetzner", "DigitalOcean"].each_with_index do |svc, i| %>
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border-strong bg-transparent px-4 py-1.5 font-mono text-xs text-faint"
+              data-controller="reveal" data-reveal-delay-value="<%= i * 55 %>">
+          <%= svc %><span class="rounded-full bg-fill px-1.5 py-0.5 text-[9px] uppercase tracking-label text-muted">soon</span>
+        </span>
       <% end %>
     </div>
   </div>
