@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_23_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -111,9 +111,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_110000) do
     t.text "api_key"
     t.text "api_secret"
     t.datetime "created_at", null: false
+    t.string "endpoint"
     t.string "name", null: false
     t.bigint "organization_id"
     t.string "provider", null: false
+    t.string "region"
     t.datetime "updated_at", null: false
     t.datetime "verified_at"
     t.text "zones"

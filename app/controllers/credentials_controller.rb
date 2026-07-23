@@ -57,6 +57,6 @@ class CredentialsController < ApplicationController
   end
 
   def credential_params
-    params.require(:credential).permit(:name, :provider, :api_key, :api_secret, :account_id, :active)
+    params.require(:credential).permit(:name, :provider, :api_key, :api_secret, :account_id, :region, :endpoint, :active)
   end
 end

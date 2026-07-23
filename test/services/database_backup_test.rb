@@ -4,23 +4,54 @@ class DatabaseBackupTest < ActiveSupport::TestCase
   setup do
     user = User.create!(email: "bk@example.com")
     @org = Organization.create_for(user, name: "Acme")
-    @cred = @org.credentials.create!(name: "r2", provider: "cloudflare",
-                                     api_key: "R2_ACCESS_KEY", api_secret: "R2_SECRET", account_id: "acct123")
-    @backup = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "mybucket",
-                                   credential: @cred, status: "pending")
   end
 
-  test "R2 upload targets the account-id endpoint + region auto — never the secret as host" do
-    captured = nil
-    ssh = Object.new
-    ssh.define_singleton_method(:execute) { |cmd| captured = cmd; true }
+  def backup_for(provider, cred_attrs)
+    cred = @org.credentials.create!({ name: "c", provider: "cloudflare", api_key: "AK", api_secret: "SK" }.merge(cred_attrs))
+    @org.backups.create!(provider: provider, bucket_name: "mybucket", credential: cred, status: "pending")
+  end
 
-    DatabaseBackup.new(@backup).send(:upload_to_r2, ssh, "/tmp/db.sql.gz", "db.sql.gz")
+  def cmd_for(provider, cred_attrs = {})
+    b = backup_for(provider, cred_attrs)
+    DatabaseBackup.new(b).send(:s3_upload_command, BackupVendors[provider], "/tmp/db.sql.gz", "db.sql.gz")
+  end
 
-    assert_includes captured, "https://acct123.r2.cloudflarestorage.com", "endpoint host must be the account id"
-    refute_includes captured, "R2_SECRET.r2.cloudflarestorage.com", "the secret must not be the endpoint host"
-    assert_includes captured, "AWS_DEFAULT_REGION=auto", "R2 needs region auto"
-    assert_includes captured, "AWS_ACCESS_KEY_ID=R2_ACCESS_KEY"
-    assert_includes captured, "s3://mybucket/db.sql.gz"
+  test "R2 targets the account-id endpoint + region auto — never the secret as host" do
+    c = cmd_for("cloudflare_r2", account_id: "acct123")
+    assert_includes c, "https://acct123.r2.cloudflarestorage.com"
+    refute_includes c, "SK.r2.cloudflarestorage.com"
+    assert_includes c, "AWS_DEFAULT_REGION=auto"
+    assert_includes c, "s3://mybucket/db.sql.gz"
+  end
+
+  test "AWS S3 uses no custom endpoint (default) + the given region" do
+    c = cmd_for("aws_s3", region: "eu-west-1")
+    refute_includes c, "--endpoint-url"
+    assert_includes c, "AWS_DEFAULT_REGION=eu-west-1"
+  end
+
+  test "Wasabi builds the regional wasabisys endpoint" do
+    c = cmd_for("wasabi", region: "eu-central-1")
+    assert_includes c, "--endpoint-url https://s3.eu-central-1.wasabisys.com"
+  end
+
+  test "MinIO / custom uses the credential's endpoint verbatim" do
+    c = cmd_for("minio", endpoint: "https://minio.internal:9000", region: "us-east-1")
+    assert_includes c, "--endpoint-url https://minio.internal:9000"
+  end
+
+  test "an unknown provider is a clean failure, not a crash" do
+    b = backup_for("aws_s3", {})
+    b.update_column(:provider, "bogus")
+    svc = DatabaseBackup.new(b)
+    fake_ssh = Object.new
+    assert_not svc.send(:upload_to_storage, fake_ssh, "/tmp/x", "x")
+    assert_match(/Unsupported provider/, svc.error)
+  end
+
+  test "local provider uploads nothing" do
+    b = backup_for("aws_s3", {})
+    b.update_column(:provider, "local")
+    assert DatabaseBackup.new(b).send(:upload_to_storage, Object.new, "/tmp/x", "x")
   end
 end

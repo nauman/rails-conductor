@@ -75,57 +75,31 @@ class DatabaseBackup
   end
 
   def upload_to_storage(ssh, local_path, filename)
-    case backup.provider
-    when "cloudflare_r2"
-      upload_to_r2(ssh, local_path, filename)
-    when "aws_s3"
-      upload_to_s3(ssh, local_path, filename)
-    when "local"
-      # Local backup - just keep the file
-      true
-    else
-      @error = "Unsupported provider: #{backup.provider}"
-      false
-    end
+    return true if backup.provider == "local" # nothing to upload — keep the file
+
+    vendor = BackupVendors[backup.provider]
+    return fail_upload("Unsupported provider: #{backup.provider}") unless vendor
+
+    ssh.execute(s3_upload_command(vendor, local_path, filename)) ? true : fail_upload(ssh.error)
   end
 
-  def upload_to_r2(ssh, local_path, filename)
+  # One uniform `aws s3 cp` for every S3-compatible vendor. The vendor registry
+  # supplies the endpoint + region; the credential supplies the keys. A custom
+  # endpoint is added only when the vendor needs one (AWS S3 uses the default).
+  def s3_upload_command(vendor, local_path, filename)
     cred = backup.credential
-    # R2 is S3-compatible. The endpoint host is the Cloudflare ACCOUNT ID (not the
-    # secret key), and R2 requires region "auto". Credentials: api_key = R2 access
-    # key id, api_secret = R2 secret access key, account_id = CF account id.
-    endpoint = "https://#{cred.account_id}.r2.cloudflarestorage.com"
-
-    upload_cmd = <<~BASH
-      AWS_ACCESS_KEY_ID=#{cred.api_key} \
-      AWS_SECRET_ACCESS_KEY=#{cred.api_secret} \
-      AWS_DEFAULT_REGION=auto \
-      aws s3 cp #{local_path} s3://#{backup.bucket_name}/#{filename} \
-        --endpoint-url #{endpoint}
-    BASH
-
-    if ssh.execute(upload_cmd)
-      true
-    else
-      @error = ssh.error
-      false
-    end
+    env = [
+      "AWS_ACCESS_KEY_ID=#{cred.api_key}",
+      "AWS_SECRET_ACCESS_KEY=#{cred.api_secret}",
+      "AWS_DEFAULT_REGION=#{vendor.region(cred)}"
+    ]
+    cmd = [ "aws", "s3", "cp", local_path, "s3://#{backup.bucket_name}/#{filename}" ]
+    cmd += [ "--endpoint-url", vendor.endpoint(cred) ] if vendor.endpoint(cred).present?
+    "#{env.join(' ')} #{cmd.join(' ')}"
   end
 
-  def upload_to_s3(ssh, local_path, filename)
-    cred = backup.credential
-
-    upload_cmd = <<~BASH
-      AWS_ACCESS_KEY_ID=#{cred.api_key} \
-      AWS_SECRET_ACCESS_KEY=#{cred.api_secret} \
-      aws s3 cp #{local_path} s3://#{backup.bucket_name}/#{filename}
-    BASH
-
-    if ssh.execute(upload_cmd)
-      true
-    else
-      @error = ssh.error
-      false
-    end
+  def fail_upload(message)
+    @error = message
+    false
   end
 end

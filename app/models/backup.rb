@@ -1,7 +1,9 @@
 class Backup < ApplicationRecord
   include OrganizationConsistency
   validate_same_organization :server, :app, :credential
-  PROVIDERS = %w[cloudflare_r2 aws_s3 backblaze_b2 local].freeze
+  # S3-compatible destinations (+ local). Per-vendor endpoint/region live in
+  # BackupVendors; DatabaseBackup builds one uniform upload from it.
+  PROVIDERS = %w[aws_s3 cloudflare_r2 wasabi backblaze_b2 do_spaces minio local].freeze
   STATUSES = %w[pending running completed failed warning].freeze
   SCHEDULES = %w[hourly daily weekly monthly].freeze
 
