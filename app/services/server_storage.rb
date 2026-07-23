@@ -39,6 +39,10 @@ class ServerStorage
     return failure(@ssh.error.presence || "No response from server") unless @ssh.success?
 
     parse(sections(output))
+  rescue => e
+    # Never let a parse hiccup 500 the turbo-frame (Turbo renders "Content missing"
+    # for a non-2xx). Degrade to an in-frame error instead.
+    failure("Couldn't read storage detail: #{e.message}")
   end
 
   private

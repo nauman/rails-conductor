@@ -1,25 +1,28 @@
-<%# Passwordless-sudo readiness. Privileged fleet ops (updates, reboot) need a
-    NOPASSWD grant — the same one-time setup Hatchbox does at provision time. %>
-<div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-  <div class="flex items-center justify-between">
-    <h3 class="text-sm font-semibold text-ink">Privileged ops readiness</h3>
-    <% if ready.nil? %>
-      <span class="rounded-full bg-fill px-2 py-0.5 text-2xs font-semibold text-muted">SSH not configured</span>
+<%# Lazy turbo-frame: passwordless-sudo readiness, loaded via servers#sudo_check.
+    Privileged fleet ops (updates, reboot) need a NOPASSWD grant — the same one-time
+    setup Hatchbox does at provision time. %>
+<%= turbo_frame_tag dom_id(server, :sudo_check) do %>
+  <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-ink">Privileged ops readiness</h3>
+      <% if ready.nil? %>
+        <span class="rounded-full bg-fill px-2 py-0.5 text-2xs font-semibold text-muted">SSH not configured</span>
+      <% elsif ready %>
+        <span class="rounded-full bg-primary-tint px-2 py-0.5 text-2xs font-semibold text-primary-strong">Ready</span>
+      <% else %>
+        <span class="rounded-full bg-warning-tint px-2 py-0.5 text-2xs font-semibold text-warning-deep">Setup needed</span>
+      <% end %>
+    </div>
+
+    <% if ready == false %>
+      <p class="mt-2 text-xs text-muted">
+        Updates and reboot run as <span class="font-mono"><%= server.ssh_user_or_default %></span> via <code class="font-mono">sudo -n</code>,
+        but this server prompts for a password. Grant passwordless sudo once — as root (or a sudo user) on the server:
+      </p>
+      <pre class="mt-3 overflow-x-auto rounded-base bg-ink px-3 py-2.5 font-mono text-2xs leading-relaxed text-white/90"><%= grant_command %></pre>
+      <p class="mt-2 text-2xs text-faint">Same grant Hatchbox sets up at provisioning — no permanent root SSH needed.</p>
     <% elsif ready %>
-      <span class="rounded-full bg-primary-tint px-2 py-0.5 text-2xs font-semibold text-primary-strong">Ready</span>
-    <% else %>
-      <span class="rounded-full bg-warning-tint px-2 py-0.5 text-2xs font-semibold text-warning-deep">Setup needed</span>
+      <p class="mt-2 text-xs text-muted">Passwordless sudo is configured — updates and reboot will run cleanly.</p>
     <% end %>
   </div>
-
-  <% if ready == false %>
-    <p class="mt-2 text-xs text-muted">
-      Updates and reboot run as <span class="font-mono"><%= server.ssh_user_or_default %></span> via <code class="font-mono">sudo -n</code>,
-      but this server prompts for a password. Grant passwordless sudo once — as root (or a sudo user) on the server:
-    </p>
-    <pre class="mt-3 overflow-x-auto rounded-base bg-ink px-3 py-2.5 font-mono text-2xs leading-relaxed text-white/90"><%= grant_command %></pre>
-    <p class="mt-2 text-2xs text-faint">Same grant Hatchbox sets up at provisioning — no permanent root SSH needed.</p>
-  <% elsif ready %>
-    <p class="mt-2 text-xs text-muted">Passwordless sudo is configured — updates and reboot will run cleanly.</p>
-  <% end %>
-</div>
+<% end %>
