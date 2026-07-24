@@ -91,17 +91,20 @@
                 </div>
               </nav>
 
-              <div class="flex max-w-full shrink-0 items-center gap-1 border-l border-border pl-2 sm:gap-2" data-account-controls>
+              <div class="flex max-w-full shrink-0 items-center gap-2 border-l border-border pl-2 sm:gap-3" data-account-controls>
                 <div class="hidden md:block">
                   <%= render "organizations/switcher" %>
                 </div>
-                <div class="hidden xl:flex flex-col items-end leading-tight">
-                  <span class="text-2xs text-muted max-w-[12rem] truncate"><%= current_user.email %></span>
-                  <% if current_admin? %>
-                    <span class="text-2xs uppercase tracking-label text-warning">Admin</span>
-                  <% end %>
+                <div class="hidden xl:flex items-center gap-2">
+                  <span class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fill text-2xs font-semibold uppercase text-body" title="<%= current_user.email %>"><%= current_user.email.to_s[0]&.upcase %></span>
+                  <div class="flex flex-col items-start leading-tight">
+                    <span class="text-2xs text-body max-w-[12rem] truncate"><%= current_user.email %></span>
+                    <% if current_admin? %>
+                      <span class="mt-0.5 rounded-full bg-warning-tint px-1.5 py-px text-[10px] font-semibold uppercase tracking-label text-warning-deep">Admin</span>
+                    <% end %>
+                  </div>
                 </div>
-                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "shrink-0 whitespace-nowrap rounded-pill px-2 py-1.5 text-2xs font-semibold uppercase tracking-label text-muted hover:bg-fill-strong hover:text-ink sm:px-3" %>
+                <%= button_to "Sign out", user_sign_out_path, method: :delete, class: "shrink-0 whitespace-nowrap rounded-pill border border-border px-3 py-1.5 text-2xs font-semibold uppercase tracking-label text-muted hover:border-border-strong hover:bg-fill-strong hover:text-ink" %>
               </div>
             <% else %>
               <div class="flex-1"></div>

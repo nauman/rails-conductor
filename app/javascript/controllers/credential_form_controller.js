@@ -6,13 +6,14 @@ import { Controller } from "@hotwired/stimulus"
 export default class extends Controller {
   static targets = [
     "provider", "apiKeyLabel", "apiSecretGroup", "apiSecretLabel",
-    "accountIdGroup", "regionGroup", "endpointGroup"
+    "accountIdGroup", "regionGroup", "regionLabel", "regionInput", "regionHint", "endpointGroup"
   ]
 
-  // per-provider field config
+  // per-provider field config. regionRequired: SES SMTP passwords are region-specific,
+  // so a blank region silently defaults to us-east-1 and 535s — force it there.
   static CONFIG = {
     cloudflare:   { accountId: true,  region: true,  endpoint: false, apiKey: "API token (or R2 access key id)", apiSecret: "R2 secret access key (for R2 backups)" },
-    amazon_ses:   { accountId: false, region: true,  endpoint: true,  apiKey: "SMTP username",   apiSecret: "SMTP password" },
+    amazon_ses:   { accountId: false, region: true,  regionRequired: true, endpoint: true, apiKey: "SMTP username", apiSecret: "SMTP password" },
     aws:          { accountId: false, region: true,  endpoint: true,  apiKey: "Access key id",   apiSecret: "Secret access key" },
     digitalocean: { accountId: false, region: true,  endpoint: true,  apiKey: "Spaces key",      apiSecret: "Spaces secret" },
     hetzner:      { accountId: false, region: false, endpoint: false, apiKey: "API token",       apiSecret: "" },
@@ -35,6 +36,12 @@ export default class extends Controller {
 
     if (this.hasApiKeyLabelTarget) this.apiKeyLabelTarget.textContent = cfg.apiKey
     if (this.hasApiSecretLabelTarget && cfg.apiSecret) this.apiSecretLabelTarget.textContent = cfg.apiSecret
+
+    // Region required-ness (SES): flip the label, the `required` attribute, and a hint.
+    const required = !!cfg.regionRequired
+    if (this.hasRegionLabelTarget) this.regionLabelTarget.textContent = required ? "Region (required)" : "Region (optional)"
+    if (this.hasRegionInputTarget) this.regionInputTarget.required = required
+    if (this.hasRegionHintTarget) this.regionHintTarget.textContent = required ? "Must match the AWS region where the SMTP credentials were created." : ""
   }
 
   #toggle(el, show) { el.classList.toggle("hidden", !show) }

@@ -7,6 +7,18 @@ class CredentialTest < ActiveSupport::TestCase
     @cf = @org.credentials.create!(name: "InventList", provider: "cloudflare", api_key: "cf-token-xyz")
   end
 
+  test "an SES credential requires a region (blank region would silently 535)" do
+    ses = @org.credentials.build(name: "SES", provider: "amazon_ses", api_key: "user", api_secret: "pass")
+    refute ses.valid?
+    assert_match(/region/i, ses.errors[:region].join)
+    ses.region = "eu-west-1"
+    assert ses.valid?, ses.errors.full_messages.join(", ")
+  end
+
+  test "region stays optional for non-SES providers" do
+    assert @cf.valid? # cloudflare, no region set
+  end
+
   # A CloudflareClient stub whose zones() returns the given result.
   def zones_client(ok:, data: [], error: nil)
     c = Object.new
@@ -74,7 +86,7 @@ class CredentialTest < ActiveSupport::TestCase
   test "verify_ses! returns the SMTP error on bad creds" do
     client = Object.new
     client.define_singleton_method(:verify) { SesClient::Result.new(ok: false, error: "535 auth invalid") }
-    ses = @org.credentials.create!(name: "ses", provider: "amazon_ses", api_key: "u", api_secret: "bad")
+    ses = @org.credentials.create!(name: "ses", provider: "amazon_ses", api_key: "u", api_secret: "bad", region: "us-east-1")
     assert_equal "535 auth invalid", ses.verify_ses!(client: client)
     refute ses.verified?
   end

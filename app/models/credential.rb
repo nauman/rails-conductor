@@ -10,6 +10,9 @@ class Credential < ApplicationRecord
 
   validates :name, presence: true
   validates :provider, presence: true, inclusion: { in: PROVIDERS }
+  # SES SMTP passwords are region-specific — a blank region silently defaults to
+  # us-east-1 and produces a misleading 535. Force it to be set.
+  validates :region, presence: { message: "is required for SES (the AWS region where the SMTP credentials were created)" }, if: :ses?
 
   scope :active, -> { where(active: true) }
   scope :inactive, -> { where(active: false) }
