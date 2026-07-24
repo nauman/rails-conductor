@@ -33,11 +33,29 @@ Conductor's current "fleet" topology uses a **shared Postgres cluster** (one
 container, a database+role per app) for density. Dedicated-container is the
 opposite end of the axis: portability + isolation over density.
 
-⟶ **ANNOTATE (Decision A — the big one):** shared-cluster vs dedicated-container as
-the model. Proposed: **make it a per-app choice** — `database_mode: shared |
-dedicated` — defaulting to `dedicated` for new apps (portable by default), with
-`shared` available for dense/low-value apps. Both coexist. Agree, or should
-dedicated be the *only* model going forward?
+### Second axis: locality (placement) — orthogonal to mode
+
+Mode (shared vs dedicated) is *isolation*. Independently, **placement** is
+*locality* — is the DB on the app's own box, or on a separate machine dedicated to
+databases? Both are per-app, and **switching between cells must be first-class**.
+
+| mode × placement | colocated (app's box) | dedicated DB host (separate box) |
+|---|---|---|
+| **shared cluster** | dense fleet — today's default | central DB server for many apps |
+| **dedicated container** | isolated, on the app's box | isolated, on a DB-dedicated box |
+
+**Conversion is the same machinery as transfer, scoped to the DB.** Moving an app's
+DB between any two cells — e.g. `calm.page`: shared-colocated → dedicated container,
+on-box *or* onto a dedicated DB host — is provision → replicate → cut-over (switch
+`DATABASE_URL`) → decommission, minus the compute/edge moves. So it's reusable both
+standalone ("give this app its own DB" / "move its DB to the DB box") and as a step
+inside a whole-app box transfer.
+
+⟶ **ANNOTATE (Decision A — the big one, two axes):** per app,
+`database_mode: shared | dedicated` × `database_placement: colocated |
+dedicated_host`. Proposed defaults for new apps: `dedicated` + `colocated`
+(portable, simple), a shared central DB host available for density, and **live
+conversion between any cell**. Agree, constrain the matrix, or go dedicated-only?
 
 ### Trade-offs (honest)
 

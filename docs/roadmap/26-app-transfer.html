@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App transfer between boxes + dedicated database containers · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p1:#8a6a1f;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f0ec;font-weight:600;color:var(--ink)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .decide{background:#f7efd9;border:1px solid #ecdcb8;border-radius:12px;padding:12px 16px;margin:12px 0}
+  .decide b{color:var(--p1);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body data-kuickr-bar="float"><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>App transfer between boxes</h1>
+  <p class="sub">Move a running app from one server to another — even when the two boxes run <strong>different edges</strong> (kamal-proxy vs Caddy). The unlock is <strong>dedicated, runtime-wired database containers</strong> so an app's state is a self-contained, portable unit.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime backends</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: L</span>
+    <span class="badge planned">Status: Draft · annotate</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2>Problem</h2>
+  <p>"Move a workload between boxes" is the essence of fleet management, but today it's a manual, forensic exercise. The primitives already exist — deploy-to-server, <code>DatabasePull</code> (pg_dump→scp→restore), <code>CaddyClient</code>, <code>CloudflareClient</code> (DNS), and per-server <code>edge_type</code>. Two things are missing:</p>
+  <ul>
+    <li><strong>Orchestration</strong> — no first-class, staged "move app A→B" with a dry-run and rollback.</li>
+    <li><strong>State coupling</strong> — the database is welded to the box (a shared cluster), so one app's data can't move as a unit.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>The core bet: dedicated, runtime-wired database containers</h2>
+  <p>Give each app its <strong>own Postgres container</strong> (its own volume), and inject the app's DB config <strong>at runtime</strong> (Hatchbox-style: it writes <code>database.yml</code> at boot; the DB is a separate container). The image carries <em>no</em> DB coordinates — so the same image runs against whatever endpoint it's pointed at. An app's state becomes a <strong>self-contained unit</strong> (<code>&lt;app&gt;-db</code> container + volume); moving the app = move/replicate that one unit and re-inject the endpoint.</p>
+  <p>This diverges from today's <strong>shared cluster</strong> (one Postgres, a DB+role per app) which trades portability for density.</p>
+
+  <h2>Two axes: isolation × locality (both per-app)</h2>
+  <p><strong>Mode</strong> is isolation (shared cluster vs dedicated container). Independently, <strong>placement</strong> is locality — is the DB on the app's own box, or on a separate machine dedicated to databases? Both are per-app knobs, and Conductor must let you <strong>switch between them live</strong>.</p>
+  <table>
+    <tr><th>mode × placement</th><th>colocated (app's box)</th><th>dedicated DB host (separate box)</th></tr>
+    <tr><td><strong>shared cluster</strong></td><td>Dense fleet — today's default</td><td>Central DB server serving many apps</td></tr>
+    <tr><td><strong>dedicated container</strong></td><td>Isolated, on the app's box</td><td>Isolated, on a DB-dedicated box</td></tr>
+  </table>
+  <p><strong>Switching is first-class.</strong> Converting an app's DB between any two cells — e.g. <code>calm.page</code>: shared-cluster-colocated → dedicated container, on-box <em>or</em> onto a dedicated DB host — is the same <em>provision → replicate → cut-over → decommission</em> machinery as a full app transfer, scoped to the database only. So it's reusable both standalone ("give this app its own DB / move its DB to the DB box") and as a step inside a whole-app box transfer.</p>
+
+  <div class="decide"><b>Decision A — the big one (two axes)</b><br>
+    Per app: <code>database_mode: shared | dedicated</code> × <code>database_placement: colocated | dedicated_host</code>. Proposed defaults for new apps: <code>dedicated</code> + <code>colocated</code> (portable, simple), with a shared central DB host available for density, and <strong>live conversion between any cell</strong>. Agree, or constrain the matrix?</div>
+  <p class="sub">Example — <code>calm.page</code> is shared-cluster-colocated today; likely target is a dedicated container (colocated first, movable to a DB host later).</p>
+
+  <h2>Trade-offs (honest)</h2>
+  <table>
+    <tr><th></th><th>Dedicated container per app</th><th>Shared cluster (today)</th></tr>
+    <tr><td>Migration</td><td>Self-contained — move the container+volume</td><td>pg_dump one DB out of a shared cluster</td></tr>
+    <tr><td>Isolation</td><td>Per-app crash / load / tuning / PG version</td><td>One app can starve others; one PG version</td></tr>
+    <tr><td>Backup / upgrade</td><td>Per-app, independent blast radius</td><td>All-or-nothing per cluster</td></tr>
+    <tr><td>Resource cost</td><td>N Postgres baselines — adds up on a dense box</td><td>One baseline for many apps</td></tr>
+    <tr><td>Ops surface</td><td>N containers to patch/monitor</td><td>One cluster</td></tr>
+  </table>
+
+  <div class="decide"><b>Decision B</b><br>
+    Injection mechanism: (i) write <code>config/database.yml</code> at boot, (ii) inject <code>DATABASE_URL</code> at deploy, (iii) both. Proposed: <strong>DATABASE_URL injected at deploy</strong> (12-factor; composes with <a href="#">shared-credential references, plan 02</a>); <code>database.yml</code> only when an app needs it.</div>
+</div>
+
+<div class="card">
+  <h2>The edge is pluggable (kamal-proxy vs Caddy)</h2>
+  <p>Conductor already stores <code>Server#edge_type</code> (<code>caddy</code> / <code>kamal_proxy</code> / <code>other</code> / <code>none</code>). A transfer doesn't need the boxes to match — it needs Conductor to render the destination edge's config. Introduce an <strong>edge adapter</strong>:</p>
+  <p><code>Edge.for(server).publish(domain:, upstream:)</code> → <code>CaddyAdapter</code> (Admin API, exists as <code>CaddyClient</code>) or <code>KamalProxyAdapter</code> (deploy.yml / proxy config — the missing half).</p>
+  <p>Once both exist, "publish this app's domain on box B" is uniform regardless of B's edge. Converges with <a href="18-per-app-proxy-mode.html">slot 18 (per-app proxy mode)</a> and <a href="22-caddy-console.html">slot 22 (Caddy console)</a>.</p>
+
+  <div class="decide"><b>Decision C</b><br>
+    Build the <code>KamalProxyAdapter</code> (transfers into <em>either</em> edge), or require Caddy on any transfer target (simpler, but forces Caddy on the fleet)?</div>
+</div>
+
+<div class="card">
+  <h2>The transfer workflow</h2>
+  <p>An app is tied to a box across orthogonal axes; a transfer reconciles each, staged for minimal downtime:</p>
+  <ol class="slices">
+    <li><strong>Plan / dry-run</strong> — emit exactly what will change: compute (redeploy to B), edge (A's config → B's edge translation), database (mode + migration method), DNS (repoint). No mutation — this is the "make sense of it" artifact.</li>
+    <li><strong>Stand up on B (parallel)</strong> — deploy the app to B (Kamal builds on B over SSH); provision <code>&lt;app&gt;-db</code> on B if dedicated. A stays live.</li>
+    <li><strong>Replicate state</strong> — dedicated: base-backup/restore or logical replication into B's DB container; shared: <code>DatabasePull</code> A→B.</li>
+    <li><strong>Cut over</strong> — publish the domain on B's edge, repoint DNS (<code>CloudflareClient</code> for CF domains), let B's edge mint TLS; final DB sync + switch <code>DATABASE_URL</code>.</li>
+    <li><strong>Verify + drain</strong> — health + <code>site_check</code> through B; stop A after a hold window; keep A's DB as a rollback snapshot for N days.</li>
+  </ol>
+
+  <div class="decide"><b>Decision D</b><br>
+    Downtime target. Cold (dump/restore, minutes of write-downtime) is simple; near-zero (logical replication) is more moving parts. Proposed: <strong>ship cold-cutover first</strong> (maintenance window), add logical replication as a follow-up.</div>
+</div>
+
+<div class="card">
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A dry-run emits the full change set (compute / edge / DB / DNS) with zero mutation.</li>
+    <li>An app moves A→B across <em>different</em> edges (kamal-proxy → Caddy) with its domain + TLS working on B.</li>
+    <li>A dedicated-DB app's state moves as a self-contained unit; <code>DATABASE_URL</code> is injected, never baked into the image.</li>
+    <li>An app's DB <strong>converts standalone</strong> between mode/placement cells (e.g. shared-colocated → dedicated container on a DB host) with the app re-pointed and the old DB retained for rollback.</li>
+    <li>Rollback at any step before decommission points DNS/edge back to A with no data loss.</li>
+  </ul></div>
+
+  <h2>Open questions (annotate)</h2>
+  <ul>
+    <li>Same-box multi-tenancy for dedicated DBs — port/socket allocation?</li>
+    <li>Per-app dedicated DB backups — reuse the S3/R2 path, one schedule per DB container?</li>
+    <li>PG major-version differences A↔B — block, or dump/restore across versions?</li>
+    <li>Does "transfer" also cover <strong>clone</strong> (copy to B, keep A) — same machinery, skip decommission?</li>
+  </ul>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Builds on <a href="18-per-app-proxy-mode.html">per-app proxy mode</a> + <a href="22-caddy-console.html">Caddy console</a> (edge adapters), and the dedicated-DB direction complements <a href="23-deploy-executor.html">the deploy-executor rework</a>. Full working spec: <code>docs/conductor/plans/04-app-transfer-and-dedicated-db.md</code>.</p>
+</div>
+<footer>Conductor roadmap · 2026-07-24 · draft for annotation</footer>
+</div></body></html>
