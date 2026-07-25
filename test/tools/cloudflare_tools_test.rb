@@ -58,4 +58,34 @@ class CloudflareToolsTest < ActiveSupport::TestCase
       assert_includes res.error, "No connected Cloudflare account"
     end
   end
+
+  test "conductor_domain action=purge_cloudflare purges the app cache via CloudflarePurge" do
+    fake = Struct.new(:seen) do
+      def purge!(files:) = (self.seen = files; CloudflarePurge::Result.new(ok: true, message: "purged: #{files || 'everything'}"))
+    end.new(nil)
+
+    CloudflarePurge.stub(:new, ->(_app) { fake }) do
+      res = ConductorDomainTool.new(user: @user).call(
+        "action" => "purge_cloudflare", "app_name" => "Calm", "files" => [ "https://calm.page/a.css" ]
+      )
+      assert res.success?, res.error
+      assert_equal "calm.page", res.value[:domain]
+      assert_equal [ "https://calm.page/a.css" ], res.value[:purged]
+      assert_equal [ "https://calm.page/a.css" ], fake.seen
+      assert_equal @org, res.value[:_organization]
+    end
+  end
+
+  test "purge_cloudflare defaults to purging everything and reports failures" do
+    fake = Struct.new(:seen) do
+      def purge!(files:) = (self.seen = files; CloudflarePurge::Result.new(ok: false, message: "No connected Cloudflare account owns calm.page."))
+    end.new(:unset)
+
+    CloudflarePurge.stub(:new, ->(_app) { fake }) do
+      res = ConductorDomainTool.new(user: @user).call("action" => "purge_cloudflare", "app_id" => @app.id)
+      refute res.success?
+      assert_nil fake.seen, "files should be nil (purge everything) when omitted"
+      assert_includes res.error, "No connected Cloudflare account"
+    end
+  end
 end

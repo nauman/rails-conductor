@@ -18,7 +18,7 @@ The surface is **eight flat tools**; each call sets `action` plus that action's 
 | `conductor_app_config` | `set_env`, `gen_deploy_key` | `gen_deploy_key` returns the PUBLIC key to add on GitHub. |
 | `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `audit`, `apply_updates`, `install_packages`, `run_script` | `add_ssh_key` generates a deploy key (returns public key); `update` attaches a key / sets login user; `test_connection` verifies SSH + refreshes metrics; `run_script` enqueues a ScriptRun. |
 | `conductor_database` | `register_cluster`, `provision` | `provision` returns a connection URL — confirm. |
-| `conductor_domain` | `add`, `remove` | `remove` is destructive — confirm. |
+| `conductor_domain` | `add`, `remove`, `put_behind_cloudflare`, `purge_cloudflare` | `remove` is destructive — confirm. `put_behind_cloudflare` proxies a domain (CDN + edge TLS); `purge_cloudflare` clears the edge cache (optional `files` URLs, else everything) after a deploy that left stale/404'd assets. Both need a Verified Cloudflare account (see `conductor_read action: cloudflare`). |
 | `conductor_github` | `set_token`, `set_app`, `installations` | Stores credentials Conductor-wide. |
 | `conductor_runbook` | `get`, `set_runbook`, `add_item`, `remove_item`, `check_item`, `reset` | Per-app deploy runbook + checklist. **Read (`get`) before deploying** — each app deploys differently. Work the checklist during deploy; `reset` before a new one. |
 

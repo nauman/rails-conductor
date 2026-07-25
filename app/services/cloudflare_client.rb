@@ -57,6 +57,15 @@ class CloudflareClient
     Result.new(ok: true, data: body["result"])
   end
 
+  # Purge a zone's edge cache. Pass files: [full URLs] to purge specific assets
+  # (e.g. a hashed CSS file Cloudflare cached as a 404), or omit for a full purge.
+  def purge_cache(zone_id, files: nil)
+    body = post("/zones/#{zone_id}/purge_cache", Array(files).any? ? { files: Array(files) } : { purge_everything: true })
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
   private
 
   def failure(body)
@@ -74,6 +83,14 @@ class CloudflareClient
     return @http.patch(path, body) if @http # test seam
 
     req = Net::HTTP::Patch.new(URI("#{API}#{path}"))
+    req.body = body.to_json
+    request(req)
+  end
+
+  def post(path, body)
+    return @http.post(path, body) if @http # test seam
+
+    req = Net::HTTP::Post.new(URI("#{API}#{path}"))
     req.body = body.to_json
     request(req)
   end

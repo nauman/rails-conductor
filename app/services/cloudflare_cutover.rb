@@ -3,6 +3,8 @@
 # zone SSL mode. Default SSL "full" — safe with the current origin TLS (zero downtime),
 # unlike "flexible" which requires an HTTP-only origin.
 class CloudflareCutover
+  include CloudflareZoneResolver
+
   Result = Struct.new(:ok, :message, keyword_init: true) do
     def ok? = ok
   end
@@ -16,7 +18,7 @@ class CloudflareCutover
     domain = @app.domain
     return failure("#{@app.name} has no domain to put behind Cloudflare.") if domain.blank?
 
-    cred, zone = resolve(domain)
+    cred, zone = resolve_cloudflare_zone(@app.organization || @app.server&.organization, domain)
     return failure("No connected Cloudflare account owns #{domain}. Connect + Verify the account first.") unless zone
 
     client = @client_for.call(cred)
@@ -35,16 +37,6 @@ class CloudflareCutover
   end
 
   private
-
-  # Find the connected, verified account whose zone owns this domain (apex or subdomain).
-  def resolve(domain)
-    creds = (@app.organization || @app.server&.organization)&.credentials&.where(provider: "cloudflare") || []
-    creds.each do |c|
-      zone = c.zones_list.find { |z| domain == z["name"] || domain.end_with?(".#{z['name']}") }
-      return [ c, zone ] if zone
-    end
-    [ nil, nil ]
-  end
 
   def failure(message) = Result.new(ok: false, message: message)
 end

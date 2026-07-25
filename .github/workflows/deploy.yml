@@ -69,14 +69,14 @@ jobs:
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       CONDUCTOR_MCP_TOKEN: ${{ secrets.CONDUCTOR_MCP_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # The committed .kamal/secrets reads RAILS_MASTER_KEY via `$(cat config/master.key)`,
       # which is gitignored — materialize it from the secret.

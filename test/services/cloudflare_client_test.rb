@@ -34,10 +34,11 @@ end
 
 class CloudflareClientWriteTest < ActiveSupport::TestCase
   class FakeHttp
-    attr_reader :patched
-    def initialize(responses) = (@responses = responses; @patched = [])
+    attr_reader :patched, :posted
+    def initialize(responses) = (@responses = responses; @patched = []; @posted = [])
     def get(path) = @responses.fetch(path)
     def patch(path, body) = (@patched << [ path, body ]; { "success" => true, "result" => body })
+    def post(path, body) = (@posted << [ path, body ]; { "success" => true, "result" => { "id" => "purge1" } })
   end
 
   test "set_proxied PATCHes the record with proxied:true" do
@@ -50,5 +51,18 @@ class CloudflareClientWriteTest < ActiveSupport::TestCase
     http = FakeHttp.new({})
     CloudflareClient.new("t", http: http).set_ssl_mode("z1", "full")
     assert_equal [ "/zones/z1/settings/ssl", { value: "full" } ], http.patched.first
+  end
+
+  test "purge_cache POSTs purge_everything when no files given" do
+    http = FakeHttp.new({})
+    res = CloudflareClient.new("t", http: http).purge_cache("z1")
+    assert res.ok?
+    assert_equal [ "/zones/z1/purge_cache", { purge_everything: true } ], http.posted.first
+  end
+
+  test "purge_cache POSTs the file list when files given" do
+    http = FakeHttp.new({})
+    CloudflareClient.new("t", http: http).purge_cache("z1", files: [ "https://x/a.css" ])
+    assert_equal [ "/zones/z1/purge_cache", { files: [ "https://x/a.css" ] } ], http.posted.first
   end
 end

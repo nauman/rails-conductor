@@ -5,7 +5,8 @@ class ConductorDomainTool
   ACTIONS = {
     "add"                   => AddDomainTool,
     "remove"                => RemoveDomainTool,
-    "put_behind_cloudflare" => PutBehindCloudflareTool
+    "put_behind_cloudflare" => PutBehindCloudflareTool,
+    "purge_cloudflare"      => PurgeCloudflareTool
   }.freeze
 
   DEFINITION = {
@@ -13,18 +14,20 @@ class ConductorDomainTool
     description: "Domains & edge routing. Set `action` to one of: " \
       "add (route a domain to an app in Caddy — server_id, domain, upstream as a unix socket path or host:port), " \
       "remove (remove a domain from Caddy — server_id, domain), " \
-      "put_behind_cloudflare (proxy an app's domain through Cloudflare for CDN + edge TLS — app_id or app_name, optional ssl_mode; needs a Verified Cloudflare account, see conductor_read action=cloudflare). " \
+      "put_behind_cloudflare (proxy an app's domain through Cloudflare for CDN + edge TLS — app_id or app_name, optional ssl_mode; needs a Verified Cloudflare account, see conductor_read action=cloudflare), " \
+      "purge_cloudflare (purge an app's Cloudflare cache — app_id or app_name, optional files array of URLs; omit files to purge everything. Use after a deploy that left stale/404'd assets at the edge). " \
       "All change live routing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:    { type: "string", enum: %w[add remove put_behind_cloudflare], description: "Which domain operation" },
+        action:    { type: "string", enum: %w[add remove put_behind_cloudflare purge_cloudflare], description: "Which domain operation" },
         server_id: { type: "integer", description: "add/remove: server where Caddy runs" },
         domain:    { type: "string",  description: "add/remove: domain name (e.g. myapp.com)" },
         upstream:  { type: "string",  description: "add: unix socket path (/tmp/puma-myapp.sock) or host:port (localhost:3000)" },
-        app_id:    { type: "integer", description: "put_behind_cloudflare: the app whose domain to proxy" },
-        app_name:  { type: "string",  description: "put_behind_cloudflare: the app whose domain to proxy (alt to app_id)" },
-        ssl_mode:  { type: "string",  description: "put_behind_cloudflare: zone SSL mode (default 'full'; off/flexible/full/strict)" }
+        app_id:    { type: "integer", description: "put_behind_cloudflare/purge_cloudflare: the target app" },
+        app_name:  { type: "string",  description: "put_behind_cloudflare/purge_cloudflare: the target app (alt to app_id)" },
+        ssl_mode:  { type: "string",  description: "put_behind_cloudflare: zone SSL mode (default 'full'; off/flexible/full/strict)" },
+        files:     { type: "array", items: { type: "string" }, description: "purge_cloudflare: specific full URLs to purge (omit = purge everything)" }
       },
       required: %w[action]
     }
