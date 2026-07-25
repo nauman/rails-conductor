@@ -145,6 +145,13 @@ print_section() {
   done
 }
 
+echo "Discovery truth (do not ask the operator to create these):"
+echo "- AGENTS.md is a file at the repo ROOT (boot instructions)."
+echo "- .claude/skills/ is REPOSITORY skill discovery."
+echo "- ~/.codex/skills/ and ~/.agents/skills/ are MACHINE-LOCAL (system root, not in-repo)."
+echo "- A missing <repo>/.agents/ is EXPECTED, not an error."
+echo
+
 echo "Thread status - $DOCS_ROOT"
 echo "aliases: $(join_aliases)"
 print_section "OWED BY ME" owed

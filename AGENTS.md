@@ -11,6 +11,21 @@
 - Do not include AI attributions or disclaimers in commit messages.
 - Write commits as if authored by a developer.
 
+## Discovery Truth
+
+Where agent/skill discovery actually lives — **never ask the operator to create these**:
+
+| Purpose | Path | Scope |
+|---|---|---|
+| Repo boot instructions | `<repo>/AGENTS.md` | in-repo (this file) |
+| Repository skills | `<repo>/.claude/skills/` | in-repo |
+| Codex machine-local skills | `~/.codex/skills/` | machine-local (system root) |
+| Generic cross-tool skills | `~/.agents/skills/` | machine-local (system root) |
+
+`.agents` is a **home-directory** store (`~/.agents/`), not a repo folder. A
+missing `<repo>/.agents/` is **expected, not an error** — do not flag it or ask
+for it to be created. The boot scan (below) prints this same truth.
+
 ## On Session Start
 
 1. Read `docs/INDEX.md` for the doc map and maintenance rules.
