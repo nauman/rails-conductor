@@ -41,7 +41,7 @@
     <span class="badge">Pillar: Runtime backends</span>
     <span class="badge p1">Priority: P1</span>
     <span class="badge">Effort: L</span>
-    <span class="badge planned">Status: Draft · annotate</span>
+    <span class="badge planned">Status: Decisions locked · ready to build</span>
   </div>
 </header>
 
@@ -68,8 +68,8 @@
   </table>
   <p><strong>Switching is first-class.</strong> Converting an app's DB between any two cells — e.g. <code>calm.page</code>: shared-cluster-colocated → dedicated container, on-box <em>or</em> onto a dedicated DB host — is the same <em>provision → replicate → cut-over → decommission</em> machinery as a full app transfer, scoped to the database only. So it's reusable both standalone ("give this app its own DB / move its DB to the DB box") and as a step inside a whole-app box transfer.</p>
 
-  <div class="decide"><b>Decision A — the big one (two axes)</b><br>
-    Per app: <code>database_mode: shared | dedicated</code> × <code>database_placement: colocated | dedicated_host</code>. Proposed defaults for new apps: <code>dedicated</code> + <code>colocated</code> (portable, simple), with a shared central DB host available for density, and <strong>live conversion between any cell</strong>. Agree, or constrain the matrix?</div>
+  <div class="decide"><b>✅ Decision A — RESOLVED (operator, 2026-07-26)</b><br>
+    Per app: <code>database_mode: shared | dedicated</code> × <code>database_placement: colocated | dedicated_host</code>. <strong>New apps default to <code>dedicated</code> + <code>colocated</code></strong> (portable, simple); shared cluster and dedicated DB host stay opt-in for density; <strong>live conversion between all four cells is first-class</strong>. (Shared cluster retained — not dedicated-only.)</div>
   <p class="sub">Example — <code>calm.page</code> is shared-cluster-colocated today; likely target is a dedicated container (colocated first, movable to a DB host later).</p>
 
   <h2>Trade-offs (honest)</h2>
@@ -82,8 +82,8 @@
     <tr><td>Ops surface</td><td>N containers to patch/monitor</td><td>One cluster</td></tr>
   </table>
 
-  <div class="decide"><b>Decision B</b><br>
-    Injection mechanism: (i) write <code>config/database.yml</code> at boot, (ii) inject <code>DATABASE_URL</code> at deploy, (iii) both. Proposed: <strong>DATABASE_URL injected at deploy</strong> (12-factor; composes with <a href="#">shared-credential references, plan 02</a>); <code>database.yml</code> only when an app needs it.</div>
+  <div class="decide"><b>✅ Decision B — RESOLVED (2026-07-26)</b><br>
+    Injection is <strong>DATABASE_URL injected at deploy</strong> (12-factor; composes with <a href="#">shared-credential references, plan 02</a>); <code>config/database.yml</code> file injection only when a specific app needs it.</div>
 </div>
 
 <div class="card">
@@ -92,8 +92,8 @@
   <p><code>Edge.for(server).publish(domain:, upstream:)</code> → <code>CaddyAdapter</code> (Admin API, exists as <code>CaddyClient</code>) or <code>KamalProxyAdapter</code> (deploy.yml / proxy config — the missing half).</p>
   <p>Once both exist, "publish this app's domain on box B" is uniform regardless of B's edge. Converges with <a href="18-per-app-proxy-mode.html">slot 18 (per-app proxy mode)</a> and <a href="22-caddy-console.html">slot 22 (Caddy console)</a>.</p>
 
-  <div class="decide"><b>Decision C</b><br>
-    Build the <code>KamalProxyAdapter</code> (transfers into <em>either</em> edge), or require Caddy on any transfer target (simpler, but forces Caddy on the fleet)?</div>
+  <div class="decide"><b>✅ Decision C — RESOLVED (operator, 2026-07-26)</b><br>
+    <strong>Build the <code>KamalProxyAdapter</code></strong> — transfers publish into <em>either</em> edge via <code>Edge.for(server).publish(...)</code>; Caddy is not forced on receiving boxes.</div>
 </div>
 
 <div class="card">
@@ -107,8 +107,8 @@
     <li><strong>Verify + drain</strong> — health + <code>site_check</code> through B; stop A after a hold window; keep A's DB as a rollback snapshot for N days.</li>
   </ol>
 
-  <div class="decide"><b>Decision D</b><br>
-    Downtime target. Cold (dump/restore, minutes of write-downtime) is simple; near-zero (logical replication) is more moving parts. Proposed: <strong>ship cold-cutover first</strong> (maintenance window), add logical replication as a follow-up.</div>
+  <div class="decide"><b>✅ Decision D — RESOLVED (2026-07-26)</b><br>
+    <strong>Ship cold-cutover first</strong> (dump/restore in a maintenance window); add near-zero logical replication as a follow-up.</div>
 </div>
 
 <div class="card">
@@ -121,16 +121,16 @@
     <li>Rollback at any step before decommission points DNS/edge back to A with no data loss.</li>
   </ul></div>
 
-  <h2>Open questions (annotate)</h2>
+  <h2>Open questions — ✅ resolved (operator, 2026-07-24…26)</h2>
   <ul>
-    <li>Same-box multi-tenancy for dedicated DBs — port/socket allocation?</li>
-    <li>Per-app dedicated DB backups — reuse the S3/R2 path, one schedule per DB container?</li>
-    <li>PG major-version differences A↔B — block, or dump/restore across versions?</li>
-    <li>Does "transfer" also cover <strong>clone</strong> (copy to B, keep A) — same machinery, skip decommission?</li>
+    <li><strong>Port/socket allocation</strong> — non-issue by default: each <code>&lt;app&gt;-db</code> joins the app's Docker network, reached by container DNS (<code>…@&lt;app&gt;-db:5432</code>), so N dedicated Postgres coexist on one box with no host-port collision. Host ports / Unix socket are opt-in, only for external psql/backup access.</li>
+    <li><strong>Backups</strong> — reuse the existing R2/S3 destination choice, one schedule per <code>&lt;app&gt;-db</code>. No new backup surface.</li>
+    <li><strong>PG major-version A↔B</strong> — not blocked; dump/restore across versions (the client-version rules <code>DatabasePull</code> already applies).</li>
+    <li><strong>Clone</strong> — the same transfer pipeline with a stop-gap: provision → replicate → cut-over, then HOLD before drain/decommission, leaving A live.</li>
   </ul>
 
   <h2>Dependencies &amp; related</h2>
   <p>Builds on <a href="18-per-app-proxy-mode.html">per-app proxy mode</a> + <a href="22-caddy-console.html">Caddy console</a> (edge adapters), and the dedicated-DB direction complements <a href="23-deploy-executor.html">the deploy-executor rework</a>. Full working spec: <code>docs/conductor/plans/04-app-transfer-and-dedicated-db.md</code>.</p>
 </div>
-<footer>Conductor roadmap · 2026-07-24 · draft for annotation</footer>
+<footer>Conductor roadmap · updated 2026-07-26 · decisions A–D locked, ready to build</footer>
 </div></body></html>

@@ -1,10 +1,9 @@
 # 04 — App transfer between boxes + dedicated database containers
 
-Status: **Spec — DRAFT for annotation** (2026-07-24). Iterating interactively — each
-`⟶ ANNOTATE` marks a decision that needs the operator's call. Motivated by the
-calm.page situation: moving a running app to another box, where the two boxes can
-run **different edges** (kamal-proxy vs Caddy). Builds on the prior discussion in
-the thread; product truth once settled.
+Status: **Spec — decisions locked, ready to build** (updated 2026-07-26). All four
+decisions (A–D) and open questions resolved via operator annotations on the kuickr
+roadmap page. Motivated by the calm.page situation: moving a running app to another
+box, where the two boxes can run **different edges** (kamal-proxy vs Caddy).
 
 ## Why this is worth doing
 
@@ -51,11 +50,12 @@ on-box *or* onto a dedicated DB host — is provision → replicate → cut-over
 standalone ("give this app its own DB" / "move its DB to the DB box") and as a step
 inside a whole-app box transfer.
 
-⟶ **ANNOTATE (Decision A — the big one, two axes):** per app,
-`database_mode: shared | dedicated` × `database_placement: colocated |
-dedicated_host`. Proposed defaults for new apps: `dedicated` + `colocated`
-(portable, simple), a shared central DB host available for density, and **live
-conversion between any cell**. Agree, constrain the matrix, or go dedicated-only?
+✅ **RESOLVED (Decision A — the big one, two axes) [operator, 2026-07-26]:** per
+app, `database_mode: shared | dedicated` × `database_placement: colocated |
+dedicated_host`. **New apps default to `dedicated` + `colocated`** (portable,
+simple). The shared cluster and the dedicated DB host stay **opt-in** for density,
+and **live conversion between any of the four cells is first-class**. (Not
+dedicated-only — shared cluster is retained.)
 
 ### Trade-offs (honest)
 
@@ -68,11 +68,10 @@ conversion between any cell**. Agree, constrain the matrix, or go dedicated-only
 | **Ops surface** | N containers to patch/monitor | One cluster |
 | **Connection wiring** | Each needs a network endpoint | One endpoint |
 
-⟶ **ANNOTATE (Decision B):** the runtime-injection mechanism. Options: (i) write
-`config/database.yml` into the container at boot; (ii) inject `DATABASE_URL` env at
-deploy; (iii) both. Proposed: **DATABASE_URL env injected at deploy**, since Kamal
-+ 12-factor already center on it and it composes with the shared-credential-
-reference work (plan 02). `database.yml` file injection only if an app needs it.
+✅ **RESOLVED (Decision B) [default accepted, 2026-07-26]:** runtime-injection is
+**`DATABASE_URL` env injected at deploy**, since Kamal + 12-factor already center
+on it and it composes with the shared-credential-reference work (plan 02).
+`config/database.yml` file injection only if a specific app needs it.
 
 ### What dedicated containers require Conductor to own
 
@@ -98,8 +97,9 @@ Once both exist, "publish this app's domain on box B" is uniform regardless of B
 edge — cross-edge transfer stops being special-cased. (Converges with ADR 0002's
 Caddy-standard direction, but doesn't wait on it.)
 
-⟶ **ANNOTATE (Decision C):** build the KamalProxyAdapter, or declare Caddy the
-required edge for any transfer target (simpler, but forces Caddy on the fleet)?
+✅ **RESOLVED (Decision C) [operator, 2026-07-26]:** **build the
+`KamalProxyAdapter`.** Transfers publish into *either* edge via
+`Edge.for(server).publish(...)`; we do not force Caddy on receiving boxes.
 
 ## Part 3 — The transfer workflow
 
@@ -121,20 +121,26 @@ for minimal downtime:
    keep A's DB as a rollback snapshot for N days.
 7. **Rollback** — at any step before decommission, DNS/edge point back to A.
 
-⟶ **ANNOTATE (Decision D):** downtime target. Cold (dump/restore, minutes of
-write-downtime) is simple; near-zero (logical replication) is more moving parts.
-Proposed: **ship cold-cutover first** (with a maintenance window), add logical
-replication as a follow-up. Acceptable?
+✅ **RESOLVED (Decision D) [default accepted, 2026-07-26]:** **ship cold-cutover
+first** (dump/restore inside a maintenance window); add near-zero logical
+replication as a follow-up.
 
-## Open questions (for annotation)
+## Open questions — RESOLVED [operator annotations on kuickr, 2026-07-24…26]
 
-1. Same-box multi-tenancy for dedicated DBs — port/socket allocation strategy?
-2. Backups: does per-app dedicated DB reuse the existing S3/R2 backup path, one
-   schedule per DB container?
-3. PG major-version differences between A and B — block, or dump/restore across
-   versions (client-version rules like `DatabasePull` already handles)?
-4. Does "transfer" also cover **duplicate** (clone app to B, keep A) — same
-   machinery, skip decommission?
+1. **Same-box multi-tenancy / port allocation** — non-issue by default. Each
+   `<app>-db` joins the app's Docker network; the app reaches it by container DNS
+   (`DATABASE_URL=…@<app>-db:5432/<db>`), so N dedicated Postgres containers
+   coexist on one box with no host-port collision (5432 lives inside each
+   network namespace). Host ports (from a Conductor-tracked pool) or a
+   per-container Unix socket are **opt-in**, only when external psql/backup access
+   is wanted.
+2. **Backups** — per-app dedicated DBs **reuse the existing R2/S3 destination
+   choice**, one backup schedule per `<app>-db` container. No new backup surface.
+3. **PG major-version differences A↔B** — **not blocked**; dump/restore across
+   versions (the client-version rules `DatabasePull` already applies).
+4. **Clone (copy to B, keep A)** — **same transfer pipeline with a stop-gap**: it
+   runs provision → replicate → cut-over but HOLDS before drain/decommission,
+   leaving A live. `clone` = the transfer machinery minus the final step.
 
 ## Test plan (sketch — fill once decisions land)
 
