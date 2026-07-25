@@ -1,0 +1,13 @@
+<%# A copyable config block. Locals: id, label, content. Reuses the shared clipboard controller. %>
+<div class="mt-4" data-controller="clipboard" data-clipboard-target-value="<%= id %>">
+  <div class="flex items-center justify-between">
+    <span class="text-2xs font-semibold uppercase tracking-label text-muted"><%= label %></span>
+    <button type="button" data-action="clipboard#copy" class="cursor-pointer text-2xs font-semibold uppercase tracking-label text-primary hover:text-primary-strong">
+      <span class="relative inline-block">
+        <span data-clipboard-target="defaultMessage">Copy</span>
+        <span data-clipboard-target="successMessage" class="absolute inset-0 opacity-0 pointer-events-none text-success">Copied!</span>
+      </span>
+    </button>
+  </div>
+  <pre id="<%= id %>" class="mt-1 overflow-x-auto rounded-card bg-ink/90 p-3 text-xs font-mono leading-relaxed text-surface whitespace-pre"><%= content %></pre>
+</div>

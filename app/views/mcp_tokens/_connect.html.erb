@@ -1,0 +1,51 @@
+<%# "Connect an agent" panel. Locals: endpoint (String), token (String — a fresh raw token, or a $ENV placeholder), fresh (Boolean). %>
+<%
+  claude_cfg = %(claude mcp add --transport http conductor #{endpoint} \\\n  --header "Authorization: Bearer #{token}")
+
+  cursor_cfg = <<~JSON.strip
+    {
+      "mcpServers": {
+        "conductor": {
+          "url": "#{endpoint}",
+          "headers": { "Authorization": "Bearer #{token}" }
+        }
+      }
+    }
+  JSON
+
+  codex_cfg = <<~TOML.strip
+    [mcp_servers.conductor]
+    command = "npx"
+    args = [
+      "-y", "mcp-remote",
+      "#{endpoint}",
+      "--header", "Authorization: Bearer #{token}"
+    ]
+  TOML
+%>
+<div class="mt-6 rounded-large border border-border bg-surface p-6 shadow-soft">
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold text-ink">Connect an agent</h2>
+      <p class="mt-1 text-xs text-muted">
+        Endpoint <code class="rounded bg-fill px-1.5 py-0.5 font-mono"><%= endpoint %></code> —
+        a standards-compliant Streamable-HTTP MCP server. Paste one of these into your client.
+      </p>
+    </div>
+    <%= link_to "Full guide ↗", "/docs/mcp", class: "shrink-0 text-2xs font-semibold uppercase tracking-label text-primary hover:text-primary-strong" %>
+  </div>
+
+  <% if fresh %>
+    <p class="mt-3 rounded-card bg-primary-tint px-3 py-2 text-xs text-primary">
+      These snippets embed your <strong>new token</strong> — copy the one you need now; the token won't be shown again.
+    </p>
+  <% else %>
+    <p class="mt-3 text-xs text-muted">
+      Export your token first: <code class="rounded bg-fill px-1.5 py-0.5 font-mono">export CONDUCTOR_MCP_TOKEN=…</code> (create one above). Never commit the raw token.
+    </p>
+  <% end %>
+
+  <%= render "mcp_tokens/config_block", id: "cfg-claude", label: "Claude Code", content: claude_cfg %>
+  <%= render "mcp_tokens/config_block", id: "cfg-cursor", label: "Cursor — ~/.cursor/mcp.json", content: cursor_cfg %>
+  <%= render "mcp_tokens/config_block", id: "cfg-codex", label: "Codex — ~/.codex/config.toml (via mcp-remote bridge)", content: codex_cfg %>
+</div>

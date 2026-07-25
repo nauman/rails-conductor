@@ -40,16 +40,55 @@ curl -s https://<your-conductor-host>/mcp/call \
   -d '{"name":"conductor_read","input":{"action":"fleet_status"}}'
 ```
 
-## Connect an agent (Claude / Cursor)
+## Get a token
 
-Point your MCP client at the HTTP endpoint with the bearer header. For Claude Code:
+Mint a per-user, org-scoped token from your Conductor instance — **Settings → MCP tokens** (`/mcp_tokens`). Name it, pick a scope (`read` or `deploy`), and copy it **once** (it's shown only at creation, hashed at rest). Every call runs as you, confined to that token's organization, and is recorded to the MCP audit log with secrets redacted. Revoke a token any time from the same page; removing a member from the org invalidates their tokens automatically.
+
+> Export it as `CONDUCTOR_MCP_TOKEN` in the shell that launches your agent — never paste the raw token into a committed config file.
+
+(A single-tenant instance may instead use the shared `CONDUCTOR_MCP_TOKEN` env var set on the server; per-user tokens are preferred.)
+
+## Connect an agent (Claude / Cursor / Codex / any MCP client)
+
+`POST /mcp` is a **standards-compliant Streamable-HTTP MCP endpoint** (JSON-RPC 2.0 — `initialize` / `tools/list` / `tools/call` / `ping`), so any MCP-capable client connects the same way: point it at the endpoint and send the bearer header.
+
+**Claude Code** — native HTTP transport:
 
 ```bash
 claude mcp add --transport http conductor https://<your-conductor-host>/mcp \
   --header "Authorization: Bearer $CONDUCTOR_MCP_TOKEN"
 ```
 
+**Cursor** — add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "conductor": {
+      "url": "https://<your-conductor-host>/mcp",
+      "headers": { "Authorization": "Bearer <CONDUCTOR_MCP_TOKEN>" }
+    }
+  }
+}
+```
+
+**Codex** — Codex spawns a small stdio↔HTTP bridge ([`mcp-remote`](https://www.npmjs.com/package/mcp-remote)) that forwards to the endpoint and injects the header. In `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.conductor]
+command = "npx"
+args = [
+  "-y", "mcp-remote",
+  "https://<your-conductor-host>/mcp",
+  "--header", "Authorization: Bearer ${CONDUCTOR_MCP_TOKEN}"
+]
+```
+
+Export `CONDUCTOR_MCP_TOKEN` in the shell that launches Codex. The same `mcp-remote` recipe works for **any** MCP client that only speaks stdio.
+
 The agent then sees `conductor_app`, `conductor_read`, and the rest as native tools.
+
+> **Transport note.** Conductor's endpoint is **JSON-mode** Streamable HTTP — it answers each `POST` with one `application/json` response and never opens a server-initiated stream, so `GET /mcp` returns `405`. That's spec-legal (SSE is optional). If a client insists on an SSE channel over native HTTP, connect through the `mcp-remote` bridge above and it works unchanged.
 
 ## The toolset
 

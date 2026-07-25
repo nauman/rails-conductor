@@ -3,7 +3,7 @@
 <section class="max-w-3xl mx-auto px-4 py-10">
   <div>
     <h1 class="font-display text-2xl text-ink tracking-display">MCP Tokens</h1>
-    <p class="mt-1 text-sm text-muted">Per-user tokens scoped to <strong><%= current_organization.name %></strong>. Use one as the bearer token for an agent (Claude Desktop, Cursor) to deploy this org's apps over MCP. See the <%= link_to "MCP guide", "/docs/mcp", class: "text-primary underline" %>.</p>
+    <p class="mt-1 text-sm text-muted">Per-user tokens scoped to <strong><%= current_organization.name %></strong>. Use one as the bearer token for any MCP agent (Claude, Cursor, Codex) to deploy this org's apps over MCP. See the <%= link_to "MCP guide", "/docs/mcp", class: "text-primary underline" %>.</p>
   </div>
 
   <% if @new_token %>
@@ -30,6 +30,11 @@
       <%= submit_tag "Create token", class: "rounded-control bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong cursor-pointer" %>
     <% end %>
   </div>
+
+  <%= render "connect",
+        endpoint: "#{request.base_url}/mcp",
+        token: (@new_token || "$CONDUCTOR_MCP_TOKEN"),
+        fresh: @new_token.present? %>
 
   <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
     <table class="min-w-full">
