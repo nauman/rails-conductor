@@ -20,6 +20,17 @@ class KamalConfigTest < ActiveSupport::TestCase
 
   def overlay = YAML.load(KamalConfig.new(@app).deploy_overlay_yaml)
 
+  test "target_server overrides the overlay's destination host + ssh user (app transfer)" do
+    target = @org.servers.create!(name: "box-b", status: "online", ip_address: "198.51.100.5",
+                                  ssh_key: @key, ssh_user: "deploy2")
+    yaml = YAML.load(KamalConfig.new(@app, target_server: target).deploy_overlay_yaml)
+
+    assert_equal [ "198.51.100.5" ], yaml["servers"]["web"], "deploys to the target box, not the app's server"
+    assert_equal "deploy2", yaml["ssh"]["user"]
+    # Default (no target) still points at the app's own server.
+    assert_equal [ "192.0.2.10" ], overlay["servers"]["web"]
+  end
+
   test "overlay carries REAL literal coordinates — no placeholders, no ENV fallbacks" do
     yaml = KamalConfig.new(@app).deploy_overlay_yaml
     refute_match(/YOUR_SERVER_IP|your-user|\|\| /, yaml, "must not emit placeholder defaults")

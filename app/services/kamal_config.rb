@@ -23,10 +23,13 @@ class KamalConfig
 
   attr_reader :app, :vault
 
-  def initialize(app, vault: nil)
+  def initialize(app, vault: nil, target_server: nil)
     @app = app
     # localvault vault holding this app's secrets. Convention: key = <slug>.<KEY>.
     @vault = vault.presence || "devops"
+    # Where this overlay deploys. Defaults to the app's own server; an app
+    # transfer (spec 26) passes a target so the same app deploys to another box.
+    @server = target_server || app.server
   end
 
   # The real, literal destination overlay (config/deploy.production.yml).
@@ -34,8 +37,8 @@ class KamalConfig
     overlay = {
       "service" => app.slug,
       "image"   => "#{registry_username}/#{app.slug}",
-      "servers" => { "web" => [app.server&.ip_address].compact },
-      "ssh"     => { "user" => app.server&.ssh_user_or_default || "deploy" },
+      "servers" => { "web" => [@server&.ip_address].compact },
+      "ssh"     => { "user" => @server&.ssh_user_or_default || "deploy" },
       "proxy"   => proxy_block,
       "registry" => {
         "server"   => registry_server,

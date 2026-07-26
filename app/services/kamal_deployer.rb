@@ -13,7 +13,7 @@ require "digest"
 #      truth for secret values — see KamalEnvWriter)
 #   3. materialize the target server's SSH key so Kamal (net-ssh) can reach it
 #   4. run `kamal deploy` locally — it builds via the local docker daemon and
-#      SSHes to app.server.ip_address to boot the release
+#      SSHes to deploy_server.ip_address to boot the release
 #
 # Infra prerequisites (see docs/roadmap/plan-kamal-control-machine.html):
 #   - the `kamal` gem in Conductor's bundle
@@ -22,18 +22,25 @@ require "digest"
 class KamalDeployer
   attr_reader :app, :deployment, :error
 
-  def initialize(app, deployment, shell: nil)
+  def initialize(app, deployment, shell: nil, target_server: nil)
     @app = app
     @deployment = deployment
     @shell = shell || LocalShell.new
+    # The destination host. Defaults to the app's own server; an app transfer
+    # (spec 26) passes a different server to stand the app up on box B. Threads
+    # through the SSH/env/key setup AND the generated deploy overlay.
+    @target_server = target_server
   end
+
+  # The server this deploy targets — the app's own, unless a transfer overrides it.
+  def deploy_server = @target_server || app.server
 
   def deploy!
     deployment.start!
     log "Deploying #{app.name} via Kamal (control machine: Conductor)"
 
     return fail_with("App has no repository_url") if app.repository_url.blank?
-    return fail_with("App has no target host") if app.server&.ip_address.blank?
+    return fail_with("App has no target host") if deploy_server&.ip_address.blank?
 
     deployment.mark_deploying!
     FileUtils.mkdir_p(workspace)
@@ -91,7 +98,7 @@ class KamalDeployer
     log "Rolling back #{app.name} to release #{version} via Kamal (control machine: Conductor)"
 
     return fail_with("App has no repository_url") if app.repository_url.blank?
-    return fail_with("App has no target host") if app.server&.ip_address.blank?
+    return fail_with("App has no target host") if deploy_server&.ip_address.blank?
     return fail_with("No release version to roll back to") if version.blank?
 
     deployment.mark_deploying!
@@ -473,8 +480,8 @@ class KamalDeployer
   # DEPLOY_SERVER_IP / KAMAL_REGISTRY_USERNAME), plus the SSH key for net-ssh.
   def deploy_env
     env = app.env_variables.each_with_object({}) { |v, h| h[v.key] = v.value }
-    env["DEPLOY_SERVER_IP"] ||= app.server.ip_address
-    env["DEPLOY_SSH_USER"]  ||= app.server.ssh_user_or_default
+    env["DEPLOY_SERVER_IP"] ||= deploy_server.ip_address
+    env["DEPLOY_SSH_USER"]  ||= deploy_server.ssh_user_or_default
     env["APP_HOST"]         ||= app.domain if app.domain.present?
     env["SSH_KEYS"] = @key_file if @key_file # consumed by deploy.yml ssh.keys
     if @ssh_home
@@ -482,7 +489,7 @@ class KamalDeployer
       # into this container). The host key + identity live in the real ~/.ssh that
       # docker's ssh connhelper reads — NOT an env $HOME, which ssh ignores (it
       # resolves ~ from the passwd database, not $HOME).
-      env["DOCKER_HOST"] = "ssh://#{app.server.ssh_user_or_default}@#{app.server.ip_address}"
+      env["DOCKER_HOST"] = "ssh://#{deploy_server.ssh_user_or_default}@#{deploy_server.ip_address}"
     end
     env
   end
@@ -521,8 +528,8 @@ class KamalDeployer
     e = "# <<< conductor #{app.slug} <<<"
     block = <<~CFG
       #{b}
-      Host #{app.server.ip_address}
-        User #{app.server.ssh_user_or_default}
+      Host #{deploy_server.ip_address}
+        User #{deploy_server.ssh_user_or_default}
         IdentityFile #{identity}
         IdentitiesOnly yes
         StrictHostKeyChecking accept-new
@@ -541,7 +548,7 @@ class KamalDeployer
   # first contact, so a first-ever deploy dies with "Host key verification failed".
   # Seed it into the real ~/.ssh/known_hosts (skip if already trusted).
   def seed_known_hosts(path)
-    ip = app.server.ip_address
+    ip = deploy_server.ip_address
     @shell.run("bash", "-lc",
       "touch #{esc(path)}; ssh-keygen -F #{esc(ip)} -f #{esc(path)} >/dev/null 2>&1 || " \
       "ssh-keyscan -t rsa,ecdsa,ed25519 #{esc(ip)} 2>/dev/null >> #{esc(path)}; true")
@@ -555,8 +562,8 @@ class KamalDeployer
   def log_ssh_diagnostics
     return unless @ssh_home
 
-    user = esc(app.server.ssh_user_or_default)
-    host = esc(app.server.ip_address)
+    user = esc(deploy_server.ssh_user_or_default)
+    host = esc(deploy_server.ip_address)
     script = <<~SH
       echo "ssh probe:"; ssh -o BatchMode=yes -o ConnectTimeout=8 #{user}@#{host} 'echo ssh-ok' 2>&1 | tail -2
       echo "docker-over-ssh probe:"; docker version --format 'server={{.Server.Version}}' 2>&1 | tail -2
@@ -591,7 +598,7 @@ class KamalDeployer
   # real config/deploy.production.yml overlay + git-safe .kamal/secrets.production.
   # Secrets resolve from deploy_env (variable substitution), which Conductor injects.
   def write_self_describing_config
-    KamalConfig.new(app).files.each do |rel_path, content|
+    KamalConfig.new(app, target_server: @target_server).files.each do |rel_path, content|
       full = File.join(checkout_dir, rel_path)
       FileUtils.mkdir_p(File.dirname(full))
       File.write(full, content)
@@ -601,7 +608,7 @@ class KamalDeployer
 
   # Materialize the target server's private key so Kamal's net-ssh can use it.
   def write_ssh_key
-    key = app.server.ssh_key&.private_key
+    key = deploy_server.ssh_key&.private_key
     return nil if key.blank?
 
     path = File.join(workspace, ".ssh_#{app.slug}")
