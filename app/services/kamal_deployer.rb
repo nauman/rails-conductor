@@ -144,7 +144,10 @@ class KamalDeployer
   # already present in Conductor's own container env (its deploy.yml injects the
   # same secrets), OR it's RAILS_MASTER_KEY we can materialize from that env.
   def verify_required_secrets
-    provided = app.env_variables.pluck(:key).to_set
+    # Include derived secrets (e.g. a dedicated app's DATABASE_URL) so preflight
+    # doesn't demand a key Conductor already injects — deploy_env_pairs is the
+    # single source of what actually lands in .kamal/secrets.
+    provided = app.deploy_env_pairs.map(&:first).to_set
     missing = required_secrets.reject do |key|
       provided.include?(key) || (app.self_managed? && resolvable_from_conductor_env?(key))
     end

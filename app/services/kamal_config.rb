@@ -100,7 +100,7 @@ class KamalConfig
   end
 
   def secret_keys
-    @secret_keys ||= app.env_variables.secrets.map(&:key).reject { |k| DEPLOY_KEYS.include?(k) }.sort
+    @secret_keys ||= app.deploy_secret_keys.reject { |k| DEPLOY_KEYS.include?(k) }.sort
   end
 
   def registry_server

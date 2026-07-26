@@ -70,6 +70,25 @@ class DedicatedDbProvisionerTest < ActiveSupport::TestCase
     assert_equal first.id, second.id
     assert_equal 1, @org.database_clusters.count
     assert_equal 1, Database.where(app: @app).count
-    assert_equal 1, cc.calls, "the container is only created once"
+  end
+
+  test "retry reuses the persisted cluster password (no auth-breaking rotation)" do
+    cc = FakeContainerClient.new
+    db = provision(cc)
+    # The container is always ensured with the cluster's PERSISTED password, so a
+    # retry after a partial failure can't leave the row and container out of sync.
+    assert_equal db.database_cluster.admin_password, cc.spec[:admin_password]
+  end
+
+  test "reconciles a prior failed database instead of duplicating it" do
+    cc = FakeContainerClient.new
+    provision(cc)
+    # Simulate a prior failed SQL provision leaving an error record.
+    Database.where(app: @app).update_all(status: "error")
+
+    provision(cc)
+
+    assert_equal 1, Database.where(app: @app).count, "no duplicate Database rows"
+    assert_equal "active", Database.find_by(app: @app).status
   end
 end

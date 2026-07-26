@@ -57,25 +57,47 @@ class App < ApplicationRecord
   def dedicated_db_volume = "#{slug}-db-data"
   def dedicated_db_network = "#{slug}-net"
 
-  # The provisioned dedicated database backing this app (dedicated mode), or nil.
+  # The provisioned dedicated database backing this app (dedicated mode). Only an
+  # ACTIVE record is returned — a failed/pending one must never be injected as a
+  # live endpoint (it would carry stale/unusable credentials).
   def dedicated_database
     return nil unless dedicated_db?
 
     databases.joins(:database_cluster)
-             .find_by(database_clusters: { container_name: dedicated_db_container_name })
+             .where(database_clusters: { container_name: dedicated_db_container_name }, status: "active")
+             .first
   end
 
-  # Deploy-time env as ordered [key, value] pairs. Decision B: a dedicated app's
-  # DATABASE_URL is injected from its provisioned DB container at deploy — never
-  # baked into the image — UNLESS the operator set DATABASE_URL explicitly, which
-  # always wins.
+  # Deploy-time env as ordered [key, value] pairs — the single source for what
+  # Conductor injects (.kamal/secrets, preflight, generated config). Decision B:
+  # a dedicated app's DATABASE_URL is derived from its provisioned DB container at
+  # deploy, never baked into the image — UNLESS the operator set DATABASE_URL
+  # explicitly, which always wins.
   def deploy_env_pairs
     pairs = env_variables.order(:key).map { |v| [ v.key, v.value ] }
-    unless pairs.any? { |k, _| k == "DATABASE_URL" }
-      db = dedicated_database
-      pairs << [ "DATABASE_URL", db.database_url ] if db
+    if (url = derived_database_url)
+      pairs << [ "DATABASE_URL", url ]
     end
     pairs.sort_by(&:first)
+  end
+
+  # Keys Conductor must declare as Kamal `env.secret` so they're actually
+  # injected from .kamal/secrets — operator-secret vars plus any derived secret
+  # (the dedicated DATABASE_URL). Without declaring it, a written value is never
+  # injected; without treating it as provided, preflight misfires.
+  def deploy_secret_keys
+    keys = env_variables.secrets.map(&:key)
+    keys << "DATABASE_URL" if derived_database_url
+    keys.uniq
+  end
+
+  # The DATABASE_URL to inject for a dedicated app when the operator hasn't set
+  # one explicitly; nil otherwise. Secret — carries the password.
+  def derived_database_url
+    return nil unless dedicated_db?
+    return nil if env_variables.any? { |v| v.key == "DATABASE_URL" }
+
+    dedicated_database&.database_url
   end
 
   validates :name, presence: true

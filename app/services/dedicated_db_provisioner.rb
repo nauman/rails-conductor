@@ -23,38 +23,43 @@ class DedicatedDbProvisioner
     raise NotDedicated, "app #{@app.slug} is not in dedicated database_mode" unless @app.dedicated_db?
     raise NoServer, "no target server for #{@app.slug}'s dedicated DB" unless @server
 
-    cluster = find_or_create_cluster!
+    cluster = ensure_cluster_and_container!
     existing = cluster.databases.find_by(app: @app)
     return existing if existing&.status == "active"
 
+    # A non-active record is a prior failed/pending attempt — discard it so a
+    # retry reconciles instead of piling up duplicate Database rows.
+    existing&.destroy
     cluster.provision_database!(name: @app.database_base_name, app: @app, client: @sql_client)
   end
 
   private
 
-  def find_or_create_cluster!
-    existing = @app.organization.database_clusters
-                   .find_by(server: @server, container_name: @app.dedicated_db_container_name)
-    return existing if existing
+  # Persist the cluster (with its admin password) FIRST, then ensure the
+  # container exists using that persisted password. This makes retries safe: a
+  # crash after the container is created but before the row is saved can't happen
+  # (row is saved first), and re-running reuses the same password rather than
+  # generating a new one the running container would reject.
+  def ensure_cluster_and_container!
+    cluster = @app.organization.database_clusters.find_or_create_by!(
+      server: @server, container_name: @app.dedicated_db_container_name
+    ) do |c|
+      c.name = @app.dedicated_db_container_name
+      c.admin_username = ADMIN_USERNAME
+      c.admin_password = SecureRandom.hex(24)
+      c.port = 5432
+    end
 
-    admin_password = SecureRandom.hex(24)
     container_client.create!(
       container_name: @app.dedicated_db_container_name,
       volume: @app.dedicated_db_volume,
       network: @app.dedicated_db_network,
-      admin_username: ADMIN_USERNAME,
-      admin_password: admin_password,
+      admin_username: cluster.admin_username,
+      admin_password: cluster.admin_password,
       image: @image
     )
 
-    @app.organization.database_clusters.create!(
-      server: @server,
-      name: @app.dedicated_db_container_name,
-      container_name: @app.dedicated_db_container_name,
-      admin_username: ADMIN_USERNAME,
-      admin_password: admin_password,
-      port: 5432
-    )
+    cluster
   end
 
   ADMIN_USERNAME = "conductor".freeze
