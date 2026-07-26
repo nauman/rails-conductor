@@ -88,4 +88,30 @@ class CloudflareToolsTest < ActiveSupport::TestCase
       assert_includes res.error, "No connected Cloudflare account"
     end
   end
+
+  test "conductor_domain action=set_dns upserts a record via CloudflareDnsRecord (DNS-only default)" do
+    fake = Struct.new(:seen) do
+      def set!(domain:, content:, type:, proxied:)
+        self.seen = [ domain, content, type, proxied ]
+        CloudflareDnsRecord::Result.new(ok: true, message: "set #{domain}", record: { "id" => "r1" })
+      end
+    end.new(nil)
+
+    CloudflareDnsRecord.stub(:new, ->(_creds) { fake }) do
+      res = ConductorDomainTool.new(user: @user).call(
+        "action" => "set_dns", "domain" => "old.platepose.com", "content" => "146.190.222.165"
+      )
+      assert res.success?, res.error
+      assert_equal "old.platepose.com", res.value[:domain]
+      assert_equal "A", res.value[:type]
+      assert_equal false, res.value[:proxied]
+      assert_equal [ "old.platepose.com", "146.190.222.165", "A", false ], fake.seen
+    end
+  end
+
+  test "set_dns requires domain and content" do
+    res = ConductorDomainTool.new(user: @user).call("action" => "set_dns", "domain" => "x.calm.page")
+    refute res.success?
+    assert_includes res.error, "required"
+  end
 end

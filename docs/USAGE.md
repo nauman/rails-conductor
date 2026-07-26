@@ -130,7 +130,7 @@ Tool definitions (names, descriptions, input schemas) come from `GET /mcp/list`,
 | `conductor_app_config` | `set_env`, `gen_deploy_key` |
 | `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `audit`, `apply_updates`, `install_packages`, `run_script` |
 | `conductor_database` | `register_cluster`, `provision` |
-| `conductor_domain` | `add`, `remove`, `put_behind_cloudflare`, `purge_cloudflare` |
+| `conductor_domain` | `add`, `remove`, `put_behind_cloudflare`, `purge_cloudflare`, `set_dns` |
 | `conductor_runbook` | `get`, `set_runbook`, `add_item`, `remove_item`, `check_item`, `reset` |
 | `conductor_github` | `set_token`, `set_app`, `installations` |
 

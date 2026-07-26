@@ -57,6 +57,23 @@ class CloudflareClient
     Result.new(ok: true, data: body["result"])
   end
 
+  # Create or update an A/CNAME record by name. Idempotent: PATCHes the existing
+  # record for that name if one exists, else POSTs a new one. ttl 1 = "automatic".
+  def upsert_dns_record(zone_id, name:, content:, type: "A", proxied: false, ttl: 1)
+    existing = dns_record(zone_id, name)
+    return existing unless existing.ok? # propagate the read error
+
+    body = { type: type, name: name, content: content, proxied: proxied, ttl: ttl }
+    resp = if existing.data
+      patch("/zones/#{zone_id}/dns_records/#{existing.data['id']}", body)
+    else
+      post("/zones/#{zone_id}/dns_records", body)
+    end
+    return failure(resp) unless resp["success"]
+
+    Result.new(ok: true, data: resp["result"])
+  end
+
   # Purge a zone's edge cache. Pass files: [full URLs] to purge specific assets
   # (e.g. a hashed CSS file Cloudflare cached as a 404), or omit for a full purge.
   def purge_cache(zone_id, files: nil)

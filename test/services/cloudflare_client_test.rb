@@ -65,4 +65,20 @@ class CloudflareClientWriteTest < ActiveSupport::TestCase
     CloudflareClient.new("t", http: http).purge_cache("z1", files: [ "https://x/a.css" ])
     assert_equal [ "/zones/z1/purge_cache", { files: [ "https://x/a.css" ] } ], http.posted.first
   end
+
+  test "upsert_dns_record POSTs a new record when none exists" do
+    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com" => { "success" => true, "result" => [] })
+    res = CloudflareClient.new("t", http: http).upsert_dns_record("z1", name: "old.x.com", content: "1.2.3.4")
+    assert res.ok?
+    assert_equal "/zones/z1/dns_records", http.posted.first[0]
+    assert_equal({ type: "A", name: "old.x.com", content: "1.2.3.4", proxied: false, ttl: 1 }, http.posted.first[1])
+  end
+
+  test "upsert_dns_record PATCHes the existing record when one is present" do
+    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com" => { "success" => true, "result" => [ { "id" => "rec9" } ] })
+    CloudflareClient.new("t", http: http).upsert_dns_record("z1", name: "old.x.com", content: "9.9.9.9", proxied: true)
+    assert_equal "/zones/z1/dns_records/rec9", http.patched.first[0]
+    assert_equal true, http.patched.first[1][:proxied]
+    assert_empty http.posted
+  end
 end
