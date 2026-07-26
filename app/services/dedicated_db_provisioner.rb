@@ -10,6 +10,7 @@
 class DedicatedDbProvisioner
   class NotDedicated < StandardError; end
   class NoServer < StandardError; end
+  class Unreachable < StandardError; end
 
   def initialize(app:, server: nil, container_client: nil, sql_client: nil, image: PostgresContainerClient::DEFAULT_IMAGE)
     @app = app
@@ -22,6 +23,7 @@ class DedicatedDbProvisioner
   def provision!
     raise NotDedicated, "app #{@app.slug} is not in dedicated database_mode" unless @app.dedicated_db?
     raise NoServer, "no target server for #{@app.slug}'s dedicated DB" unless @server
+    ensure_reachable!
 
     cluster = ensure_cluster_and_container!
     existing = cluster.databases.find_by(app: @app)
@@ -34,6 +36,19 @@ class DedicatedDbProvisioner
   end
 
   private
+
+  # A colocated dedicated DB is reachable only if the app shares a Docker network
+  # with it. Refuse the cases we can't yet make reachable rather than provision an
+  # island: dedicated_host (a bridge network can't span boxes — needs a routable
+  # endpoint) and non-Kamal apps (their network wiring isn't built yet).
+  def ensure_reachable!
+    unless @app.colocated_db?
+      raise Unreachable, "#{@app.slug}: dedicated_host placement needs a cross-box routable endpoint — not wired yet; use colocated"
+    end
+    unless @app.deploy_network
+      raise Unreachable, "#{@app.slug}: reachability for #{@app.deploy_method} apps isn't wired yet — only Kamal apps share a network with their DB"
+    end
+  end
 
   # Persist the cluster (with its admin password) FIRST, then ensure the
   # container exists using that persisted password. This makes retries safe: a
@@ -53,7 +68,7 @@ class DedicatedDbProvisioner
     container_client.create!(
       container_name: @app.dedicated_db_container_name,
       volume: @app.dedicated_db_volume,
-      network: @app.dedicated_db_network,
+      network: @app.deploy_network,
       admin_username: cluster.admin_username,
       admin_password: cluster.admin_password,
       image: @image

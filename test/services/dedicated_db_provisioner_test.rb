@@ -44,10 +44,11 @@ class DedicatedDbProvisionerTest < ActiveSupport::TestCase
     assert_equal @server, cluster.server, "dedicated DB is colocated on the app's server by default"
     assert_equal "appone-db", cluster.container_name
 
-    # The container client was asked to run the right container (name/volume/network).
+    # The container client was asked to run the right container, on the SAME
+    # network the app runs on (Kamal's "kamal" net) so <app>-db:5432 resolves.
     assert_equal "appone-db", cc.spec[:container_name]
     assert_equal "appone-db-data", cc.spec[:volume]
-    assert_equal "appone-net", cc.spec[:network]
+    assert_equal "kamal", cc.spec[:network]
     assert cc.spec[:admin_username].present?
     assert cc.spec[:admin_password].present?
 
@@ -60,6 +61,16 @@ class DedicatedDbProvisionerTest < ActiveSupport::TestCase
   test "refuses a shared-mode app" do
     @app.update!(database_mode: "shared")
     assert_raises(DedicatedDbProvisioner::NotDedicated) { provision }
+  end
+
+  test "refuses dedicated_host placement — not reachable across boxes yet" do
+    @app.update!(database_placement: "dedicated_host")
+    assert_raises(DedicatedDbProvisioner::Unreachable) { provision }
+  end
+
+  test "refuses a non-Kamal app — no shared app↔DB network yet" do
+    @app.update!(deploy_method: "docker")
+    assert_raises(DedicatedDbProvisioner::Unreachable) { provision }
   end
 
   test "is idempotent — reuses the existing cluster + database" do

@@ -55,7 +55,17 @@ class App < ApplicationRecord
   # `<container>:5432`, so the app and its DB share the network below.
   def dedicated_db_container_name = "#{slug}-db"
   def dedicated_db_volume = "#{slug}-db-data"
-  def dedicated_db_network = "#{slug}-net"
+
+  # The Docker network the app's OWN container runs on. A colocated dedicated DB
+  # must join this so the app resolves `<app>-db:5432` by container DNS. Kamal 2
+  # runs the app (and accessories) on the "kamal" network; overridable via a
+  # KAMAL_NETWORK env var. nil for non-Kamal apps — their reachability wiring is
+  # not built yet, so the provisioner refuses rather than create an island.
+  def deploy_network
+    return nil unless kamal?
+
+    env_hash["KAMAL_NETWORK"].presence || "kamal"
+  end
 
   # The provisioned dedicated database backing this app (dedicated mode). Only an
   # ACTIVE record is returned — a failed/pending one must never be injected as a

@@ -17,9 +17,11 @@ class PostgresContainerClient
   end
 
   # Idempotent: creates the network, volume, and container if absent, then
-  # blocks until Postgres is ready. Returns a summary hash.
+  # blocks until Postgres is ready. Returns a summary hash. No host port is
+  # published — the app reaches Postgres over the shared Docker network by
+  # container DNS (`<container>:5432`), so there's nothing to allocate.
   def create!(container_name:, volume:, network:, admin_username:, admin_password:,
-              image: DEFAULT_IMAGE, port: 5432)
+              image: DEFAULT_IMAGE)
     [ container_name, volume, network ].each { |n| validate_name!(n) }
     validate_name!(admin_username)
 
