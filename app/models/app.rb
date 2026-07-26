@@ -57,6 +57,27 @@ class App < ApplicationRecord
   def dedicated_db_volume = "#{slug}-db-data"
   def dedicated_db_network = "#{slug}-net"
 
+  # The provisioned dedicated database backing this app (dedicated mode), or nil.
+  def dedicated_database
+    return nil unless dedicated_db?
+
+    databases.joins(:database_cluster)
+             .find_by(database_clusters: { container_name: dedicated_db_container_name })
+  end
+
+  # Deploy-time env as ordered [key, value] pairs. Decision B: a dedicated app's
+  # DATABASE_URL is injected from its provisioned DB container at deploy — never
+  # baked into the image — UNLESS the operator set DATABASE_URL explicitly, which
+  # always wins.
+  def deploy_env_pairs
+    pairs = env_variables.order(:key).map { |v| [ v.key, v.value ] }
+    unless pairs.any? { |k, _| k == "DATABASE_URL" }
+      db = dedicated_database
+      pairs << [ "DATABASE_URL", db.database_url ] if db
+    end
+    pairs.sort_by(&:first)
+  end
+
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }

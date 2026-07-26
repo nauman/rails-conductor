@@ -12,13 +12,14 @@ class KamalEnvWriter
   # dotenv-style KEY=value content for `.kamal/secrets`. One line per env var;
   # values are passed through verbatim (Kamal reads this file as dotenv).
   def self.secrets_content(app)
-    lines = app.env_variables.order(:key).map { |v| "#{v.key}=#{v.value}" }
+    lines = app.deploy_env_pairs.map { |key, value| "#{key}=#{value}" }
     (lines.join("\n") + "\n")
   end
 
   # The keys Conductor manages — handy for surfacing/validating the deploy.yml
-  # `env.secret` declaration.
+  # `env.secret` declaration. Includes the derived DATABASE_URL for a dedicated
+  # app (see App#deploy_env_pairs).
   def self.managed_keys(app)
-    app.env_variables.order(:key).pluck(:key)
+    app.deploy_env_pairs.map(&:first)
   end
 end
