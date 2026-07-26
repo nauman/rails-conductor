@@ -55,9 +55,14 @@ class EdgeTest < ActiveSupport::TestCase
     assert_equal "caddy", result[:edge]
   end
 
-  test "KamalProxyAdapter is a defined seam pending the deployer's kamal-proxy work" do
+  test "KamalProxyAdapter publishes declaratively — the route flips with the deploy" do
     adapter = Edge.for(server("kamal_proxy"))
-    assert_raises(Edge::KamalProxyAdapter::Pending) { adapter.publish(domain: "a.com", upstream: "localhost:3000") }
-    assert_raises(Edge::KamalProxyAdapter::Pending) { adapter.unpublish(domain: "a.com") }
+    result = adapter.publish(domain: "a.com", upstream: "localhost:3000")
+
+    assert_equal "kamal_proxy", result[:edge]
+    assert_equal "a.com", result[:domain]
+    assert_equal "deploy", result[:applied_by]
+    assert_match(/deploy\.yml|deploy/, result[:note])
+    assert_equal "deploy", adapter.unpublish(domain: "a.com")[:applied_by]
   end
 end
