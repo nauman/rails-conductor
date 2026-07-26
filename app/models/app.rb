@@ -49,6 +49,14 @@ class App < ApplicationRecord
   # The current cell (mode·placement) — the unit a transfer/conversion moves between.
   def database_cell = "#{database_mode}·#{database_placement}"
 
+  # Canonical names for this app's dedicated Postgres container, volume, and
+  # network. Single source of truth so the provisioner (Slice 2) and deploy-time
+  # DATABASE_URL injection (Slice 3) agree. Reached by container DNS at
+  # `<container>:5432`, so the app and its DB share the network below.
+  def dedicated_db_container_name = "#{slug}-db"
+  def dedicated_db_volume = "#{slug}-db-data"
+  def dedicated_db_network = "#{slug}-net"
+
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
