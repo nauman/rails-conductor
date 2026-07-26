@@ -97,7 +97,7 @@ The surface is **eight flat tools**, each taking an `action` (fewer tools keeps 
 | Tool | Actions |
 |------|---------|
 | `conductor_read` | `fleet_status`, `situation`, `logs`, `deployment`, `cloudflare` (read-only) |
-| `conductor_app` | `create`, `update`, `deploy`, `sync_status` |
+| `conductor_app` | `create`, `update`, `deploy`, `rollback`, `sync_status`, `transfer_plan` (read-only dry-run of moving an app to another server) |
 | `conductor_app_config` | `set_env`, `gen_deploy_key` |
 | `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `audit`, `apply_updates`, `install_packages`, `run_script` |
 | `conductor_database` | `register_cluster`, `provision` |
