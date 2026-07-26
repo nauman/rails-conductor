@@ -8,7 +8,8 @@ class ConductorAppTool
     "update"      => UpdateAppTool,
     "deploy"      => DeployAppTool,
     "rollback"    => RollbackAppTool,
-    "sync_status" => SyncAppStatusTool
+    "sync_status" => SyncAppStatusTool,
+    "transfer_plan" => TransferPlanAppTool
   }.freeze
 
   DEFINITION = {
@@ -18,12 +19,15 @@ class ConductorAppTool
       "update (change an existing app's config — app_id/app_name + any of deploy_method, repository_url, branch, domain, port, notes), " \
       "deploy (deploy an app to the latest commit on origin/<branch> — the REMOTE, not any local checkout; PUSH FIRST, unpushed commits are not shipped. app_id/app_name; the result reports ships_from + a verify pointer and records the resolved commit_sha. Runs a preflight that BLOCKS on an at-risk server audit, a deploy hold, or a failed seed run, returning status 'blocked' with the blockers — pass force:true to override. NB: the migration row is a capability label — whether a post-deploy migrate gate exists — NOT a pending-migration/drift probe, so it never blocks), " \
       "rollback (Kamal only: boot a previously-shipped release again — app_id/app_name + optional deployment_id; omit deployment_id to roll back to the release before the current one. No rebuild — reboots the prior image Kamal retains on the host), " \
-      "sync_status (check live container status over SSH — app_id/app_name). " \
+      "sync_status (check live container status over SSH — app_id/app_name), " \
+      "transfer_plan (READ-ONLY dry-run of moving an app to another server — app_id/app_name + target_server_id/target_server_name; emits the staged change set + warnings, mutates nothing). " \
       "deploy and rollback are destructive/outward-facing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[create update deploy rollback sync_status], description: "Which app operation" },
+        action:            { type: "string", enum: %w[create update deploy rollback sync_status transfer_plan], description: "Which app operation" },
+        target_server_id:   { type: "integer", description: "transfer_plan: destination server by id (or target_server_name)" },
+        target_server_name: { type: "string",  description: "transfer_plan: destination server by name (or target_server_id)" },
         deployment_id:     { type: "integer", description: "rollback: the prior deployment whose release to roll back to (omit for the release before current)" },
         force:             { type: "boolean", description: "deploy: override a blocking preflight (at-risk audit / deploy hold). Confirm with the user first." },
         app_id:            { type: "integer", description: "update/deploy/sync_status: target app by id" },
