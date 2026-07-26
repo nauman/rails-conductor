@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_26_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_26_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -26,6 +26,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_26_000002) do
     t.index ["organization_id"], name: "index_api_tokens_on_organization_id"
     t.index ["token_digest"], name: "index_api_tokens_on_token_digest", unique: true
     t.index ["user_id"], name: "index_api_tokens_on_user_id"
+  end
+
+  create_table "app_transfers", force: :cascade do |t|
+    t.bigint "app_id", null: false
+    t.datetime "created_at", null: false
+    t.string "error"
+    t.datetime "finished_at"
+    t.text "log"
+    t.string "mode", default: "transfer", null: false
+    t.bigint "organization_id", null: false
+    t.string "phase"
+    t.bigint "source_server_id"
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.bigint "target_server_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_id", "created_at"], name: "index_app_transfers_on_app_id_and_created_at"
+    t.index ["app_id"], name: "index_app_transfers_on_app_id"
+    t.index ["organization_id"], name: "index_app_transfers_on_organization_id"
+    t.index ["source_server_id"], name: "index_app_transfers_on_source_server_id"
+    t.index ["status"], name: "index_app_transfers_on_status"
+    t.index ["target_server_id"], name: "index_app_transfers_on_target_server_id"
   end
 
   create_table "apps", force: :cascade do |t|
@@ -468,6 +490,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_26_000002) do
 
   add_foreign_key "api_tokens", "organizations"
   add_foreign_key "api_tokens", "users"
+  add_foreign_key "app_transfers", "apps"
+  add_foreign_key "app_transfers", "organizations"
+  add_foreign_key "app_transfers", "servers", column: "source_server_id"
+  add_foreign_key "app_transfers", "servers", column: "target_server_id"
   add_foreign_key "apps", "organizations"
   add_foreign_key "apps", "servers"
   add_foreign_key "backups", "apps"
