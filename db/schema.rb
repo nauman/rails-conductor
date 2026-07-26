@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_24_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_26_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -35,6 +35,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_000001) do
     t.datetime "container_started_at"
     t.string "container_status", default: "unknown"
     t.datetime "created_at", null: false
+    t.string "database_mode", default: "dedicated", null: false
+    t.string "database_placement", default: "colocated", null: false
     t.boolean "deploy_hold", default: false, null: false
     t.string "deploy_hold_reason"
     t.string "deploy_method", default: "docker", null: false

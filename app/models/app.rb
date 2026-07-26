@@ -4,6 +4,11 @@ class App < ApplicationRecord
   STATUSES = %w[running stopped deploying failed].freeze
   CONTAINER_STATUSES = %w[unknown running exited dead restarting paused].freeze
   DEPLOY_METHODS = %w[docker native kamal].freeze
+  # App-transfer spec 26 — the two per-app DB axes. Mode is isolation (shared
+  # cluster vs dedicated container); placement is locality (the app's own box vs
+  # a DB-dedicated host). Both are orthogonal and convertible live.
+  DATABASE_MODES = %w[shared dedicated].freeze
+  DATABASE_PLACEMENTS = %w[colocated dedicated_host].freeze
 
   belongs_to :organization, optional: true
   belongs_to :server, optional: true
@@ -35,10 +40,21 @@ class App < ApplicationRecord
     raw.presence || "app"
   end
 
+  # --- DB placement axes (spec 26) -------------------------------------------
+  def dedicated_db? = database_mode == "dedicated"
+  def shared_db? = database_mode == "shared"
+  def colocated_db? = database_placement == "colocated"
+  def dedicated_db_host? = database_placement == "dedicated_host"
+
+  # The current cell (mode·placement) — the unit a transfer/conversion moves between.
+  def database_cell = "#{database_mode}·#{database_placement}"
+
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
+  validates :database_mode, inclusion: { in: DATABASE_MODES }
+  validates :database_placement, inclusion: { in: DATABASE_PLACEMENTS }
   # Only KamalDeployer runs seeds — the flag on a docker/native app would never
   # execute yet would defeat the preflight's failed-seed gate. Enforce here so
   # every path (UI, MCP, direct) obeys, not just the controller.
