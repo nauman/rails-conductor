@@ -6,6 +6,10 @@
 #               keys to set (self-describing, ADR 0001; no secret handling).
 #   migrate   — upload blobs from one service to another (e.g. local ->
 #               cloudflare_r2) and repoint them; chunked + idempotent (mutating).
+#   set_cors  — set the R2 bucket's CORS policy so browser direct-uploads work
+#               (mutating; via the connected Cloudflare account, no vault).
+#   connect_domain — attach a public custom domain to the bucket for
+#               Cloudflare-served, CDN-cached delivery (mutating).
 class ConductorStorageTool
   include ActorScoped
 
@@ -14,19 +18,24 @@ class ConductorStorageTool
     description: "Active Storage / Cloudflare R2 for a fleet app. Set `action` to one of: " \
       "audit (where blobs live + configured service + reachability + count not on the configured service — read-only), " \
       "configure (generate the R2 storage.yml block + production.rb line + required env keys to add to the app repo — no secrets), " \
-      "migrate (upload blobs from from_service to to_service, default local -> cloudflare_r2, and repoint them; chunked via limit, idempotent — mutating). " \
-      "audit + migrate run `bin/rails runner` in the app's running container over SSH (Kamal/Docker apps).",
+      "migrate (upload blobs from from_service to to_service, default local -> cloudflare_r2, and repoint them; chunked via limit, idempotent — mutating), " \
+      "set_cors (set the R2 bucket's CORS policy so browser direct_upload PUTs work — bucket + optional origins, default the app's domain + wildcard subdomains — mutating, via the connected Cloudflare account), " \
+      "connect_domain (attach a public custom domain to the bucket for Cloudflare-served CDN delivery — bucket + domain; Cloudflare provisions cert + proxied DNS — mutating). " \
+      "audit + migrate run `bin/rails runner` in the app's running container over SSH (Kamal/Docker apps). " \
+      "set_cors + connect_domain need a Verified Cloudflare account whose token carries 'Workers R2 Storage: Edit'.",
     input_schema: {
       type: "object",
       properties: {
-        action:       { type: "string", enum: %w[audit configure migrate], description: "Which storage operation" },
+        action:       { type: "string", enum: %w[audit configure migrate set_cors connect_domain], description: "Which storage operation" },
         app_id:       { type: "integer", description: "Target app" },
         app_name:     { type: "string",  description: "Target app (alt to app_id)" },
-        bucket:       { type: "string",  description: "configure: R2 bucket name" },
+        bucket:       { type: "string",  description: "configure/set_cors/connect_domain: R2 bucket name" },
         account_id:   { type: "string",  description: "configure: Cloudflare account id (for the R2 endpoint)" },
         from_service: { type: "string",  description: "migrate: source service (default 'local')" },
         to_service:   { type: "string",  description: "migrate: target service (default 'cloudflare_r2')" },
-        limit:        { type: "integer", description: "migrate: max migratable blobs this call (default 1000; repeat until remaining_migratable is 0)" }
+        limit:        { type: "integer", description: "migrate: max migratable blobs this call (default 1000; repeat until remaining_migratable is 0)" },
+        origins:      { type: "array", items: { type: "string" }, description: "set_cors: allowed origins (default ['https://<app.domain>','https://*.<app.domain>'])" },
+        domain:       { type: "string",  description: "connect_domain: the public custom domain to serve the bucket (e.g. assets.calm.page)" }
       },
       required: %w[action]
     }
@@ -41,14 +50,42 @@ class ConductorStorageTool
     return Result.fail("App not found. Pass a valid app_id or app_name.") unless app
 
     case input["action"]
-    when "audit"     then audit(app)
-    when "configure" then configure(app, input)
-    when "migrate"   then migrate(app, input)
-    else Result.fail("Missing or unknown action. Set action to one of: audit, configure, migrate.")
+    when "audit"          then audit(app)
+    when "configure"      then configure(app, input)
+    when "migrate"        then migrate(app, input)
+    when "set_cors"       then set_cors(app, input)
+    when "connect_domain" then connect_domain(app, input)
+    else Result.fail("Missing or unknown action. Set action to one of: audit, configure, migrate, set_cors, connect_domain.")
     end
   end
 
   private
+
+  def set_cors(app, input)
+    bucket = input["bucket"].presence
+    return Result.fail("set_cors requires a bucket.") unless bucket
+    return Result.fail("#{app.name} has no domain to resolve the Cloudflare account from.") if app.domain.blank?
+
+    origins = Array(input["origins"]).map(&:to_s).reject(&:blank?)
+    origins = [ "https://#{app.domain}", "https://*.#{app.domain}" ] if origins.empty?
+
+    r = CloudflareR2Admin.new(app.organization).set_cors(bucket, account_domain: app.domain, origins: origins)
+    return Result.fail(r.message) unless r.ok?
+
+    Result.ok(r.data.merge(app: app.name, message: r.message, _organization: app.organization))
+  end
+
+  def connect_domain(app, input)
+    bucket = input["bucket"].presence
+    domain = input["domain"].presence
+    return Result.fail("connect_domain requires a bucket.") unless bucket
+    return Result.fail("connect_domain requires a domain (e.g. assets.#{app.domain}).") unless domain
+
+    r = CloudflareR2Admin.new(app.organization).connect_domain(bucket, domain)
+    return Result.fail(r.message) unless r.ok?
+
+    Result.ok(r.data.merge(app: app.name, message: r.message, _organization: app.organization))
+  end
 
   def audit(app)
     return Result.fail(container_prereq_error(app)) unless container_capable?(app)
