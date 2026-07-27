@@ -1,0 +1,64 @@
+<% content_for :title, "Connect an agent · Conductor" %>
+
+<section class="max-w-lg mx-auto px-4 py-12">
+  <h1 class="font-display text-2xl text-ink tracking-display">Connect <%= client.name %>?</h1>
+  <p class="mt-1 text-sm text-muted">
+    This client is asking to drive your fleet over MCP <strong>as you</strong> — the
+    same tools you have in the UI. Approve it only if you started this from
+    <%= client.name %> yourself.
+  </p>
+
+  <%= form_with url: oauth_authorization_path, method: :post, class: "mt-6" do %>
+    <% hidden_params.each do |key, value| %>
+      <%= hidden_field_tag key, value, id: nil %>
+    <% end %>
+
+    <div class="rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+      <dl class="divide-y divide-border text-sm">
+        <div class="flex items-baseline justify-between gap-4 px-6 py-3">
+          <dt class="text-2xs font-semibold uppercase tracking-label text-muted">Client</dt>
+          <dd class="text-ink"><%= client.name %></dd>
+        </div>
+        <div class="flex items-baseline justify-between gap-4 px-6 py-3">
+          <dt class="text-2xs font-semibold uppercase tracking-label text-muted">Sends the code to</dt>
+          <dd class="font-mono text-2xs text-ink break-all"><%= params[:redirect_uri] %></dd>
+        </div>
+        <div class="flex items-baseline justify-between gap-4 px-6 py-3">
+          <dt class="text-2xs font-semibold uppercase tracking-label text-muted">Access</dt>
+          <dd class="text-ink">
+            <%= scopes.include?("mcp") ? "Full — read and change apps, servers, domains, env" : "Read-only" %>
+          </dd>
+        </div>
+      </dl>
+
+      <div class="border-t border-border bg-fill px-6 py-4">
+        <span class="text-2xs font-semibold uppercase tracking-label text-muted">Organization</span>
+        <p class="mt-1 text-2xs text-muted">The connection is confined to the organization you pick here.</p>
+
+        <% if organizations.one? %>
+          <%= hidden_field_tag :organization_id, organizations.first.id, id: nil %>
+          <p class="mt-2 text-sm font-medium text-ink"><%= organizations.first.name %></p>
+        <% else %>
+          <div class="mt-2 space-y-2">
+            <% organizations.each_with_index do |organization, index| %>
+              <label class="flex items-center gap-2 text-sm text-ink">
+                <%= radio_button_tag :organization_id, organization.id, index.zero?, id: nil,
+                      class: "border-border-strong text-primary focus:ring-primary" %>
+                <%= organization.name %>
+              </label>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="mt-5 flex items-center gap-3">
+      <%= submit_tag "Connect", class: "rounded-control bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong cursor-pointer" %>
+      <%= link_to "Cancel", root_path, class: "text-sm text-muted hover:text-ink" %>
+    </div>
+  <% end %>
+
+  <p class="mt-4 text-2xs text-muted">
+    Connections are listed — and revocable — under <%= link_to "Tokens", mcp_tokens_path, class: "text-primary underline" %>.
+  </p>
+</section>

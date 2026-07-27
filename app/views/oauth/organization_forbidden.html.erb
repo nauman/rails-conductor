@@ -1,0 +1,19 @@
+<% content_for :title, "Connection refused · Conductor" %>
+
+<section class="max-w-lg mx-auto px-4 py-12">
+  <h1 class="font-display text-2xl text-ink tracking-display">That organization isn't yours</h1>
+  <p class="mt-1 text-sm text-muted">
+    The client asked to connect to an organization you're not a member of, so the
+    request was refused. Nothing was granted.
+  </p>
+
+  <% if organizations.any? %>
+    <p class="mt-6 text-sm text-muted">You belong to:</p>
+    <ul class="mt-2 divide-y divide-border rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+      <% organizations.each do |organization| %>
+        <li class="px-6 py-3 text-sm text-ink"><%= organization.name %></li>
+      <% end %>
+    </ul>
+    <p class="mt-4 text-2xs text-muted">Start the connection again from the client to pick one of these.</p>
+  <% end %>
+</section>

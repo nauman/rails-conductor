@@ -12,6 +12,13 @@ Rack::Attack.throttle("api/ip", limit: 60, period: 1.minute) do |req|
   req.ip if req.path.start_with?("/api/")
 end
 
+# Dynamic client registration is unauthenticated by design (RFC 7591) — each POST
+# creates an oauth_applications row, so cap it. A real client registers once and
+# reuses the client_id.
+Rack::Attack.throttle("oauth_register/ip", limit: 10, period: 1.hour) do |req|
+  req.ip if req.path == "/oauth/register" && req.post?
+end
+
 # Block suspicious requests
 Rack::Attack.blocklist("block bad paths") do |req|
   req.path.match?(/\.(php|asp|aspx|cgi|env)$/i)

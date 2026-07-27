@@ -50,9 +50,46 @@ Mint a per-user, org-scoped token from your Conductor instance — **Settings �
 
 ## Connect an agent (Claude / Cursor / Codex / any MCP client)
 
-`POST /mcp` is a **standards-compliant Streamable-HTTP MCP endpoint** (JSON-RPC 2.0 — `initialize` / `tools/list` / `tools/call` / `ping`), so any MCP-capable client connects the same way: point it at the endpoint and send the bearer header.
+`POST /mcp` is a **standards-compliant Streamable-HTTP MCP endpoint** (JSON-RPC 2.0 — `initialize` / `tools/list` / `tools/call` / `ping`), so any MCP-capable client connects the same way.
 
-**Claude Code** — native HTTP transport:
+There are two ways in. **OAuth** is the one to prefer: the client sends you to Conductor in a browser, you sign in and pick an organization, and the client stores a token you never see. No secret is copied by hand, tokens expire and refresh, and you can revoke a connection. A static bearer token (above) still works everywhere and is the right tool for CI and scripts.
+
+### Sign-in with OAuth (no token to paste)
+
+Conductor is an OAuth 2.1 authorization server for its own MCP endpoint — discovery at `/.well-known/oauth-authorization-server` (RFC 8414) and `/.well-known/oauth-protected-resource` (RFC 9728), dynamic client registration at `POST /oauth/register` (RFC 7591), authorization-code + PKCE. A client needs no configuration beyond the URL: it discovers the rest.
+
+**Codex** — native remote MCP support (`codex-cli` 0.145+):
+
+```bash
+codex mcp add conductor \
+  --url https://<your-conductor-host>/mcp \
+  --oauth-resource https://<your-conductor-host>/mcp
+codex mcp login conductor          # opens the browser; sign in, pick an org
+codex mcp get conductor            # verify
+```
+
+`--oauth-resource` binds the token to this MCP endpoint (RFC 8707). Conductor **requires** it: a token carrying no resource, or one minted for a different resource, is refused at `/mcp`. Ask for read-only access with `codex mcp login conductor --scopes mcp_read`.
+
+**claude.ai / Claude Desktop** — add a custom connector pointing at `https://<your-conductor-host>/mcp`; it registers itself and runs the same browser login.
+
+**Any stdio-only client** — the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge is an OAuth client too, so it performs the same flow with no token in the config:
+
+```json
+{ "mcpServers": { "conductor": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "https://<your-conductor-host>/mcp"]
+} } }
+```
+
+**What you approve.** Conductor always shows a consent screen naming the client, where it will send the code, the access level, and the organization — approving is an explicit click, never automatic. Read it: registration is open, so the client's name is whatever that client called itself. If you didn't start the connection, cancel.
+
+**What a connection is bound to.** One user, one organization, one scope. The connection can only see and act on that org's apps and servers, exactly like an org-bound token, and write access still requires being an organization owner (or admin) — a plain member's connection is read-only whatever scope it asked for. Access tokens last 2 hours and refresh silently. A connection dies the moment its user leaves the org.
+
+**Revoking.** Connected clients are listed on the **Tokens** page (`/mcp_tokens`) with a Revoke button that kills the client's tokens and its ability to refresh. Clients can also revoke their own (`codex mcp logout conductor`, or `POST /oauth/revoke`).
+
+### Static bearer token
+
+Point the client at the endpoint and send the header. **Claude Code** — native HTTP transport:
 
 ```bash
 claude mcp add --transport http conductor https://<your-conductor-host>/mcp \
@@ -72,19 +109,24 @@ claude mcp add --transport http conductor https://<your-conductor-host>/mcp \
 }
 ```
 
-**Codex** — Codex spawns a small stdio↔HTTP bridge ([`mcp-remote`](https://www.npmjs.com/package/mcp-remote)) that forwards to the endpoint and injects the header. In `~/.codex/config.toml`:
+**Codex** — a bearer token instead of OAuth (useful in CI, where no browser exists):
 
-```toml
-[mcp_servers.conductor]
-command = "npx"
-args = [
-  "-y", "mcp-remote",
-  "https://<your-conductor-host>/mcp",
-  "--header", "Authorization: Bearer ${CONDUCTOR_MCP_TOKEN}"
-]
+```bash
+codex mcp add conductor --url https://<your-conductor-host>/mcp \
+  --bearer-token-env-var CONDUCTOR_MCP_TOKEN
 ```
 
-Export `CONDUCTOR_MCP_TOKEN` in the shell that launches Codex. The same `mcp-remote` recipe works for **any** MCP client that only speaks stdio.
+For a client that only speaks stdio, the `mcp-remote` bridge forwards to the endpoint and injects the header:
+
+```json
+{ "mcpServers": { "conductor": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "https://<your-conductor-host>/mcp",
+           "--header", "Authorization: Bearer ${CONDUCTOR_MCP_TOKEN}"]
+} } }
+```
+
+Export `CONDUCTOR_MCP_TOKEN` in the shell that launches the agent — never paste the raw token into a committed config file.
 
 The agent then sees `conductor_app`, `conductor_read`, and the rest as native tools.
 

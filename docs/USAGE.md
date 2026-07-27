@@ -91,9 +91,10 @@ Errors return JSON: `401` for a bad/missing token, `404` for unknown records, `4
 
 Conductor exposes its tools over the **Model Context Protocol** so any MCP-compatible agent (Claude Desktop, Cursor, the chat interface, etc.) can drive the fleet.
 
-- **Auth:** Bearer token. Two kinds:
-  - A **per-user/per-org API token** runs as that user and is scoped to the token's organization and read/write scope (multi-tenant).
-  - The shared **`CONDUCTOR_MCP_TOKEN`** env var runs as the first admin user with global scope (legacy single-tenant). If neither is configured/valid, the endpoint returns `401`.
+- **Auth:** three kinds of bearer credential, tried in order:
+  - **OAuth sign-in (preferred).** Conductor is an OAuth 2.1 authorization server for its own `/mcp` endpoint — discovery, dynamic client registration, PKCE — so a client sends you to the browser to sign in and pick an organization instead of asking for a pasted token. `codex mcp add conductor --url https://your-conductor.example.com/mcp --oauth-resource https://your-conductor.example.com/mcp && codex mcp login conductor`. Tokens are org-bound, audience-bound (RFC 8707), 2h-lived, and refreshable. See the [MCP guide](guides/mcp.md).
+  - A **per-user/per-org API token** runs as that user and is scoped to the token's organization and read/write scope (multi-tenant). Best for CI and scripts.
+  - The shared **`CONDUCTOR_MCP_TOKEN`** env var runs as the first admin user with global scope (legacy single-tenant). If none is configured/valid, the endpoint returns `401` with a `WWW-Authenticate` challenge pointing at the OAuth metadata.
 - **Two surfaces over the same tools:**
   - **Standard JSON-RPC transport** at `POST /mcp` — what MCP clients register natively (`initialize` / `tools/list` / `tools/call`). Register it with:
     ```bash
@@ -130,7 +131,7 @@ Tool definitions (names, descriptions, input schemas) come from `GET /mcp/list`,
 | `conductor_app_config` | `set_env`, `gen_deploy_key` |
 | `conductor_server` | `register`, `update`, `add_ssh_key`, `test_connection`, `audit`, `apply_updates`, `install_packages`, `run_script` |
 | `conductor_database` | `register_cluster`, `provision` |
-| `conductor_domain` | `add`, `remove`, `put_behind_cloudflare`, `purge_cloudflare`, `set_dns` |
+| `conductor_domain` | `add`, `remove`, `put_behind_cloudflare`, `purge_cloudflare`, `set_dns`, `delete_dns` |
 | `conductor_runbook` | `get`, `set_runbook`, `add_item`, `remove_item`, `check_item`, `reset` |
 | `conductor_storage` | `audit`, `configure`, `migrate` |
 | `conductor_github` | `set_token`, `set_app`, `installations` |

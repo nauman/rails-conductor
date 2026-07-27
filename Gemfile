@@ -58,6 +58,11 @@ gem "image_processing", "~> 1.2"
 # Rate limiting and request throttling
 gem "rack-attack"
 
+# OAuth 2.1 authorization server — lets any MCP client (Codex, claude.ai, Cursor)
+# connect with a browser login instead of a hand-pasted bearer token. See
+# docs/conductor/plans/06-mcp-oauth-connect.md.
+gem "doorkeeper", "~> 5.8"
+
 # AWS SES for transactional email
 gem "aws-sdk-ses", require: false
 

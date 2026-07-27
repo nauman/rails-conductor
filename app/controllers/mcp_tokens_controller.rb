@@ -5,6 +5,7 @@ class McpTokensController < ApplicationController
   def index
     @tokens = current_organization_tokens.order(created_at: :desc)
     @new_token = flash[:new_token] # raw value shown once after create
+    @connections = oauth_connections
   end
 
   def create
@@ -29,5 +30,18 @@ class McpTokensController < ApplicationController
 
   def current_organization_tokens
     ApiToken.where(user: current_user, organization: current_organization)
+  end
+
+  # Clients this user connected through browser sign-in (spec 06), one row per
+  # client: several live access tokens for the same client are one connection.
+  def oauth_connections
+    return [] unless defined?(Doorkeeper)
+
+    Doorkeeper::AccessToken
+      .where(resource_owner_id: current_user.id, organization_id: current_organization.id, revoked_at: nil)
+      .includes(:application)
+      .order(created_at: :desc)
+      .reject { |token| token.expired? && token.refresh_token.blank? }
+      .uniq(&:application_id)
   end
 end

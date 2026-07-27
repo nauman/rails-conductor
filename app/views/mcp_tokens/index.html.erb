@@ -37,6 +37,40 @@
         fresh: @new_token.present? %>
 
   <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+    <div class="px-6 py-4 border-b border-border">
+      <h2 class="text-sm font-semibold text-ink">Connected clients</h2>
+      <p class="mt-1 text-2xs text-muted">Agents you connected by signing in through the browser (OAuth). Revoking cuts off the client immediately, including its ability to refresh.</p>
+    </div>
+    <table class="min-w-full">
+      <thead class="bg-fill">
+        <tr class="text-2xs font-semibold uppercase tracking-label text-muted">
+          <th class="px-6 py-3 text-left">Client</th>
+          <th class="px-6 py-3 text-left">Access</th>
+          <th class="px-6 py-3 text-left">Connected</th>
+          <th class="px-6 py-3 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        <% @connections.each do |connection| %>
+          <tr>
+            <td class="px-6 py-4 text-sm font-medium text-ink"><%= connection.application&.name || "Unknown client" %></td>
+            <td class="px-6 py-4"><span class="inline-flex items-center rounded-pill px-2.5 py-1 text-2xs font-semibold uppercase tracking-label <%= connection.scopes.include?("mcp") ? 'bg-primary-tint text-primary' : 'bg-info-tint text-info' %>"><%= connection.scopes.to_s %></span></td>
+            <td class="px-6 py-4 text-sm text-muted"><%= time_ago_in_words(connection.created_at) %> ago</td>
+            <td class="px-6 py-4 text-right">
+              <%= button_to "Revoke", oauth_connection_path(connection.application_id), method: :delete,
+                    data: { turbo_confirm: "Revoke this connection? The client will have to sign in again." },
+                    class: "text-2xs font-semibold uppercase tracking-label text-danger hover:text-danger-deep" %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @connections.empty? %>
+          <tr><td colspan="4" class="px-6 py-6 text-sm text-muted">No connected clients. Point an MCP client at <code class="font-mono text-2xs"><%= request.base_url %>/mcp</code> and it will walk you through signing in.</td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
     <table class="min-w-full">
       <thead class="bg-fill">
         <tr class="text-2xs font-semibold uppercase tracking-label text-muted">

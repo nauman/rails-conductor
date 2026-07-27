@@ -28,3 +28,14 @@ Source: `docs/sessions/2026-03-28-routing-baseline-and-doc-realignment.md`
 - Contained navigation and fleet rows at mobile, tablet, and desktop widths
 
 Source: `docs/sessions/2026-07-12-operational-dashboard-health.md`
+
+## 2026-07-27
+
+- Added an OAuth 2.1 authorization server for the MCP endpoint: discovery (RFC 8414 + 9728), dynamic client registration (RFC 7591), authorization code + PKCE(S256), refresh tokens
+- Bound OAuth tokens to one organization (picker for multi-org users) and to this MCP resource (RFC 8707); membership re-checked on every call
+- Required an explicit consent screen at `/oauth/authorize` (a GET never authorizes) so open client registration can't yield drive-by grants
+- Stored OAuth token secrets as digests, failed write access closed (needs `mcp` scope + operator), and added connected-client revocation on the Tokens page
+- Accepted OAuth tokens at `/mcp` alongside static tokens, and answered unauthenticated calls with a `WWW-Authenticate` challenge
+- Documented browser sign-in for Codex / claude.ai / `mcp-remote` in the MCP guide
+
+Source: `docs/conductor/plans/06-mcp-oauth-connect.md`

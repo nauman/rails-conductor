@@ -9,6 +9,25 @@ Rails.application.routes.draw do
   # externally verifying deploys against origin/main HEAD.
   get "version" => "version#show", as: :version
 
+  # OAuth 2.1 authorization server for the MCP endpoint (spec 06) — lets any MCP
+  # client connect with a browser login instead of a pasted bearer token.
+  # authorize/token/revoke come from doorkeeper; the human-facing application
+  # management UIs are skipped because clients register dynamically below.
+  # Guarded so an image built before doorkeeper was added still boots (OAuth
+  # degrades instead of 500-ing every route).
+  if respond_to?(:use_doorkeeper)
+    use_doorkeeper do
+      skip_controllers :applications, :authorized_applications
+    end
+  end
+
+  # Discovery (RFC 8414 + RFC 9728) and dynamic client registration (RFC 7591).
+  get "/.well-known/oauth-authorization-server", to: "oauth/metadata#authorization_server"
+  get "/.well-known/oauth-protected-resource", to: "oauth/metadata#protected_resource"
+  # Some clients probe the resource-scoped form of the PRM path.
+  get "/.well-known/oauth-protected-resource/mcp", to: "oauth/metadata#protected_resource"
+  post "/oauth/register", to: "oauth/registrations#create"
+
   # API for CLI and external integrations
   namespace :api do
     namespace :v1 do
@@ -75,7 +94,7 @@ Rails.application.routes.draw do
   resources :invitations, only: [:create]
   get "/invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
 
-  # Database clusters (Hatchbox-style) — per-app databases on a server's Postgres
+  # Database clusters (PaaS-style) — per-app databases on a server's Postgres
   resources :database_clusters, only: [:index, :show, :new, :create] do
     resources :databases, only: [:create]
   end
@@ -98,6 +117,9 @@ Rails.application.routes.draw do
 
   # Per-user, org-scoped MCP/API tokens (self-serve issuance for agents).
   resources :mcp_tokens, only: [:index, :create, :destroy]
+  # Revoke an OAuth connection (a client the user connected via browser sign-in);
+  # :id is the client's application id. Listed on the Tokens page.
+  resources :oauth_connections, only: [:destroy]
 
   # Settings → Integrations: Conductor-wide integrations (GitHub App). Singular
   # resource (one config per instance); admin-gated in the controller.
