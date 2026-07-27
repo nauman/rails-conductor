@@ -19,13 +19,16 @@ The server is mounted on your Conductor instance:
 | `GET` | `/mcp/list` | List every tool + its input schema (discovery). |
 | `POST` | `/mcp/call` | Call one tool: `{ "name": "...", "input": { ... } }`. |
 
-Authentication is a **bearer token** — the `CONDUCTOR_MCP_TOKEN` env var set on your instance:
+Every request carries a bearer token, and there are two ways to get one:
+
+- **Sign in through the browser (OAuth).** The client discovers Conductor, registers itself, and sends you to approve it — nothing to copy. This is how you connect Codex, claude.ai, or Cursor. See [Sign-in with OAuth](#sign-in-with-oauth-no-token-to-paste).
+- **Mint a token yourself.** A per-user, org-scoped token from `/mcp_tokens`, exported as `CONDUCTOR_MCP_TOKEN`. Right for CI, scripts, and `curl`.
 
 ```
-Authorization: Bearer <CONDUCTOR_MCP_TOKEN>
+Authorization: Bearer <token>
 ```
 
-Keep the token secret. Every call is recorded to the MCP **audit log** (`/admin` → MCP calls), with secret arguments redacted.
+Either way the call runs as you, confined to one organization, and is recorded to the MCP **audit log** (`/admin` → MCP calls) with secret arguments redacted.
 
 ## Quick check
 
@@ -231,9 +234,10 @@ reads whatever you pipe it.
 
 ## Tokens & scope
 
-Two kinds of bearer token work:
+Three kinds of bearer credential work:
 
-- **Per-user / per-org token (recommended).** An `ApiToken` bound to a user + organization. MCP runs the call **as that user, scoped to their organizations** — `conductor_app`, `conductor_app_config`, `conductor_read`, logs, domains, etc. only see and act on apps/servers in orgs the user belongs to. One org's token can't touch another org's resources. This is how "anyone can deploy *their own* apps" works.
+- **OAuth connection (recommended for agents).** Minted by the browser sign-in above and held by the client. Bound to one user, one organization, and one MCP resource; expires in 2 hours and refreshes; revocable per client from the Tokens page. Write access additionally requires an organization owner (or admin).
+- **Per-user / per-org token (recommended for CI and scripts).** An `ApiToken` bound to a user + organization. MCP runs the call **as that user, scoped to their organizations** — `conductor_app`, `conductor_app_config`, `conductor_read`, logs, domains, etc. only see and act on apps/servers in orgs the user belongs to. One org's token can't touch another org's resources. This is how "anyone can deploy *their own* apps" works.
 - **Legacy shared token.** The instance `CONDUCTOR_MCP_TOKEN` env var runs as the first admin with **global** scope. Treat it like a root credential; rotate by changing the env var and redeploying.
 
 Mint one self-serve in the **Tokens** page (top nav → *Tokens*, or `/mcp_tokens`): name it, pick a **scope** — `deploy` (full) or `read` (read-only: `conductor_read` only) — and copy the token (shown once). Tokens are **bound to the active org**, so they can only see and act on that org's apps. Revoke anytime.

@@ -66,7 +66,7 @@ Maturity is qualitative and moves often. For the current detailed assessment, se
 
 **The moat.** The whole fleet is operable by an AI agent end-to-end over MCP — every action a tool, every tool org-scoped, audited, and least-privilege — deploying *secretlessly* so neither human nor agent needs to handle secret values. This is the pillar a hosted panel and a single-machine TUI cannot copy, and it leads the moat: it's defensible by *architecture*, not just effort.
 
-- **Today:** A seven-tool MCP server (flat `action`-enum tools) exposing every operation, with a standard JSON-RPC transport (`claude mcp add`), org-scoped multi-tenant auth (read/deploy scopes, membership-revoked, owner-gated execution), and a redacted audit log — plus the AI chat that plans-and-executes fleet ops.
+- **Today:** A seven-tool MCP server (flat `action`-enum tools) exposing every operation, with a standard JSON-RPC transport (`claude mcp add`), **OAuth 2.1 browser sign-in** for connecting a client (discovery + dynamic registration + PKCE, org- and audience-bound tokens) alongside static tokens, org-scoped multi-tenant auth (read/deploy scopes, membership-revoked, owner-gated execution), and a redacted audit log — plus the AI chat that plans-and-executes fleet ops.
 - **Where help is wanted:** Secretless / vault-resolved deploys (values resolved at deploy time, never stored or logged — roadmap 16), broader tool coverage, and richer agent-facing skill docs.
 
 ---
