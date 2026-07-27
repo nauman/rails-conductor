@@ -7,7 +7,8 @@ class ConductorDomainTool
     "remove"                => RemoveDomainTool,
     "put_behind_cloudflare" => PutBehindCloudflareTool,
     "purge_cloudflare"      => PurgeCloudflareTool,
-    "set_dns"               => SetDnsRecordTool
+    "set_dns"               => SetDnsRecordTool,
+    "delete_dns"            => DeleteDnsRecordTool
   }.freeze
 
   DEFINITION = {
@@ -17,12 +18,13 @@ class ConductorDomainTool
       "remove (remove a domain from Caddy — server_id, domain), " \
       "put_behind_cloudflare (proxy an app's domain through Cloudflare for CDN + edge TLS — app_id or app_name, optional ssl_mode; needs a Verified Cloudflare account, see conductor_read action=cloudflare), " \
       "purge_cloudflare (purge an app's Cloudflare cache — app_id or app_name, optional files array of URLs; omit files to purge everything. Use after a deploy that left stale/404'd assets at the edge), " \
-      "set_dns (create/update a Cloudflare A/CNAME record via a connected account that owns the zone — domain, content, optional type=A, proxied=false. Idempotent; zero vault). " \
+      "set_dns (create/update a Cloudflare A/CNAME record via a connected account that owns the zone — domain, content, optional type=A, proxied=false. Idempotent; zero vault), " \
+      "delete_dns (delete a Cloudflare DNS record by name — domain. Idempotent; for cleaning up a subdomain that pointed at a decommissioned host). " \
       "All change live routing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:    { type: "string", enum: %w[add remove put_behind_cloudflare purge_cloudflare set_dns], description: "Which domain operation" },
+        action:    { type: "string", enum: %w[add remove put_behind_cloudflare purge_cloudflare set_dns delete_dns], description: "Which domain operation" },
         server_id: { type: "integer", description: "add/remove: server where Caddy runs" },
         domain:    { type: "string",  description: "add/remove/set_dns: domain / record name (e.g. myapp.com)" },
         upstream:  { type: "string",  description: "add: unix socket path (/tmp/puma-myapp.sock) or host:port (localhost:3000)" },

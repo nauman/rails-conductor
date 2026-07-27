@@ -39,6 +39,8 @@ class CloudflareClientWriteTest < ActiveSupport::TestCase
     def get(path) = @responses.fetch(path)
     def patch(path, body) = (@patched << [ path, body ]; { "success" => true, "result" => body })
     def post(path, body) = (@posted << [ path, body ]; { "success" => true, "result" => { "id" => "purge1" } })
+    def delete(path) = (@deleted ||= []; @deleted << path; { "success" => true, "result" => { "id" => path.split("/").last } })
+    attr_reader :deleted
   end
 
   test "set_proxied PATCHes the record with proxied:true" do
@@ -80,5 +82,12 @@ class CloudflareClientWriteTest < ActiveSupport::TestCase
     assert_equal "/zones/z1/dns_records/rec9", http.patched.first[0]
     assert_equal true, http.patched.first[1][:proxied]
     assert_empty http.posted
+  end
+
+  test "delete_dns_record DELETEs the record by id" do
+    http = FakeHttp.new({})
+    res = CloudflareClient.new("t", http: http).delete_dns_record("z1", "rec9")
+    assert res.ok?
+    assert_equal "/zones/z1/dns_records/rec9", http.deleted.first
   end
 end

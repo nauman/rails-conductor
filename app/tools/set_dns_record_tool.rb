@@ -3,6 +3,7 @@
 # operator/deploy-scoped token. Idempotent (upsert). Delegates to CloudflareDnsRecord.
 class SetDnsRecordTool
   include ActorScoped
+  include CloudflareActorCredentials
 
   DEFINITION = {
     name: "set_dns",
@@ -45,14 +46,5 @@ class SetDnsRecordTool
       message: r.message,
       _organization: Current.organization
     })
-  end
-
-  private
-
-  # Cloudflare credentials this actor may use: all of them for the legacy admin
-  # token, else the acting user's org(s).
-  def actor_cloudflare_credentials
-    scope = Credential.where(provider: "cloudflare")
-    actor_admin? ? scope : scope.where(organization_id: actor_org_ids)
   end
 end

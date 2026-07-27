@@ -1,13 +1,16 @@
 require "test_helper"
 
 class CloudflareDnsRecordTest < ActiveSupport::TestCase
-  # A CloudflareClient stub recording the upsert it received.
+  # A CloudflareClient stub recording the calls it received.
   class FakeClient
-    attr_reader :seen
+    attr_reader :seen, :deleted
+    def initialize(record: { "id" => "rec1" }) = @record = record
     def upsert_dns_record(zone, name:, content:, type:, proxied:)
       @seen = [ zone, name, content, type, proxied ]
       CloudflareClient::Result.new(ok: true, data: { "id" => "rec1", "name" => name })
     end
+    def dns_record(_zone, _name) = CloudflareClient::Result.new(ok: true, data: @record)
+    def delete_dns_record(zone, id) = (@deleted = [ zone, id ]; CloudflareClient::Result.new(ok: true, data: {}))
   end
 
   setup do
@@ -43,5 +46,27 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
   test "requires domain and content" do
     refute CloudflareDnsRecord.new(cf_creds).set!(domain: "", content: "1.1.1.1").ok?
     refute CloudflareDnsRecord.new(cf_creds).set!(domain: "x.platepose.com", content: "").ok?
+  end
+
+  test "delete! removes the record in the owning zone" do
+    fake = FakeClient.new(record: { "id" => "rec9" })
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake }).delete!(domain: "old.platepose.com")
+    assert res.ok?, res.message
+    assert_equal [ "z1", "rec9" ], fake.deleted
+    assert_match(/Deleted old.platepose.com/, res.message)
+  end
+
+  test "delete! is idempotent when the record is already absent" do
+    fake = FakeClient.new(record: nil)
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake }).delete!(domain: "gone.platepose.com")
+    assert res.ok?
+    assert_nil fake.deleted
+    assert_match(/already absent/, res.message)
+  end
+
+  test "delete! fails when no connected account owns the domain" do
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { FakeClient.new }).delete!(domain: "unrelated.com")
+    refute res.ok?
+    assert_match(/No connected Cloudflare account owns/, res.message)
   end
 end

@@ -114,4 +114,24 @@ class CloudflareToolsTest < ActiveSupport::TestCase
     refute res.success?
     assert_includes res.error, "required"
   end
+
+  test "conductor_domain action=delete_dns deletes the record via CloudflareDnsRecord" do
+    fake = Struct.new(:seen) do
+      def delete!(domain:) = (self.seen = domain; CloudflareDnsRecord::Result.new(ok: true, message: "Deleted #{domain}", record: { "id" => "r1" }))
+    end.new(nil)
+
+    CloudflareDnsRecord.stub(:new, ->(_creds) { fake }) do
+      res = ConductorDomainTool.new(user: @user).call("action" => "delete_dns", "domain" => "old.calm.page")
+      assert res.success?, res.error
+      assert_equal "old.calm.page", res.value[:domain]
+      assert res.value[:deleted]
+      assert_equal "old.calm.page", fake.seen
+    end
+  end
+
+  test "delete_dns requires a domain" do
+    res = ConductorDomainTool.new(user: @user).call("action" => "delete_dns")
+    refute res.success?
+    assert_match(/domain is required/i, res.error)
+  end
 end

@@ -74,6 +74,14 @@ class CloudflareClient
     Result.new(ok: true, data: resp["result"])
   end
 
+  # Delete a DNS record by id (resolve the id first via #dns_record).
+  def delete_dns_record(zone_id, record_id)
+    resp = delete("/zones/#{zone_id}/dns_records/#{record_id}")
+    return failure(resp) unless resp["success"]
+
+    Result.new(ok: true, data: resp["result"])
+  end
+
   # Purge a zone's edge cache. Pass files: [full URLs] to purge specific assets
   # (e.g. a hashed CSS file Cloudflare cached as a 404), or omit for a full purge.
   def purge_cache(zone_id, files: nil)
@@ -110,6 +118,12 @@ class CloudflareClient
     req = Net::HTTP::Post.new(URI("#{API}#{path}"))
     req.body = body.to_json
     request(req)
+  end
+
+  def delete(path)
+    return @http.delete(path) if @http # test seam
+
+    request(Net::HTTP::Delete.new(URI("#{API}#{path}")))
   end
 
   def request(req)

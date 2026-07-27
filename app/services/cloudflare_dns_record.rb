@@ -30,6 +30,25 @@ class CloudflareDnsRecord
                message: "#{type} #{domain} → #{content} set in Cloudflare (#{cred.name}); proxied: #{proxied}.")
   end
 
+  # Delete the record for `domain` from the owning zone. Idempotent — reports OK
+  # when there's already no record to delete.
+  def delete!(domain:)
+    return failure("A domain (record name) is required.") if domain.blank?
+
+    cred, zone = resolve_cloudflare_zone_in(@credentials, domain)
+    return failure("No connected Cloudflare account owns #{domain}. Connect + Verify the account first.") unless zone
+
+    client = @client_for.call(cred)
+    rec = client.dns_record(zone["id"], domain)
+    return failure("Couldn't read the DNS record for #{domain}: #{rec.error}") unless rec.ok?
+    return Result.new(ok: true, record: nil, message: "#{domain} has no DNS record in Cloudflare (already absent).") if rec.data.nil?
+
+    r = client.delete_dns_record(zone["id"], rec.data["id"])
+    return failure("Deleting the DNS record failed: #{r.error}") unless r.ok?
+
+    Result.new(ok: true, record: rec.data, message: "Deleted #{domain} from Cloudflare (#{cred.name}).")
+  end
+
   private
 
   def failure(message) = Result.new(ok: false, message: message)
