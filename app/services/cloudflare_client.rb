@@ -91,6 +91,81 @@ class CloudflareClient
     Result.new(ok: true, data: body["result"])
   end
 
+  # --- R2 object storage (account-scoped API: /accounts/{acct}/r2/...) ---
+  # These need the token to carry the "Workers R2 Storage: Edit" permission;
+  # read-only tokens can list/get but every write returns an auth error.
+
+  # [{name, location, creation_date}, ...] for the account.
+  def r2_buckets(account_id)
+    body = get("/accounts/#{account_id}/r2/buckets")
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: Array(body.dig("result", "buckets")))
+  end
+
+  # One bucket's metadata ({name, location, storage_class, jurisdiction}).
+  def r2_bucket(account_id, name)
+    body = get("/accounts/#{account_id}/r2/buckets/#{name}")
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
+  # Create a bucket. location_hint is one of wnam/enam/weur/eeur/apac/oc — it fixes
+  # the bucket's physical region and CANNOT be changed after creation.
+  def create_r2_bucket(account_id, name, location_hint: nil)
+    payload = { name: name }
+    payload[:locationHint] = location_hint if location_hint.present?
+    body = post("/accounts/#{account_id}/r2/buckets", payload)
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
+  # Delete a bucket (must be empty).
+  def delete_r2_bucket(account_id, name)
+    body = delete("/accounts/#{account_id}/r2/buckets/#{name}")
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
+  # Read the bucket's CORS rules (nil-safe: [] when none configured).
+  def r2_cors(account_id, bucket)
+    body = get("/accounts/#{account_id}/r2/buckets/#{bucket}/cors")
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: Array(body.dig("result", "rules")))
+  end
+
+  # Replace the bucket's CORS policy. `rules` is an array of R2 CORS rule hashes,
+  # e.g. [{ allowed: { origins:, methods:, headers: }, exposeHeaders:, maxAgeSeconds: }].
+  def put_r2_cors(account_id, bucket, rules)
+    body = put("/accounts/#{account_id}/r2/buckets/#{bucket}/cors", { rules: rules })
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
+  # Connect a custom domain to the bucket for public, Cloudflare-served delivery.
+  # The domain's zone must be in the same account; Cloudflare provisions the cert
+  # and (when enabled) the proxied DNS record.
+  def create_r2_custom_domain(account_id, bucket, domain:, zone_id:, enabled: true)
+    payload = { domain: domain, zoneId: zone_id, enabled: enabled }
+    body = post("/accounts/#{account_id}/r2/buckets/#{bucket}/domains/custom", payload)
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: body["result"])
+  end
+
+  # [{domain, enabled, status, ...}, ...] custom domains bound to the bucket.
+  def r2_custom_domains(account_id, bucket)
+    body = get("/accounts/#{account_id}/r2/buckets/#{bucket}/domains/custom")
+    return failure(body) unless body["success"]
+
+    Result.new(ok: true, data: Array(body.dig("result", "domains")))
+  end
+
   private
 
   def failure(body)
@@ -116,6 +191,14 @@ class CloudflareClient
     return @http.post(path, body) if @http # test seam
 
     req = Net::HTTP::Post.new(URI("#{API}#{path}"))
+    req.body = body.to_json
+    request(req)
+  end
+
+  def put(path, body)
+    return @http.put(path, body) if @http # test seam
+
+    req = Net::HTTP::Put.new(URI("#{API}#{path}"))
     req.body = body.to_json
     request(req)
   end

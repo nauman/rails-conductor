@@ -62,4 +62,56 @@ class ConductorStorageToolTest < ActiveSupport::TestCase
     refute res.success?
     assert_includes res.error, "App not found"
   end
+
+  test "action=set_cors defaults origins to the app domain + wildcard and delegates" do
+    @app.update!(domain: "calm.page")
+    captured = {}
+    fake = Struct.new(:x) do
+      define_method(:set_cors) do |bucket, account_domain:, origins:|
+        captured.merge!(bucket: bucket, account_domain: account_domain, origins: origins)
+        CloudflareR2Admin::Result.new(ok: true, message: "CORS set on #{bucket}.", data: { bucket: bucket, origins: origins })
+      end
+    end.new(nil)
+
+    CloudflareR2Admin.stub(:new, ->(*, **) { fake }) do
+      res = ConductorStorageTool.new(user: @user).call("action" => "set_cors", "app_id" => @app.id, "bucket" => "calm-page-storage")
+      assert res.success?, res.error
+      assert_equal "calm-page-storage", captured[:bucket]
+      assert_equal "calm.page", captured[:account_domain]
+      assert_equal [ "https://calm.page", "https://*.calm.page" ], captured[:origins]
+      assert_equal @org, res.value[:_organization]
+    end
+  end
+
+  test "action=set_cors requires a bucket" do
+    @app.update!(domain: "calm.page")
+    res = ConductorStorageTool.new(user: @user).call("action" => "set_cors", "app_id" => @app.id)
+    refute res.success?
+    assert_includes res.error, "bucket"
+  end
+
+  test "action=connect_domain delegates the bucket + domain" do
+    captured = {}
+    fake = Struct.new(:x) do
+      define_method(:connect_domain) do |bucket, domain|
+        captured.merge!(bucket: bucket, domain: domain)
+        CloudflareR2Admin::Result.new(ok: true, message: "#{domain} connected.", data: { bucket: bucket, domain: domain })
+      end
+    end.new(nil)
+
+    CloudflareR2Admin.stub(:new, ->(*, **) { fake }) do
+      res = ConductorStorageTool.new(user: @user).call(
+        "action" => "connect_domain", "app_id" => @app.id, "bucket" => "calm-page-storage", "domain" => "assets.calm.page"
+      )
+      assert res.success?, res.error
+      assert_equal "calm-page-storage", captured[:bucket]
+      assert_equal "assets.calm.page", captured[:domain]
+    end
+  end
+
+  test "action=connect_domain requires a domain" do
+    res = ConductorStorageTool.new(user: @user).call("action" => "connect_domain", "app_id" => @app.id, "bucket" => "b")
+    refute res.success?
+    assert_includes res.error, "domain"
+  end
 end

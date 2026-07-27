@@ -21,6 +21,11 @@ class R2StorageConfig
         bucket: <%= ENV.fetch("R2_BUCKET", "#{@bucket}") %>
         endpoint: https://<%= ENV["R2_ACCOUNT_ID"] %>.r2.cloudflarestorage.com
         force_path_style: true
+        # R2 rejects the CRC32 checksum aws-sdk-s3 >= 1.178 sends by default
+        # ("one non-default checksum at a time") — uploads succeed but downloads
+        # fail. Only checksum when the operation requires it.
+        request_checksum_calculation: when_required
+        response_checksum_validation: when_required
     YAML
   end
 
