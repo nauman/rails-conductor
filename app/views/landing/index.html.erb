@@ -138,6 +138,26 @@
       disconnect, <strong class="text-body">ship</strong> through the preflight gate, and <strong class="text-body">operate</strong>
       the fleet — all over MCP, all idempotent, so retries never double-fire.
     </p>
+
+    <%# Connecting an agent: two commands, a browser sign-in, no token to paste. %>
+    <div class="mx-auto mt-10 max-w-2xl rounded-large border border-border bg-surface p-6 shadow-soft">
+      <p class="text-2xs font-semibold uppercase tracking-label text-faint">Connect an agent</p>
+      <h3 class="mt-1 font-display text-xl text-ink">Sign in, don't paste a token</h3>
+      <p class="mt-2 text-sm text-body">
+        Conductor is an OAuth 2.1 server for its own MCP endpoint, so a client discovers
+        it, registers itself, and sends you to the browser to approve. You pick the
+        organization; the agent never sees a secret you had to copy.
+      </p>
+      <pre class="mt-4 overflow-x-auto rounded-card bg-ink px-4 py-3 font-mono text-2xs leading-relaxed text-white/85"><span class="text-white/35"># point Codex at your Conductor…</span>
+codex mcp add conductor --url https://your-conductor/mcp \
+  --oauth-resource https://your-conductor/mcp
+<span class="text-white/35"># …then approve it in the browser</span>
+codex mcp login conductor</pre>
+      <p class="mt-3 text-2xs text-faint">
+        Claude, Cursor, and any MCP client connect the same way. Tokens are scoped to one
+        organization, expire, refresh, and are revocable per client.
+      </p>
+    </div>
   </section>
 </div>
 
@@ -148,7 +168,7 @@
     <h2 class="mt-2 text-center font-display text-3xl text-ink tracking-display">Built for how Rails is run now</h2>
     <div class="mt-10 grid gap-5 md:grid-cols-3">
       <% [
-        [:primary, :command, "Agent-native & resumable", "The whole surface is over MCP, and it survives disconnects: an agent reads the fleet situation, picks up in-flight work, and follows each app's own runbook. Idempotent by design.", "conductor_read · situation · conductor_runbook"],
+        [:primary, :command, "Agent-native & resumable", "The whole surface is over MCP — connect an agent by signing in, no pasted tokens — and it survives disconnects: an agent reads the fleet situation, picks up in-flight work, and follows each app's own runbook. Idempotent by design.", "codex mcp login · conductor_read · situation"],
         [:accent, :lock, "Secretless deploys", "Config in your repo carries every non-secret coordinate; real secrets stay in your vault behind a pointer. Clone the repo and bin/kamal just works.", "config/deploy.production.yml · .kamal/secrets"],
         [:info, :server, "Yours to run", "Source-available and self-hosted on servers you already own. A production-grade control plane with no per-app pricing and no lock-in.", "your servers · your cloud · bare metal"]
       ].each_with_index do |(accent, icon, title, body, mono), i| %>

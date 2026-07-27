@@ -34,7 +34,7 @@ Deploy method and topology are independent choices.
 ## Drive it two ways (CLI in progress)
 
 - **Web UI** — the dashboard at `/dashboard`.
-- **MCP** — the full toolset over HTTP: AI agents (or your own scripts via `curl`) call Conductor's tools to run the whole loop programmatically. See [Deploy via MCP](mcp).
+- **MCP** — the full toolset over HTTP: AI agents (or your own scripts via `curl`) call Conductor's tools to run the whole loop programmatically. Connect an agent by signing in through the browser (OAuth) — no token to paste. See [Deploy via MCP](mcp).
 - **CLI** *(early / in progress)* — `bin/conductor` currently covers secret-safe `set-env` and a generic `call <tool>` passthrough over the MCP endpoint. A fuller command set is planned; until then, script against MCP directly.
 
 Next: **[Deploy an app](deploy-an-app)**.

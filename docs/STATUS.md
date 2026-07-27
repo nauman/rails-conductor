@@ -14,7 +14,7 @@ _Last updated: 2026-07-21._
 | **Provisioning & provider automation** | GitHub App + auto-installed deploy keys for Kamal checkouts; SSH key vault; provider tagging |
 | **Data & backups** | Postgres clusters + per-app DB provisioning; `pg_dump` backups + scheduling → R2; DB pull (remote→local) |
 | **Continuous maintenance** | cron/scheduled jobs; server hardening / auto-update / audit; global-admin email alerts for backup/deploy/server failures |
-| **Agent-native control** | MCP server (7 enum tools); JSON-RPC Streamable HTTP core; multi-tenant org-scoped + read-only scope + token-issuance UI; AI chat orchestration; `/mcp/skill`; **Conductor deploys itself** |
+| **Agent-native control** | MCP server (7 enum tools); JSON-RPC Streamable HTTP core; **OAuth 2.1 connect (browser sign-in, dynamic client registration, PKCE, org+audience-bound tokens, revocable per client)**; multi-tenant org-scoped + read-only scope + token-issuance UI; AI chat orchestration; `/mcp/skill`; **Conductor deploys itself** |
 
 _Verification history lives under `docs/sessions/`; repository behavior is gated by `bin/ci`._
 
