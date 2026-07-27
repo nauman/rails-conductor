@@ -48,14 +48,14 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Reactive statuses everywhere (Turbo Streams)](17-reactive-statuses.html) | Fleet Control | P1 | M | 🔄 In progress (slice 1 done 2026-06-22) |
 | [Per-app proxy mode (Caddy or kamal-proxy)](18-per-app-proxy-mode.html) | Routing & edge | P1 | M | **Spec'd** (`docs/plans/per-app-proxy-mode.md`, 2026-07-09) · edge-per-box + kamal-proxy→Caddy migration; depends on ADR 0001 |
 | [Cloudflare R2 integration](19-r2-integration.html) | Provider Automation | P1 | M | Planned |
-| [AWS SES + SNS messaging (email + SMS)](20-ses-sns-messaging.html) | Provider Automation | P1 | M | Planned · **+ event-level observability spec'd** (`docs/conductor/plans/05-ses-observability.md`, Sessy-inspired) |
+| [AWS SES + SNS messaging (email + SMS)](20-ses-sns-messaging.html) | Provider Automation | P1 | M | Planned · **+ event-level observability spec'd** (`docs/conductor/plans/05-ses-observability.md`) |
 | [Backup restore + verification (R2)](21-backup-restore.html) | Data & Backups | P0 | M | Planned |
 | [Caddy management console + per-app multi-subdomain](22-caddy-console.html) | Routing & edge | P1 | M | Planned |
 | [Deploy-executor rework (isolate kamal from the web container)](23-deploy-executor.html) | Runtime Backends | P1 | L | Planned · **architecture** |
 | Migration lifecycle: status, pending/drift detection, gated run, failure remediation | Runtime Backends | **P0** | M | 🔄 Post-deploy gated run SHIPPED (KamalDeployer, kamal only, 2026-07-11); **Deploy Preflight gate SHIPPED** (2026-07-13, `DeployPreflight` — blocks on at-risk audit / deploy-hold / failed-seed, force override). NOTE: the preflight's migration row is a *capability* check (is a post-deploy gate present), **not** a live pending-migration/drift probe — real pre-deploy drift detection, docker/native gating, and failure remediation remain |
 | [Two-identity servers (root=automation, deploy=app ops) + server automation/upgrades as root](25-two-identity-servers.html) | Continuous Maintenance | P1 | M | Planned · **security split** |
 | [App transfer between boxes + dedicated database containers](26-app-transfer.html) | Runtime Backends | P1 | L | **Spec locked** (A–D resolved 2026-07-26) · dedicated-DB + KamalProxyAdapter · ready to build |
-| [SES email observability (event-level, via SNS)](27-ses-observability.html) | Provider Automation | P1 | M | Draft · **annotate** · flight-recorder for slot 20 · Sessy-inspired (`plans/05`) |
+| [SES email observability (event-level, via SNS)](27-ses-observability.html) | Provider Automation | P1 | M | Draft · **annotate** · flight-recorder for slot 20 · (`plans/05`) |
 
 ## Critical path
 

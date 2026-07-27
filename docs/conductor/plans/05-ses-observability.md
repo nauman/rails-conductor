@@ -3,8 +3,9 @@
 Status: **Spec — DRAFT for annotation** (2026-07-27). Build SES *event-level*
 observability into Conductor: per-message, per-recipient truth (deliveries,
 bounces, complaints, opens, clicks) ingested from SNS, tied to the app/domain
-that sent the mail. Design reference: **Sessy** (open-source SES observability by
-Marc Köhlbrugge, Fizzy-inspired) — we adapt its model, not its codebase.
+that sent the mail. Design reference: a proven open-source SES-observability tool
+(model only) — we adapt the shape, not the codebase. _(Internal note: the
+reference is Sessy; per house rule, external plan docs stay generic.)_
 
 ## Why this is worth doing
 
@@ -19,12 +20,12 @@ on raw SES while giving a single pane of glass in the control plane.
 Slot 20 = the dashboard gauges (rates, reputation). This = the flight recorder
 (every event, searchable, per message).
 
-## What we take from Sessy (and where we diverge)
+## What we take from the reference design (and where we diverge)
 
-Sessy's shape is clean and battle-tested — we mirror it:
+the reference design's shape is clean and battle-tested — we mirror it:
 
 - **`SesEventPayload`** — a PORO that parses one SES event JSON (event type,
-  `messageId`, recipients, timestamp, event-type-specific data). Port Sessy's
+  `messageId`, recipients, timestamp, event-type-specific data). Port the reference design's
   `EventPayload` almost verbatim; it encodes the SES payload quirks (recipients
   live under `bounce`/`complaint`/`delivery`/… per type).
 - **Idempotent ingestion** — `find_or_create` a message by `ses_message_id`, then
@@ -35,34 +36,34 @@ Sessy's shape is clean and battle-tested — we mirror it:
   auto-confirm `SubscriptionConfirmation`.
 - **Retention policy** — auto-delete events/messages older than N days.
 
-**Where Conductor diverges from Sessy (the real design work):**
+**Where Conductor diverges from the reference design (the real design work):**
 
-1. **Org-scoped + multi-tenant.** Sessy is single-tenant. Conductor scopes every
+1. **Org-scoped + multi-tenant.** the reference design is single-tenant. Conductor scopes every
    record to an `Organization` and the webhook token resolves the org.
-2. **Events map to Apps/Domains.** Sessy's `Source` = an SES config set with a
+2. **Events map to Apps/Domains.** the reference design's `Source` = an SES config set with a
    token. Conductor already knows apps + their domains, so the payoff is tying an
    event to the **App** that sent it (via sender domain / config-set mapping) —
    "app X has a 4% bounce rate this week," not just a standalone dashboard.
-3. **Auto-wiring from Conductor.** Sessy makes you configure SES→SNS by hand.
+3. **Auto-wiring from Conductor.** the reference design makes you configure SES→SNS by hand.
    Conductor should *provision* the pipe (SES config-set event destination → SNS
    topic → Conductor's own webhook URL) from the SES-manage flow (slot 20 slice 2).
 4. **Surfaced over MCP**, not just a UI — agents can query deliverability.
 
 ## Core model
 
-- **`MessageStream`** (Sessy's `Source`) — the tokened webhook target,
+- **`MessageStream`** (the reference design's `Source`) — the tokened webhook target,
   `belongs_to :organization`, unique `token` (webhook URL = `/webhooks/ses/:token`),
   optional link to an SES config-set name + a default App. Retention policy here.
   (Naming TBD — see Decision A; may just hang off `Organization` or `Domain`.)
-- **`EmailMessage`** (Sessy's `Message`) — one email, keyed by `ses_message_id`;
+- **`EmailMessage`** (the reference design's `Message`) — one email, keyed by `ses_message_id`;
   `source_email`, `subject`, `sent_at`, `mail_metadata` (json). `belongs_to
   :organization`, `belongs_to :app, optional: true`. `has_many :email_events`.
-- **`EmailEvent`** (Sessy's `Event`) — one SES event for one recipient:
+- **`EmailEvent`** (the reference design's `Event`) — one SES event for one recipient:
   `event_type`, `recipient_email` (normalized), `event_at`, `bounce_type`,
   `event_data` (json), `raw_payload`. `belongs_to :email_message` (+ counter
   cache), `organization`, optional `app`. Idempotent on the natural key.
 - **`SesWebhook`** — raw SNS payload + processed flag (idempotent processing).
-- **`SesEventPayload`** — PORO parser (ported from Sessy).
+- **`SesEventPayload`** — PORO parser (ported from the reference design).
 
 Event types: Send, Delivery, Bounce (Permanent/Transient/Undetermined),
 Complaint, DeliveryDelay, Reject, Rendering Failure, Open, Click, Subscription.
@@ -98,11 +99,30 @@ destination to it, subscribe Conductor's `/webhooks/ses/:token` URL, and store t
 `MessageStream`. One action, mirroring `put_behind_cloudflare`'s "one button"
 ergonomics. Manual setup (paste the webhook URL into SES) stays supported.
 
+## Credentials & who benefits (nothing is injected into the app)
+
+A common confusion: apps already carry **repo-based SES *send* creds** (SMTP /
+IAM). Observability does **not** touch them and injects nothing new into the app
+at deploy. What's configured is **AWS-side** — the domain identity's *default
+config set* (SES v2 `PutEmailIdentityConfigurationSetAttributes`) — so SES tags
+every send from that domain and emits events. The app sends exactly as before.
+
+- **Existing apps** benefit the moment the domain default is set: their *current*
+  sends start emitting events — no redeploy, no code change, no new app cred.
+- **New apps** are automatic: send from a wired domain → observed from email one.
+
+⟶ **Decision G (the real gap — admin credential):** send-creds can only send, not
+administer. Auto-wiring needs a separate **admin IAM credential** (SES + SNS
+write) held by Conductor at the org/fleet level (connected-services vault).
+Proposed: one shared fleet SES account + one admin credential; per-app AWS
+accounts supported but each needs its own. **Manual mode** (operator wires
+SES→SNS by hand) needs no admin cred — a first-class fallback.
+
 ## Surface
 
 - **UI** — a deliverability view: per-App/Domain rates (delivery/bounce/complaint),
   a reverse-chronological event stream, search by recipient/subject, date + type
-  filters (port Sessy's `Filterable`/`Searchable`). A message detail page
+  filters (port the reference design's `Filterable`/`Searchable`). A message detail page
   (timeline of its events).
 - **MCP** — `conductor_read action=email_events` (filter by app/domain/type/date;
   search) so agents can answer "why did mail to X fail?" Feeds situation reads.
@@ -127,7 +147,7 @@ when present, but do we *enable* it during auto-wiring? Proposed: ingest always;
 make enabling tracking an explicit opt-in (privacy).
 
 ⟶ **Decision D (retention default):** N days before auto-delete. Proposed: 30
-days default, per-`MessageStream` override (Sessy-style).
+days default, per-`MessageStream` override (the reference design-style).
 
 ## Implementation slices
 
@@ -159,7 +179,7 @@ days default, per-`MessageStream` override (Sessy-style).
 
 ## Test plan (sketch)
 
-- `SesEventPayload` against captured fixtures for every event type (Sessy has
+- `SesEventPayload` against captured fixtures for every event type (the reference design has
   these — reuse the shapes).
 - Idempotent ingest: same payload twice → one message, N events, no dupes.
 - Webhook: signature reject, subscription auto-confirm, async enqueue.
@@ -170,5 +190,5 @@ days default, per-`MessageStream` override (Sessy-style).
 Extends **slot 20 (SES + SNS messaging)** — slot 20 owns aggregate sending health
 + SES-manage + SMS; this owns the event stream and reuses slot 20's SES client for
 auto-wiring. Alerts feed **slot 12**. Part of the *Connected Services* hub. Credit
-+ design reference: [Sessy](https://github.com/marckohlbrugge/sessy) (O'Saasy
++ design reference: a proven open-source SES-observability tool (model only).
 License — reference only; we implement independently in Conductor).

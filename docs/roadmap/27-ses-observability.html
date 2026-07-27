@@ -40,6 +40,16 @@
   .kpi div{background:#f1f0ec;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
   .kpi .n{font-family:var(--serif);font-size:22px;color:var(--ink);display:block}
   .kpi .l{font-size:12px;color:var(--muted)}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;margin:14px 0 4px}
+  .fnode{appearance:none;cursor:pointer;font:inherit;text-align:left;background:#f1f0ec;border:1px solid var(--line);border-radius:10px;padding:8px 11px;min-width:118px;color:var(--ink);font-size:12.5px;font-weight:600;transition:.15s}
+  .fnode:hover{border-color:var(--accent);background:#eef2ee}
+  .fnode.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 8px rgba(58,90,63,.25)}
+  .fnode small{display:block;font-weight:400;font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.3}
+  .fnode.active small{color:#dcece0}
+  .farr{display:flex;align-items:center;color:var(--line-2);padding:0 5px;font-family:var(--mono);font-size:15px;user-select:none}
+  .fdetail{background:#fbfbf9;border:1px dashed var(--line-2);border-radius:12px;padding:12px 16px;font-size:13.5px;min-height:52px;margin-top:8px;color:var(--body)}
+  .fdetail b{color:var(--ink)}
+  .hint{font-size:12px;color:var(--muted);margin:2px 0 0}
   footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
 </style></head>
 <body data-kuickr-bar="float"><div class="wrap">
@@ -74,9 +84,50 @@
 </div>
 
 <div class="card">
+  <h2>How it flows, end to end <span style="font-weight:400;font-size:14px;color:var(--muted)">(click a step)</span></h2>
+  <div class="flow" data-flow="pipe">
+    <button class="fnode" data-k="app">1 · App sends<small>repo SES creds · unchanged</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="ses">2 · SES<small>tags send w/ config-set</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="sns">3 · SNS topic<small>1 JSON / event</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="hook">4 · /webhooks/ses/:token<small>resolve org</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="verify">5 · Verify<small>signature + account</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="ingest">6 · Ingest<small>async · idempotent</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="attr">7 · Attribute<small>→ App / Domain</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="surface">8 · UI + MCP<small>&lt; 5s</small></button>
+  </div>
+  <div class="fdetail" data-detail="pipe">Click any step to see what happens there.</div>
+</div>
+
+<div class="card">
+  <h2>Wait — nothing is injected into the app. Who benefits, and how? <span style="font-weight:400;font-size:14px;color:var(--muted)">(click a step)</span></h2>
+  <p>Your apps already carry <strong>repo-based SES <em>send</em> credentials</strong> (SMTP user/pass or IAM). Observability does <strong>not</strong> touch them and injects nothing new into the app at deploy. What gets configured is <strong>AWS-side, at the domain identity / config-set level</strong> (SES v2 <code>PutEmailIdentityConfigurationSetAttributes</code>) — SES then tags every send from that domain and emits events. The app sends exactly as before.</p>
+  <div class="flow" data-flow="onboard">
+    <button class="fnode" data-k="have">App has send-creds<small>the SEND path (unchanged)</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="admin">Conductor needs admin IAM<small>SES/SNS write · THE gap</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="wire">Conductor wires the domain<small>config-set + SNS + default</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="existing">Existing apps<small>events flow · no redeploy</small></button>
+    <span class="farr">→</span>
+    <button class="fnode" data-k="new">New apps<small>automatic</small></button>
+  </div>
+  <div class="fdetail" data-detail="onboard">Click a step. Short version: existing apps benefit with <strong>no redeploy and no credential change</strong>; the only new prerequisite is an admin IAM credential for Conductor to do the one-time AWS-side setup.</div>
+  <div class="decide" style="margin-top:14px"><b>Decision G — the real gap: an admin credential</b><br>
+    Apps carry <em>send</em> creds only. Auto-wiring needs a separate <strong>admin IAM credential</strong> (SES + SNS write) held by Conductor at the org/fleet level. Proposed: one shared fleet SES account + one admin credential in the connected-services vault; per-app AWS accounts are supported but each needs its own admin cred. <strong>Manual mode</strong> (operator wires SES→SNS by hand, pastes the webhook URL) needs no admin cred at all — first-class fallback.</div>
+</div>
+
+<div class="card">
   <h2>Data model (concrete)</h2>
-  <p>Adapted from <a href="https://github.com/marckohlbrugge/sessy">Sessy</a>'s proven schema (reference only, O'Saasy License), made org-scoped and app-attributed. Four tables + one PORO.</p>
-  <pre><span class="c"># message_streams — the tokened ingest target (Sessy: Source)</span>
+  <p>Adapted from a proven open-source SES-observability schema, made org-scoped and app-attributed. Four tables + one PORO.</p>
+  <pre><span class="c"># message_streams — the tokened ingest target</span>
 organization_id  bigint   not null
 name             string   not null
 token            string   not null   <span class="c"># UUID → webhook URL; unique</span>
@@ -85,14 +136,14 @@ app_id           bigint              <span class="c"># default attribution targe
 retention_days   integer             <span class="c"># nil = keep forever</span>
 index (token) unique · index (organization_id)
 
-<span class="c"># email_messages — one email (Sessy: Message)</span>
+<span class="c"># email_messages — one email</span>
 organization_id  bigint   not null
 app_id           bigint              <span class="c"># resolved on ingest, may be nil</span>
 ses_message_id   string   not null   <span class="c"># unique per org</span>
 source_email · subject · sent_at · mail_metadata(json) · events_count(counter)
 index (organization_id, ses_message_id) unique · index (app_id) · index (sent_at)
 
-<span class="c"># email_events — one event, one recipient (Sessy: Event)</span>
+<span class="c"># email_events — one event, one recipient</span>
 organization_id · app_id · email_message_id(fk) · ses_webhook_id(fk)
 event_type       string   not null   <span class="c"># enum: send/delivery/bounce/…</span>
 recipient_email  string   not null   <span class="c"># normalized lower/strip</span>
@@ -103,7 +154,7 @@ event_data(json) · raw_payload(json)
 index (ses_message_id, event_type, recipient_email, event_at) UNIQUE
 index (app_id, event_at, event_type) · index (recipient_email) · index (event_type)
 
-<span class="c"># ses_webhooks — raw SNS envelope, idempotent processing (Sessy: Webhook)</span>
+<span class="c"># ses_webhooks — raw SNS envelope, idempotent processing</span>
 organization_id · sns_message_id(unique) · sns_type · sns_timestamp
 raw_payload(json, not null) · processed_at
 index (sns_message_id) unique · index (processed_at)</pre>
@@ -146,7 +197,7 @@ Ses::IngestJob(webhook):
 
 <div class="card">
   <h2>Query &amp; surface</h2>
-  <p>Ported from Sessy's <code>Filterable</code>/<code>Searchable</code>, scoped to app/org:</p>
+  <p>A filter/search layer over events, scoped to app/org:</p>
   <ul>
     <li><strong>Filters</strong> — date-range presets (today … last 90 days, custom), event-type multi-select, bounce-subtype (permanent/transient/undetermined), plus <code>filter_counts</code> for the facet badges.</li>
     <li><strong>Search</strong> — <code>LIKE</code> over recipient email + subject (sanitized). Postgres <code>ILIKE</code>; a trigram index if volume warrants.</li>
@@ -161,11 +212,11 @@ Ses::IngestJob(webhook):
   <div class="risk"><b>R1 · SubscriptionConfirmation abuse</b><br>
     Auto-confirming any <code>SubscribeURL</code> lets an attacker point <em>their</em> SNS topic at our endpoint and flood it. Mitigation: confirm only when the message's <code>TopicArn</code> account id matches a connected SES credential in that org. <strong>Open:</strong> do we hard-require this, or allow manual approval for un-owned topics?</div>
   <div class="risk"><b>R2 · Signature-verifier SSRF + latency</b><br>
-    <code>Aws::SNS::MessageVerifier</code> fetches the <code>SigningCertURL</code>; it must be pinned to AWS hosts (the gem does this) and the verifier instance <strong>shared</strong> (a per-request instance re-downloads the cert ~600ms — this dominated Sessy's latency). <strong>Open:</strong> confirm the gem's host allowlist covers all SES regions we use.</div>
+    <code>Aws::SNS::MessageVerifier</code> fetches the <code>SigningCertURL</code>; it must be pinned to AWS hosts (the gem does this) and the verifier instance <strong>shared</strong> (a per-request instance re-downloads the cert ~600ms — this dominates the endpoint's latency). <strong>Open:</strong> confirm the gem's host allowlist covers all SES regions we use.</div>
   <div class="risk"><b>R3 · Cross-tenant event injection</b><br>
     A valid AWS signature proves "from AWS," not "from <em>this org's</em> account." Without the TopicArn↔account check, org A could receive org B's events at a leaked token. Mitigation: same account-id check as R1, applied on every Notification, not just confirm.</div>
   <div class="risk"><b>R4 · Volume &amp; retention</b><br>
-    A busy sender is millions of events/month. SQLite (Sessy's default) won't do; Conductor is Postgres — good, but we need the retention job (<code>delete_all</code> by <code>sent_at</code> cutoff, batched) and to watch index bloat. <strong>Open:</strong> partition <code>email_events</code> by month, or is retention enough at fleet scale?</div>
+    A busy sender is millions of events/month. a naive SQLite store won't do; Conductor is Postgres — good, but we need the retention job (<code>delete_all</code> by <code>sent_at</code> cutoff, batched) and to watch index bloat. <strong>Open:</strong> partition <code>email_events</code> by month, or is retention enough at fleet scale?</div>
   <div class="risk"><b>R5 · Open/click = tracking pixels + link rewriting</b><br>
     These events only exist if the config set enables open/click tracking, which injects a pixel and rewrites links through an SES redirect (a deliverability + privacy cost). <strong>Open:</strong> default OFF and opt-in per stream (Decision C).</div>
   <div class="risk"><b>R6 · Attribution gaps</b><br>
@@ -228,7 +279,42 @@ Ses::IngestJob(webhook):
   </ul>
 
   <h2>Dependencies &amp; related</h2>
-  <p>Extends <a href="20-ses-sns-messaging.html">slot 20</a> (reuses its SES client for auto-wiring); needs <code>aws-sdk-sns</code> + <code>aws-sdk-sesv2</code>. Alerts feed <a href="12-alerts.html">slot 12</a>. Part of the <em>Connected Services</em> hub. Full working spec: <code>docs/conductor/plans/05-ses-observability.md</code>. Design reference: <a href="https://github.com/marckohlbrugge/sessy">Sessy</a> (model only; independent implementation).</p>
+  <p>Extends <a href="20-ses-sns-messaging.html">slot 20</a> (reuses its SES client for auto-wiring); needs <code>aws-sdk-sns</code> + <code>aws-sdk-sesv2</code>. Alerts feed <a href="12-alerts.html">slot 12</a>. Part of the <em>Connected Services</em> hub. Full working spec: <code>docs/conductor/plans/05-ses-observability.md</code>.</p>
 </div>
-<footer>Conductor roadmap · 2026-07-27 · draft for annotation · design reference: Sessy</footer>
-</div></body></html>
+<footer>Conductor roadmap · 2026-07-27 · draft for annotation</footer>
+</div>
+<script>
+(function(){
+  var D = {
+    pipe: {
+      app: "<b>App sends mail</b> exactly as today — its repo-based SES send-creds are untouched. Nothing new is injected into the app.",
+      ses: "<b>SES</b> sees the domain's <b>default config set</b> (set once by Conductor, AWS-side) and tags the send, so it emits lifecycle events. No app change.",
+      sns: "<b>SNS topic</b> receives one JSON notification per event (send / delivery / bounce / complaint / open / click) and pushes it to the webhook (retries on failure).",
+      hook: "<b>POST /webhooks/ses/:token</b> — the token resolves the MessageStream &rarr; Organization. That is the tenant boundary; an unknown token is a 404.",
+      verify: "<b>Verify</b> the SNS signature (with a cached verifier) <em>and</em> that the TopicArn's AWS account matches a connected SES credential — this blocks forged and cross-tenant events.",
+      ingest: "<b>Async ingest</b>: persist the raw webhook (idempotent on sns_message_id, fast 200), then a job upserts EmailMessage + EmailEvent on the dedup key. Replaying a notification is a no-op.",
+      attr: "<b>Attribute</b>: config-set name &rarr; App first, else sender-domain &rarr; Domain &rarr; App. Unmatched still stored (app_id nil) so nothing is lost.",
+      surface: "<b>Surface</b>: appears in the deliverability UI and over <code>conductor_read action=email_events</code> within seconds (target &lt; 5s p95)."
+    },
+    onboard: {
+      have: "<b>Already there.</b> Each app sends via SES with its own repo/env creds. This is the SEND path — observability never reads or changes it.",
+      admin: "<b>The actual gap.</b> Send-creds can only send, not administer. To wire events, Conductor needs a separate <b>admin IAM credential</b> (SES + SNS write) at the org/fleet level. Without it, only manual setup is possible (Decision G).",
+      wire: "<b>One-time, per domain.</b> Conductor creates the config set + SNS topic, subscribes its webhook, and sets the config set as the domain identity's <b>default</b>. AWS-side only — no app deploy.",
+      existing: "<b>Existing apps benefit immediately.</b> The moment the domain default is set, their <em>current</em> sends start emitting events — no redeploy, no code change, no new app credential.",
+      new: "<b>New apps: automatic.</b> Any app that sends from an already-wired domain is observed from its first email. Nothing to configure per app."
+    }
+  };
+  document.querySelectorAll('.flow').forEach(function(flow){
+    var key = flow.getAttribute('data-flow');
+    var panel = document.querySelector('.fdetail[data-detail="' + key + '"]');
+    flow.querySelectorAll('.fnode').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        flow.querySelectorAll('.fnode').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        if (panel) panel.innerHTML = D[key][btn.getAttribute('data-k')];
+      });
+    });
+  });
+})();
+</script>
+</body></html>
