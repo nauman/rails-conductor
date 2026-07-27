@@ -10,7 +10,8 @@ class ConductorServerTool
     "audit"           => ServerAuditTool,
     "apply_updates"   => ApplyServerUpdatesTool,
     "install_packages" => InstallServerPackagesTool,
-    "run_script"      => RunScriptTool
+    "run_script"      => RunScriptTool,
+    "remove"          => RemoveServerTool
   }.freeze
 
   DEFINITION = {
@@ -23,11 +24,13 @@ class ConductorServerTool
       "audit (read-only security/patch posture — server_id/server_name; firewall, SSH hardening, DB exposure, pending updates), " \
       "apply_updates (apply OS updates — server_id/server_name + scope security|all; 'all' or a kernel update may reboot — DISRUPTIVE, confirm first), " \
       "install_packages (install OS packages — server_id/server_name + packages), " \
-      "run_script (run a provisioning/deploy script on a server — server_id, script_name e.g. server-provision, ruby-install, app-setup).",
+      "run_script (run a provisioning/deploy script on a server — server_id, script_name e.g. server-provision, ruby-install, app-setup), " \
+      "remove (deregister a server — server_id/server_name; refuses if apps are still attached unless force:true. Destructive — confirm).",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[register update add_ssh_key test_connection audit apply_updates install_packages run_script], description: "Which server operation" },
+        action:            { type: "string", enum: %w[register update add_ssh_key test_connection audit apply_updates install_packages run_script remove], description: "Which server operation" },
+        force:             { type: "boolean", description: "remove: deregister even if apps are still attached (detaches them)" },
         scope:             { type: "string", enum: %w[security all], description: "apply_updates: which updates (default security)" },
         packages:          { type: "string", description: "install_packages: space/comma-separated package names" },
         name:              { type: "string",  description: "register: unique server name; update: rename; add_ssh_key: key name" },
