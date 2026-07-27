@@ -48,7 +48,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Reactive statuses everywhere (Turbo Streams)](17-reactive-statuses.html) | Fleet Control | P1 | M | 🔄 In progress (slice 1 done 2026-06-22) |
 | [Per-app proxy mode (Caddy or kamal-proxy)](18-per-app-proxy-mode.html) | Routing & edge | P1 | M | **Spec'd** (`docs/plans/per-app-proxy-mode.md`, 2026-07-09) · edge-per-box + kamal-proxy→Caddy migration; depends on ADR 0001 |
 | [Cloudflare R2 integration](19-r2-integration.html) | Provider Automation | P1 | M | Planned |
-| [AWS SES + SNS messaging (email + SMS)](20-ses-sns-messaging.html) | Provider Automation | P1 | M | Planned |
+| [AWS SES + SNS messaging (email + SMS)](20-ses-sns-messaging.html) | Provider Automation | P1 | M | Planned · **+ event-level observability spec'd** (`docs/conductor/plans/05-ses-observability.md`, Sessy-inspired) |
 | [Backup restore + verification (R2)](21-backup-restore.html) | Data & Backups | P0 | M | Planned |
 | [Caddy management console + per-app multi-subdomain](22-caddy-console.html) | Routing & edge | P1 | M | Planned |
 | [Deploy-executor rework (isolate kamal from the web container)](23-deploy-executor.html) | Runtime Backends | P1 | L | Planned · **architecture** |
