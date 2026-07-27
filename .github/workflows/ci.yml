@@ -1,9 +1,8 @@
 name: CI
 
+# LOCAL-FIRST CI (fleet doctrine) — dev box via bin/ci + .githooks/pre-push, not push/PR (private repos meter Actions minutes). Break-glass: run manually. Doctrine: https://kuickr.co/dev-docs-74/infra/local-ci-doctrine.html
 on:
-  pull_request:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   scan_ruby:

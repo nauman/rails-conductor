@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# LOCAL-FIRST CI — pre-push gate (fleet doctrine).
+# GitHub Actions no longer runs CI on push (workflow_dispatch-only), so this is the
+# enforcement: runs the local audit on the delta being pushed and BLOCKS a red push.
+#   • asdf ruby (bare shell may pick up system ruby)  • PARALLEL_WORKERS=1 (macOS forker)
+#   • forkers (test/system/*, og_card) EXCLUDED — covered by a prod curl, not CI.
+# Docs-only pushes skip. Escape hatch: `git push --no-verify`.
+# Doctrine: https://kuickr.co/dev-docs-74/infra/local-ci-doctrine.html
+set -uo pipefail
+export PATH="$HOME/.asdf/shims:$PATH"
+export PARALLEL_WORKERS=1
+base="$(git merge-base origin/main HEAD 2>/dev/null || true)"
+[ -z "${base:-}" ] && base="$(git rev-parse HEAD~1 2>/dev/null || echo HEAD)"
+changed="$(git diff --name-only "$base"..HEAD 2>/dev/null || true)"
+code_changed=0; tests=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in app/*|lib/*|config/*|db/*|test/*|Gemfile|Gemfile.lock) code_changed=1 ;; esac
+  case "$f" in
+    test/system/*) : ;;
+    *og_card*) : ;;
+    test/*_test.rb) [ -f "$f" ] && tests="$tests $f" ;;
+  esac
+done <<< "$changed"
+if [ "$code_changed" -eq 0 ]; then echo "pre-push: docs-only delta — skipping local CI."; exit 0; fi
+if [ -z "${tests// /}" ]; then
+  echo "pre-push: code changed but no changed *_test.rb — run relevant tests manually (advisory)."; exit 0
+fi
+echo "pre-push: running changed tests (PARALLEL_WORKERS=1):$tests"
+# shellcheck disable=SC2086
+if bin/rails test $tests; then echo "pre-push: ✓ green — push allowed."; exit 0
+else echo "pre-push: ✗ RED — push blocked. Fix, or: git push --no-verify" >&2; exit 1; fi
