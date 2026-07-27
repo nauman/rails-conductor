@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SES email observability (event-level) · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p1:#8a6a1f;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f0ec;font-weight:600;color:var(--ink)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:8px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .decide{background:#f7efd9;border:1px solid #ecdcb8;border-radius:12px;padding:12px 16px;margin:12px 0}
+  .decide b{color:var(--p1);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .lede{font-size:16px}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body data-kuickr-bar="float"><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>SES email observability</h1>
+  <p class="sub">Event-level SES truth built <strong>into</strong> Conductor: every delivery, bounce, complaint, open, and click — per message, per recipient — ingested from SNS and tied to the App/Domain that sent it. The flight recorder that complements slot 20's sending-health gauges.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Provider automation</span>
+    <span class="badge p1">Priority: P1</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Draft · annotate</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2>Problem</h2>
+  <p class="lede">Conductor injects SES SMTP creds at deploy, so the fleet <em>sends</em> mail — but has zero visibility into what happens after send.</p>
+  <p><a href="20-ses-sns-messaging.html">Slot 20 (SES + SNS messaging)</a> covers the <strong>aggregate gauges</strong>: reputation, bounce/complaint rates, verified identities. This is the complementary <strong>event stream</strong> — "what happened to <em>this</em> email, to <em>this</em> recipient?" — the layer people otherwise pay a glorified-SES-wrapper SaaS for. Owning it keeps the fleet on raw SES with a single pane of glass in the control plane.</p>
+  <p>Slot 20 = the dashboard gauges (rates, reputation). This = the flight recorder (every event, searchable, per message).</p>
+</div>
+
+<div class="card">
+  <h2>Design reference: Sessy</h2>
+  <p>We adapt the model (not the codebase) of <a href="https://github.com/marckohlbrugge/sessy">Sessy</a> — a clean, battle-tested open-source SES observability app (Marc Köhlbrugge, Fizzy-inspired; O'Saasy License, reference only). We mirror its proven shape:</p>
+  <ul>
+    <li><strong><code>SesEventPayload</code></strong> — a PORO that parses one SES event JSON. Ported near-verbatim; it encodes SES's payload quirks (recipients live under <code>bounce</code>/<code>complaint</code>/<code>delivery</code>/… per type).</li>
+    <li><strong>Idempotent ingest</strong> — find-or-create a message by <code>ses_message_id</code>, then create-or-find an event on <code>(ses_message_id, event_type, recipient, event_at)</code>.</li>
+    <li><strong>Raw webhook record</strong> for idempotency + replay; <strong>SNS signature verification</strong> (<code>Aws::SNS::MessageVerifier</code>, cached — a fresh verifier re-downloads the signing cert ~600ms/req) with auto-confirm of <code>SubscriptionConfirmation</code>; a <strong>retention policy</strong>.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Where Conductor diverges from Sessy (the real design work)</h2>
+  <table>
+    <tr><th>Concern</th><th>Sessy (single-tenant)</th><th>Conductor</th></tr>
+    <tr><td>Tenancy</td><td>One instance, one tenant</td><td>Every record <strong>org-scoped</strong>; the webhook token resolves the org</td></tr>
+    <tr><td>Attribution</td><td>Standalone dashboard per SES config set</td><td>Events <strong>map to the App/Domain</strong> that sent them — "app X has a 4% bounce rate"</td></tr>
+    <tr><td>Wiring</td><td>Configure SES→SNS by hand</td><td><strong>Auto-provision</strong> the pipe from the SES-manage flow (one action)</td></tr>
+    <tr><td>Access</td><td>Web UI</td><td>UI <strong>+ MCP</strong> — agents can query deliverability</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Core model</h2>
+  <table>
+    <tr><th>Model</th><th>Sessy analog</th><th>Role</th></tr>
+    <tr><td><code>MessageStream</code></td><td><code>Source</code></td><td>Tokened webhook target (<code>/webhooks/ses/:token</code>), org-scoped; optional config-set + default App; retention policy. <em>(home TBD — Decision A)</em></td></tr>
+    <tr><td><code>EmailMessage</code></td><td><code>Message</code></td><td>One email, keyed by <code>ses_message_id</code> — source_email, subject, sent_at, mail_metadata. Org + optional App.</td></tr>
+    <tr><td><code>EmailEvent</code></td><td><code>Event</code></td><td>One SES event for one recipient — type, recipient, event_at, bounce_type, event_data, raw. Idempotent on the natural key.</td></tr>
+    <tr><td><code>SesWebhook</code></td><td><code>Webhook</code></td><td>Raw SNS payload + processed flag (idempotent processing).</td></tr>
+    <tr><td><code>SesEventPayload</code></td><td><code>EventPayload</code></td><td>PORO parser (ported).</td></tr>
+  </table>
+  <p class="sub">Event types: Send · Delivery · Bounce (Permanent/Transient/Undetermined) · Complaint · DeliveryDelay · Reject · Rendering Failure · Open · Click · Subscription.</p>
+</div>
+
+<div class="card">
+  <h2>Data flow</h2>
+  <ol class="slices">
+    <li>SES config-set publishes events → <strong>SNS topic</strong> → <code>POST /webhooks/ses/:token</code>.</li>
+    <li><code>Ses::WebhooksController</code> resolves the <code>MessageStream</code> by token, <strong>verifies the SNS signature</strong>, auto-confirms <code>SubscriptionConfirmation</code>.</li>
+    <li>On <code>Notification</code>: persist a <code>SesWebhook</code> (idempotent) + enqueue processing.</li>
+    <li><code>SesWebhook#process</code> → <code>SesEventPayload</code> → find-or-create <code>EmailMessage</code> → ingest an <code>EmailEvent</code> per recipient.</li>
+    <li><strong>Map to App</strong>: config-set→App binding first, else sender-domain→<code>Domain</code>→App. Unmatched events still ingest (org-scoped, <code>app_id</code> nil) — nothing lost.</li>
+  </ol>
+
+  <div class="decide"><b>Decision A — model home</b><br>
+    Is the tokened webhook target a new <code>MessageStream</code> model, or does it hang off <code>Organization</code> (one SES ingest URL per org) or <code>Domain</code>? Proposed: a lightweight <code>MessageStream</code> (name + token + optional app/config-set + retention), so an org can run several (one per config set).</div>
+
+  <div class="decide"><b>Decision B — ingest sync vs async</b><br>
+    Verify + persist the <code>SesWebhook</code> synchronously (fast 200 to SNS), then parse/ingest events in a Solid Queue job? Proposed: <strong>async</strong> — SNS retries on non-2xx, cert-verified persist is cheap, and parsing/mapping shouldn't block the webhook.</div>
+
+  <div class="decide"><b>Decision C — open/click tracking</b><br>
+    Opens/clicks require SES config-set open/click tracking enabled (adds a tracking pixel / link redirect). Ingest them whenever present — but should auto-wiring <em>enable</em> tracking? Proposed: <strong>ingest always; enabling tracking is an explicit opt-in</strong> (privacy).</div>
+
+  <div class="decide"><b>Decision D — retention default</b><br>
+    N days before auto-delete. Proposed: <strong>30 days</strong>, per-<code>MessageStream</code> override (Sessy-style).</div>
+</div>
+
+<div class="card">
+  <h2>Auto-wiring — don't make the operator hand-configure SNS</h2>
+  <p>Building on slot 20's SES-manage client, offer "<strong>observe this app's email</strong>": create/confirm an SNS topic, point the SES config-set's event destination at it, subscribe Conductor's <code>/webhooks/ses/:token</code> URL, and store the <code>MessageStream</code> — one action, mirroring <code>put_behind_cloudflare</code>'s one-button ergonomics. Manual setup (paste the webhook URL into SES) stays supported.</p>
+</div>
+
+<div class="card">
+  <h2>Surface</h2>
+  <ul>
+    <li><strong>UI</strong> — a deliverability view: per-App/Domain rates (delivery/bounce/complaint), a reverse-chronological event stream, search by recipient/subject, date + type filters. A message detail page = the timeline of its events.</li>
+    <li><strong>MCP</strong> — <code>conductor_read action=email_events</code> (filter by app/domain/type/date; search) so agents can answer "why did mail to X fail?" Feeds situation reads.</li>
+    <li><strong>Alerts</strong> — bounce/complaint rate over threshold → the <a href="12-alerts.html">alerts pipeline</a>, complementing slot 20's aggregate reputation alert.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Implementation slices</h2>
+  <ol class="slices">
+    <li><strong>Ingest core</strong> — <code>SesEventPayload</code> (port), <code>EmailMessage</code>/<code>EmailEvent</code>/<code>SesWebhook</code> models + migrations, idempotent org-scoped ingest. Unit-tested against real SES payload fixtures.</li>
+    <li><strong>Webhook endpoint</strong> — <code>Ses::WebhooksController</code>: <code>aws-sdk-sns</code> verifier (cached), subscription auto-confirm, async processing job.</li>
+    <li><strong>App/domain mapping</strong> — config-set→App + sender-domain→Domain resolution; backfill <code>app_id</code>.</li>
+    <li><strong>Surface</strong> — deliverability UI (rates + stream + search/filter) + <code>conductor_read action=email_events</code> + message detail.</li>
+    <li><strong>Auto-wiring</strong> — provision SES config-set event destination → SNS → webhook from the SES-manage flow; retention job + threshold alert.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>Acceptance criteria</h2>
+  <div class="acc"><ul>
+    <li>A real SES SNS notification is signature-verified, ingested idempotently (replaying it creates no duplicates), and appears in the UI + over MCP within seconds.</li>
+    <li>Events attribute to the correct App/Domain; unmatched events still ingest (org-scoped, <code>app_id</code> nil) and are visible.</li>
+    <li>An operator sees per-app delivery/bounce/complaint rates and can search a recipient/subject to a message's full event timeline.</li>
+    <li>Auto-wiring configures SES→SNS→Conductor end-to-end from one action; manual setup still works.</li>
+    <li>Events past the retention window are auto-deleted; a bounce/complaint-rate threshold fires an alert.</li>
+  </ul></div>
+
+  <h2>Dependencies &amp; related</h2>
+  <p>Extends <a href="20-ses-sns-messaging.html">slot 20 (SES + SNS messaging)</a> — slot 20 owns aggregate sending health + SES-manage + SMS; this owns the event stream and reuses slot 20's SES client for auto-wiring. Alerts feed <a href="12-alerts.html">slot 12</a>. Part of the <em>Connected Services</em> hub. Full working spec: <code>docs/conductor/plans/05-ses-observability.md</code>.</p>
+</div>
+<footer>Conductor roadmap · 2026-07-27 · draft for annotation · design reference: Sessy</footer>
+</div></body></html>
