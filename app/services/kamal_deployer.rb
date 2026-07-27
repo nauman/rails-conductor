@@ -154,7 +154,7 @@ class KamalDeployer
     # Include derived secrets (e.g. a dedicated app's DATABASE_URL) so preflight
     # doesn't demand a key Conductor already injects — deploy_env_pairs is the
     # single source of what actually lands in .kamal/secrets.
-    provided = app.deploy_env_pairs.map(&:first).to_set
+    provided = app.deploy_env_pairs(server: deploy_server).map(&:first).to_set
     missing = required_secrets.reject do |key|
       provided.include?(key) || (app.self_managed? && resolvable_from_conductor_env?(key))
     end
@@ -587,7 +587,7 @@ class KamalDeployer
     secrets_path = File.join(checkout_dir, ".kamal", "secrets")
     return if app.self_managed? && File.exist?(secrets_path)
 
-    content = KamalEnvWriter.secrets_content(app)
+    content = KamalEnvWriter.secrets_content(app, server: deploy_server)
     return if content.strip.empty?
 
     FileUtils.mkdir_p(File.dirname(secrets_path))

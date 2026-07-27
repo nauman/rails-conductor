@@ -46,4 +46,25 @@ class AppDatabasePlacementTest < ActiveSupport::TestCase
   test "database_cell names the current cell for the transfer planner" do
     assert_equal "dedicated·colocated", build_app.database_cell
   end
+
+  test "dedicated_database is server-scoped — source and target resolve independently" do
+    key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
+    src = @org.servers.create!(name: "a", status: "online", ip_address: "10.0.0.1", ssh_key: key, ssh_user: "deploy")
+    dst = @org.servers.create!(name: "b", status: "online", ip_address: "10.0.0.2", ssh_key: key, ssh_user: "deploy")
+    app = build_app(server: src) # dedicated + colocated by default
+
+    # Same container name (`appone-db`) on BOTH boxes — the transfer window.
+    [ src, dst ].each do |server|
+      cluster = @org.database_clusters.create!(server: server, name: app.dedicated_db_container_name,
+                                               container_name: app.dedicated_db_container_name,
+                                               admin_username: "conductor", admin_password: "x", port: 5432)
+      cluster.databases.create!(organization: @org, app: app, name: "appone",
+                                username: "u_#{server.name}", password: "pw", status: "active")
+    end
+
+    assert_equal "u_a", app.dedicated_database(server: src).username
+    assert_equal "u_b", app.dedicated_database(server: dst).username
+    # The deploy env injects the DB on the box being deployed to.
+    assert_includes app.deploy_env_pairs(server: dst).to_h["DATABASE_URL"], "u_b:pw@appone-db"
+  end
 end
