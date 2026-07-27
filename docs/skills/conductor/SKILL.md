@@ -7,9 +7,9 @@ description: Use to operate a self-hosted Rails fleet through Conductor's MCP se
 
 Endpoint `/mcp` — `GET /mcp/list` to discover, `POST /mcp/call` to invoke, `GET /mcp/skill` for this doc. Auth: Bearer `CONDUCTOR_MCP_TOKEN` (or a per-user/org API token; `401` if neither). Tool defs come from `ToolRegistry` (`app/tools/tool_registry.rb`) — always trust `/mcp/list` over this doc.
 
-## Surface: 8 flat tools, each with an `action`
+## Surface: 9 flat tools, each with an `action`
 
-The surface is **eight flat tools**; each call sets `action` plus that action's params (fewer tools keeps agent tool-selection accurate). Call shape: `{"name":"conductor_read","input":{"action":"fleet_status"}}`.
+The surface is **nine flat tools**; each call sets `action` plus that action's params (fewer tools keeps agent tool-selection accurate). Call shape: `{"name":"conductor_read","input":{"action":"fleet_status"}}`.
 
 | Tool | Actions | Notes |
 |------|---------|-------|
@@ -21,6 +21,7 @@ The surface is **eight flat tools**; each call sets `action` plus that action's 
 | `conductor_domain` | `add`, `remove`, `put_behind_cloudflare`, `purge_cloudflare`, `set_dns` | `remove` is destructive — confirm. `put_behind_cloudflare` proxies a domain (CDN + edge TLS); `purge_cloudflare` clears the edge cache (optional `files` URLs, else everything) after a deploy that left stale/404'd assets; `set_dns` creates/updates an A/CNAME record (idempotent; `proxied=false` = DNS-only) via the connected account that owns the zone — zero vault. All need a Verified Cloudflare account (see `conductor_read action: cloudflare`). |
 | `conductor_github` | `set_token`, `set_app`, `installations` | Stores credentials Conductor-wide. |
 | `conductor_runbook` | `get`, `set_runbook`, `add_item`, `remove_item`, `check_item`, `reset` | Per-app deploy runbook + checklist. **Read (`get`) before deploying** — each app deploys differently. Work the checklist during deploy; `reset` before a new one. |
+| `conductor_storage` | `audit`, `configure`, `migrate` | App Active Storage / R2. `audit` = where blobs live + configured service + reachability + count not on it (read-only). `configure` = generate the R2 storage.yml + production.rb + env keys to add (no secrets). `migrate` = upload blobs local→cloudflare_r2 and repoint them; chunked via `limit`, idempotent (mutating). audit/migrate exec `bin/rails runner` in the app container over SSH. Use after a host migration that left images 404'ing (files not carried with the DB). |
 
 ## Flow
 1. `conductor_read action: fleet_status` to orient → `action: logs` / `action: deployment` to diagnose.

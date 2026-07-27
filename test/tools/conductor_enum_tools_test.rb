@@ -111,15 +111,15 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
 
   # --- registry & scope -------------------------------------------------
 
-  test "all six enum tools are registered" do
+  test "the consolidated enum tools are registered" do
     names = ToolRegistry.definitions.map { |d| d[:name] }
     %w[conductor_app conductor_app_config conductor_server conductor_database
-       conductor_domain conductor_github].each { |n| assert_includes names, n }
+       conductor_domain conductor_github conductor_runbook conductor_storage].each { |n| assert_includes names, n }
   end
 
   test "mutating enum tools are NOT read-only allowed" do
     %w[conductor_app conductor_app_config conductor_server conductor_database
-       conductor_domain conductor_github].each do |n|
+       conductor_domain conductor_github conductor_runbook conductor_storage].each do |n|
       refute_includes ToolRegistry::READ_ONLY_TOOLS, n
     end
   end

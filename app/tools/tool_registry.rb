@@ -1,5 +1,5 @@
 class ToolRegistry
-  # The wire surface is seven flat `action`-enum tools. Each delegates via
+  # The wire surface is a set of flat `action`-enum tools. Each delegates via
   # EnumDispatch to the single-purpose `*_tool.rb` implementation classes,
   # which remain as internal handlers (not registered).
   TOOLS = [
@@ -10,7 +10,8 @@ class ToolRegistry
     ConductorDatabaseTool,
     ConductorDomainTool,
     ConductorGithubTool,
-    ConductorRunbookTool
+    ConductorRunbookTool,
+    ConductorStorageTool
   ].freeze
 
   def self.definitions
