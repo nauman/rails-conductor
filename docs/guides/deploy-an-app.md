@@ -11,7 +11,7 @@ order: 2
 | Method | What it does | When to use |
 |---|---|---|
 | **kamal** | Conductor runs Kamal as the **control machine** (in its own container): clones your repo, builds on the target's docker daemon over SSH, and deploys. You keep `kamal logs` / `kamal console`. | Containerized apps you want on Kamal. |
-| **native** | Git-based release over SSH on the box: `app-setup` → `systemd-setup` → `app-deploy` (Puma + systemd). | Hatchbox-style native Rails apps. |
+| **native** | Git-based release over SSH on the box: `app-setup` → `systemd-setup` → `app-deploy` (Puma + systemd). | Classic native Rails apps. |
 | **docker** | Build + run a container directly. | Simple container apps. |
 
 Set the method on the app (UI **Edit app**, or the `update_app` MCP tool).

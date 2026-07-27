@@ -17,7 +17,7 @@ one-click scheduling of the built-in maintenance scripts (materialized via
 
 ## Goal
 
-A **cron-job creator UI**: define a scheduled command (frequency + command + server) in Conductor, and Conductor installs it into the server's crontab — Hatchbox-style. Human-friendly schedules ("every 2 hours", "daily at 3am") are translated to cron syntax via the `whenever` gem's expression builder.
+A **cron-job creator UI**: define a scheduled command (frequency + command + server) in Conductor, and Conductor installs it into the server's crontab — PaaS-style. Human-friendly schedules ("every 2 hours", "daily at 3am") are translated to cron syntax via the `whenever` gem's expression builder.
 
 ## Scope
 

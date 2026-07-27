@@ -1,6 +1,6 @@
 # Conductor — Roadmap & Backlog
 
-Gap analysis vs **Hatchbox.io**, mapped to the 6 strategic pillars. Detailed plans live alongside this file as `plan-*.html`.
+Gap analysis vs a hosted Rails PaaS, mapped to the 6 strategic pillars. Detailed plans live alongside this file as `plan-*.html`.
 
 _Index in Markdown; individual plan pages stay HTML._ · Updated 2026-06-20.
 
@@ -8,22 +8,23 @@ _Index in Markdown; individual plan pages stay HTML._ · Updated 2026-06-20.
 
 ## Thesis
 
-Conductor is the **control plane for self-hosted Rails ops across a fleet** — apps, servers, routing, databases, backups, and provider APIs, across **Kamal, native, and Docker** deploys, driven by web UI, CLI, and **AI agents over MCP**. The moat is the _combination_ (multi-host + hybrid deploy + provider APIs + Postgres ops + continuous maintenance + agent-native control), not "deploy Rails on a VPS" — that lane is Hatchbox's.
+Conductor is the **control plane for self-hosted Rails ops across a fleet** — apps, servers, routing, databases, backups, and provider APIs, across **Kamal, native, and Docker** deploys, driven by web UI, CLI, and **AI agents over MCP**. The moat is the _combination_ (multi-host + hybrid deploy + provider APIs + Postgres ops + continuous maintenance + agent-native control), not "deploy Rails on a VPS" — that lane is a hosted PaaS's.
 
-### Where Conductor already beats Hatchbox
+### Where Conductor already beats a hosted PaaS
 
-- **Agent-native** — a full MCP server, CLI, and API. Hatchbox has none of this.
-- **Hybrid backends** — Kamal _and_ native _and_ Docker. Hatchbox is native-only.
-- **Self-hosted / source-available** (Elastic License) vs Hatchbox's hosted SaaS panel.
+- **Agent-native** — a full MCP server, CLI, and API. A hosted PaaS has none of this.
+- **Hybrid backends** — Kamal _and_ native _and_ Docker. Hosted PaaS panels are native-only.
+- **Self-hosted / source-available** (Elastic License) vs a hosted SaaS panel.
 - **Provider-API orchestration** (SES, R2, Cloudflare, Hetzner) + Postgres cluster ops + continuous maintenance.
 
 ## Recently shipped
 
+- **MCP OAuth connect (browser sign-in for agents)** — **shipped 2026-07-27**: Conductor is now an OAuth 2.1 authorization server for its own `/mcp` endpoint (discovery, dynamic client registration, PKCE, refresh tokens, RFC 8707 audience binding, org-bound tokens), so Codex / claude.ai / Cursor connect with a browser login instead of a pasted bearer token. Static tokens still work. (See [../conductor/plans/06-mcp-oauth-connect.md](../conductor/plans/06-mcp-oauth-connect.md).)
 - **Deploy Kamal apps through Conductor (control machine)** — **live-validated 2026-06-19**: Conductor's container clones the repo and builds on the target's docker daemon over SSH, then deploys. First clean end-to-end deploy proven on a real app. (See [01-kamal-control-machine.html](01-kamal-control-machine.html).)
 - **GitHub App & deploy keys (private repos), Kamal slice** — short-lived installation tokens + auto-installed deploy keys, plus a browser **Integrations** page. Native/raw-Docker clone auth and commit-status reporting remain. (See [02-github-app.html](02-github-app.html).)
 - Cron / scheduled jobs, server hardening/auto-update/audit, Postgres clusters (per-app DB on a shared cluster), MCP server + token + audit log (secret-redacted), org-scoped `/api/v1` + org-aware MCP, kamal env bridge + status sync. `app-one.example.com` + `app-three.example.com` live on the shared fleet box (multi-app proven).
 
-## Backlog — gaps to fully replace Hatchbox
+## Backlog — gaps to fully replace a hosted Rails PaaS
 
 Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** = expected parity · **P2** = polish/breadth.
 

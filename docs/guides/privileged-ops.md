@@ -49,19 +49,19 @@ If you want even tighter separation than the wrapper model:
 1. **Separate privileged identity.** Give `deploy` **no** sudo at all, and let
    Conductor SSH as a dedicated `root`/admin key **only** for OS ops. Cleanest
    separation; costs a second key.
-2. **Password-protected sudo (Hatchbox-classic style).** Keep full sudo but require a
+2. **Password-protected sudo (classic-PaaS style).** Keep full sudo but require a
    password, stored in Conductor's secret vault and passed via `sudo -S`. Matches
-   Hatchbox classic, but it is full sudo — not least-privilege.
+   a hosted Rails PaaS classic, but it is full sudo — not least-privilege.
 
-## How this compares to Hatchbox
+## How this compares to a hosted Rails PaaS
 
-Hatchbox's classic platform uses **password-protected sudo** for the deploy user (the
+a hosted Rails PaaS's classic platform uses **password-protected sudo** for the deploy user (the
 password is emailed at server creation) — not passwordless. Its newer platform runs a
-server-side **agent as root** for automation. Either way, Hatchbox does not hand the
+server-side **agent as root** for automation. Either way, a hosted Rails PaaS does not hand the
 deploy user *blanket passwordless* sudo. The same principle applies here: grant the
 narrowest thing that lets the automation work.
 
 ## References
 
 - [GTFOBins — apt-get](https://gtfobins.org/gtfobins/apt-get/) (sudo shell escape)
-- [Hatchbox — the deploy user's sudo password](https://hatchbox.relationkit.io/articles/7-what-is-the-sudo-password-for-the-deploy-user)
+- [a hosted Rails PaaS — the deploy user's sudo password](https://hatchbox.relationkit.io/articles/7-what-is-the-sudo-password-for-the-deploy-user)

@@ -14,7 +14,7 @@ Active — building (slice 1).
 
 ## Goal
 
-Hatchbox-style Postgres management: register a Postgres **cluster** running on a server, then **create and drop per-app databases** (database + role + generated password) from Conductor — no manual `psql`.
+PaaS-style Postgres management: register a Postgres **cluster** running on a server, then **create and drop per-app databases** (database + role + generated password) from Conductor — no manual `psql`.
 
 ## Scope
 

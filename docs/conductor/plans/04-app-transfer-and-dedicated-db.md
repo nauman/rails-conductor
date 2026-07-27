@@ -17,7 +17,7 @@ box. This spec fixes both.
 ## Part 1 — The core architectural bet: dedicated, runtime-wired database containers
 
 **Proposal (operator's instinct):** each app gets its **own Postgres container**
-with its own volume, and the app's DB config is **injected at runtime** (Hatchbox
+with its own volume, and the app's DB config is **injected at runtime** (a hosted Rails PaaS
 does this: it writes `database.yml` at boot; the DB is a separate container). The
 image carries **no** DB coordinates — they're injected — so the *same image* runs
 against whatever DB endpoint it's pointed at.

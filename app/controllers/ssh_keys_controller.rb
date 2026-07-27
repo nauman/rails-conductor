@@ -27,7 +27,7 @@ class SshKeysController < ApplicationController
     end
   end
 
-  # Generate a deploy keypair on the Conductor server itself (the Hatchbox
+  # Generate a deploy keypair on the Conductor server itself (the a hosted PaaS
   # model): Conductor keeps the private key and shows you the public key to
   # authorize on your servers. No pasting, nothing generated on your machine.
   def generate

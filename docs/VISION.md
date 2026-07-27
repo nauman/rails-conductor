@@ -28,7 +28,7 @@ Conductor sits above infrastructure tools instead of forcing a complete replacem
 
 That means Conductor can work with:
 - Kamal for Docker-based deployments
-- ONCE-compatible runtimes or CLI workflows where they fit
+- single-binary self-host runtimes or CLI workflows where they fit
 - native Caddy/Puma setups for multi-app servers without Docker
 - provider APIs such as Hetzner, Cloudflare, R2, and SES
 - database and backup tooling needed to manage Postgres clusters
@@ -39,7 +39,7 @@ Conductor should remain compatible with lower-level tools without depending on a
 
 **The moat is not deployment by itself. The moat is an entire self-hosted fleet that an AI agent can operate end-to-end, safely — unified mixed-infrastructure operations *plus* agent-native, secretless control. The combination.**
 
-The headline differentiator — **agent-native, secretless control** — is defensible by *architecture*, not just effort: Hatchbox is a hosted panel and ONCE is a single-machine TUI; neither is a fleet that an agent can drive over MCP. The rest is defensible by *depth*:
+The headline differentiator — **agent-native, secretless control** — is defensible by *architecture*, not just effort: a hosted PaaS is a hosted panel and a single-machine self-host tool is a TUI; neither is a fleet that an agent can drive over MCP. The rest is defensible by *depth*:
 - agent-native MCP surface (every op a tool), org-scoped + audited + least-privilege, with secretless deploys so values are never handled by human or agent
 - Kamal and native hosting in one system
 - multi-host Caddy orchestration
@@ -75,12 +75,12 @@ What is still the critical gap:
 ## Strategic Pillars
 
 1. **Fleet control** — one place to see apps, servers, issues, and operational state across the fleet
-2. **Runtime backends** — support Kamal, ONCE-compatible Docker workflows, and native Caddy/Puma servers
+2. **Runtime backends** — support Kamal, single-binary self-host Docker workflows, and native Caddy/Puma servers
 3. **Routing and edge** — multi-host Caddy orchestration, domains, certificates, and traffic state
 4. **Provisioning and provider automation** — domains, Hetzner, Cloudflare, R2, SES, and control-panel setup flows
 5. **Data and backups** — Postgres backup, restore, monitoring, and cluster lifecycle
 6. **Continuous maintenance** — server checks, updates, drift detection, and alerts
-7. **Agent-native control** — the whole fleet is operable by an AI agent end-to-end over MCP — every action a tool, every tool org-scoped, audited, and least-privilege, deploying *secretlessly* so neither human nor agent need handle secret values. This is the pillar Hatchbox and ONCE cannot copy, and it leads the moat.
+7. **Agent-native control** — the whole fleet is operable by an AI agent end-to-end over MCP — every action a tool, every tool org-scoped, audited, and least-privilege, deploying *secretlessly* so neither human nor agent need handle secret values. This is the pillar a hosted panel and a single-machine TUI cannot copy, and it leads the moat.
 
 ## Connected Services (the integration hub)
 
@@ -257,7 +257,7 @@ A developer running 8+ apps across 3+ providers can:
 6. **Bootstrap flow** — take a new server from created to ready
 
 ### Phase 3: Build the fleet moat
-7. **Kamal and optional ONCE-compatible backend integration** — support richer Docker lifecycle workflows
+7. **Kamal and optional single-binary self-host backend integration** — support richer Docker lifecycle workflows
 8. **Multi-host orchestration** — coordinate actions across servers
 9. **Continuous maintenance** — drift detection, updates, cert monitoring, and trends
 

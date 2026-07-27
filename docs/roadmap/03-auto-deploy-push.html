@@ -49,7 +49,7 @@
 <a class="back" href="backlog.md">← Back to backlog</a>
 <header class="page">
   <h1>Auto-deploy on git push</h1>
-  <p class="sub">Receive GitHub/GitLab push webhooks and deploy the matching app automatically — Hatchbox's signature push-to-deploy flow.</p>
+  <p class="sub">Receive GitHub/GitLab push webhooks and deploy the matching app automatically — the signature push-to-deploy flow of hosted PaaS panels.</p>
   <div class="badges">
     <span class="badge">Pillar: Runtime Backends</span>
     <span class="badge p0">Priority: P0</span>
@@ -63,7 +63,7 @@
 </div>
 <div class="card">
   <h2>Problem</h2>
-  <p>Conductor only deploys when a human pulls the trigger: a button in the UI or an explicit MCP call. Hatchbox's entire value proposition is the opposite — you <code>git push</code> and your app ships. Until Conductor reacts to pushes on its own, it can't honestly be sold as a Hatchbox replacement; every deploy still needs a person in the loop.</p>
+  <p>Conductor only deploys when a human pulls the trigger: a button in the UI or an explicit MCP call. a hosted PaaS's entire value proposition is the opposite — you <code>git push</code> and your app ships. Until Conductor reacts to pushes on its own, it can't honestly be sold as a hosted-PaaS replacement; every deploy still needs a person in the loop.</p>
 
   <h2>Current state</h2>
   <p>Deploys today have exactly two entry points, both manual:</p>

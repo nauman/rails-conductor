@@ -49,7 +49,7 @@
 <a class="back" href="backlog.md">← Back to backlog</a>
 <header class="page">
   <h1>Background worker management</h1>
-  <p class="sub">Define, run, scale, and restart a managed app's background worker processes (Sidekiq and friends) from Conductor — the way Hatchbox does — instead of leaving them to manual SSH.</p>
+  <p class="sub">Define, run, scale, and restart a managed app's background worker processes (Sidekiq and friends) from Conductor — the way hosted PaaS panels do — instead of leaving them to manual SSH.</p>
   <div class="badges">
     <span class="badge">Pillar: Runtime Backends</span>
     <span class="badge p1">Priority: P1</span>
@@ -59,7 +59,7 @@
 </header>
 <div class="card">
   <h2>Problem</h2>
-  <p>Hatchbox treats background workers as first-class processes: you declare a worker (e.g. <code>bundle exec sidekiq</code>), pick a process count, and Hatchbox starts/stops/scales them and restarts them on every deploy. Conductor has no equivalent. A managed app today gets a web process and nothing else, so any Sidekiq, Solid Queue, or custom worker has to be wired up by hand over SSH and is invisible to the UI and to deploys. There is no model, no UI, and no MCP surface for an app's worker processes.</p>
+  <p>hosted PaaS panels treat background workers as first-class processes: you declare a worker (e.g. <code>bundle exec sidekiq</code>), pick a process count, and the panel starts/stops/scales them and restarts them on every deploy. Conductor has no equivalent. A managed app today gets a web process and nothing else, so any Sidekiq, Solid Queue, or custom worker has to be wired up by hand over SSH and is invisible to the UI and to deploys. There is no model, no UI, and no MCP surface for an app's worker processes.</p>
 
   <h2>Current state</h2>
   <p>Conductor now provides a read-only per-app Solid Queue view through <code>SolidQueueStats</code> and the app Jobs page: queue counts, failed jobs, registered processes, and heartbeat freshness. This is useful observability, but it does not define or control managed worker processes.</p>

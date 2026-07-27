@@ -32,7 +32,7 @@
       <%= f.label :source_env_file, "Env file to source (optional)", class: "block text-sm font-medium text-body mb-1" %>
       <%= f.text_field :source_env_file, placeholder: "/home/deploy/app-two/.asdf-vars",
             class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
-      <p class="text-xs text-faint mt-1">Sourced before <code>pg_dump</code> so <code>$DATABASE_URL</code> is set (Hatchbox keeps it here). Leave blank if the variable is already in the shell environment.</p>
+      <p class="text-xs text-faint mt-1">Sourced before <code>pg_dump</code> so <code>$DATABASE_URL</code> is set (some PaaS boxes keep it here). Leave blank if the variable is already in the shell environment.</p>
     </div>
 
     <div>

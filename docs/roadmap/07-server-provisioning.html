@@ -49,7 +49,7 @@
 <a class="back" href="backlog.md">← Back to backlog</a>
 <header class="page">
   <h1>Server provisioning via provider APIs</h1>
-  <p class="sub">Move Conductor from registering pre-existing boxes to creating and bootstrapping VMs directly through cloud-provider APIs, closing the biggest gap against Hatchbox's one-click server flow.</p>
+  <p class="sub">Move Conductor from registering pre-existing boxes to creating and bootstrapping VMs directly through cloud-provider APIs, closing the biggest gap against a hosted PaaS's one-click server flow.</p>
   <div class="badges">
     <span class="badge">Pillar: Provisioning &amp; Provider Automation</span>
     <span class="badge p1">Priority: P1</span>
@@ -59,7 +59,7 @@
 </header>
 <div class="card">
   <h2>Problem</h2>
-  <p>Conductor can <em>register</em> a server that already exists, but it cannot <em>create</em> one. Hatchbox's core onboarding flow is &ldquo;pick a provider, pick a size, click &mdash; you get a hardened, provisioned box.&rdquo; Conductor instead requires the operator to go to DigitalOcean/Hetzner/etc., spin up a VM by hand, copy its IP and SSH details back into Conductor, and only then run provisioning. The Provisioning &amp; Provider Automation pillar audited at roughly 32% precisely because the &ldquo;create the server&rdquo; half is missing entirely. This is the single biggest friction point in standing up a new app on the fleet.</p>
+  <p>Conductor can <em>register</em> a server that already exists, but it cannot <em>create</em> one. a hosted PaaS's core onboarding flow is &ldquo;pick a provider, pick a size, click &mdash; you get a hardened, provisioned box.&rdquo; Conductor instead requires the operator to go to DigitalOcean/Hetzner/etc., spin up a VM by hand, copy its IP and SSH details back into Conductor, and only then run provisioning. The Provisioning &amp; Provider Automation pillar audited at roughly 32% precisely because the &ldquo;create the server&rdquo; half is missing entirely. This is the single biggest friction point in standing up a new app on the fleet.</p>
 
   <h2>Current state</h2>
   <p>Server creation is fully manual. <code>Server</code> (<code>app/models/server.rb</code>) is a registration record: it declares <code>PROVIDERS = %w[hetzner digitalocean linode vultr aws gcp azure]</code> and validates that <code>provider</code> is one of them, but <code>provider</code> is purely descriptive metadata &mdash; the model stores <code>name</code>, <code>ip_address</code>, SSH details (<code>ssh_user</code>, <code>ssh_port</code>, <code>ssh_key</code>), and live metrics, and nothing in it talks to a provider API. The closest thing to provisioning is <code>ProvisioningService</code> (<code>app/services/provisioning_service.rb</code>), which takes a <code>script_run</code>, opens an <code>SshConnection</code> to an <strong>already-existing</strong> <code>@server</code>, and streams a <code>Script</code> body over SSH while logging output &mdash; i.e. it runs setup/hardening commands on a box that must already be reachable. There is a Hetzner spec at <code>docs/plans/provisioning-hetzner.md</code> and a bootstrap spec at <code>docs/plans/server-bootstrap.md</code>, plus related <code>docs/plans/ssh-keys.md</code>, but no provider-API code that calls out to create a VM. In short: Conductor has the &ldquo;configure the box&rdquo; half (SSH + Scripts) and none of the &ldquo;summon the box&rdquo; half.</p>

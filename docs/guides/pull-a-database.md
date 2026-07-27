@@ -18,7 +18,7 @@ Go to **Pulls → New pull** and fill in:
 | Field | Meaning |
 |---|---|
 | **Source server** | A server with SSH access configured (an SSH key + IP). |
-| **Env file to source** | Optional. A file sourced before `pg_dump` so `$DATABASE_URL` is set. Hatchbox boxes keep it at `/home/deploy/<app>/.asdf-vars`. Leave blank if the variable is already in the shell environment. |
+| **Env file to source** | Optional. A file sourced before `pg_dump` so `$DATABASE_URL` is set. some PaaS boxes keep it at `/home/deploy/<app>/.asdf-vars`. Leave blank if the variable is already in the shell environment. |
 | **DATABASE_URL variable** | The env var holding the connection string (default `DATABASE_URL`). |
 | **Source label** | Optional, display-only name for the pulls list. |
 | **Restore into local database** | Optional. If set, Conductor **drops and recreates** that local database on its own host, then `pg_restore`s into it. Leave blank to only download the dump. |

@@ -1,7 +1,7 @@
 # Conductor Phase 2: SSH-Based Server Monitoring
 
 ## Summary
-Implement agentless server monitoring via SSH keys (similar to Hatchbox), eliminating the need for installing agents on monitored servers. Includes an SSH key vault for secure storage of private keys.
+Implement agentless server monitoring via SSH keys (similar to a hosted PaaS), eliminating the need for installing agents on monitored servers. Includes an SSH key vault for secure storage of private keys.
 
 ## Architecture
 

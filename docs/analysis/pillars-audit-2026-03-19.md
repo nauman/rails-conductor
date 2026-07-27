@@ -15,7 +15,7 @@ large amount of strategic surface still unbuilt. The audit below measures that g
 ## Strategic Pillars
 
 1. **Fleet control** — Visibility into apps, servers, issues, and operational state
-2. **Runtime backends** — Kamal, optional ONCE-compatible Docker workflows, and native deploys
+2. **Runtime backends** — Kamal, optional single-binary self-host Docker workflows, and native deploys
 3. **Routing and edge** — Caddy orchestration, domains, certificates, and reachability
 4. **Provisioning and provider automation** — Domain, server, DNS, storage, and email setup from the control panel
 5. **Data and backups** — Postgres backup, restore, monitoring, and cluster lifecycle
@@ -89,7 +89,7 @@ surfacing, historical trends, and richer operational views.
 ## Pillar 2: Runtime Backends
 
 Runtime backends are the execution layer. Conductor should support multiple ways to deploy and
-run apps: Kamal Docker, native Puma/systemd, and optionally ONCE-compatible workflows.
+run apps: Kamal Docker, native Puma/systemd, and optionally a single-machine self-host tool-compatible workflows.
 
 ### What's Built
 
@@ -114,7 +114,7 @@ run apps: Kamal Docker, native Puma/systemd, and optionally ONCE-compatible work
 | Rollback | MISSING | No image/release history tracking |
 | Multi-host rolling deploys | MISSING | Each app tied to single server |
 | Blue-green / canary | MISSING | No versioned deployment strategies |
-| ONCE-compatible packaging | MISSING | No `/up` + `/storage` + hooks standardization |
+| a single-machine self-host tool-compatible packaging | MISSING | No `/up` + `/storage` + hooks standardization |
 | Native app Caddy registration | MISSING | systemd-setup doesn't wire Caddy route |
 | Puma config generation | MISSING | No `puma.rb` template for native apps |
 
@@ -147,7 +147,7 @@ registry support, and rollback is entirely unbuilt.
 - **Native deploy completion** — No plan covers wiring systemd-setup to Caddy, puma.rb generation, or socket-based routing.
 - **Release versioning and rollback** — No plan for tracking image/release history or rolling back.
 - **Multi-host orchestration** — No plan for coordinating deploys across multiple servers.
-- **ONCE-compatible backend** — No plan for how to use ONCE CLI as an execution backend on managed servers.
+- **a single-machine self-host tool-compatible backend** — No plan for how to use a single-machine self-host tool CLI as an execution backend on managed servers.
 
 ---
 
@@ -531,7 +531,7 @@ Aligned with `docs/plans/INDEX.md` and `docs/VISION.md` Phase 1–4.
 7. **Credential validation** — Test API keys against provider endpoints before saving
 
 ### Phase 3: Build the fleet moat (Operations)
-8. **Kamal backend integration** — Use Kamal CLI for richer Docker lifecycle, or ONCE where it fits
+8. **Kamal backend integration** — Use Kamal CLI for richer Docker lifecycle, or a single-machine self-host tool where it fits
 9. **Multi-host orchestration** — Fleet-wide deploys, rolling restarts, coordinated operations
 10. **Drift detection** — Compare desired state (DB) vs actual state (server) with alerting
 11. **Server update automation** — Unattended-upgrades setup, maintenance windows

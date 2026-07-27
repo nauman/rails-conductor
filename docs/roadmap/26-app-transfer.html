@@ -56,7 +56,7 @@
 
 <div class="card">
   <h2>The core bet: dedicated, runtime-wired database containers</h2>
-  <p>Give each app its <strong>own Postgres container</strong> (its own volume), and inject the app's DB config <strong>at runtime</strong> (Hatchbox-style: it writes <code>database.yml</code> at boot; the DB is a separate container). The image carries <em>no</em> DB coordinates — so the same image runs against whatever endpoint it's pointed at. An app's state becomes a <strong>self-contained unit</strong> (<code>&lt;app&gt;-db</code> container + volume); moving the app = move/replicate that one unit and re-inject the endpoint.</p>
+  <p>Give each app its <strong>own Postgres container</strong> (its own volume), and inject the app's DB config <strong>at runtime</strong> (PaaS-style: it writes <code>database.yml</code> at boot; the DB is a separate container). The image carries <em>no</em> DB coordinates — so the same image runs against whatever endpoint it's pointed at. An app's state becomes a <strong>self-contained unit</strong> (<code>&lt;app&gt;-db</code> container + volume); moving the app = move/replicate that one unit and re-inject the endpoint.</p>
   <p>This diverges from today's <strong>shared cluster</strong> (one Postgres, a DB+role per app) which trades portability for density.</p>
 
   <h2>Two axes: isolation × locality (both per-app)</h2>

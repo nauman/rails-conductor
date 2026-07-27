@@ -284,7 +284,7 @@ class App < ApplicationRecord
     "conductor-#{slug}"
   end
 
-  # Command to tail this app's logs over an SSH exec. Native (Hatchbox-style) apps
+  # Command to tail this app's logs over an SSH exec. Native (classic PaaS-style) apps
   # run as per-user systemd units named <slug>-server; over a non-login SSH exec
   # `journalctl --user` can't reach the user journal without XDG_RUNTIME_DIR, and
   # stderr would otherwise be dropped — set the runtime dir and fold stderr in so
@@ -367,7 +367,7 @@ class App < ApplicationRecord
   end
 
   # The service label on a running container doesn't always equal the slug: an
-  # adopted/Hatchbox app can have slug "calm-page" but Kamal service "calmpage".
+  # adopted app can have slug "calm-page" but Kamal service "calmpage".
   # Match on the slug AND a separator-stripped variant so status sync finds it.
   def kamal_service_candidates
     [ kamal_service, kamal_service.gsub(/[^a-z0-9]/i, "").downcase ].uniq

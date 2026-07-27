@@ -15,9 +15,9 @@ Conductor **reliably deploys the fleet through its own UI/CI happy-path** — al
 | Kuickr | kuickr.co | 200 | Conductor self-deploy (KamalDeployer as control machine) | Kamal, fleet box | ❌ ENV-injected coords only |
 | Calm.page | calm.page | 200 | Conductor-managed Kamal | Kamal, fleet box | ❌ **incident** — defaulted to wrong host/service |
 | Wiseherds | wiseherds.com | 200 | Conductor-managed Kamal | Kamal, fleet box | ❌ same pattern |
-| intellectaco / agpages-2 / minimalnarrow | — | (Hatchbox box 89.233.107.200) | **Hatchbox**, NOT Conductor | Native systemd `--user` units (`<app>-server`) | n/a (different tool) |
+| intellectaco / agpages-2 / minimalnarrow | — | (a hosted Rails PaaS box 89.233.107.200) | **a hosted Rails PaaS**, NOT Conductor | Native systemd `--user` units (`<app>-server`) | n/a (different tool) |
 
-Fleet box: `135.181.114.59` (Kamal + shared `conductor-postgres`). Hatchbox box: `89.233.107.200` (native, root=automation / deploy=apps).
+Fleet box: `135.181.114.59` (Kamal + shared `conductor-postgres`). a hosted Rails PaaS box: `89.233.107.200` (native, root=automation / deploy=apps).
 
 ## How deploys actually work (the mechanism)
 
@@ -72,7 +72,7 @@ Fleet deploys rely on the image entrypoint's silent `db:prepare`. **Evidence:** 
 → Fixed for **Conductor's own CI** (gated `db:migrate` + `db:abort_if_pending_migrations`). **NOT yet generalized to `KamalDeployer`** for fleet apps = **slot 24**.
 
 ### F5 — Mixed-runtime reality only partly modeled (P1).
-The Hatchbox box (intellectaco/agpages-2/minimalnarrow) runs native `--user` systemd apps with a root=automation / deploy=apps split — and **isn't managed by Conductor at all**. Conductor's native log tail was silently broken there (fixed this session: `XDG_RUNTIME_DIR` for non-login SSH). Two-identity server model = **slot 25**, not built.
+The a hosted Rails PaaS box (intellectaco/agpages-2/minimalnarrow) runs native `--user` systemd apps with a root=automation / deploy=apps split — and **isn't managed by Conductor at all**. Conductor's native log tail was silently broken there (fixed this session: `XDG_RUNTIME_DIR` for non-login SSH). Two-identity server model = **slot 25**, not built.
 
 ## Fixed this session (evidence of direction)
 CI self-deploy for Conductor · gated migrations (Conductor) · deploy serialization + auto-lock-release · native log tail fix · reactive fleet statuses · server health + install-packages · `/version` verifiability · ADR 0001 recorded.
@@ -82,7 +82,7 @@ CI self-deploy for Conductor · gated migrations (Conductor) · deploy serializa
 2. **P0 — Gate migrations for fleet apps** (generalize the CI pattern into `KamalDeployer`).
 3. **P1 — Single secret source of truth**; localvault = explicit source/pointer or setup-time seed, `.kamal/secrets*` stays git-safe or gitignored.
 4. **P1 — Deploy-executor isolation** (slot 23) — retire self-deploy-in-container for fleet apps too.
-5. **P1 — Two-identity servers** (slot 25) + adopt the Hatchbox box into Conductor.
+5. **P1 — Two-identity servers** (slot 25) + adopt the a hosted Rails PaaS box into Conductor.
 
 ## Required follow-up for Claude
 

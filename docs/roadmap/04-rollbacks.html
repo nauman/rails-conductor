@@ -59,7 +59,7 @@
 </header>
 <div class="card">
   <h2>Problem</h2>
-  <p>When a deploy ships a bad release, there is currently no way to get back to the version that was running a minute ago. The operator's only recourse is to push a revert commit and run a full fresh deploy — slow, and useless when the repo is fine but the release is broken (bad migration, bad asset build, bad env). Hatchbox, the tool Conductor aims to replace, retains a stack of releases and offers one-click rollback. Conductor needs parity here before it can be trusted with production fleets.</p>
+  <p>When a deploy ships a bad release, there is currently no way to get back to the version that was running a minute ago. The operator's only recourse is to push a revert commit and run a full fresh deploy — slow, and useless when the repo is fine but the release is broken (bad migration, bad asset build, bad env). a hosted PaaS, the kind of tool Conductor aims to replace, retains a stack of releases and offers one-click rollback. Conductor needs parity here before it can be trusted with production fleets.</p>
 
   <h2>Current state</h2>
   <p>Conductor records deploys but keeps no rollback-able artifact. <code>app/models/deployment.rb</code> persists <code>status</code>, <code>log</code>, timing (<code>started_at</code>/<code>completed_at</code>) and a <code>commit_sha</code> column, with a <code>STATUSES</code> lifecycle (<code>pending → building → deploying → succeeded/failed</code>) and a <code>successful</code> scope — but there is no <em>release version</em>, no retained build, and no rollback action anywhere on the model.</p>

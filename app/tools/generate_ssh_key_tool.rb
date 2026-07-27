@@ -1,4 +1,4 @@
-# Generate a deploy keypair on the Conductor server and store it (the Hatchbox
+# Generate a deploy keypair on the Conductor server and store it (the classic-PaaS
 # model). Returns ONLY the public key — the private half stays encrypted in
 # Conductor's DB and is never returned or logged. Attach the resulting key to a
 # server with conductor_server action: update, then test_connection.

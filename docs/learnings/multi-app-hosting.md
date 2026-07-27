@@ -28,7 +28,7 @@
 
 | Manual step | Conductor feature |
 |---|---|
-| Create DB role + database on the cluster | **Database** resource (Hatchbox-style): provision/drop per-app DBs + credentials on a server's Postgres cluster |
+| Create DB role + database on the cluster | **Database** resource (PaaS-style): provision/drop per-app DBs + credentials on a server's Postgres cluster |
 | Hand-write `deploy.yml` for the shared box | **Deploy config generator** (shared proxy host, registry, DB binding) |
 | `cat master.key`, generate DB passwords | **Secrets**: master-key + DB-password storage (vault integration) |
 | Add DNS A record by hand | **DNS automation** (Cloudflare provider) |
