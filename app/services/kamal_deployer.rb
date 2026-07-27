@@ -472,8 +472,28 @@ class KamalDeployer
     ["bash", "-lc", "#{kamal_bin} app exec --reuse \"#{command}\"#{destination_flag}"]
   end
 
+  # How to invoke Kamal from Conductor's own container (the control machine).
+  #
+  # Two things make the obvious answers wrong:
+  #
+  #   - Bare `kamal` is not on PATH. Every command here runs through `bash -lc`,
+  #     and a login shell re-sets PATH from /etc/profile — dropping the bundle's
+  #     bin dir, which is where the binstub lives
+  #     (/usr/local/bundle/ruby/<abi>/bin/kamal). The gem IS installed; only the
+  #     lookup fails, which reads like "kamal is missing" but isn't.
+  #   - The target app's `./bin/kamal` (Rails 8 apps ship one) resolves against
+  #     THAT app's Gemfile, whose gems were never installed in the checkout —
+  #     Conductor deploys the app, it doesn't bundle it.
+  #
+  # So: run Conductor's own bundled Kamal, pinning BUNDLE_GEMFILE because the
+  # working directory is the target app's checkout.
   def kamal_bin
-    File.exist?(File.join(checkout_dir, "bin", "kamal")) ? "./bin/kamal" : "kamal"
+    "BUNDLE_GEMFILE=#{esc(conductor_gemfile)} bundle exec kamal"
+  end
+
+  # Conductor's Gemfile — the bundle that actually has Kamal in it.
+  def conductor_gemfile
+    ENV["CONDUCTOR_GEMFILE"].presence || Rails.root.join("Gemfile").to_s
   end
 
   # Conductor's env vars become Kamal's process env (deploy.yml ERB reads e.g.

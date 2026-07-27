@@ -92,6 +92,25 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+  # Regression: the control container's PATH under `bash -lc` (a login shell)
+  # doesn't include the bundle's bin dir, so bare `kamal` is not found — and the
+  # cloned app's own bin/kamal resolves against a Gemfile whose gems were never
+  # installed. Both read as "Kamal isn't installed" when it is. Invoke Conductor's
+  # own bundled Kamal, with the Gemfile pinned because the working directory is
+  # the app's checkout.
+  test "invokes Conductor's bundled kamal, not bare kamal or the app's binstub" do
+    write_checkout_file("bin/kamal", "#!/usr/bin/env ruby\n") # Rails apps ship one
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    kamal_run = shell.runs.find { |r| r[:command].last.include?("kamal deploy") }
+    command = kamal_run[:command].last
+
+    assert_includes command, "BUNDLE_GEMFILE=#{Rails.root.join('Gemfile')}"
+    assert_includes command, "bundle exec kamal deploy"
+    refute_includes command, "./bin/kamal", "the app's binstub can't resolve Kamal"
+  end
+
   test "rollback! syncs config then runs kamal rollback <version>, not kamal deploy, and succeeds" do
     shell = FakeShell.new(success: true)
     rollback_with(shell, version: "abc123def456")
