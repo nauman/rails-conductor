@@ -4,8 +4,12 @@
 class AppTransfer < ApplicationRecord
   MODES    = %w[transfer clone].freeze
   STATUSES = %w[pending running succeeded failed].freeze
-  # The ordered pipeline. A clone stops before `drain`, keeping the source live.
-  PHASES   = %w[compute database edge cutover drain].freeze
+  # The ordered pipeline. `database` (provision the target DB + replicate data)
+  # runs BEFORE `compute` (deploy to the target) so the app boots against a
+  # populated DB — deploying first would run migrations on an empty DB and the
+  # later restore would collide with that schema. A clone stops before `drain`,
+  # keeping the source live.
+  PHASES   = %w[database compute edge cutover drain].freeze
 
   belongs_to :app
   belongs_to :organization

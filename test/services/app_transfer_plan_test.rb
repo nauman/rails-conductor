@@ -26,7 +26,7 @@ class AppTransferPlanTest < ActiveSupport::TestCase
     assert_equal @source, p.source_server
     assert_equal @target, p.target_server
     phases = p.steps.map { |s| s[:phase] }
-    assert_equal %w[compute database edge cutover drain], phases
+    assert_equal %w[database compute edge cutover drain], phases
     assert_equal 0, @org.database_clusters.count, "dry-run provisions nothing"
     assert_equal 0, Database.count
   end

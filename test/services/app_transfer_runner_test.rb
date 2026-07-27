@@ -40,7 +40,7 @@ class AppTransferRunnerTest < ActiveSupport::TestCase
     t = transfer
     assert AppTransferRunner.new(t, collaborators: fc).run
 
-    assert_equal %i[compute database edge cutover drain], fc.calls
+    assert_equal %i[database compute edge cutover drain], fc.calls
     assert t.reload.succeeded?
     assert_equal "drain", t.phase
     assert t.finished_at.present?
@@ -51,7 +51,7 @@ class AppTransferRunnerTest < ActiveSupport::TestCase
     t = transfer(mode: "clone")
     AppTransferRunner.new(t, collaborators: fc).run
 
-    assert_equal %i[compute database edge cutover], fc.calls
+    assert_equal %i[database compute edge cutover], fc.calls
     refute_includes fc.calls, :drain
     assert t.reload.succeeded?
   end
@@ -61,7 +61,7 @@ class AppTransferRunnerTest < ActiveSupport::TestCase
     t = transfer
     refute AppTransferRunner.new(t, collaborators: fc).run
 
-    assert_equal %i[compute database], fc.calls, "stops at the failing phase"
+    assert_equal %i[database], fc.calls, "database is first; it fails and nothing after runs"
     assert t.reload.failed?
     assert_equal "database", t.phase
     assert_match(/database/, t.error)
@@ -72,7 +72,7 @@ class AppTransferRunnerTest < ActiveSupport::TestCase
     refute AppTransferRunner.new(t).run
 
     assert t.reload.failed?
-    assert_equal "compute", t.phase, "fails at the very first mutating step"
+    assert_equal "database", t.phase, "fails at the very first mutating step"
     assert_match(/not wired/i, t.error)
   end
 

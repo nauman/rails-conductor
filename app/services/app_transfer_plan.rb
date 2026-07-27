@@ -23,7 +23,7 @@ class AppTransferPlan
   end
 
   def steps
-    @steps ||= [ compute_step, database_step, edge_step, cutover_step, drain_step ]
+    @steps ||= [ database_step, compute_step, edge_step, cutover_step, drain_step ]
   end
 
   def warnings

@@ -22,7 +22,7 @@ class TransferPlanToolTest < ActiveSupport::TestCase
     v = res.value
     assert_equal "box-a", v[:source][:server]
     assert_equal "box-b", v[:target][:server]
-    assert_equal %w[compute database edge cutover drain], v[:steps].map { |s| s[:phase] }
+    assert_equal %w[database compute edge cutover drain], v[:steps].map { |s| s[:phase] }
     assert_equal 0, AppTransfer.count, "dry-run creates no transfer record"
     assert_equal 0, @org.database_clusters.count
   end
