@@ -152,34 +152,52 @@
     </div>
   <% end %>
 
-  <%# Recent Deployments %>
-  <% if @recent_deployments.any? %>
+  <%# Apps — state, not history (spec 08). The old panel listed the last 10 DEPLOYMENTS,
+      so an app that failed twice and then shipped cleanly filled three rows and read as
+      three problems. What an operator needs on a fleet page is "where does each app
+      stand right now"; the run-by-run history belongs on the app's own page. %>
+  <% if @apps.any? %>
     <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="font-display text-xl text-ink">Recent Deployments</h2>
-          <p class="text-sm text-muted">Latest deployment activity across your apps</p>
+          <h2 class="font-display text-xl text-ink">Apps</h2>
+          <p class="text-sm text-muted">
+            <% if @apps_failing.any? %>
+              <span class="text-danger font-medium"><%= pluralize(@apps_failing.size, "app") %> failing now</span> ·
+            <% end %>
+            <%= @apps.count %> total<%= " · #{@apps_never_deployed.size} never deployed here" if @apps_never_deployed.any? %>
+          </p>
         </div>
+        <%= link_to "View all", apps_path, class: "text-2xs font-semibold uppercase tracking-label text-faint hover:text-muted" %>
       </div>
       <div class="mt-4 overflow-x-auto">
         <table class="min-w-full">
           <thead>
             <tr class="text-2xs font-semibold uppercase tracking-label text-muted">
               <th class="pb-2 text-left">App</th>
-              <th class="pb-2 text-left">Status</th>
-              <th class="pb-2 text-left">Duration</th>
-              <th class="pb-2 text-left">When</th>
+              <th class="pb-2 text-left">Server</th>
+              <th class="pb-2 text-left">Runtime</th>
+              <th class="pb-2 text-left">Last deploy</th>
+              <th class="pb-2 text-left">Release</th>
               <th class="pb-2 text-right">Details</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border">
-            <% @recent_deployments.each do |deployment| %>
-              <tr>
-                <td class="py-2 text-sm font-medium text-ink"><%= deployment.app.name %></td>
-                <td class="py-2"><span class="<%= status_badge(deployment.status) %>"><%= deployment.status %></span></td>
-                <td class="py-2 font-mono text-sm text-body"><%= deployment.formatted_duration %></td>
-                <td class="py-2 text-sm text-muted"><%= time_ago_in_words(deployment.created_at) %> ago</td>
-                <td class="py-2 text-right"><%= link_to "View", deployment_path(deployment), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %></td>
+            <% @dashboard_apps.each do |app| %>
+              <tr data-app-row="<%= app.slug %>">
+                <td class="py-2 text-sm font-medium text-ink">
+                  <%= app.name %>
+                  <span class="block font-mono text-2xs text-faint"><%= app.domain %></span>
+                </td>
+                <td class="py-2 font-mono text-xs text-muted"><%= app.server_name %></td>
+                <td class="py-2 font-mono text-xs text-muted"><%= app.deploy_method %></td>
+                <td class="py-2"><%= deploy_health_badge(app) %></td>
+                <td class="py-2 font-mono text-xs text-muted">
+                  <%= app.last_deployment&.commit_sha&.first(7) || "—" %>
+                </td>
+                <td class="py-2 text-right">
+                  <%= link_to "View", app_path(app), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+                </td>
               </tr>
             <% end %>
           </tbody>
@@ -221,8 +239,11 @@
                 <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.disk_display %></div>
               </div>
               <div class="rounded-card bg-fill p-3">
-                <div class="text-2xs uppercase tracking-label text-faint">Uptime</div>
-                <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.formatted_uptime %></div>
+                <%# Apps-per-box next to CPU is what makes an imbalance visible: one app at
+                    63% on 2 cores beside six apps at 3% on 64GB is invisible unless both
+                    numbers sit together. %>
+                <div class="text-2xs uppercase tracking-label text-faint">Apps</div>
+                <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.apps.size %></div>
               </div>
             </div>
           </div>

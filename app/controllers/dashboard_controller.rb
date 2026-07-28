@@ -2,11 +2,19 @@ class DashboardController < ApplicationController
   def index
     org = current_organization
     @servers = org.servers.order(:name)
-    @apps = org.apps.includes(:server).order(:name)
+    @apps = org.apps.includes(:server, :deployments).order(:name)
     @backups = org.backups.includes(:server, :app).recent.limit(10)
     @credentials = org.credentials.order(:name)
 
-    # Recent deployments (last 10) for this org's apps
+    # Fleet reads state, not history (spec 08). Apps ordered so the ones needing a
+    # decision are first: failing, then never-deployed, then everything else by name.
+    # includes(:deployments) keeps deploy_health off the N+1 path.
+    @apps_failing = @apps.select(&:deploy_failing?)
+    @apps_never_deployed = @apps.select { |a| a.deploy_health.nil? }
+    @dashboard_apps = (@apps_failing + @apps_never_deployed +
+                       (@apps - @apps_failing - @apps_never_deployed)).first(10)
+
+    # Still used by the "Deployed Apps" panel below.
     @recent_deployments = Deployment.where(app: org.apps).includes(:app, :user).recent.limit(10)
 
     @app_health = @apps.index_with { |app| AppHealth.new(app) }
