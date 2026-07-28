@@ -4,7 +4,11 @@ class CloudflareR2AdminTest < ActiveSupport::TestCase
   # CloudflareClient stub recording the R2 admin calls it received.
   class FakeClient
     attr_reader :cors, :domains
-    def initialize = (@cors = []; @domains = [])
+    attr_accessor :existing_rules
+    def initialize = (@cors = []; @domains = []; @existing_rules = [])
+    def r2_cors(_account_id, _bucket)
+      CloudflareClient::Result.new(ok: true, data: @existing_rules)
+    end
     def put_r2_cors(account_id, bucket, rules)
       @cors << [ account_id, bucket, rules ]
       CloudflareClient::Result.new(ok: true, data: {})
@@ -56,10 +60,50 @@ class CloudflareR2AdminTest < ActiveSupport::TestCase
 
   test "surfaces a Cloudflare auth error verbatim (read-only token)" do
     denier = Object.new
+    denier.define_singleton_method(:r2_cors) { |*| CloudflareClient::Result.new(ok: true, data: []) }
     denier.define_singleton_method(:put_r2_cors) { |*| CloudflareClient::Result.new(ok: false, error: "Authentication error") }
     res = CloudflareR2Admin.new(@org, client_for: ->(_c) { denier })
       .set_cors("calm-page-storage", account_domain: "calm.page", origins: [ "https://calm.page" ])
     refute res.ok?
     assert_match(/Authentication error/, res.message)
+  end
+
+  test "refuses a bucket already claimed by another org on the same account (finding 1)" do
+    other = Organization.create_for(User.create!(email: "other@example.com"), name: "Other")
+    StorageBucket.create!(organization: other, name: "calm-page-storage", cloudflare_account_id: "acct1")
+
+    res = CloudflareR2Admin.new(@org, client_for: ->(_c) { FakeClient.new })
+      .set_cors("calm-page-storage", account_domain: "calm.page", origins: [ "https://calm.page" ])
+
+    refute res.ok?
+    assert_match(/belongs to another organization/, res.message)
+  end
+
+  test "set_cors is read-modify-write — preserves another app's rule, replaces only ours (finding 3)" do
+    fake = FakeClient.new
+    fake.existing_rules = [ { "id" => "conductor-other", "allowed" => { "origins" => [ "https://other.app" ] } } ]
+
+    res = CloudflareR2Admin.new(@org, client_for: ->(_c) { fake })
+      .set_cors("calm-page-storage", account_domain: "calm.page", origins: [ "https://calm.page" ], rule_id: "conductor-calm")
+    assert res.ok?, res.message
+
+    _account, _bucket, put_rules = fake.cors.first
+    ids = put_rules.map { |r| r[:id] || r["id"] }
+    assert_includes ids, "conductor-other", "the other app's rule survives"
+    assert_includes ids, "conductor-calm", "our rule is written"
+    assert_equal 2, put_rules.size
+    assert_equal 1, res.data[:preserved_rules]
+  end
+
+  test "set_cors replaces its OWN prior rule rather than stacking it" do
+    fake = FakeClient.new
+    fake.existing_rules = [ { "id" => "conductor-calm", "allowed" => { "origins" => [ "https://old" ] } } ]
+
+    CloudflareR2Admin.new(@org, client_for: ->(_c) { fake })
+      .set_cors("calm-page-storage", account_domain: "calm.page", origins: [ "https://new" ], rule_id: "conductor-calm")
+
+    put_rules = fake.cors.first.last
+    assert_equal 1, put_rules.size, "our stale rule is dropped, not duplicated"
+    assert_equal [ "https://new" ], put_rules.first[:allowed][:origins]
   end
 end
