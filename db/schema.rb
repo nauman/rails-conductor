@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_27_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_28_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -514,6 +514,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_000001) do
     t.index ["organization_id"], name: "index_ssh_keys_on_organization_id"
   end
 
+  create_table "storage_buckets", force: :cascade do |t|
+    t.bigint "app_id"
+    t.string "cloudflare_account_id", null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.bigint "organization_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_id"], name: "index_storage_buckets_on_app_id"
+    t.index ["cloudflare_account_id", "name"], name: "index_storage_buckets_on_cloudflare_account_id_and_name", unique: true
+    t.index ["organization_id"], name: "index_storage_buckets_on_organization_id"
+  end
+
   create_table "tool_executions", force: :cascade do |t|
     t.datetime "completed_at"
     t.datetime "created_at", null: false
@@ -589,5 +601,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_000001) do
   add_foreign_key "servers", "ssh_keys"
   add_foreign_key "site_checks", "apps"
   add_foreign_key "ssh_keys", "organizations"
+  add_foreign_key "storage_buckets", "apps"
+  add_foreign_key "storage_buckets", "organizations"
   add_foreign_key "tool_executions", "messages"
 end

@@ -35,7 +35,8 @@ class ConductorStorageTool
         to_service:   { type: "string",  description: "migrate: target service (default 'cloudflare_r2')" },
         limit:        { type: "integer", description: "migrate: max migratable blobs this call (default 1000; repeat until remaining_migratable is 0)" },
         origins:      { type: "array", items: { type: "string" }, description: "set_cors: allowed origins (default ['https://<app.domain>','https://*.<app.domain>'])" },
-        domain:       { type: "string",  description: "connect_domain: the public custom domain to serve the bucket (e.g. assets.calm.page)" }
+        domain:       { type: "string",  description: "connect_domain: the public custom domain to serve the bucket (e.g. assets.calm.page)" },
+        confirm:      { type: "boolean", description: "connect_domain: required to actually publish. Without it, the call returns a preview and does nothing — connect_domain makes the bucket PUBLIC on the internet." }
       },
       required: %w[action]
     }
@@ -69,7 +70,8 @@ class ConductorStorageTool
     origins = Array(input["origins"]).map(&:to_s).reject(&:blank?)
     origins = [ "https://#{app.domain}", "https://*.#{app.domain}" ] if origins.empty?
 
-    r = CloudflareR2Admin.new(app.organization).set_cors(bucket, account_domain: app.domain, origins: origins)
+    r = CloudflareR2Admin.new(app.organization, app: app)
+      .set_cors(bucket, account_domain: app.domain, origins: origins, rule_id: "conductor-#{app.slug}")
     return Result.fail(r.message) unless r.ok?
 
     Result.ok(r.data.merge(app: app.name, message: r.message, _organization: app.organization))
@@ -81,11 +83,25 @@ class ConductorStorageTool
     return Result.fail("connect_domain requires a bucket.") unless bucket
     return Result.fail("connect_domain requires a domain (e.g. assets.#{app.domain}).") unless domain
 
-    r = CloudflareR2Admin.new(app.organization).connect_domain(bucket, domain)
+    # Public-exposure gate: connect_domain makes the bucket readable to the whole
+    # internet, so it never fires on a bare call — it previews and requires confirm.
+    unless truthy?(input["confirm"])
+      return Result.ok(
+        status: "confirmation_required", action_taken: false,
+        bucket: bucket, domain: domain,
+        will: "make bucket '#{bucket}' PUBLIC, served at https://#{domain}/<key> (Cloudflare provisions a cert + proxied DNS)",
+        message: "connect_domain publishes the bucket to the internet. Re-call with confirm: true to proceed.",
+        _organization: app.organization
+      )
+    end
+
+    r = CloudflareR2Admin.new(app.organization, app: app).connect_domain(bucket, domain)
     return Result.fail(r.message) unless r.ok?
 
     Result.ok(r.data.merge(app: app.name, message: r.message, _organization: app.organization))
   end
+
+  def truthy?(value) = [ true, "true", "1", 1 ].include?(value)
 
   def audit(app)
     return Result.fail(container_prereq_error(app)) unless container_capable?(app)

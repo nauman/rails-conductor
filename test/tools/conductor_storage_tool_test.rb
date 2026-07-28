@@ -67,7 +67,7 @@ class ConductorStorageToolTest < ActiveSupport::TestCase
     @app.update!(domain: "calm.page")
     captured = {}
     fake = Struct.new(:x) do
-      define_method(:set_cors) do |bucket, account_domain:, origins:|
+      define_method(:set_cors) do |bucket, account_domain:, origins:, rule_id: nil|
         captured.merge!(bucket: bucket, account_domain: account_domain, origins: origins)
         CloudflareR2Admin::Result.new(ok: true, message: "CORS set on #{bucket}.", data: { bucket: bucket, origins: origins })
       end
@@ -90,7 +90,24 @@ class ConductorStorageToolTest < ActiveSupport::TestCase
     assert_includes res.error, "bucket"
   end
 
-  test "action=connect_domain delegates the bucket + domain" do
+  test "action=connect_domain previews and does NOTHING without confirm (finding 2)" do
+    called = false
+    fake = Struct.new(:x) do
+      define_method(:connect_domain) { |*| called = true; CloudflareR2Admin::Result.new(ok: true) }
+    end.new(nil)
+
+    CloudflareR2Admin.stub(:new, ->(*, **) { fake }) do
+      res = ConductorStorageTool.new(user: @user).call(
+        "action" => "connect_domain", "app_id" => @app.id, "bucket" => "calm-page-storage", "domain" => "assets.calm.page"
+      )
+      assert res.success?, res.error
+      assert_equal false, res.value[:action_taken], "must not publish without confirm"
+      assert_equal "confirmation_required", res.value[:status]
+      refute called, "the admin must not be invoked without confirm"
+    end
+  end
+
+  test "action=connect_domain delegates the bucket + domain WITH confirm" do
     captured = {}
     fake = Struct.new(:x) do
       define_method(:connect_domain) do |bucket, domain|
@@ -101,7 +118,8 @@ class ConductorStorageToolTest < ActiveSupport::TestCase
 
     CloudflareR2Admin.stub(:new, ->(*, **) { fake }) do
       res = ConductorStorageTool.new(user: @user).call(
-        "action" => "connect_domain", "app_id" => @app.id, "bucket" => "calm-page-storage", "domain" => "assets.calm.page"
+        "action" => "connect_domain", "app_id" => @app.id, "bucket" => "calm-page-storage",
+        "domain" => "assets.calm.page", "confirm" => true
       )
       assert res.success?, res.error
       assert_equal "calm-page-storage", captured[:bucket]
