@@ -74,9 +74,16 @@ class DashboardController < ApplicationController
 
     app_health.filter_map(&:incident).each { |incident| issues << incident }
 
-    # Failed deployments in last 24h
-    Deployment.where(app: org.apps).failed.where("created_at > ?", 24.hours.ago).includes(:app).each do |deployment|
-      issues << { type: "deployment", severity: "critical", resource: deployment, message: "Deployment failed", action: "deployment" }
+    # Apps whose LATEST deploy failed — one incident per broken app, not one per
+    # failure. Listing every failure in a window meant an app that failed twice and
+    # then deployed cleanly still showed two criticals, so the list never emptied and
+    # stopped being read. A failure a later deploy superseded is history; it lives in
+    # the app's activity feed, not here. No time window needed: "still broken" has no
+    # expiry, and a break from 30 hours ago is not less broken.
+    org.apps.failing_now.includes(:server).each do |app|
+      deployment = app.last_deployment
+      issues << { type: "deployment", severity: "critical", resource: deployment,
+                  message: deployment_failure_message(deployment), action: "deployment" }
     end
 
     # Failed backups
@@ -93,5 +100,18 @@ class DashboardController < ApplicationController
     # Sort by severity (critical first)
     severity_order = { "critical" => 0, "warning" => 1, "info" => 2 }
     issues.sort_by { |i| severity_order[i[:severity]] }
+  end
+
+  # Name the kind of failure when we know it, so an operator doesn't go debugging
+  # their own migration over a registry outage. Blocked never ran at all — say that
+  # rather than "failed", which implies it tried.
+  def deployment_failure_message(deployment)
+    return "Deploy refused by preflight" if deployment&.status == "blocked"
+
+    case deployment&.cause_class
+    when "infrastructure" then "Deployment failed (infrastructure, not app code)"
+    when "app_code"       then "Deployment failed (app code)"
+    else                       "Deployment failed"
+    end
   end
 end
