@@ -58,6 +58,32 @@ class Deployment < ApplicationRecord
   # the status changes (building → deploying → succeeded/failed), so the
   # deployment page updates without a reload. Subscribe with turbo_stream_from.
   after_update_commit :broadcast_status_badge, if: :saved_change_to_status?
+  # A deployment's status IS the app's deploy health, so the fleet row is stale the
+  # moment this changes — on create (a deploy starting flips the row to "deploying")
+  # and on every status change after.
+  #
+  # ONE callback, not after_create_commit + after_update_commit: registering the same
+  # method twice makes the second registration replace the first, so the create
+  # broadcast silently never fired. Caught by a test that expected a broadcast when a
+  # deploy starts.
+  # Two registrations, two DIFFERENT method names on purpose: registering the same
+  # method for create and update makes the second replace the first, and the create
+  # broadcast silently never fires (a test caught exactly that).
+  after_create_commit :broadcast_dashboard_app_row_on_create
+  after_update_commit :broadcast_dashboard_app_row, if: :saved_change_to_status?
+
+  def broadcast_dashboard_app_row_on_create = broadcast_dashboard_app_row
+
+  def broadcast_dashboard_app_row
+    org = app&.organization
+    return unless org
+
+    broadcast_replace_to(
+      org, :dashboard,
+      target: ActionView::RecordIdentifier.dom_id(app, :dashboard_row),
+      partial: "dashboard/app_row", locals: { app: app.reload }
+    )
+  end
 
   def broadcast_status_badge
     broadcast_replace_to self,

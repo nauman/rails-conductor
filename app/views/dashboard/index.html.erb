@@ -1,4 +1,7 @@
 <% content_for :title, "Conductor · Overview" %>
+<%# Live fleet: server metrics and deploy state push themselves to this page.
+    One subscription for the whole dashboard rather than one per record. %>
+<%= turbo_stream_from current_organization, :dashboard %>
 
 <section class="border-b border-border bg-bg-alt">
   <div class="max-w-7xl mx-auto px-4 py-10">
@@ -184,21 +187,7 @@
           </thead>
           <tbody class="divide-y divide-border">
             <% @dashboard_apps.each do |app| %>
-              <tr data-app-row="<%= app.slug %>">
-                <td class="py-2 text-sm font-medium text-ink">
-                  <%= app.name %>
-                  <span class="block font-mono text-2xs text-faint"><%= app.domain %></span>
-                </td>
-                <td class="py-2 font-mono text-xs text-muted"><%= app.server_name %></td>
-                <td class="py-2 font-mono text-xs text-muted"><%= app.deploy_method %></td>
-                <td class="py-2"><%= deploy_health_badge(app) %></td>
-                <td class="py-2 font-mono text-xs text-muted">
-                  <%= app.last_deployment&.commit_sha&.first(7) || "—" %>
-                </td>
-                <td class="py-2 text-right">
-                  <%= link_to "View", app_path(app), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-                </td>
-              </tr>
+              <%= render "dashboard/app_row", app: app %>
             <% end %>
           </tbody>
         </table>
@@ -217,36 +206,7 @@
       </div>
       <div class="mt-4 grid gap-4 lg:grid-cols-3">
         <% @servers.limit(3).each do |server| %>
-          <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-sm font-semibold text-ink"><%= server.name %></div>
-                <div class="text-2xs text-muted"><%= server.region || server.provider || "—" %></div>
-              </div>
-              <span class="<%= status_badge(server.display_status) %>"><%= server.display_status %></span>
-            </div>
-            <div class="mt-4 grid grid-cols-2 gap-3">
-              <div class="rounded-card bg-fill p-3">
-                <div class="text-2xs uppercase tracking-label text-faint">CPU</div>
-                <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.cpu_display %></div>
-              </div>
-              <div class="rounded-card bg-fill p-3">
-                <div class="text-2xs uppercase tracking-label text-faint">Memory</div>
-                <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.formatted_memory %></div>
-              </div>
-              <div class="rounded-card bg-fill p-3">
-                <div class="text-2xs uppercase tracking-label text-faint">Disk</div>
-                <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.disk_display %></div>
-              </div>
-              <div class="rounded-card bg-fill p-3">
-                <%# Apps-per-box next to CPU is what makes an imbalance visible: one app at
-                    63% on 2 cores beside six apps at 3% on 64GB is invisible unless both
-                    numbers sit together. %>
-                <div class="text-2xs uppercase tracking-label text-faint">Apps</div>
-                <div class="mt-1 font-mono text-sm font-semibold text-ink"><%= server.apps.size %></div>
-              </div>
-            </div>
-          </div>
+          <%= render "dashboard/server_card", server: server %>
         <% end %>
       </div>
     </div>

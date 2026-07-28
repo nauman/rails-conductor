@@ -31,6 +31,10 @@ class Server < ApplicationRecord
   scope :with_ssh, -> { where.not(ssh_key_id: nil).where.not(ip_address: [ nil, "" ]) }
 
   # Package installs run async; push the result panel to the server page live.
+  # Live fleet (spec 08): metrics arrive from a background job, so the dashboard has
+  # to be told — otherwise the numbers are only ever as fresh as the last page load,
+  # which is exactly what makes people trust `htop` over the control plane.
+  after_update_commit :broadcast_dashboard_card, if: :saved_change_to_metrics_updated_at?
   after_update_commit :broadcast_package_install, if: :saved_change_to_last_package_install_at?
 
   # Persist a ServerAudit rollup so the deploy preflight can read posture without a
@@ -52,6 +56,16 @@ class Server < ApplicationRecord
   def ever_seen? = last_seen_at.present?
 
   def package_install_running? = last_package_install_status == "running"
+
+  def broadcast_dashboard_card
+    return unless organization
+
+    broadcast_replace_to(
+      organization, :dashboard,
+      target: ActionView::RecordIdentifier.dom_id(self, :dashboard_card),
+      partial: "dashboard/server_card", locals: { server: self }
+    )
+  end
 
   def broadcast_package_install
     broadcast_replace_to(
