@@ -69,15 +69,25 @@ class CloudflareClientWriteTest < ActiveSupport::TestCase
   end
 
   test "upsert_dns_record POSTs a new record when none exists" do
-    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com" => { "success" => true, "result" => [] })
+    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com&type=A" => { "success" => true, "result" => [] })
     res = CloudflareClient.new("t", http: http).upsert_dns_record("z1", name: "old.x.com", content: "1.2.3.4")
     assert res.ok?
     assert_equal "/zones/z1/dns_records", http.posted.first[0]
     assert_equal({ type: "A", name: "old.x.com", content: "1.2.3.4", proxied: false, ttl: 1 }, http.posted.first[1])
   end
 
+  # P1 regression (codex audit): a name with an existing TXT record must NOT be
+  # rewritten — the lookup is scoped to the requested type, so upsert POSTs a new
+  # A record and leaves the TXT untouched.
+  test "upsert_dns_record ignores a different-type record at the same name (no rewrite)" do
+    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com&type=A" => { "success" => true, "result" => [] })
+    CloudflareClient.new("t", http: http).upsert_dns_record("z1", name: "old.x.com", content: "1.2.3.4", type: "A")
+    assert_equal "/zones/z1/dns_records", http.posted.first[0], "should POST a new A, not PATCH the TXT"
+    assert_empty http.patched
+  end
+
   test "upsert_dns_record PATCHes the existing record when one is present" do
-    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com" => { "success" => true, "result" => [ { "id" => "rec9" } ] })
+    http = FakeHttp.new("/zones/z1/dns_records?name=old.x.com&type=A" => { "success" => true, "result" => [ { "id" => "rec9" } ] })
     CloudflareClient.new("t", http: http).upsert_dns_record("z1", name: "old.x.com", content: "9.9.9.9", proxied: true)
     assert_equal "/zones/z1/dns_records/rec9", http.patched.first[0]
     assert_equal true, http.patched.first[1][:proxied]

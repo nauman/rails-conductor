@@ -33,12 +33,16 @@ class CloudflareClient
 
   # --- P2: put behind Cloudflare (proxy the DNS record + set SSL mode) ---
 
-  # The A/CNAME record for a hostname in a zone (proxied status lives on it).
-  def dns_record(zone_id, name)
-    body = get("/zones/#{zone_id}/dns_records?name=#{name}")
+  # The record for a hostname in a zone. Pass `type:` to match a SPECIFIC record
+  # type — critical for upsert: a name can hold several records (e.g. an A and a
+  # TXT), and rewriting the wrong one would destroy unrelated DNS data.
+  def dns_record(zone_id, name, type: nil)
+    query = "name=#{name}"
+    query += "&type=#{type}" if type.present?
+    body = get("/zones/#{zone_id}/dns_records?#{query}")
     return failure(body) unless body["success"]
 
-    Result.new(ok: true, data: body["result"].first) # nil if the host has no record
+    Result.new(ok: true, data: body["result"].first) # nil if the host has no such record
   end
 
   # Flip a record's orange cloud on/off (partial PATCH — proxied only).
@@ -60,7 +64,8 @@ class CloudflareClient
   # Create or update an A/CNAME record by name. Idempotent: PATCHes the existing
   # record for that name if one exists, else POSTs a new one. ttl 1 = "automatic".
   def upsert_dns_record(zone_id, name:, content:, type: "A", proxied: false, ttl: 1)
-    existing = dns_record(zone_id, name)
+    # Match the SAME type only — never rewrite an existing TXT/MX/etc. at this name.
+    existing = dns_record(zone_id, name, type: type)
     return existing unless existing.ok? # propagate the read error
 
     body = { type: type, name: name, content: content, proxied: proxied, ttl: ttl }
