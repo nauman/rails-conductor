@@ -347,6 +347,22 @@ class App < ApplicationRecord
       "else echo \"No running container found (service: #{names}) on this host\"; fi"
   end
 
+  # Shell command to run a Rails task on a schedule (cron), resolving where the
+  # app actually runs — the kamal/docker container, or native over the user unit.
+  # Mirrors log_tail_command's container resolution. `task` is validated by the
+  # caller (a bare rake/rails task name, e.g. "slack:sync").
+  def scheduled_command(task)
+    if native?
+      "XDG_RUNTIME_DIR=/run/user/$(id -u) bin/rails #{task}"
+    elsif kamal?
+      cands = kamal_service_candidates.map { |c| Shellwords.escape(c) }.join(" ")
+      %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s" -f status=running | head -n1); [ -n "$cid" ] && break; done; ) \
+        "[ -n \"$cid\" ] && docker exec \"$cid\" bin/rails #{task}"
+    else
+      "docker exec #{container_name} bin/rails #{task}"
+    end
+  end
+
   # Human label for the log source, matching what log_tail_command actually reads.
   def log_source_label
     if native?

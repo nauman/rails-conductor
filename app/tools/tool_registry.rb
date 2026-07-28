@@ -11,7 +11,8 @@ class ToolRegistry
     ConductorDomainTool,
     ConductorGithubTool,
     ConductorRunbookTool,
-    ConductorStorageTool
+    ConductorStorageTool,
+    ConductorCronTool
   ].freeze
 
   def self.definitions
