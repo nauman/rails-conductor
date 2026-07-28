@@ -479,23 +479,84 @@ class KamalDeployerTest < ActiveSupport::TestCase
   end
 
   test "writes an ssh config Host stanza + identity into the real ~/.ssh (what ssh reads)" do
-    shell = FakeShell.new(success: true)
+    shell = SshStateShell.new(ssh_root: @ssh_root)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
 
-    config = File.read(File.join(@ssh_root, ".ssh", "config"))
+    # Asserted as of the moment kamal runs: the stanza is deliberately transient
+    # now, removed with its key so nothing dangles afterwards.
+    config = shell.stanza_at_kamal_time
     assert_includes config, "Host #{@server.ip_address}"
     assert_includes config, "StrictHostKeyChecking accept-new"
     assert_includes config, "UserKnownHostsFile #{File.join(@ssh_root, ".ssh", "known_hosts")}"
-    assert_includes config, "conductor_appone", "expected the per-app IdentityFile"
+    assert_includes config, "conductor_appone_#{@deployment.id}", "expected this run's IdentityFile"
   end
 
-  test "config Host stanza is idempotent across repeat deploys (no duplicate blocks)" do
+  # Reproduces the production failure on InventList deploys 149/152: the stanza
+  # named an IdentityFile that had already been deleted, and because it also says
+  # `IdentitiesOnly yes`, ssh offered NO key, fell back to password auth, and died
+  # with Errno::ENOTTY in the non-interactive job. Build and push had already
+  # succeeded, so it read like "kamal was never given a key".
+  test "cleanup removes the config stanza with the key, never leaving a dangling IdentityFile" do
+    KamalDeployer.new(@app, @deployment, shell: FakeShell.new(success: true)).deploy!
+
+    config_path = File.join(@ssh_root, ".ssh", "config")
+    config = File.exist?(config_path) ? File.read(config_path) : ""
+    identity = config[/IdentityFile (\S+)/, 1]
+
+    if identity
+      assert File.exist?(identity),
+             "the stanza names #{identity}, which no longer exists — ssh would offer no key at all"
+    else
+      refute_includes config, "IdentitiesOnly", "no identity should mean no stanza"
+    end
+  end
+
+  # The stanza is only useful while the key it names exists, so assert the pair
+  # holds AT THE MOMENT kamal runs — not before, not after.
+  class SshStateShell < FakeShell
+    attr_reader :identity_at_kamal_time, :stanza_at_kamal_time
+    def initialize(ssh_root:)
+      super(success: true)
+      @ssh_root = ssh_root
+    end
+
+    def run(*command, chdir: nil, env: {})
+      if command.last.to_s.include?("kamal deploy")
+        config_path = File.join(@ssh_root, ".ssh", "config")
+        config = File.exist?(config_path) ? File.read(config_path) : ""
+        @stanza_at_kamal_time = config
+        identity = config[/IdentityFile (\S+)/, 1]
+        @identity_at_kamal_time = identity && File.exist?(identity)
+      end
+      super
+    end
+  end
+
+  test "the identity exists while kamal runs, and is gone afterwards" do
+    shell = SshStateShell.new(ssh_root: @ssh_root)
+    KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+
+    assert_includes shell.stanza_at_kamal_time, "Host #{@server.ip_address}",
+                    "kamal needs the Host stanza while it runs"
+    assert shell.identity_at_kamal_time,
+           "the IdentityFile named by the stanza must exist while kamal runs — with " \
+           "IdentitiesOnly yes, a missing file means ssh offers no key at all"
+
+    config_after = File.read(File.join(@ssh_root, ".ssh", "config"))
+    refute_includes config_after, "Host #{@server.ip_address}",
+                    "the stanza must not outlive the key it points at"
+  end
+
+  test "repeat deploys never accumulate stanzas (one while running, none after)" do
     KamalDeployer.new(@app, @deployment, shell: FakeShell.new(success: true)).deploy!
     second = @app.deployments.create!(user: @app.organization.users.first)
-    KamalDeployer.new(@app, second, shell: FakeShell.new(success: true)).deploy!
+    shell = SshStateShell.new(ssh_root: @ssh_root)
+    KamalDeployer.new(@app, second, shell: shell).deploy!
 
+    assert_equal 1, shell.stanza_at_kamal_time.scan("Host #{@server.ip_address}").size,
+                 "the second run should upsert, not append a duplicate block"
     config = File.read(File.join(@ssh_root, ".ssh", "config"))
-    assert_equal 1, config.scan("Host #{@server.ip_address}").size, "should upsert, not append duplicates"
+    assert_equal 0, config.scan("Host #{@server.ip_address}").size, "and clean up after itself"
   end
 
   test "pre-seeds the target host key into the real ~/.ssh/known_hosts (skip if already trusted)" do

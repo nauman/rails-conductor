@@ -531,7 +531,12 @@ class KamalDeployer
     FileUtils.mkdir_p(ssh)
     File.chmod(0o700, ssh)
 
-    @managed_identity = File.join(ssh, "conductor_#{app.slug}")
+    # Per-RUN identity, not per-app. Two deploys of the same app overlap easily —
+    # a build takes minutes — and with a shared `conductor_<slug>` path the first
+    # run's cleanup deletes the key the second run is still using, mid-deploy. The
+    # symptom is brutal to read: build and push succeed (key still present), then
+    # the container roll falls back to password auth and dies with ENOTTY.
+    @managed_identity = File.join(ssh, "conductor_#{app.slug}_#{deployment.id}")
     FileUtils.cp(@key_file, @managed_identity)
     File.chmod(0o600, @managed_identity)
 
@@ -544,8 +549,8 @@ class KamalDeployer
   # Idempotently upsert a marked Host stanza in ~/.ssh/config for this app's
   # target, so repeat deploys don't accumulate duplicate blocks.
   def write_ssh_config_block(config_path, identity, known_hosts)
-    b = "# >>> conductor #{app.slug} >>>"
-    e = "# <<< conductor #{app.slug} <<<"
+    b = ssh_config_marker_begin
+    e = ssh_config_marker_end
     block = <<~CFG
       #{b}
       Host #{deploy_server.ip_address}
@@ -557,10 +562,22 @@ class KamalDeployer
       #{e}
     CFG
     existing = File.exist?(config_path) ? File.read(config_path) : ""
-    existing = existing.gsub(/#{Regexp.escape(b)}.*?#{Regexp.escape(e)}\n/m, "")
+    # Drop this run's block if it somehow exists, plus any stale per-app block from
+    # the pre-#{deployment.id} scheme, so an old dangling IdentityFile can't win.
+    existing = strip_ssh_config_block(existing, b, e)
+    existing = strip_ssh_config_block(existing, "# >>> conductor #{app.slug} >>>", "# <<< conductor #{app.slug} <<<")
     File.write(config_path, existing + block)
     File.chmod(0o600, config_path)
   end
+
+  def strip_ssh_config_block(text, marker_begin, marker_end)
+    text.gsub(/#{Regexp.escape(marker_begin)}.*?#{Regexp.escape(marker_end)}\n/m, "")
+  end
+
+  # Markers are per-RUN so a concurrent deploy of the same app removes only its own
+  # stanza — and so cleanup can take the stanza away with the key it points at.
+  def ssh_config_marker_begin = "# >>> conductor #{app.slug} run #{deployment.id} >>>"
+  def ssh_config_marker_end   = "# <<< conductor #{app.slug} run #{deployment.id} <<<"
 
   # Pre-trust the target's SSH host key. The build runs on the target's docker
   # daemon over SSH (DOCKER_HOST=ssh://…), and docker's buildx connection — like
@@ -638,14 +655,31 @@ class KamalDeployer
   end
 
   # Remove the materialized secrets. @ssh_home is the real ~/.ssh — never delete
-  # it; only the per-app identity key we copied in. The known_hosts/config block
-  # are left in place (host trust persists; the block is re-upserted next deploy).
+  # it; only this run's identity key and the stanza that names it.
+  #
+  # The stanza MUST go with the key. Leaving `IdentityFile … / IdentitiesOnly yes`
+  # pointing at a deleted file is worse than leaving nothing: ssh then offers no
+  # identity at all and falls back to password auth, which in a non-interactive
+  # deploy dies with `Errno::ENOTTY` — the error reads like "no key was ever
+  # configured" when the truth is "the key was configured, then removed".
+  # known_hosts stays: host trust is legitimately durable.
   def cleanup_key
-    [@key_file, @deploy_key_file, @askpass_file, @managed_identity].compact.each do |f|
+    [ @key_file, @deploy_key_file, @askpass_file, @managed_identity ].compact.each do |f|
       File.delete(f) if File.exist?(f)
     end
+    remove_ssh_config_block
   rescue StandardError
     nil
+  end
+
+  def remove_ssh_config_block
+    return unless @ssh_home
+
+    path = File.join(@ssh_home, "config")
+    return unless File.exist?(path)
+
+    File.write(path, strip_ssh_config_block(File.read(path), ssh_config_marker_begin, ssh_config_marker_end))
+    File.chmod(0o600, path)
   end
 
   def checkout_dir = File.join(workspace, app.slug)
