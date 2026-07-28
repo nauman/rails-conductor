@@ -126,4 +126,34 @@ class CredentialTest < ActiveSupport::TestCase
     assert_equal "535 auth invalid", ses.verify_ses!(client: client)
     refute ses.verified?
   end
+
+  # Rotating a token must not inherit the old proof: `verified?` has to describe
+  # the values that are actually stored now, and the cached zone list may belong
+  # to an account the new token cannot reach.
+  test "changing a credential's identity clears its verification and cached zones" do
+    @cf.update!(verified_at: Time.current, zones: [ { "id" => "z1", "name" => "example.com" } ].to_json,
+                account_id: "acct1")
+    assert @cf.verified?
+
+    @cf.update!(api_key: "a-rotated-token")
+
+    refute @cf.reload.verified?, "a rotated token has not been verified"
+    assert_equal [], @cf.zones_list, "cached zones describe the old token's account"
+  end
+
+  test "an unrelated edit keeps the verification" do
+    @cf.update!(verified_at: Time.current, zones: [ { "id" => "z1", "name" => "example.com" } ].to_json)
+    @cf.update!(name: "Renamed")
+
+    assert @cf.reload.verified?, "renaming does not change what the credential is"
+    assert_equal 1, @cf.zones_list.size
+  end
+
+  test "verifying does not clear the verification it just wrote" do
+    client = zones_client(ok: true, data: [ { "id" => "z9", "name" => "example.com", "account_id" => "acct9" } ])
+    @cf.verify_cloudflare!(client: client)
+
+    assert @cf.reload.verified?, "verify writes account_id; that must not trip the invalidation"
+    assert_equal 1, @cf.zones_list.size
+  end
 end

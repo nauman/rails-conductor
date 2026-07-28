@@ -61,10 +61,18 @@ class CloudflareR2Admin
     owned = claim_bucket(zone["account_id"], bucket)
     return owned if owned.is_a?(Result)
 
-    r = @client_for.call(cred).create_r2_custom_domain(zone["account_id"], bucket, domain: domain, zone_id: zone["id"])
+    client = @client_for.call(cred)
+    r = client.create_r2_custom_domain(zone["account_id"], bucket, domain: domain, zone_id: zone["id"])
     return failure("Connecting #{domain} to #{bucket} failed: #{r.error}") unless r.ok?
 
-    Result.new(ok: true, message: "#{domain} connected to #{bucket} — Cloudflare is provisioning the cert.", data: { bucket: bucket, domain: domain })
+    # Cloudflare ACCEPTING the request is not the domain being live: ownership and
+    # SSL are provisioned asynchronously, and a zone hold can block activation
+    # entirely. Reporting "connected" here is how "is assets.<domain> serving yet?"
+    # gets answered wrong. Read the real status back instead of asserting success.
+    status = custom_domain_status(client, zone["account_id"], bucket, domain)
+    Result.new(ok: true,
+               message: domain_message(domain, bucket, status),
+               data: { bucket: bucket, domain: domain, status: status, live: status == "active" })
   end
 
   private
@@ -76,6 +84,28 @@ class CloudflareR2Admin
     nil
   rescue StorageBucket::CrossOrg
     failure("Bucket #{bucket} on this Cloudflare account belongs to another organization; refusing.")
+  end
+
+  # Cloudflare's own view of the domain, right after creating it. "pending" is the
+  # normal answer for the first minutes. Unknown when the read fails — say so
+  # rather than guess, since the whole point is not to overstate.
+  def custom_domain_status(client, account_id, bucket, domain)
+    listed = client.r2_custom_domains(account_id, bucket)
+    return "unknown" unless listed.ok?
+
+    row = Array(listed.data).find { |d| (d["domain"] || d[:domain]).to_s == domain }
+    (row && (row["status"] || row[:status])).presence&.to_s || "pending"
+  end
+
+  def domain_message(domain, bucket, status)
+    case status
+    when "active"
+      "#{domain} is connected to #{bucket} and serving."
+    when "unknown"
+      "#{domain} was accepted for #{bucket}, but its status could not be read back — check Cloudflare before pointing traffic at it."
+    else
+      "#{domain} was accepted for #{bucket} and is #{status} — Cloudflare is still provisioning ownership + SSL, so it is NOT serving yet."
+    end
   end
 
   def rule_identifier(rule) = rule["id"] || rule[:id]

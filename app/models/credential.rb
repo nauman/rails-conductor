@@ -31,6 +31,12 @@ class Credential < ApplicationRecord
   scope :inactive, -> { where(active: false) }
   scope :for_provider, ->(provider) { where(provider: provider) }
 
+  # Rotating the credential invalidates what we knew about it. `verified?` must
+  # describe THESE values, not the ones that passed Verify a month ago — and the
+  # cached account_id/zones may belong to an account the new token can't reach.
+  # Without this, swapping a token silently inherits the old proof.
+  before_save :invalidate_verification, if: :identity_changed?
+
   def masked_api_key
     return "•••••••" if api_key.blank?
     "#{api_key[0..3]}•••••#{api_key[-4..]}"
@@ -64,6 +70,24 @@ class Credential < ApplicationRecord
   def ses? = provider == "amazon_ses"
   def verifiable? = cloudflare? || ses?
   def verified? = verified_at.present?
+
+  # The fields that make a credential a different credential — i.e. what an
+  # operator types. Region/endpoint count: SES SMTP passwords are region-derived,
+  # so the same key/secret against a new region is an unproven combination.
+  # `account_id` and `zones` are deliberately NOT here: Verify derives them, and
+  # including them would make this callback erase the verification it just wrote.
+  IDENTITY_FIELDS = %w[api_key api_secret region endpoint].freeze
+
+  def identity_changed?
+    persisted? && (changed & IDENTITY_FIELDS).any?
+  end
+
+  def invalidate_verification
+    # account_id is part of the identity, so only clear what Verify derived:
+    # the timestamp and the cached zone list.
+    self.verified_at = nil
+    self.zones = nil
+  end
 
   # Amazon SES (SMTP): api_key = SMTP username, api_secret = SMTP password, region →
   # host, endpoint = optional host override. Verify does a real SMTP auth.

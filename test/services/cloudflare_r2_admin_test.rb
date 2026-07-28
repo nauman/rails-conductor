@@ -17,6 +17,15 @@ class CloudflareR2AdminTest < ActiveSupport::TestCase
       @domains << [ account_id, bucket, domain, zone_id ]
       CloudflareClient::Result.new(ok: true, data: {})
     end
+
+    # What Cloudflare reports back for the bucket's custom domains. Defaults to
+    # the real-world answer right after creation: pending, not yet serving.
+    attr_writer :domain_rows, :domains_readable
+    def r2_custom_domains(_account_id, _bucket)
+      return CloudflareClient::Result.new(ok: false, error: "boom") if @domains_readable == false
+
+      CloudflareClient::Result.new(ok: true, data: @domain_rows || [ { "domain" => @domains.last&.dig(2), "status" => "pending" } ])
+    end
   end
 
   setup do
@@ -105,5 +114,56 @@ class CloudflareR2AdminTest < ActiveSupport::TestCase
     put_rules = fake.cors.first.last
     assert_equal 1, put_rules.size, "our stale rule is dropped, not duplicated"
     assert_equal [ "https://new" ], put_rules.first[:allowed][:origins]
+  end
+
+  # A "connected" domain that isn't serving is the answer people act on — they
+  # point traffic at it, or conclude something else is broken. Cloudflare accepts
+  # the request immediately but provisions ownership + SSL asynchronously.
+  test "connect_domain reports the real status, not just that Cloudflare accepted it" do
+    fake = FakeClient.new
+    res = CloudflareR2Admin.new(@org, client_for: ->(_c) { fake })
+      .connect_domain("calm-page-storage", "assets.calm.page")
+
+    assert res.ok?, res.message
+    assert_equal "pending", res.data[:status]
+    refute res.data[:live], "a pending domain is not live"
+    assert_match(/NOT serving yet/i, res.message)
+  end
+
+  test "connect_domain says so plainly once the domain is active" do
+    fake = FakeClient.new
+    fake.domain_rows = [ { "domain" => "assets.calm.page", "status" => "active" } ]
+    res = CloudflareR2Admin.new(@org, client_for: ->(_c) { fake })
+      .connect_domain("calm-page-storage", "assets.calm.page")
+
+    assert res.data[:live]
+    assert_match(/serving/i, res.message)
+  end
+
+  test "connect_domain admits when it cannot read the status back" do
+    fake = FakeClient.new
+    fake.domains_readable = false
+    res = CloudflareR2Admin.new(@org, client_for: ->(_c) { fake })
+      .connect_domain("calm-page-storage", "assets.calm.page")
+
+    assert res.ok?, "the domain was still created"
+    assert_equal "unknown", res.data[:status]
+    refute res.data[:live]
+    assert_match(/could not be read back/i, res.message)
+  end
+
+  # Deactivating a credential is the first thing an operator does after a
+  # suspected token leak. It has to actually stop the credential being used.
+  test "an inactive or unverified Cloudflare credential is not used to resolve a zone" do
+    admin = CloudflareR2Admin.new(@org, client_for: ->(_c) { FakeClient.new })
+
+    @cred.update!(active: false)
+    res = admin.set_cors("calm-page-storage", account_domain: "calm.page", origins: [ "https://calm.page" ])
+    refute res.ok?, "an inactive credential must not resolve the zone"
+
+    @cred.update!(active: true)
+    @cred.update_columns(verified_at: nil)
+    res = admin.set_cors("calm-page-storage", account_domain: "calm.page", origins: [ "https://calm.page" ])
+    refute res.ok?, "an unverified credential must not resolve the zone"
   end
 end
