@@ -7,7 +7,15 @@ class Deployment < ApplicationRecord
   belongs_to :server, optional: true
   belongs_to :user, optional: true
 
+  # Coarse blame for a failure, so the UI can say "this one wasn't your code".
+  #   app_code       — the app failed to build, migrate, or boot
+  #   infrastructure — Conductor, the host, the registry, or the network failed
+  #   preflight      — refused before running (a gate said no)
+  # Optional: rows predating this, and successful deploys, carry nothing.
+  CAUSE_CLASSES = %w[app_code infrastructure preflight].freeze
+
   validates :status, inclusion: { in: STATUSES }
+  validates :cause_class, inclusion: { in: CAUSE_CLASSES }, allow_blank: true
 
   scope :recent, -> { order(created_at: :desc) }
   scope :successful, -> { where(status: "succeeded") }
@@ -77,6 +85,9 @@ class Deployment < ApplicationRecord
     status == "failed"
   end
 
+  def infrastructure_failure? = cause_class == "infrastructure"
+  def app_code_failure?       = cause_class == "app_code"
+
   def in_progress?
     %w[pending building deploying].include?(status)
   end
@@ -128,12 +139,39 @@ class Deployment < ApplicationRecord
     app.update!(status: "running", deployed_at: Time.current)
   end
 
-  def fail!(error_message = nil)
+  def fail!(error_message = nil, cause: nil)
     append_log("ERROR: #{error_message}") if error_message
-    update!(status: "failed", completed_at: Time.current)
+    update!(status: "failed", completed_at: Time.current,
+            cause_class: cause || classify_failure(error_message))
     app.update!(status: "failed")
 
     # Send notification
     AlertMailer.deployment_failed(self).deliver_later
+  end
+
+  private
+
+  # Coarse blame from the failure text. Deliberately conservative: only signatures
+  # we've actually seen in production are classified, and anything unrecognised
+  # stays nil rather than guessing "your code" — a wrong accusation costs more
+  # than a blank field.
+  #
+  # Every pattern here comes from a real failure:
+  #   ENOTTY / no such identity / Permission denied (publickey  — the ssh identity bug
+  #   dial-stdio / buildx / docker system                       — the shared-builder bug
+  #   Connection refused|timed out|No route to host             — the target was unreachable
+  #   registry / unauthorized: authentication required          — registry auth
+  INFRASTRUCTURE_SIGNATURES = Regexp.union(
+    /ENOTTY/i, /no such identity/i, /Permission denied \(publickey/i,
+    /dial-stdio/i, /buildx/i, /docker system/i,
+    /Connection refused/i, /Connection timed out/i, /No route to host/i,
+    /unauthorized: authentication required/i, /denied: requested access/i
+  ).freeze
+
+  def classify_failure(message)
+    text = "#{message}\n#{log}"
+    return "infrastructure" if text.match?(INFRASTRUCTURE_SIGNATURES)
+
+    nil
   end
 end

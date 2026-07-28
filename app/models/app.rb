@@ -209,6 +209,40 @@ class App < ApplicationRecord
     deployments.order(created_at: :desc).first
   end
 
+  # --- Deploy health (spec 07, slice 1) ---------------------------------------
+  #
+  # Health is the state of the LATEST deploy, never an accumulation of past ones.
+  # Counting history is why the fleet read "11 failures this week" when 8 had
+  # already been fixed by the next deploy and only 3 apps were broken — a badge
+  # that never clears is a badge people learn to ignore.
+  #
+  # nil when the app has never deployed through Conductor: "unknown" is a real,
+  # different state from "fine", and half this fleet is in it.
+  def deploy_health = last_deployment&.status
+
+  # Currently broken — the last attempt failed, or was refused before it ran.
+  # An in-flight deploy is deliberately neither: it hasn't failed yet.
+  def deploy_failing? = %w[failed blocked].include?(deploy_health)
+
+  # Why, when we know. nil for older rows that predate cause tracking.
+  def deploy_failure_cause = deploy_failing? ? last_deployment&.cause_class : nil
+
+  # Apps whose LATEST deploy failed or was blocked — i.e. what's broken now.
+  # Expressed as "no newer deployment exists" rather than by loading every app,
+  # so the fleet page stays one query.
+  scope :failing_now, -> {
+    where(<<~SQL.squish)
+      apps.id IN (
+        SELECT app_id FROM (
+          SELECT DISTINCT ON (app_id) app_id, status
+          FROM deployments
+          ORDER BY app_id, created_at DESC, id DESC
+        ) latest
+        WHERE latest.status IN ('failed', 'blocked')
+      )
+    SQL
+  }
+
   # Single-flight deploy starter shared by every trigger path (MCP, UI, webhook).
   # Guarantees at most one in-flight deployment per app: the unique partial index
   # idx_one_active_deploy_per_app is the real invariant; this returns the existing
