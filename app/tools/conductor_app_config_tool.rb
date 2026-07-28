@@ -4,19 +4,21 @@ class ConductorAppConfigTool
   include EnumDispatch
 
   ACTIONS = {
-    "set_env"        => SetEnvVariableTool,
-    "gen_deploy_key" => GenerateDeployKeyTool
+    "set_env"         => SetEnvVariableTool,
+    "gen_deploy_key"  => GenerateDeployKeyTool,
+    "install_webhook" => InstallWebhookTool
   }.freeze
 
   DEFINITION = {
     name: "conductor_app_config",
     description: "App configuration. Set `action` to one of: " \
       "set_env (create/update an env var on an app — app_id/app_name, key, value, optional secret), " \
-      "gen_deploy_key (generate a read-only SSH deploy key for the app's private repo — app_id/app_name).",
+      "gen_deploy_key (generate a read-only SSH deploy key for the app's private repo — app_id/app_name), " \
+      "install_webhook (wire push-to-deploy — install a GitHub push webhook pointing at Conductor + enable auto_deploy in one call; needs an org GitHub token — app_id/app_name).",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[set_env gen_deploy_key], description: "Which config operation" },
+        action:            { type: "string", enum: %w[set_env gen_deploy_key install_webhook], description: "Which config operation" },
         app_id:            { type: "integer", description: "target app by id" },
         app_name:          { type: "string",  description: "target app by name" },
         key:               { type: "string",  description: "set_env: variable name (UPPER_SNAKE_CASE)" },

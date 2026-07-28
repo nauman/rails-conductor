@@ -40,6 +40,37 @@ class GithubClient
     raise Error, error_message(resp)
   end
 
+  def list_webhooks(repo:)
+    resp = conn.get("/repos/#{repo}/hooks")
+    return JSON.parse(resp.body) if resp.success?
+
+    raise Error, error_message(resp)
+  end
+
+  def delete_webhook(repo:, id:)
+    resp = conn.delete("/repos/#{repo}/hooks/#{id}")
+    return true if resp.status == 204
+
+    raise Error, error_message(resp)
+  end
+
+  # Install a push webhook that POSTs to `url`, HMAC-signed with `secret`.
+  # Idempotent: replaces any existing hook pointing at the same URL (same
+  # list -> delete -> create shape as add_deploy_key).
+  def create_webhook(repo:, url:, secret:, events: %w[push])
+    existing = list_webhooks(repo: repo).find { |h| h.dig("config", "url") == url }
+    delete_webhook(repo: repo, id: existing["id"]) if existing
+    resp = conn.post("/repos/#{repo}/hooks") do |req|
+      req.body = JSON.generate(
+        name: "web", active: true, events: events,
+        config: { url: url, content_type: "json", secret: secret, insecure_ssl: "0" }
+      )
+    end
+    return JSON.parse(resp.body) if resp.status == 201
+
+    raise Error, error_message(resp)
+  end
+
   private
 
   def conn
