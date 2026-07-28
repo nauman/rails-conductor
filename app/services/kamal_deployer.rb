@@ -510,8 +510,22 @@ class KamalDeployer
       # docker's ssh connhelper reads — NOT an env $HOME, which ssh ignores (it
       # resolves ~ from the passwd database, not $HOME).
       env["DOCKER_HOST"] = "ssh://#{deploy_server.ssh_user_or_default}@#{deploy_server.ip_address}"
+      # Isolate buildx state PER TARGET HOST. Kamal's builder name is a constant
+      # (`kamal-local-docker-container`), but its endpoint is baked in from the
+      # DOCKER_HOST of whichever deploy created it. With one shared buildx config,
+      # app A's deploy inherits app B's builder and tries to build on B's server:
+      # calm.page's deploy 154 failed dialling InventList's host as root, using an
+      # identity for an app it has nothing to do with. Per-target state means a
+      # record made for one host can never be handed to another.
+      env["BUILDX_CONFIG"] = buildx_config_dir
     end
     env
+  end
+
+  def buildx_config_dir
+    dir = File.join(workspace, ".buildx", "server-#{deploy_server.id}")
+    FileUtils.mkdir_p(dir)
+    dir
   end
 
   # The ssh dir that OpenSSH actually reads. ssh resolves `~` from the passwd

@@ -478,6 +478,29 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_nil env["HOME"], "must not override HOME; ssh would ignore it anyway"
   end
 
+  # calm.page's deploy 154 failed building on InventList's host as root: kamal's
+  # builder name is a constant, so the record created by one app's deploy — with
+  # that app's target baked into its endpoint — was reused by the next app's
+  # deploy from the same container. Per-target buildx state makes that impossible.
+  test "buildx state is isolated per target host, so one app cannot inherit another's builder" do
+    shell = FakeShell.new(success: true)
+    KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+    mine = shell.runs.find { |r| r[:command].last.include?("kamal deploy") }[:env]["BUILDX_CONFIG"]
+    assert mine.present?, "expected buildx state to be pinned per deploy"
+    assert_includes mine, "server-#{@server.id}"
+
+    other_server = @org.servers.create!(name: "box-b", status: "online", ip_address: "10.0.0.99",
+                                        ssh_key: @key, ssh_user: "deploy")
+    other_app = @org.apps.create!(name: "Apptwo", slug: "apptwo", server: other_server,
+                                  deploy_method: "kamal", repository_url: "https://github.com/x/z.git")
+    other_shell = FakeShell.new(success: true)
+    KamalDeployer.new(other_app, other_app.deployments.create!(user: @app.organization.users.first),
+                      shell: other_shell).deploy!
+    theirs = other_shell.runs.find { |r| r[:command].last.include?("kamal deploy") }[:env]["BUILDX_CONFIG"]
+
+    refute_equal mine, theirs, "two targets sharing buildx state is how the builder leaks between apps"
+  end
+
   test "writes an ssh config Host stanza + identity into the real ~/.ssh (what ssh reads)" do
     shell = SshStateShell.new(ssh_root: @ssh_root)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
