@@ -40,12 +40,15 @@ class SesClient
     "SES SMTP passwords are region-specific."
   end
 
+  # The block form of #start closes the connection itself when the block ends. Do
+  # NOT call #finish afterwards: Net::SMTP#finish raises IOError("not yet started")
+  # on an already-closed session, which verify would then report as a failure — even
+  # though the AUTH succeeded. ("not yet started" in a verify error is the tell.)
   def smtp_auth(host, user, pass)
     smtp = Net::SMTP.new(host, PORT)
     smtp.enable_starttls_auto
     smtp.open_timeout = 10
     smtp.read_timeout = 10
     smtp.start("conductor", user, pass, :login) { } # raises on bad auth / connect
-    smtp.finish
   end
 end

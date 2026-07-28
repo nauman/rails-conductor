@@ -19,6 +19,25 @@ class CredentialTest < ActiveSupport::TestCase
     assert @cf.valid? # cloudflare, no region set
   end
 
+  # Happened in production (calm.page, 2026-07-28): the SMTP endpoint was pasted
+  # into Region, so SesClient dialled email-smtp.email-smtp.<region>.amazonaws.com
+  # .amazonaws.com and Verify could never pass — with nothing saying why.
+  test "an SES region must be a region, not the SMTP hostname" do
+    ses = @org.credentials.build(name: "SES", provider: "amazon_ses", api_key: "u", api_secret: "p",
+                                 region: "email-smtp.ap-southeast-2.amazonaws.com")
+    refute ses.valid?
+    assert_match(/not a hostname/i, ses.errors[:region].join)
+
+    ses.region = "ap-southeast-2"
+    assert ses.valid?, ses.errors.full_messages.join(", ")
+  end
+
+  test "four-part AWS regions are accepted" do
+    ses = @org.credentials.build(name: "SES", provider: "amazon_ses", api_key: "u", api_secret: "p",
+                                 region: "us-gov-west-1")
+    assert ses.valid?, ses.errors.full_messages.join(", ")
+  end
+
   # A CloudflareClient stub whose zones() returns the given result.
   def zones_client(ok:, data: [], error: nil)
     c = Object.new

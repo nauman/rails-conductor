@@ -13,6 +13,17 @@ class Credential < ApplicationRecord
   # SES SMTP passwords are region-specific — a blank region silently defaults to
   # us-east-1 and produces a misleading 535. Force it to be set.
   validates :region, presence: { message: "is required for SES (the AWS region where the SMTP credentials were created)" }, if: :ses?
+  # A region, not a host. Pasting the SMTP endpoint here (`email-smtp.<region>.amazonaws.com`)
+  # is an easy mistake and fails silently: SesClient interpolates it into
+  # `email-smtp.#{region}.amazonaws.com`, so Verify dials a doubled hostname that
+  # resolves to nothing. Caught in production once (calm.page, 2026-07-28).
+  # Covers 3- and 4-part regions: us-east-1, ap-southeast-2, us-gov-west-1.
+  AWS_REGION = /\A[a-z]{2}(-[a-z]+)+-\d+\z/
+  validates :region,
+            format: { with: AWS_REGION,
+                      message: "must be an AWS region like ap-southeast-2, not a hostname " \
+                               "(put a custom SMTP host in Endpoint instead)" },
+            if: -> { ses? && region.present? }
 
   scope :active, -> { where(active: true) }
   scope :inactive, -> { where(active: false) }
