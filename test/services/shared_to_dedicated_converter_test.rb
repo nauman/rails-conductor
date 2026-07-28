@@ -39,9 +39,19 @@ class SharedToDedicatedConverterTest < ActiveSupport::TestCase
     assert res.ok?, res.message
     assert_equal "dedicated", @app.reload.database_mode
     assert_nil @app.env_variables.find_by(key: "DATABASE_URL"), "manual DATABASE_URL removed so the derived dedicated DSN takes over"
-    assert_equal "postgres://shared/appone", calls.first[:source_url]
+    assert_equal "postgres://shared/appone", @app.env_variables.find_by(key: "DATABASE_URL_PRE_CONVERT")&.value, "shared DSN preserved for rollback"
     assert_equal "postgres://appone-db:5432/appone_production", calls.first[:target_url]
     assert_equal @cred, calls.first[:credential]
+  end
+
+  test "refuses a credential from another organization (DB dump must not cross orgs)" do
+    other = Organization.create_for(User.create!(email: "other@example.com"), name: "Other")
+    foreign = other.credentials.create!(name: "r2", provider: "aws", api_key: "k", api_secret: "s", account_id: "a1")
+    res = SharedToDedicatedConverter.new(@app, provisioner_for: fake_provisioner).call(credential: foreign, bucket: "b")
+
+    refute res.ok?
+    assert_match(/another organization/, res.message)
+    assert_equal "shared", @app.reload.database_mode, "no mutation on an org-boundary refusal"
   end
 
   test "rejects an already-dedicated app" do
