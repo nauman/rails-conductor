@@ -46,6 +46,18 @@ class AppTransferRunnerTest < ActiveSupport::TestCase
     assert t.finished_at.present?
   end
 
+  test "a completed transfer repoints App#server to the target (control plane follows traffic)" do
+    t = transfer
+    AppTransferRunner.new(t, collaborators: FakeCollaborators.new).run
+    assert_equal @target, @app.reload.server, "app must move to its new home after a transfer"
+  end
+
+  test "a clone leaves App#server on the source (source stays live)" do
+    t = transfer(mode: "clone")
+    AppTransferRunner.new(t, collaborators: FakeCollaborators.new).run
+    assert_equal @source, @app.reload.server, "clone must not move the app"
+  end
+
   test "clone skips drain, leaving the source live" do
     fc = FakeCollaborators.new
     t = transfer(mode: "clone")

@@ -37,11 +37,24 @@ class TransferAppTool
     bucket = input["bucket"].presence
     return Result.fail("transfer (confirm) needs a bucket for the DB copy.") unless bucket
 
+    provider = input["provider"].presence || "cloudflare_r2"
+    return Result.fail("Unknown object-store provider '#{provider}' — must be an S3-compatible vendor.") unless BackupVendors[provider]
+
+    # The wired executor only handles Kamal + dedicated + colocated today (it
+    # provisions via DedicatedDbProvisioner and deploys via KamalDeployer). Reject
+    # any other cell up front with a clear message instead of failing mid-transfer.
+    unsupported = executor_unsupported_reason(app)
+    return Result.fail(unsupported) if unsupported
+
+    # Revalidate the same way the dry-run does — a confirmed call must not skip the
+    # source-server / distinct-server / org-boundary checks AppTransferPlan runs.
+    AppTransferPlan.new(app: app, target_server: target).call
+
     transfer = AppTransfer.create!(
       app: app, organization: app.organization,
       source_server: app.server, target_server: target, mode: mode
     )
-    AppTransferJob.perform_later(transfer.id, credential_id: credential.id, bucket: bucket)
+    AppTransferJob.perform_later(transfer.id, credential_id: credential.id, bucket: bucket, provider: provider)
 
     Result.ok(
       transfer_id: transfer.id, status: "running", mode: mode,
@@ -57,6 +70,16 @@ class TransferAppTool
   end
 
   private
+
+  # The wired executor is Kamal + dedicated-container + colocated only; anything
+  # else can't complete. Return a reason string, or nil when supported.
+  def executor_unsupported_reason(app)
+    return "transfer executes via Kamal only for now — #{app.name} deploys via #{app.deploy_method}." unless app.kamal?
+    return "transfer needs a dedicated database (app is in shared-cluster mode) — convert it first." unless app.dedicated_db?
+    return "transfer supports colocated dedicated DBs for now — #{app.name} is dedicated_host." unless app.colocated_db?
+
+    nil
+  end
 
   def find_target(input)
     if input["target_server_id"].present?

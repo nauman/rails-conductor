@@ -48,17 +48,38 @@ class AppTransferRunner
       Edge.for(@target).publish(domain: domain, upstream: "localhost:#{@app.port || 3000}")
     end
 
-    # Repoint DNS to the target box via the connected Cloudflare account.
+    # Repoint DNS to the target box via the connected Cloudflare account. MUST
+    # raise on failure: upsert_dns_record returns a non-raising Result, and if
+    # cutover silently "succeeds" while DNS still points at the source, the runner
+    # goes on to drain the source — an outage with traffic pointed nowhere.
     def repoint_dns!(domain:, ip:)
       credential, zone = resolve_cloudflare_zone(@app.organization, domain)
       raise "no connected Cloudflare zone owns #{domain}" unless zone
 
-      CloudflareClient.new(credential.api_key).upsert_dns_record(zone["id"], name: domain, content: ip, type: "A", proxied: false)
+      r = CloudflareClient.new(credential.api_key).upsert_dns_record(zone["id"], name: domain, content: ip, type: "A", proxied: false)
+      raise "DNS repoint of #{domain} → #{ip} failed: #{r.error}" unless r.ok?
     end
 
-    # Stop the app on the source after the hold window (kept idempotent/quiet).
+    # Stop the app on the source after cutover. Must target the REAL container:
+    # docker apps run `conductor-<slug>` (app.container_name); Kamal runs a
+    # versioned service container resolved by its `service=` label. Stopping
+    # `<slug>` would match nothing and let the transfer "succeed" with the source
+    # still serving.
     def stop_source!
-      SshConnection.new(@source).execute_with_status("docker stop #{Shellwords.escape(@app.slug)} 2>/dev/null || true")
+      result = SshConnection.new(@source).execute_with_status(drain_command)
+      raise "failed to stop #{@app.slug} on #{@source&.name}" unless result[:success]
+    end
+
+    private
+
+    def drain_command
+      if @app.kamal?
+        cands = @app.kamal_service_candidates.map { |s| Shellwords.escape(s) }.join(" ")
+        %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s" -f status=running | head -n1); ) +
+          %([ -n "$cid" ] && docker stop "$cid" && break; done; true)
+      else
+        %(docker stop #{Shellwords.escape(@app.container_name)} 2>/dev/null || true)
+      end
     end
   end
 end

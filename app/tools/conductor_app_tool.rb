@@ -34,6 +34,7 @@ class ConductorAppTool
         confirm:           { type: "boolean", description: "transfer: required to execute. Without it, returns the dry-run plan and does NOTHING — a transfer redeploys, copies the DB, repoints DNS, and drains the source." },
         credential_id:     { type: "integer", description: "transfer (confirm): object-store (R2/S3) credential id used to copy the database" },
         bucket:            { type: "string",  description: "transfer (confirm): object-store bucket to stage the DB copy through" },
+        provider:          { type: "string",  description: "transfer (confirm): object-store vendor for the DB copy (default cloudflare_r2; any S3-compatible BackupVendors key)" },
         deployment_id:     { type: "integer", description: "rollback: the prior deployment whose release to roll back to (omit for the release before current)" },
         force:             { type: "boolean", description: "deploy: override a blocking preflight (at-risk audit / deploy hold). Confirm with the user first." },
         app_id:            { type: "integer", description: "update/deploy/sync_status: target app by id" },

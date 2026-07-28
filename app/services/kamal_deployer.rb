@@ -584,13 +584,28 @@ class KamalDeployer
         UserKnownHostsFile #{known_hosts}
       #{e}
     CFG
-    existing = File.exist?(config_path) ? File.read(config_path) : ""
-    # Drop this run's block if it somehow exists, plus any stale per-app block from
-    # the pre-#{deployment.id} scheme, so an old dangling IdentityFile can't win.
-    existing = strip_ssh_config_block(existing, b, e)
-    existing = strip_ssh_config_block(existing, "# >>> conductor #{app.slug} >>>", "# <<< conductor #{app.slug} <<<")
-    File.write(config_path, existing + block)
-    File.chmod(0o600, config_path)
+    # Concurrent deploys of different apps share this one ~/.ssh/config. Without a
+    # lock, two runs that both read before either writes each drop the other's live
+    # stanza (the last writer wins). Serialize the whole read-modify-write.
+    with_ssh_config_lock(config_path) do
+      existing = File.exist?(config_path) ? File.read(config_path) : ""
+      # Drop this run's block if it somehow exists, plus any stale per-app block from
+      # the pre-#{deployment.id} scheme, so an old dangling IdentityFile can't win.
+      existing = strip_ssh_config_block(existing, b, e)
+      existing = strip_ssh_config_block(existing, "# >>> conductor #{app.slug} >>>", "# <<< conductor #{app.slug} <<<")
+      File.write(config_path, existing + block)
+      File.chmod(0o600, config_path)
+    end
+  end
+
+  # Exclusive flock over the shared ~/.ssh/config so concurrent deploys never
+  # interleave their read-modify-write and clobber each other's stanza.
+  def with_ssh_config_lock(config_path)
+    lock_path = "#{config_path}.conductor.lock"
+    File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
+      lock.flock(File::LOCK_EX)
+      yield
+    end
   end
 
   def strip_ssh_config_block(text, marker_begin, marker_end)
@@ -701,8 +716,13 @@ class KamalDeployer
     path = File.join(@ssh_home, "config")
     return unless File.exist?(path)
 
-    File.write(path, strip_ssh_config_block(File.read(path), ssh_config_marker_begin, ssh_config_marker_end))
-    File.chmod(0o600, path)
+    # Same shared file, same race on cleanup — take the lock for the read+write.
+    with_ssh_config_lock(path) do
+      next unless File.exist?(path)
+
+      File.write(path, strip_ssh_config_block(File.read(path), ssh_config_marker_begin, ssh_config_marker_end))
+      File.chmod(0o600, path)
+    end
   end
 
   def checkout_dir = File.join(workspace, app.slug)

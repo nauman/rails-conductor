@@ -41,6 +41,12 @@ class AppTransferRunner
       @transfer.append_log("✓ #{phase}")
     end
 
+    # A completed transfer (not a clone) moves the app to its new home — the
+    # control-plane record must follow the traffic, or subsequent deploys, status
+    # syncs, and DB resolution keep operating against the drained source server.
+    # Clone keeps the source live, so its app stays put.
+    @transfer.app.update!(server: @transfer.target_server) if @transfer.transfer?
+
     @transfer.update!(status: "succeeded", finished_at: Time.current)
     true
   rescue StandardError => e

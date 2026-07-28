@@ -69,4 +69,47 @@ class TransferToolTest < ActiveSupport::TestCase
     refute res.success?
     assert_match(/differ/, res.error)
   end
+
+  test "confirm with no source server is refused (revalidates the plan)" do
+    @app.update!(server: nil)
+    assert_no_enqueued_jobs do
+      res = run_tool("confirm" => true, "credential_id" => @cred.id, "bucket" => "b")
+      refute res.success?
+      assert_match(/source server/, res.error)
+    end
+    assert_equal 0, AppTransfer.count
+  end
+
+  test "shared-DB app is rejected up front (executor can't do it)" do
+    @app.update!(database_mode: "shared")
+    res = run_tool("confirm" => true, "credential_id" => @cred.id, "bucket" => "b")
+    refute res.success?
+    assert_match(/dedicated database/, res.error)
+    assert_equal 0, AppTransfer.count
+  end
+
+  test "non-Kamal app is rejected up front" do
+    docker = @org.apps.create!(name: "Dock", slug: "dock", server: @source, deploy_method: "docker",
+                               repository_url: "https://github.com/x/y.git")
+    res = ConductorAppTool.new(user: @user).call("action" => "transfer", "app_name" => "Dock",
+                                                 "target_server_name" => "box-b", "confirm" => true,
+                                                 "credential_id" => @cred.id, "bucket" => "b")
+    refute res.success?
+    assert_match(/Kamal only/, res.error)
+  end
+
+  test "an unknown object-store provider is refused" do
+    res = run_tool("confirm" => true, "credential_id" => @cred.id, "bucket" => "b", "provider" => "not-a-vendor")
+    refute res.success?
+    assert_match(/provider/, res.error)
+  end
+
+  test "the selected provider is forwarded to the job" do
+    captured = nil
+    stub = ->(*_a, **kw) { captured = kw; nil }
+    AppTransferJob.stub(:perform_later, stub) do
+      run_tool("confirm" => true, "credential_id" => @cred.id, "bucket" => "b", "provider" => "aws_s3")
+    end
+    assert_equal "aws_s3", captured[:provider]
+  end
 end
