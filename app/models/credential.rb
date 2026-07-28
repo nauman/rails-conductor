@@ -17,8 +17,10 @@ class Credential < ApplicationRecord
   # is an easy mistake and fails silently: SesClient interpolates it into
   # `email-smtp.#{region}.amazonaws.com`, so Verify dials a doubled hostname that
   # resolves to nothing. Caught in production once (calm.page, 2026-07-28).
-  # Covers 3- and 4-part regions: us-east-1, ap-southeast-2, us-gov-west-1.
-  AWS_REGION = /\A[a-z]{2}(-[a-z]+)+-\d+\z/
+  # Format-only, deliberately: it rejects hostnames (dots can't match) without
+  # pinning a region list that AWS keeps extending. The first segment is [a-z]+,
+  # not [a-z]{2}, so longer prefixes like eusc-de-east-1 still pass.
+  AWS_REGION = /\A[a-z]+(-[a-z]+)+-\d+\z/
   validates :region,
             format: { with: AWS_REGION,
                       message: "must be an AWS region like ap-southeast-2, not a hostname " \
@@ -66,6 +68,12 @@ class Credential < ApplicationRecord
   # Amazon SES (SMTP): api_key = SMTP username, api_secret = SMTP password, region →
   # host, endpoint = optional host override. Verify does a real SMTP auth.
   def verify_ses!(client: nil)
+    # Check the record BEFORE dialling. A row saved before the region format rule
+    # existed can still hold a hostname: connecting would fail on a doubled host
+    # anyway, and if a custom endpoint made AUTH succeed, the update! below would
+    # raise RecordInvalid and 500 instead of telling the operator what's wrong.
+    return errors.full_messages.to_sentence unless valid?
+
     client ||= SesClient.new(api_key, api_secret, region, endpoint: endpoint)
     r = client.verify
     return r.error unless r.ok?

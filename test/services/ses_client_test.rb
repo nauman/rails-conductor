@@ -39,6 +39,8 @@ class SesClientTest < ActiveSupport::TestCase
       @open = false
     end
 
+    def open? = @open
+
     def enable_starttls_auto
       nil
     end
@@ -69,5 +71,8 @@ class SesClientTest < ActiveSupport::TestCase
       assert result.ok?, "a successful AUTH must not be reported as a failure: #{result.error}"
     end
     assert_equal [ "conductor", "USER", "PASS", :login ], fake.started_with
+    # Guards the other direction: dropping the block (leaving the session open)
+    # would also make the assertion above pass, while leaking a socket.
+    refute fake.open?, "the SMTP session must be closed when verify returns"
   end
 end

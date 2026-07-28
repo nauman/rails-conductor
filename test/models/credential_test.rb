@@ -32,10 +32,27 @@ class CredentialTest < ActiveSupport::TestCase
     assert ses.valid?, ses.errors.full_messages.join(", ")
   end
 
-  test "four-part AWS regions are accepted" do
+  test "longer AWS region forms are accepted" do
+    %w[us-gov-west-1 eusc-de-east-1 ap-southeast-2].each do |region|
+      ses = @org.credentials.build(name: "SES", provider: "amazon_ses", api_key: "u", api_secret: "p",
+                                   region: region)
+      assert ses.valid?, "#{region} should be accepted: #{ses.errors.full_messages.join(', ')}"
+    end
+  end
+
+  # A row saved before the region rule existed still holds a hostname. Verify must
+  # say so, not dial a doubled host and then 500 on update!(verified_at:).
+  test "verifying a legacy SES row with a bad region reports the problem instead of raising" do
     ses = @org.credentials.build(name: "SES", provider: "amazon_ses", api_key: "u", api_secret: "p",
-                                 region: "us-gov-west-1")
-    assert ses.valid?, ses.errors.full_messages.join(", ")
+                                 region: "email-smtp.ap-southeast-2.amazonaws.com")
+    ses.save!(validate: false)
+    client = Object.new
+    client.define_singleton_method(:verify) { raise "must not dial with an invalid record" }
+
+    error = ses.verify_ses!(client: client)
+
+    assert_match(/not a hostname/i, error)
+    assert_nil ses.reload.verified_at
   end
 
   # A CloudflareClient stub whose zones() returns the given result.
