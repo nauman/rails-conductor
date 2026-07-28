@@ -505,6 +505,15 @@ class KamalDeployer
     env["APP_HOST"]         ||= app.domain if app.domain.present?
     env["SSH_KEYS"] = @key_file if @key_file # consumed by deploy.yml ssh.keys
     if @ssh_home
+      # Cross-host roll fix. The docker connhelper's `ssh` binary reads the real
+      # passwd-home ~/.ssh (ignores $HOME), which is why build+push work. But
+      # kamal's container roll uses SSHKit → Net::SSH (pure Ruby), which resolves
+      # ~/.ssh/config from the child's $HOME. If $HOME differs from the dir
+      # setup_ssh_home wrote the IdentityFile stanza into, Net::SSH finds no key
+      # and falls back to password auth — which dies ENOTTY in the non-interactive
+      # job (build succeeds, roll fails, identically). Pin HOME to that dir so
+      # Net::SSH reads the same config the ssh binary does.
+      env["HOME"] = File.dirname(@ssh_home)
       # Build on the target's docker daemon over SSH (avoids mounting docker.sock
       # into this container). The host key + identity live in the real ~/.ssh that
       # docker's ssh connhelper reads — NOT an env $HOME, which ssh ignores (it

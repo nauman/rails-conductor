@@ -92,6 +92,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+
   # Regression: the control container's PATH under `bash -lc` (a login shell)
   # doesn't include the bundle's bin dir, so bare `kamal` is not found — and the
   # cloned app's own bin/kamal resolves against a Gemfile whose gems were never
@@ -467,15 +468,17 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert env["SSH_KEYS"].present?, "expected the materialized ssh key path"
   end
 
-  test "builds over SSH (DOCKER_HOST), no docker.sock, and does not override HOME" do
+  test "builds over SSH (DOCKER_HOST), no docker.sock, and pins HOME for the Net::SSH roll" do
     shell = FakeShell.new(success: true)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
 
     env = shell.runs.find { |r| r[:command].last.include?("kamal deploy") }[:env]
     assert_equal "ssh://deploy@10.0.0.9", env["DOCKER_HOST"]
-    # ssh ignores $HOME (resolves ~ from passwd), so we must NOT fake HOME — the
-    # ssh config/known_hosts go into the real ~/.ssh instead.
-    assert_nil env["HOME"], "must not override HOME; ssh would ignore it anyway"
+    # The docker connhelper's ssh BINARY ignores $HOME (reads passwd ~/.ssh), so the
+    # BUILD doesn't need it. But kamal's container ROLL uses Net::SSH, which resolves
+    # ~/.ssh/config from $HOME — so HOME must point at the dir setup_ssh_home wrote
+    # the IdentityFile stanza into, or the roll falls back to password auth (ENOTTY).
+    assert_equal @ssh_root, env["HOME"], "HOME must point at the ssh-config dir for Net::SSH"
   end
 
   # calm.page's deploy 154 failed building on InventList's host as root: kamal's
