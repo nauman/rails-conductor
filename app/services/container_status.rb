@@ -54,7 +54,7 @@ class ContainerStatus
   end
 
   # Kamal apps: the container is labelled `service=<service>`. The service name
-  # doesn't always equal Conductor's slug — an adopted/Hatchbox app with slug
+  # doesn't always equal Conductor's slug — an adopted app with slug
   # "calm-page" runs as service "calmpage". So we list every running container's
   # service label + CreatedAt and match against the app's service candidates
   # (slug + separator-stripped variant). A running match means the app is live —

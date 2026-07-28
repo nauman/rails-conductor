@@ -57,7 +57,7 @@ class DatabasePullService
 
   def steps = @pull.restore? ? 3 : 2
 
-  # When an env file is configured (e.g. Hatchbox's .asdf-vars) source it so
+  # When an env file is configured (e.g. a hosted PaaS's .asdf-vars) source it so
   # $DATABASE_URL is populated, then dump in custom format without owner/acl.
   def remote_dump_command(remote_path)
     var = @pull.source_database_url_var.presence || "DATABASE_URL"
