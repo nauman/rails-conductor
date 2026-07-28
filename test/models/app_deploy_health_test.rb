@@ -1,6 +1,6 @@
 require "test_helper"
 
-# Spec 07, slice 1 — a deploy failure has to stop shouting once a later deploy fixes it.
+# Spec 08, slice 1 — a deploy failure has to stop shouting once a later deploy fixes it.
 #
 # The fleet read "11 failures this week" when 8 had already been superseded and only 3 apps
 # were actually broken. Counting history instead of current state trains an operator to

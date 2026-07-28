@@ -209,7 +209,7 @@ class App < ApplicationRecord
     deployments.order(created_at: :desc).first
   end
 
-  # --- Deploy health (spec 07, slice 1) ---------------------------------------
+  # --- Deploy health (spec 08, slice 1) ---------------------------------------
   #
   # Health is the state of the LATEST deploy, never an accumulation of past ones.
   # Counting history is why the fleet read "11 failures this week" when 8 had

@@ -1,6 +1,13 @@
-# 07 — Operability gaps: schema state, resolving failures, easy backups, real schedules, job control
+# 08 — Operability gaps: schema state, resolving failures, easy backups, real schedules, job control
 
-Status: **Spec — ready to slice (2026-07-29)**. Five gaps found by designing the app and
+Status: **Spec — slice 1 shipped (`d65908c`), 2026-07-29.**
+
+> Renumbered 07 → 08 on 2026-07-29. `07` in this series is
+> `07-control-machine-build-and-ssh` (build on the control machine, push, target
+> pulls — supersedes the SSH-roll patching), which was already being called "plan 07"
+> in the threads before it landed in git. Same number, two documents, one series: the
+> slot went to whoever named it first.
+ Five gaps found by designing the app and
 fleet pages against real fleet data, not by reading the code. Each one is small on its
 own; together they're the difference between a control plane you glance at and one you
 have to SSH behind.

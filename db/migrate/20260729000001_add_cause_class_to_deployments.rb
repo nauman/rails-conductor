@@ -1,4 +1,4 @@
-# Spec 07, slice 1. Why a deploy failed, coarsely — so the UI can say "not your code".
+# Spec 08, slice 1. Why a deploy failed, coarsely — so the UI can say "not your code".
 #
 # Two of one week's failures were Conductor's own bugs (a shared buildx builder pointing
 # at another app's host; an ssh config stanza naming a deleted key). Rendering those the
