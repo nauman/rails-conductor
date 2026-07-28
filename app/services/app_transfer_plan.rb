@@ -19,6 +19,8 @@ class AppTransferPlan
     raise InvalidTarget, "#{app.slug} has no source server" unless source_server
     raise InvalidTarget, "target must differ from the source server" if target_server.nil? || target_server.id == source_server.id
 
+    AppTransferOrgBoundary.enforce!(app: app, target_server: target_server, error: InvalidTarget)
+
     self
   end
 

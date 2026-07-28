@@ -26,6 +26,12 @@ class AppTransferRunner
   # Runs the planned phases in order. Returns true on success; on any phase
   # failure, records the failing phase + message and stops (no further phases).
   def run
+    # Re-check the org boundary at execute time, not just when the plan was built:
+    # a transfer record can sit between planning and running, and an app or server
+    # can be moved between orgs in that window. Cheap, and the failure lands in the
+    # normal failed-phase path below rather than mutating anything.
+    AppTransferOrgBoundary.enforce!(app: @transfer.app, target_server: @transfer.target_server)
+
     @transfer.update!(status: "running", started_at: Time.current, error: nil)
 
     @transfer.planned_phases.each do |phase|
@@ -39,7 +45,12 @@ class AppTransferRunner
     true
   rescue StandardError => e
     @transfer.append_log("✗ #{@transfer.phase}: #{e.message}")
-    @transfer.update!(status: "failed", error: "#{@transfer.phase}: #{e.message}", finished_at: Time.current)
+    # update_columns, not update!: recording a failure must never itself fail
+    # validation. A run that dies *because* the record became invalid (an app or
+    # server moved orgs mid-flight) would otherwise raise here and lose the reason
+    # it stopped. Same reason append_log writes columns directly.
+    @transfer.update_columns(status: "failed", error: "#{@transfer.phase}: #{e.message}",
+                             finished_at: Time.current, updated_at: Time.current)
     false
   end
 

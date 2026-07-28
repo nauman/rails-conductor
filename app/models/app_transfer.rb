@@ -19,6 +19,7 @@ class AppTransfer < ApplicationRecord
   validates :mode, inclusion: { in: MODES }
   validates :status, inclusion: { in: STATUSES }
   validate :distinct_servers
+  validate :same_organization
 
   scope :recent, -> { order(created_at: :desc) }
   scope :in_progress, -> { where(status: %w[pending running]) }
@@ -46,5 +47,20 @@ class AppTransfer < ApplicationRecord
     return if source_server_id.blank?
 
     errors.add(:target_server, "must differ from the source server") if source_server_id == target_server_id
+  end
+
+  # A transfer never crosses an org: the app, both servers, and this record all
+  # belong to one organization. AppTransferOrgBoundary enforces the same rule in
+  # the plan and the runner; this stops a bad record from being persisted at all.
+  def same_organization
+    return if organization_id.blank?
+
+    errors.add(:app, "belongs to another organization") if app && app.organization_id != organization_id
+    [ :source_server, :target_server ].each do |role|
+      server = public_send(role)
+      next if server.nil? || server.organization_id == organization_id
+
+      errors.add(role, "belongs to another organization")
+    end
   end
 end
