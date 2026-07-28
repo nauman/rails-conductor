@@ -112,4 +112,21 @@ class TransferToolTest < ActiveSupport::TestCase
     end
     assert_equal "aws_s3", captured[:provider]
   end
+
+  test "confirm without credential_id derives the object store from the app's own R2 env vars" do
+    @app.env_variables.create!(key: "R2_ACCESS_KEY_ID", value: "AKID")
+    @app.env_variables.create!(key: "R2_SECRET_ACCESS_KEY", value: "SEKRET")
+    @app.env_variables.create!(key: "R2_ENDPOINT", value: "https://acct123.r2.cloudflarestorage.com")
+    captured = nil
+    AppTransferJob.stub(:perform_later, ->(*_a, **kw) { captured = kw; nil }) do
+      res = run_tool("confirm" => true, "mode" => "clone") # no credential_id / bucket
+      assert res.success?, res.error
+    end
+    cred = @org.credentials.find_by(provider: "aws", name: "appone R2 (auto DB transfer)")
+    assert cred, "derived a managed credential from the app's own R2 env"
+    assert_equal "acct123", cred.account_id
+    assert_equal cred.id, captured[:credential_id]
+    assert_equal "appone-db-transfer", captured[:bucket]
+    assert_equal "cloudflare_r2", captured[:provider]
+  end
 end

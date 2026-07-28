@@ -27,17 +27,22 @@ class TransferAppTool
         status: "confirmation_required", action_taken: false, mode: mode,
         message: "This will #{mode} #{app.name} #{app.server&.name} → #{target.name}: redeploy, copy the DB, " \
                  "publish the edge, repoint DNS#{mode == 'transfer' ? ', then drain the source' : ' (source stays live)'}. " \
-                 "Re-call with confirm: true, credential_id (R2/S3 for the DB copy) and bucket.",
+                 "Re-call with confirm: true. (credential_id + bucket are OPTIONAL — derived from the app's own R2 config if omitted.)",
         _organization: app.organization
       ))
     end
 
-    credential = app.organization.credentials.find_by(id: input["credential_id"])
-    return Result.fail("transfer (confirm) needs credential_id — an object-store credential for the DB copy.") unless credential
-    bucket = input["bucket"].presence
-    return Result.fail("transfer (confirm) needs a bucket for the DB copy.") unless bucket
-
-    provider = input["provider"].presence || "cloudflare_r2"
+    # Object store for the DB copy. Explicit credential_id/bucket win; otherwise
+    # derive them from the app's OWN R2 config (it already carries R2_ACCESS_KEY_ID /
+    # R2_SECRET_ACCESS_KEY / R2_ENDPOINT), so the operator never re-enters what the
+    # app already has — Conductor owns the whole cycle.
+    credential, bucket, provider = resolve_object_store(app, input)
+    unless credential && bucket
+      return Result.fail(
+        "transfer needs an object store for the DB copy — pass credential_id + bucket, " \
+        "or set the app's R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ENDPOINT env vars."
+      )
+    end
     return Result.fail("Unknown object-store provider '#{provider}' — must be an S3-compatible vendor.") unless BackupVendors[provider]
 
     # The wired executor only handles Kamal + dedicated + colocated today (it
@@ -70,6 +75,33 @@ class TransferAppTool
   end
 
   private
+
+  # Object store for the DB copy — Conductor owns the whole cycle, so the app's
+  # existing R2 config is reused instead of demanding a re-entered credential.
+  # Explicit credential_id/bucket override; otherwise derive from the app's env
+  # vars (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ENDPOINT), find-or-updating a
+  # managed "<slug> R2 (auto DB transfer)" credential so no second secret is stored.
+  # Returns [credential, bucket, provider]; credential/bucket nil when neither an
+  # explicit credential nor app R2 config is available.
+  def resolve_object_store(app, input)
+    provider = input["provider"].presence || "cloudflare_r2"
+
+    if input["credential_id"].present?
+      cred = app.organization.credentials.find_by(id: input["credential_id"])
+      return [ cred, input["bucket"].presence, provider ]
+    end
+
+    ev = app.env_variables.each_with_object({}) { |v, h| h[v.key] = v.value }
+    access_key = ev["R2_ACCESS_KEY_ID"]
+    secret_key = ev["R2_SECRET_ACCESS_KEY"]
+    account_id = ev["R2_ENDPOINT"].to_s[%r{https://([^.]+)\.}, 1]
+    return [ nil, nil, provider ] if access_key.blank? || secret_key.blank? || account_id.blank?
+
+    cred = app.organization.credentials.find_or_initialize_by(provider: "aws", name: "#{app.slug} R2 (auto DB transfer)")
+    cred.update!(api_key: access_key, api_secret: secret_key, account_id: account_id)
+    bucket = input["bucket"].presence || ev["R2_PRIVATE_BUCKET"].presence || "#{app.slug}-db-transfer"
+    [ cred, bucket, provider ]
+  end
 
   # The wired executor is Kamal + dedicated-container + colocated only; anything
   # else can't complete. Return a reason string, or nil when supported.
