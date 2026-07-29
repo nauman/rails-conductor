@@ -78,7 +78,11 @@ class DatabaseReplicator
   # stdin, so its container needs `-i`. Both stream to/from the host pipe, so the
   # dump file, gzip/gunzip and aws all stay on the host — only the DB dialogue
   # moves onto the network.
-  def pg_dump_cmd(url) = "#{docker_pg} pg_dump #{esc(url)}".strip
+  # --clean --if-exists: the dump DROPs each object before recreating it, so a
+  # restore into a target that already holds data (a retried transfer/convert)
+  # replaces it cleanly instead of erroring on "already exists". No-op on a fresh
+  # target — so replication is idempotent and safe to re-run.
+  def pg_dump_cmd(url) = "#{docker_pg} pg_dump --clean --if-exists #{esc(url)}".strip
   def psql_cmd(url)    = "#{docker_pg(interactive: true)} psql #{esc(url)}".strip
 
   # The `docker run` prefix that puts a one-shot client on the app's network, or

@@ -64,6 +64,17 @@ class DatabaseReplicatorTest < ActiveSupport::TestCase
     assert(src.commands.any? { |c| c.include?("aws s3 cp") && !c.include?("docker run") })
   end
 
+  # Re-runnable: the dump carries DROP ... IF EXISTS so restoring into a target
+  # that already holds objects (a retried transfer) cleanly replaces them instead
+  # of colliding on "already exists".
+  test "the dump is idempotent (--clean --if-exists) so a retry doesn't collide" do
+    src = FakeSsh.new
+    replicate(source_ssh: src, target_ssh: FakeSsh.new)
+    dump = src.commands.find { |c| c.include?("pg_dump") }
+    assert_includes dump, "--clean"
+    assert_includes dump, "--if-exists"
+  end
+
   test "raises with the failing step when a command fails" do
     src = FakeSsh.new(fail_on: "aws s3 cp") # upload fails
     err = assert_raises(DatabaseReplicator::Error) { replicate(source_ssh: src, target_ssh: FakeSsh.new) }
