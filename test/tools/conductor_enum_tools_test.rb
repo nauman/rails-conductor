@@ -123,6 +123,27 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     refute v.key?(:live), "default must skip the live SSH probes (no 504 risk)"
   end
 
+  test "conductor_read action=server probe:true batches the live probes over ONE session" do
+    key = SshKey.create!(name: "k2", private_key: valid_private_key, organization: @org)
+    server = @org.servers.create!(name: "box7", status: "online", ip_address: "192.0.2.7",
+                                  ssh_key: key, ssh_user: "deploy", edge_type: "caddy")
+    calls = []
+    fake = Object.new
+    fake.define_singleton_method(:run_batch) { |cmds| calls << cmds; [ "UFW:active", "UFW:active\nSSH_ROOT:no", "===DF===", "SUDO_READY" ] }
+    fake.define_singleton_method(:success?) { true }
+    fake.define_singleton_method(:error) { nil }
+
+    SshConnection.stub(:new, ->(*) { fake }) do
+      res = ConductorReadTool.new(user: @user).call("action" => "server", "server_id" => server.id, "probe" => true)
+      assert res.success?, res.error
+      assert_equal 1, calls.size, "exactly ONE batched SSH session, not four connections"
+      assert_equal 4, calls.first.size, "health + audit + storage + sudo in one batch"
+      live = res.value[:live]
+      assert live.key?(:health) && live.key?(:audit) && live.key?(:storage)
+      assert_equal true, live.dig(:privileged_ops, :ready)
+    end
+  end
+
   test "conductor_server action=harden enqueues a background job and returns immediately" do
     key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     server = @org.servers.create!(name: "box6", status: "online", ip_address: "192.0.2.6",

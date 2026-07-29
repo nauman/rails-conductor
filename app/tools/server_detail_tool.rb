@@ -62,32 +62,36 @@ class ServerDetailTool
       _organization: server.organization
     }
 
-    if probe
-      data[:live] = {
-        health:         safe { health(server, ssh) },
-        audit:          safe { audit(server, ssh) },
-        storage:        safe { storage(server, ssh) },
-        privileged_ops: safe { { ready: ServerSudo.ready?(ssh) } }
-      }
-    end
+    data[:live] = safe { live_detail(server, ssh) } if probe
 
     Result.ok(data)
   end
 
   private
 
-  def health(server, ssh)
-    r = ServerHealth.new(server, ssh: ssh).check
-    r.ok? ? { status: r.status, checks: map_checks(r.checks) } : { error: r.error }
+  # All four live probes over ONE SSH session (one connect) instead of four —
+  # keeps the deep-panel read under the gateway budget. Each block is graded from
+  # its raw output; a bad chunk degrades to an {error:}, never a crash.
+  def live_detail(server, ssh)
+    outs = ssh.run_batch([
+      ServerHealth::PROBE,
+      ServerAudit::PROBE,
+      ServerStorage::PROBE,
+      "sudo -n #{ServerSudo::CHECK} >/dev/null 2>&1 && echo SUDO_READY || echo SUDO_NO"
+    ])
+    return { error: ssh.error.presence || "no response from server" } if outs.compact.empty?
+
+    {
+      health:         safe { graded(ServerHealth.new(server).grade_output(outs[0].to_s)) },
+      audit:          safe { graded(ServerAudit.new(server).grade_output(outs[1].to_s)) },
+      storage:        safe { storage_detail(ServerStorage.new(server).from_output(outs[2].to_s)) },
+      privileged_ops: { ready: outs[3].to_s.include?("SUDO_READY") }
+    }
   end
 
-  def audit(server, ssh)
-    r = ServerAudit.new(server, ssh: ssh).audit
-    r.ok? ? { status: r.status, checks: map_checks(r.checks) } : { error: r.error }
-  end
+  def graded(r) = { status: r.status, checks: map_checks(r.checks) }
 
-  def storage(server, ssh)
-    r = ServerStorage.new(server, ssh: ssh).load
+  def storage_detail(r)
     return { error: r.error } if r.error
     {
       mounts: r.mounts.map { |m| { filesystem: m.filesystem, size: m.size, used: m.used, avail: m.avail, percent: m.percent, mount: m.mount } },

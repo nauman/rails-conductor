@@ -39,10 +39,14 @@ class ServerStorage
     output = @ssh.execute(PROBE)
     return failure(@ssh.error.presence || "No response from server") unless @ssh.success?
 
+    from_output(output)
+  end
+
+  # Parse a PROBE's raw output without running SSH — for a batched single-session
+  # read. Never lets a parse hiccup 500 the turbo-frame; degrades to an error.
+  def from_output(output)
     parse(sections(output))
   rescue => e
-    # Never let a parse hiccup 500 the turbo-frame (Turbo renders "Content missing"
-    # for a non-2xx). Degrade to an in-frame error instead.
     failure("Couldn't read storage detail: #{e.message}")
   end
 

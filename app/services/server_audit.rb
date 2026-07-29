@@ -39,8 +39,12 @@ class ServerAudit
     output = @ssh.execute(PROBE)
     return failure(@ssh.error.presence || "No response from server") unless @ssh.success?
 
-    grade(parse(output))
+    grade_output(output)
   end
+
+  # Grade a PROBE's raw output without running SSH — for a batched single-session
+  # read (server-detail runs health+audit+storage+sudo over one connection).
+  def grade_output(output) = grade(parse(output))
 
   private
 

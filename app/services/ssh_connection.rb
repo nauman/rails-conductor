@@ -106,6 +106,28 @@ class SshConnection
     failure_result("SSH error: #{e.message}")
   end
 
+  # Run several commands over ONE SSH session (a single connect), returning their
+  # outputs in order. For batched read-probes (health/audit/storage/sudo in one
+  # server-detail call) where a fresh connection per probe would blow the request
+  # budget. On failure sets @error and returns an array of nils.
+  def run_batch(commands)
+    @error = nil
+    unless server.ssh_key.present? && server.ip_address.present?
+      failure("SSH not configured")
+      return commands.map { nil }
+    end
+
+    outputs = []
+    Net::SSH.start(server.ip_address, login_user, **ssh_options) do |ssh|
+      commands.each { |c| outputs << ssh.exec!(c) }
+    end
+    outputs
+  rescue Net::SSH::AuthenticationFailed => e
+    failure("Authentication failed: #{e.message}"); commands.map { nil }
+  rescue => e
+    failure("SSH error: #{e.message}"); commands.map { nil }
+  end
+
   # Execute a script body with real-time streaming. Yields [:stdout/:stderr, data] chunks.
   # Returns { success: bool, exit_code: int }
   def execute_stream(script_body, &block)
