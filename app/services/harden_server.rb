@@ -105,15 +105,17 @@ class HardenServer
   BASH
 
   def initialize(server, root_ssh: nil, deploy_ssh: nil, auditor: nil)
-    @server     = server
-    @root_ssh   = root_ssh   || SshConnection.new(server)                    # current identity (root)
-    @deploy_ssh = deploy_ssh || SshConnection.new(server, user: DEPLOY_USER) # freshly-provisioned identity
-    @auditor    = auditor
-    @steps      = []
+    @server        = server
+    @provided_root = root_ssh                                                # tests inject the privileged seam
+    @deploy_ssh    = deploy_ssh || SshConnection.new(server, user: DEPLOY_USER) # freshly-provisioned identity
+    @auditor       = auditor
+    @steps         = []
   end
 
   def call
     return fail!("SSH not configured") unless @server.ssh_configured?
+    return fail!("no privileged access to #{@server.name}: add Conductor's key to root@#{@server.ip_address} " \
+                 "(the Hatchbox model provisions via root), or ensure the deploy user has passwordless sudo") unless privileged_ssh
 
     run_root("provision", PROVISION) or return failed_result
     return fail!("deploy+sudo verification failed — root left enabled, no lockout") unless deploy_sudo_ok?
@@ -132,8 +134,34 @@ class HardenServer
 
   private
 
+  # The connection used for privileged steps. The server's ssh_user is the
+  # app-ops identity (often a deploy user WITHOUT passwordless sudo), which can't
+  # bootstrap hardening — so resolve a connection that actually holds privilege:
+  #   1. root — the Hatchbox model puts Conductor's key on root; an un-hardened
+  #      box still permits root login, so this is the normal path.
+  #   2. the deploy user IF it already has passwordless sudo — the case when
+  #      re-running harden on an already-hardened box (root is off by then).
+  # nil when neither works, so call() aborts with a legible message instead of
+  # failing every step with an opaque sudo-password error.
+  def privileged_ssh
+    return @provided_root if @provided_root
+    return @privileged if defined?(@privileged)
+
+    @privileged =
+      begin
+        root = SshConnection.new(@server, user: "root")
+        root.execute("echo ok")
+        if root.success?
+          root
+        else
+          du = SshConnection.new(@server, user: DEPLOY_USER)
+          du.execute_with_status("sudo -n true")[:success] ? du : nil
+        end
+      end
+  end
+
   def run_root(name, script)
-    res = @root_ssh.execute_with_status(script)
+    res = privileged_ssh.execute_with_status(script)
     @steps << { step: name, ok: res[:success] }
     return true if res[:success]
 

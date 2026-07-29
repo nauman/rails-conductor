@@ -115,6 +115,21 @@ class HardenServerTest < ActiveSupport::TestCase
     ENV.delete("CONDUCTOR_FAIL2BAN_ALLOWLIST")
   end
 
+  test "aborts with a legible message when neither root nor deploy+sudo is reachable" do
+    unreachable = Class.new do
+      def execute(_) = nil
+      def success? = false
+      def execute_with_status(_) = { success: false, output: "", stderr: "", stdout: "", exit_code: 1 }
+    end.new
+
+    SshConnection.stub :new, unreachable do
+      result = HardenServer.new(@server).call # no injected seam → resolves via (stubbed) SshConnection
+      refute result.ok?
+      assert_match(/no privileged access/i, result.error)
+      assert_equal "root", @server.reload.ssh_user, "must not flip identity when it couldn't harden"
+    end
+  end
+
   test "closes an exposed host Postgres by rebinding off 0.0.0.0" do
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
