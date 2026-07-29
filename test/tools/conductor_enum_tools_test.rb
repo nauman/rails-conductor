@@ -6,6 +6,8 @@ require "test_helper"
 # through), the legible error path, and registration. The underlying behaviour
 # is already covered by the per-tool tests.
 class ConductorEnumToolsTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   setup do
     @user = User.create!(email: "enum@example.com", admin: true)
     @org = Organization.create_for(@user, name: "Acme")
@@ -90,6 +92,19 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
 
   test "ACTIONS maps harden to HardenServerTool" do
     assert_equal HardenServerTool, ConductorServerTool::ACTIONS["harden"]
+  end
+
+  test "conductor_server action=harden enqueues a background job and returns immediately" do
+    key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
+    server = @org.servers.create!(name: "box6", status: "online", ip_address: "192.0.2.6",
+                                  ssh_key: key, ssh_user: "root")
+
+    assert_enqueued_with(job: HardenServerJob, args: [ server.id ]) do
+      res = ConductorServerTool.new(user: @user).call("action" => "harden", "server_id" => server.id)
+      assert res.success?, res.error
+      assert_equal "running", res.value[:status]
+    end
+    assert_equal "running", server.reload.last_harden_status
   end
 
   test "conductor_app_config action=unset_env removes the env var" do

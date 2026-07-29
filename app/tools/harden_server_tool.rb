@@ -14,16 +14,18 @@ class HardenServerTool
     server = find_server(input)
     return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless server
 
-    result = HardenServer.new(server).call
-    return Result.fail(result.error) unless result.ok?
+    # Harden takes minutes (apt installs, a Postgres restart, an sshd reload), so
+    # it runs as a background job — a synchronous call would blow the gateway
+    # timeout. Returns immediately; poll conductor_server action: audit to confirm.
+    server.update!(last_harden_status: "running", last_harden_at: Time.current, last_harden_log: nil)
+    HardenServerJob.perform_later(server.id)
 
     Result.ok({
       server:        server.name,
-      ssh_user:      server.reload.ssh_user,
-      audit_status:  result.audit_status,
-      steps:         result.steps,
-      message:       "#{server.name} hardened; Conductor now manages it as #{server.ssh_user}+sudo. " \
-                     "Audit grade: #{result.audit_status || 'unknown'}.",
+      status:        "running",
+      message:       "Hardening #{server.name} in the background (provision deploy+sudo → ufw/fail2ban → " \
+                     "disable root/password → close exposed DB → switch to deploy). It never self-locks. " \
+                     "Poll conductor_server action: audit in ~2 min to confirm it flips to secure/attention.",
       _organization: server.organization
     })
   end
