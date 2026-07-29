@@ -238,6 +238,35 @@
     <% end %>
   </div>
 
+  <%# CI deploy reporting (Q-07-1) — for apps that deploy via CI, not through
+      Conductor's own deploy path. The CI job POSTs its result here so it becomes a
+      real Deployment row; without it the app's dashboard row reads stale forever.
+      Shown to OPERATORS regardless of auto-deploy (a CI-deployed app has it off),
+      because these are the two values the CI needs to authenticate. %>
+  <% if current_operator? %>
+    <div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
+      <div>
+        <h2 class="text-sm font-semibold text-ink">CI deploy reporting</h2>
+        <p class="mt-1 text-sm text-muted">If this app deploys via its own CI (not through Conductor), have the CI job POST its result here so the deploy is recorded and this app's health stops reading stale. Set these two as GitHub Actions <strong>repository secrets</strong>.</p>
+      </div>
+      <div class="mt-4 space-y-3 border-t border-border pt-4">
+        <div>
+          <div class="text-2xs uppercase tracking-label text-faint">Report URL &middot; <code>POST</code></div>
+          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= request.base_url %><%= @app.deployment_report_path %></code>
+        </div>
+        <div>
+          <div class="text-2xs uppercase tracking-label text-faint"><code>CONDUCTOR_APP_ID</code></div>
+          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= @app.id %></code>
+        </div>
+        <div>
+          <div class="text-2xs uppercase tracking-label text-faint"><code>CONDUCTOR_DEPLOY_WEBHOOK_SECRET</code></div>
+          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= @app.webhook_secret %></code>
+        </div>
+        <p class="text-2xs text-faint">Signed with <code>HMAC-SHA256</code> over the raw body (<code>X-Hub-Signature-256</code>), same scheme as the push webhook. Body: <code>{"status":"succeeded|failed","commit_sha":"…","release_version":"…"}</code>.</p>
+      </div>
+    </div>
+  <% end %>
+
   <%# Database %>
   <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
     <div class="flex items-center justify-between">

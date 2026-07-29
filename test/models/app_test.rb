@@ -14,6 +14,10 @@ class AppTest < ActiveSupport::TestCase
     @user = user
   end
 
+  test "deployment_report_path is the per-app CI report endpoint" do
+    assert_equal "/webhooks/#{@app.id}/deployment", @app.deployment_report_path
+  end
+
   test "seed_on_next_deploy is rejected on a non-Kamal app (model-enforced, every path)" do
     docker = @org.apps.create!(name: "Dock", slug: "dock", server: @server, deploy_method: "docker",
                                repository_url: "https://github.com/x/y.git")

@@ -183,6 +183,13 @@ class App < ApplicationRecord
     "/webhooks/#{provider}/#{id}"
   end
 
+  # The path a CI/external deploy POSTs its result to so it becomes a real
+  # Deployment row (Q-07-1). Authenticated by the same webhook_secret as the push
+  # webhook — see WebhooksController#report_deployment.
+  def deployment_report_path
+    "/webhooks/#{id}/deployment"
+  end
+
   def url
     return nil unless domain
     ssl_enabled? ? "https://#{domain}" : "http://#{domain}"
