@@ -73,6 +73,18 @@ class CaddyClientTest < ActiveSupport::TestCase
     assert_includes ssh.commands.last, "127.0.0.1:3000"
   end
 
+  # An apex and its wildcard are different routes to the same app; their ids must
+  # differ so adding *.domain doesn't overwrite the apex route (and vice versa).
+  def test_apex_and_wildcard_get_distinct_route_ids
+    client = CaddyClient.new(build_server)
+    apex = client.send(:route_id_for, "calm.page")
+    wild = client.send(:route_id_for, "*.calm.page")
+
+    assert_equal "conductor-route-calm-page", apex
+    refute_equal apex, wild, "apex and wildcard must not collide into one route id"
+    assert_includes wild, "wildcard"
+  end
+
   def test_remove_route_deletes_a_managed_route_by_domain
     config = {
       "apps" => {

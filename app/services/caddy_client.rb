@@ -229,7 +229,13 @@ class CaddyClient
   end
 
   def route_id_for(domain)
-    "#{ROUTE_ID_PREFIX}#{domain.gsub(/[^a-z0-9]+/, "-").gsub(/^-|-$/, "")}"
+    # A wildcard (`*.calm.page`) and its apex (`calm.page`) slug to the same string
+    # once the `*.` is stripped, which would make one route overwrite the other.
+    # Prefix wildcards so apex + wildcard are DISTINCT routes for the same app.
+    wildcard = domain.to_s.start_with?("*.")
+    slug = domain.gsub(/[^a-z0-9]+/, "-").gsub(/^-|-$/, "")
+    slug = "wildcard-#{slug}" if wildcard
+    "#{ROUTE_ID_PREFIX}#{slug}"
   end
 
   def load_config(config)
