@@ -76,7 +76,7 @@ class ServerDetailTool
     outs = ssh.run_batch([
       ServerHealth::PROBE,
       ServerAudit::PROBE,
-      ServerStorage::PROBE,
+      ServerStorage::PROBE_LITE, # no `du` scan — keeps the batched read under budget
       "sudo -n #{ServerSudo::CHECK} >/dev/null 2>&1 && echo SUDO_READY || echo SUDO_NO"
     ])
     return { error: ssh.error.presence || "no response from server" } if outs.compact.empty?

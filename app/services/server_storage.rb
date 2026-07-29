@@ -25,6 +25,11 @@ class ServerStorage
     timeout 8 du -x -B1 --max-depth=1 / 2>/dev/null | sort -rn | head -15
   BASH
 
+  # Same as PROBE minus the slow `du` biggest-directories scan (which can eat a
+  # full 8s and blow a batched multi-probe read's budget). Used by server-detail's
+  # live probe, where mounts/inodes/swap/mem matter and top-dirs is optional.
+  PROBE_LITE = PROBE.sub(/echo "===TOPDIRS===".*/m, "").freeze
+
   attr_reader :server, :error
 
   def initialize(server, ssh: nil)
