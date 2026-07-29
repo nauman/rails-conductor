@@ -17,6 +17,20 @@ class RemoteRailsRunnerTest < ActiveSupport::TestCase
     assert_includes cmd, "NO_CONTAINER"
   end
 
+  test "a docker app resolves its container by conductor-<slug> name, not a service label" do
+    docker_app = App.new(name: "Dock", slug: "dock", deploy_method: "docker")
+    cmd = RemoteRailsRunner.new(docker_app, ssh: Object.new).command("puts 1")
+    assert_includes cmd, "name=^/conductor-dock$"
+    refute_includes cmd, "label=service="
+    assert_includes cmd, "bin/rails runner -"
+  end
+
+  test "task_command runs a bare rails task in the resolved container" do
+    cmd = @runner.task_command("db:migrate:status")
+    assert_includes cmd, "for s in myapp"
+    assert_includes cmd, "docker exec \"$cid\" bin/rails db:migrate:status"
+  end
+
   test "Result#payload parses the JSON printed after the marker" do
     out = "some noise\n#{RemoteRailsRunner::MARKER}#{{ 'total_blobs' => 5 }.to_json}\n"
     res = RemoteRailsRunner::Result.new(ok: true, output: out, exit_code: 0)

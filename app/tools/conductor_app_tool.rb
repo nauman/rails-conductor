@@ -12,7 +12,8 @@ class ConductorAppTool
     "cancel"      => CancelDeploymentAppTool,
     "convert_database" => ConvertDatabaseAppTool,
     "transfer_plan" => TransferPlanAppTool,
-    "transfer"      => TransferAppTool
+    "transfer"      => TransferAppTool,
+    "runner"        => RunAppRunnerTool
   }.freeze
 
   DEFINITION = {
@@ -26,12 +27,13 @@ class ConductorAppTool
       "cancel (reap a stuck in-progress deployment so the app can deploy again — deployment_id, or app_id/app_name for its latest; marks it cancelled, doesn't touch the container), " \
       "convert_database (convert a shared-cluster app to a dedicated colocated DB IN PLACE so it can be transferred — app_id/app_name; requires confirm:true, a bare call previews. REVERSIBLE until redeploy: the shared DB is left intact and the old DSN kept as DATABASE_URL_PRE_CONVERT. credential_id/bucket optional — derived from the app's own R2 config), " \
       "transfer_plan (READ-ONLY dry-run of moving an app to another server — app_id/app_name + target_server_id/target_server_name; emits the staged change set + warnings, mutates nothing), " \
-      "transfer (EXECUTE a move/clone to another server — app + target_server + mode + credential_id/bucket for the DB copy; requires confirm:true, a bare call returns the plan and does nothing). " \
-      "deploy, rollback, and transfer are destructive/outward-facing — confirm with the user first.",
+      "transfer (EXECUTE a move/clone to another server — app + target_server + mode + credential_id/bucket for the DB copy; requires confirm:true, a bare call returns the plan and does nothing), " \
+      "runner (run a one-off Rails command inside the app's LIVE container over SSH — the non-interactive `kamal console`: app_id/app_name + either `ruby` (arbitrary Ruby via `rails runner`) or `task` (a bare rails/rake task like db:migrate:status). kamal + docker apps only. Runs real code against production — a mutating script is destructive, confirm first). " \
+      "deploy, rollback, transfer, and a mutating runner are destructive/outward-facing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer], description: "Which app operation" },
+        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer runner], description: "Which app operation" },
         target_server_id:   { type: "integer", description: "transfer_plan/transfer: destination server by id (or target_server_name)" },
         target_server_name: { type: "string",  description: "transfer_plan/transfer: destination server by name (or target_server_id)" },
         mode:              { type: "string",  enum: %w[transfer clone stage], description: "transfer: 'transfer' (move + cut over + drain source), 'clone' (cut over, source stays live), or 'stage' (copy + deploy + publish, STOP before DNS so you can verify the target first). Default transfer." },
@@ -41,8 +43,10 @@ class ConductorAppTool
         provider:          { type: "string",  description: "transfer (confirm): object-store vendor for the DB copy (default cloudflare_r2; any S3-compatible BackupVendors key)" },
         deployment_id:     { type: "integer", description: "rollback: the prior deployment whose release to roll back to (omit for the release before current)" },
         force:             { type: "boolean", description: "deploy: override a blocking preflight (at-risk audit / deploy hold). Confirm with the user first." },
-        app_id:            { type: "integer", description: "update/deploy/sync_status: target app by id" },
-        app_name:          { type: "string",  description: "update/deploy/sync_status: target app by name" },
+        app_id:            { type: "integer", description: "update/deploy/sync_status/runner: target app by id" },
+        app_name:          { type: "string",  description: "update/deploy/sync_status/runner: target app by name" },
+        ruby:              { type: "string",  description: "runner: arbitrary Ruby to execute via `rails runner` inside the live container (mutating = destructive, confirm first)" },
+        task:              { type: "string",  description: "runner: a bare rails/rake task name to run in the live container (e.g. db:migrate:status). No arguments/shell." },
         name:              { type: "string",  description: "create: app name" },
         repository_url:    { type: "string",  description: "create/update: git repository URL" },
         deploy_method:     { type: "string",  enum: %w[docker native kamal], description: "create (docker|native) / update (docker|native|kamal)" },
