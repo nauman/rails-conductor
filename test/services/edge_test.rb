@@ -55,14 +55,41 @@ class EdgeTest < ActiveSupport::TestCase
     assert_equal "caddy", result[:edge]
   end
 
-  test "KamalProxyAdapter publishes declaratively — the route flips with the deploy" do
-    adapter = Edge.for(server("kamal_proxy"))
-    result = adapter.publish(domain: "a.com", upstream: "localhost:3000")
+  # Instant cut-over via the kamal-proxy CLI over SSH.
+  class FakeSsh
+    attr_reader :commands
+    def initialize(success: true) = (@commands = []; @success = success)
+    def execute_with_status(cmd)
+      @commands << cmd
+      { success: @success, output: @success ? "" : "boom", stdout: "", stderr: @success ? "" : "boom", exit_code: @success ? 0 : 1 }
+    end
+  end
+
+  test "KamalProxyAdapter#publish registers the host on kamal-proxy via its CLI" do
+    ssh = FakeSsh.new
+    result = Edge.for(server("kamal_proxy"), ssh: ssh).publish(domain: "a.com", upstream: "app-web:3000")
 
     assert_equal "kamal_proxy", result[:edge]
     assert_equal "a.com", result[:domain]
-    assert_equal "deploy", result[:applied_by]
-    assert_match(/deploy\.yml|deploy/, result[:note])
-    assert_equal "deploy", adapter.unpublish(domain: "a.com")[:applied_by]
+    assert_equal "kamal-proxy", result[:applied_by]
+    cmd = ssh.commands.first
+    assert_includes cmd, "docker exec kamal-proxy kamal-proxy deploy"
+    assert_includes cmd, "--host a.com"
+    assert_includes cmd, "--target app-web:3000"
+    assert_includes cmd, "--tls"
+  end
+
+  test "KamalProxyAdapter#unpublish removes the service" do
+    ssh = FakeSsh.new
+    result = Edge.for(server("kamal_proxy"), ssh: ssh).unpublish(domain: "a.com")
+    assert_equal "kamal_proxy", result[:edge]
+    assert_includes ssh.commands.first, "kamal-proxy remove"
+  end
+
+  test "KamalProxyAdapter raises a legible error when kamal-proxy fails" do
+    ssh = FakeSsh.new(success: false)
+    assert_raises(Edge::KamalProxyAdapter::Error) do
+      Edge.for(server("kamal_proxy"), ssh: ssh).publish(domain: "a.com", upstream: "x:3000")
+    end
   end
 end

@@ -50,9 +50,15 @@ class AppTransferPlanTest < ActiveSupport::TestCase
     assert_match(/app\.example\.com/, detail)
   end
 
-  test "warns when the target edge is kamal-proxy (adapter pending)" do
+  test "does not warn for a kamal-proxy target — its adapter is implemented" do
     @target.update!(edge_type: "kamal_proxy")
-    assert(plan.warnings.any? { |w| w.match?(/kamal-proxy/i) }, "expected a kamal-proxy pending warning")
+    refute(plan.warnings.any? { |w| w.match?(/no adapter|pending/i) },
+           "kamal-proxy has an edge adapter now; no pending/no-adapter warning expected")
+  end
+
+  test "warns when the target edge has no adapter" do
+    @target.update!(edge_type: "haproxy")
+    assert(plan.warnings.any? { |w| w.match?(/no adapter/i) })
   end
 
   test "warns when the app has no domain to repoint" do

@@ -88,10 +88,7 @@ class AppTransferPlan
 
   def build_warnings
     warnings = []
-    if target_server.edge_type == "kamal_proxy"
-      warnings << "Target edge is kamal-proxy — Edge::KamalProxyAdapter is pending (owned by " \
-                  "conductor-deployer); the edge cut-over on the target will not apply until it lands."
-    elsif !%w[caddy kamal_proxy].include?(target_server.edge_type)
+    unless %w[caddy kamal_proxy].include?(target_server.edge_type)
       warnings << "Target edge #{target_server.edge_type.inspect} has no adapter — run edge " \
                   "detection, or pick a Caddy/kamal-proxy box."
     end
