@@ -15,14 +15,15 @@ class ConductorCronTool
   DEFINITION = {
     name: "conductor_cron",
     description: "Scheduled jobs (cron) on a server — the Heroku-Scheduler equivalent. Set `action` to one of: " \
-      "schedule (create + install a job — name + schedule ('every hour', 'daily at 3am', or raw '0 * * * *') PLUS either app_id/app_name + task (a rails task like slack:sync, run in the app's container) OR server_id + command (raw)), " \
-      "list (managed cron jobs — all visible, or filter by server_id/app_id), " \
+      "schedule (create + install a job — name + schedule ('every hour', 'daily at 3am', or raw '0 * * * *') PLUS either app_id/app_name + task (a rails task like slack:sync, run in the app's container — APP-scoped) OR server_id + command (raw — SERVER/host-scoped)), " \
+      "list (managed cron jobs, each tagged scope=app|server — all visible, or filter by server_id/app_id), " \
+      "update (edit a job in place — cron_job_id + any of schedule, task (app-scoped, regenerates the command), command (server-scoped), name; reinstalls), " \
       "remove (uninstall from the crontab + delete — cron_job_id), " \
       "set_enabled (enable/disable a job — cron_job_id + enabled). Mutating (except list) — installs real crontab entries; confirm.",
     input_schema: {
       type: "object",
       properties: {
-        action:      { type: "string", enum: %w[schedule list remove set_enabled], description: "Which cron operation" },
+        action:      { type: "string", enum: %w[schedule list update remove set_enabled], description: "Which cron operation" },
         app_id:      { type: "integer", description: "schedule/list: target app (its server + container)" },
         app_name:    { type: "string",  description: "schedule/list: target app by name" },
         server_id:   { type: "integer", description: "schedule/list: target server (raw command / filter)" },
@@ -46,9 +47,10 @@ class ConductorCronTool
     case input["action"]
     when "schedule"    then schedule(input)
     when "list"        then list(input)
+    when "update"      then update(input)
     when "remove"      then remove(input)
     when "set_enabled" then set_enabled(input)
-    else Result.fail("Missing or unknown action. Set action to one of: schedule, list, remove, set_enabled.")
+    else Result.fail("Missing or unknown action. Set action to one of: schedule, list, update, remove, set_enabled.")
     end
   end
 
@@ -77,7 +79,8 @@ class ConductorCronTool
       org = server.organization
     end
 
-    job = server.cron_jobs.new(organization: org, name: name, command: command, schedule: schedule)
+    job = server.cron_jobs.new(organization: org, name: name, command: command, schedule: schedule,
+                               app: app, task: (app ? task : nil))
     return Result.fail(job.errors.full_messages.to_sentence) unless job.save
 
     begin
@@ -95,9 +98,39 @@ class ConductorCronTool
     if (s = find_server(input))
       scope = scope.where(server_id: s.id)
     elsif (a = find_app(input))
-      scope = scope.where(server_id: a.server_id)
+      scope = scope.where(app_id: a.id) # this app's jobs, not every cron on its server
     end
     Result.ok({ cron_jobs: scope.order(:server_id, :name).map { |j| job_view(j) } })
+  end
+
+  # Edit a job in place. For an app-scoped job a new `task` regenerates the
+  # container-exec command; for a server-scoped job you pass `command`. Then
+  # reinstall so the crontab matches.
+  def update(input)
+    job = find_job(input)
+    return Result.fail("Cron job not found. Pass a valid cron_job_id.") unless job
+
+    job.name     = input["name"].to_s.strip     if input["name"].present?
+    job.schedule = input["schedule"].to_s.strip if input["schedule"].present?
+
+    if input["task"].present?
+      return Result.fail("task only applies to an app-scoped job; this is a server cron.") unless job.app_scoped?
+      task = input["task"].to_s.strip
+      return Result.fail("Invalid task name '#{task}'.") unless task.match?(TASK_RE)
+      job.task    = task
+      job.command = job.app.scheduled_command(task)
+    elsif input["command"].present?
+      return Result.fail("command only applies to a server cron; this job is app-scoped (use task).") if job.app_scoped?
+      job.command = input["command"].to_s.strip
+    end
+
+    return Result.fail(job.errors.full_messages.to_sentence) unless job.save
+    begin
+      job.install!
+    rescue => e
+      return Result.fail("Saved but couldn't update the crontab: #{e.message}")
+    end
+    Result.ok(job_view(job).merge(message: "Updated '#{job.name}' (#{job.cron_expression}).", _organization: job.organization))
   end
 
   def remove(input)
@@ -137,6 +170,7 @@ class ConductorCronTool
   def job_view(job)
     {
       id: job.id, name: job.name, server: job.server&.name,
+      scope: job.scope, app: job.app&.name, task: job.task,
       schedule: job.schedule, cron: job.cron_expression,
       enabled: job.enabled?, command: job.command
     }

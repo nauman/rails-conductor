@@ -46,6 +46,53 @@ class ConductorCronToolTest < ActiveSupport::TestCase
       assert_equal @server.name, res.value[:server]
       assert @fake.calls.any? { |verb,| verb == :upsert }, "should install into the crontab"
       assert_equal 1, CronJob.where(server: @server).count
+      # structured app scope (not inferred from the command)
+      assert_equal "app", res.value[:scope]
+      assert_equal "Slackapp", res.value[:app]
+      assert_equal "slack:sync", res.value[:task]
+      assert_equal @app.id, CronJob.last.app_id
+    end
+  end
+
+  test "a server-scoped raw-command cron has scope=server and no app" do
+    with_fake_crontab do
+      res = ConductorCronTool.new(user: @user).call(
+        "action" => "schedule", "server_id" => @server.id, "name" => "backup",
+        "schedule" => "0 3 * * *", "command" => "/usr/local/bin/backup.sh"
+      )
+      assert res.success?, res.error
+      assert_equal "server", res.value[:scope]
+      assert_nil res.value[:app]
+      assert_nil CronJob.last.app_id
+    end
+  end
+
+  test "update changes an app job's task and regenerates the container-exec command" do
+    with_fake_crontab do
+      created = ConductorCronTool.new(user: @user).call(
+        "action" => "schedule", "app_id" => @app.id, "name" => "Slack sync",
+        "schedule" => "0 * * * *", "task" => "slack:sync"
+      )
+      res = ConductorCronTool.new(user: @user).call(
+        "action" => "update", "cron_job_id" => created.value[:id], "task" => "slack:prune", "schedule" => "30 4 * * *"
+      )
+      assert res.success?, res.error
+      assert_equal "slack:prune", res.value[:task]
+      assert_includes res.value[:command], "bin/rails slack:prune"
+      assert_equal "30 4 * * *", res.value[:cron]
+    end
+  end
+
+  test "update rejects a task on a server-scoped cron (and command on an app job)" do
+    with_fake_crontab do
+      srv = ConductorCronTool.new(user: @user).call(
+        "action" => "schedule", "server_id" => @server.id, "name" => "b", "schedule" => "0 3 * * *", "command" => "x"
+      )
+      bad = ConductorCronTool.new(user: @user).call(
+        "action" => "update", "cron_job_id" => srv.value[:id], "task" => "slack:sync"
+      )
+      assert bad.failure?
+      assert_match(/server cron/i, bad.error)
     end
   end
 

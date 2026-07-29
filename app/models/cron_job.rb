@@ -3,6 +3,10 @@ class CronJob < ApplicationRecord
 
   belongs_to :organization
   belongs_to :server
+  # Optional: an app-scoped job (Heroku-Scheduler style) runs `task` in the app's
+  # container. Absent = a server/host-scoped raw-command cron. This is the real
+  # app-vs-server distinction the flat list used to only infer from the command.
+  belongs_to :app, optional: true
 
   validates :name, :command, :schedule, presence: true
   validates :status, inclusion: { in: STATUSES }
@@ -15,6 +19,10 @@ class CronJob < ApplicationRecord
   def enabled?
     status == "enabled"
   end
+
+  # App-scoped (runs a rails task in the app container) vs server/host cron.
+  def app_scoped? = app_id.present?
+  def scope = app_scoped? ? "app" : "server"
 
   # Stable identifier for the server's managed crontab block.
   def crontab_id
