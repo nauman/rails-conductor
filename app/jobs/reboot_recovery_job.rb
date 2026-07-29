@@ -7,19 +7,22 @@
 #
 #   1. Poll SSH until the box answers again (bounded — it must return within the
 #      reboot grace window, else we stop and leave normal offline detection to it).
-#   2. Refresh metrics so the record flips "rebooting" → "online".
-#   3. Verify every syncable app; restart the ones that should be running but
-#      aren't (exited/dead container, failed status), then re-verify.
-#   4. Record a legible report of what recovery did, per app.
+#   2. Wait for Docker to actually be ready — SSH usually answers BEFORE the daemon
+#      is up, and probing apps against a not-yet-ready daemon reads them all as down.
+#   3. Refresh metrics so the record flips "rebooting" → "online".
+#   4. Verify every syncable app; restart the ones that were meant to be running but
+#      aren't (decided from the PRE-reboot desired state, not the post-sync one),
+#      then re-verify.
+#   5. Record a legible report of what recovery did, per app.
 #
 # Enqueued (with a short initial delay) by RebootServerTool / ServersController#reboot.
 class RebootRecoveryJob < ApplicationJob
   queue_as :ops
 
-  POLL_INTERVAL  = 30.seconds
-  MAX_ATTEMPTS   = 12 # ~6 min of polling — within Server::REBOOT_GRACE
-  SETTLE_ATTEMPTS = 3 # if the box answers but hasn't actually rebooted yet, wait this long
-  FRESH_BOOT     = 5.minutes # uptime under this = a genuine fresh boot
+  POLL_INTERVAL   = 30.seconds
+  MAX_ATTEMPTS    = 12 # ~6 min of polling — within Server::REBOOT_GRACE
+  SETTLE_ATTEMPTS = 3  # if the box answers but hasn't actually rebooted yet, wait this long
+  FRESH_BOOT      = 5.minutes # uptime under this = a genuine fresh boot
 
   def perform(server_id, attempt = 1)
     server = Server.find_by(id: server_id)
@@ -46,6 +49,14 @@ class RebootRecoveryJob < ApplicationJob
       return repoll(server, attempt)
     end
 
+    # SSH usually comes back BEFORE Docker finishes starting. If we remediate now,
+    # every container reads as down (sync returns unknown/exited), we fire useless
+    # restarts against a dead daemon, and the pass ends prematurely. So wait for
+    # Docker to be ready before touching containerized apps (bounded by MAX_ATTEMPTS).
+    if runs_containers?(server) && !docker_ready?(server) && attempt < MAX_ATTEMPTS
+      return repoll(server, attempt)
+    end
+
     remediate!(server, uptime)
   end
 
@@ -53,6 +64,17 @@ class RebootRecoveryJob < ApplicationJob
 
   def repoll(server, attempt)
     self.class.set(wait: POLL_INTERVAL).perform_later(server.id, attempt + 1)
+  end
+
+  def runs_containers?(server)
+    server.apps.any?(&:can_sync_status?) # docker/kamal apps need the daemon
+  end
+
+  # Docker up + responsive. `docker info` exits non-zero until the daemon is ready.
+  def docker_ready?(server)
+    ssh = SshConnection.new(server)
+    out = ssh.execute("docker info >/dev/null 2>&1 && echo READY || echo WAIT")
+    ssh.success? && out.to_s.include?("READY")
   end
 
   def remediate!(server, uptime)
@@ -67,26 +89,37 @@ class RebootRecoveryJob < ApplicationJob
       end
 
       verified += 1
+      # Decide "should this be up?" from the PRE-sync record. ContainerStatus#sync!
+      # rewrites a Kamal app whose container didn't return to status:"stopped" —
+      # which needs_attention? then reads as a deliberate stop and would skip it.
+      # Capturing intent first is what makes recovery actually restart lost apps.
+      should_run = desired_up?(app)
+
       ContainerStatus.new(app).sync!
       app.reload
 
-      unless app.needs_attention?
-        lines << "✓ #{app.name}: #{app.container_status}"
+      if app.container_running?
+        lines << "✓ #{app.name}: running"
         next
       end
 
-      # Should be running but isn't — restart, then re-verify.
+      unless should_run
+        lines << "· #{app.name}: #{app.container_status} (not expected up — left as is)"
+        next
+      end
+
+      # Meant to be running but isn't — restart, then re-verify.
       RestartAppJob.perform_now(app.id)
       safe_sync(app)
       app.reload
 
-      if app.needs_attention?
+      if app.container_running?
+        restarted += 1
+        lines << "↻ #{app.name}: restarted → running"
+      else
         still_down += 1
         detail = app.status_check_error.presence || app.container_status
         lines << "✗ #{app.name}: restarted → still down (#{detail})"
-      else
-        restarted += 1
-        lines << "↻ #{app.name}: restarted → #{app.container_status}"
       end
     end
 
@@ -96,6 +129,12 @@ class RebootRecoveryJob < ApplicationJob
     header = "Reboot recovery on #{server.name}#{uptime_note}: " \
              "#{verified} app(s) verified, #{restarted} restarted, #{still_down} still down."
     server.record_recovery!([ header, *lines ].join("\n"))
+  end
+
+  # Was this app expected to be running before the reboot? Read from the STORED
+  # record (last-known good) before sync mutates it — a managed app that was up.
+  def desired_up?(app)
+    app.naggable? && (app.status == "running" || app.container_running?)
   end
 
   def safe_sync(app)
