@@ -128,10 +128,18 @@
       <% end %>
       <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
         <h3 class="text-sm font-semibold text-ink">Power</h3>
-        <p class="mt-1 text-xs text-muted">Reboot the server over SSH. It drops offline briefly and comes back.</p>
+        <p class="mt-1 text-xs text-muted">Reboot over SSH — it drops offline briefly, then Conductor babysits recovery: once it's back, apps are verified and any that crashed are restarted.</p>
         <%= button_to "Reboot server", reboot_server_path(@server), method: :post,
-              form: { data: { turbo_confirm: "Reboot #{@server.name}? Apps on it go down for the reboot." } },
+              form: { data: { turbo_confirm: "Reboot #{@server.name}? Apps on it go down for the reboot, then Conductor auto-verifies + restarts them." } },
               class: "mt-3 inline-flex items-center gap-2 rounded-lg border border-danger bg-surface px-3 py-1.5 text-xs font-medium text-danger-deep hover:bg-danger-tint" %>
+        <% if @server.last_recovery_at.present? %>
+          <div class="mt-4 border-t border-border pt-3">
+            <p class="text-xs font-medium text-ink">Last reboot recovery
+              <span class="text-muted font-normal">· <%= time_ago_in_words(@server.last_recovery_at) %> ago</span>
+            </p>
+            <pre class="mt-2 whitespace-pre-wrap rounded-lg bg-fill p-3 text-[11px] leading-relaxed text-muted"><%= @server.last_recovery_report %></pre>
+          </div>
+        <% end %>
       </div>
       <%= render "servers/package_install", server: @server %>
       <%= render "servers/system_update", server: @server %>

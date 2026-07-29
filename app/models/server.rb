@@ -49,6 +49,13 @@ class Server < ApplicationRecord
 
   def audit_fresh?(within: 7.days) = last_audit_at.present? && last_audit_at > within.ago
 
+  # Store the outcome of a post-reboot recovery pass (RebootRecoveryJob) so the
+  # UI/MCP can show what recovery verified + remediated. Internal bookkeeping —
+  # skip callbacks/validation like record_audit!.
+  def record_recovery!(report)
+    update_columns(last_recovery_report: report.to_s, last_recovery_at: Time.current)
+  end
+
   # Honest status for display. A server Conductor has never actually reached
   # (no successful metrics/health check → last_seen_at is nil) reads "pending",
   # not the "online" default stored at registration. Prevents never-connected

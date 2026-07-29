@@ -162,6 +162,7 @@ class ServersController < ApplicationController
     result = ServerReboot.new(@server).reboot!
     if result.success?
       @server.mark_rebooting! # transitional state + grace window, so the UI shows "rebooting" now
+      RebootRecoveryJob.set(wait: 60.seconds).perform_later(@server.id) # babysit apps back to health
       redirect_to @server, notice: result.message
     else
       redirect_to @server, alert: result.message

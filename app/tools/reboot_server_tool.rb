@@ -21,10 +21,15 @@ class RebootServerTool
     # (which would also fire a false offline alert).
     server.mark_rebooting!
 
+    # Babysit recovery: after the box returns, verify + remediate its apps rather
+    # than leaving a crashed container / stale port to a human (a short initial
+    # delay lets the box actually start going down first).
+    RebootRecoveryJob.set(wait: 60.seconds).perform_later(server.id)
+
     Result.ok({
       server:        server.name,
       status:        "rebooting",
-      message:       "#{result.message} Re-run conductor_server action: audit after it's back to confirm.",
+      message:       "#{result.message} Conductor will babysit recovery (verify + restart apps once it's back).",
       _organization: server.organization
     })
   end

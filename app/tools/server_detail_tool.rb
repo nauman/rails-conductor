@@ -43,6 +43,9 @@ class ServerDetailTool
       audit:   { last_status: server.last_audit_status, last_at: ts(server.last_audit_at) },
       updates: { last_status: server.last_update_status, last_scope: server.last_update_scope, last_at: ts(server.last_update_at) },
       harden:  { last_status: server.last_harden_status, last_at: ts(server.last_harden_at) },
+      # Post-reboot babysit-recovery outcome (RebootRecoveryJob): what it verified
+      # + remediated once the box came back. nil until a reboot has been recovered.
+      recovery: { last_at: ts(server.last_recovery_at), report: server.last_recovery_report.presence },
       # Scheduled jobs — scope=app|server is now a real distinction (CronJob#app_id),
       # not inferred from the command. App-scoped jobs carry the app + rails task.
       cron_jobs: (server.cron_jobs.includes(:app).map do |c|
