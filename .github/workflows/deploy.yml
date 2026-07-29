@@ -124,3 +124,34 @@ jobs:
             sleep 10
           done
           echo "::warning::/version did not report ${GITHUB_SHA:0:7} within ~3.5min"
+
+      # Report THIS deploy back to Conductor so it becomes a real Deployment row
+      # (Q-07-1). A CI deploy is otherwise invisible to the control plane, and
+      # Conductor's own dashboard row reads stale forever. Runs on success AND
+      # failure (if: always()) so a broken deploy is recorded as failed, not just
+      # absent. No-ops when the two secrets aren't set, so it never fails a deploy.
+      #   Repository SECRETS:
+      #     CONDUCTOR_APP_ID                 Conductor's own App id in its DB
+      #     CONDUCTOR_DEPLOY_WEBHOOK_SECRET  that App's webhook_secret (per-app HMAC)
+      - name: Report deploy to Conductor
+        if: always()
+        env:
+          CONDUCTOR_APP_ID: ${{ secrets.CONDUCTOR_APP_ID }}
+          CONDUCTOR_DEPLOY_WEBHOOK_SECRET: ${{ secrets.CONDUCTOR_DEPLOY_WEBHOOK_SECRET }}
+          DEPLOY_RESULT: ${{ job.status }}   # 'success' | 'failure' | 'cancelled'
+        run: |
+          if [ -z "${CONDUCTOR_APP_ID:-}" ] || [ -z "${CONDUCTOR_DEPLOY_WEBHOOK_SECRET:-}" ]; then
+            echo "Conductor report secrets not set — skipping self-report."; exit 0
+          fi
+          case "$DEPLOY_RESULT" in
+            success) status=succeeded ;;
+            *)       status=failed ;;   # failure OR cancelled — not a live release
+          esac
+          body=$(printf '{"status":"%s","commit_sha":"%s","release_version":"%s"}' \
+                   "$status" "$GITHUB_SHA" "${GITHUB_SHA:0:7}")
+          # HMAC-SHA256 over the RAW body, same scheme as the push webhook.
+          sig="sha256=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$CONDUCTOR_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}')"
+          curl -sS --max-time 15 -X POST "https://$APP_HOST/webhooks/$CONDUCTOR_APP_ID/deployment" \
+            -H "Content-Type: application/json" -H "X-Hub-Signature-256: $sig" \
+            --data "$body" && echo "Reported deploy ($status) to Conductor." || \
+            echo "::warning::Could not report deploy to Conductor (non-fatal)."

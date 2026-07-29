@@ -195,6 +195,12 @@ Rails.application.routes.draw do
     resources :messages, only: [:create]
   end
 
+  # A CI/external deploy reports itself back so it becomes a real Deployment row
+  # (Q-07-1). Records a finished deploy; does not trigger one. Same per-app HMAC.
+  # MUST precede the :provider/:app_id route below, whose two wildcards would
+  # otherwise swallow `webhooks/<id>/deployment` (provider=<id>, app_id=deployment).
+  post "webhooks/:app_id/deployment", to: "webhooks#report_deployment", as: :deployment_report_webhook
+
   # Inbound SCM push webhooks → auto-deploy (public; verified by per-app HMAC).
   post "webhooks/:provider/:app_id", to: "webhooks#receive", as: :webhook
 

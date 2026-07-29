@@ -30,6 +30,39 @@ class WebhooksController < ActionController::Base
     head :accepted
   end
 
+  # A deploy that happened OUTSIDE Conductor (its own CI workflow) reports itself
+  # here so it becomes a real Deployment row. Without this, an app deployed by CI
+  # rather than through Conductor never records a deploy, so its dashboard row
+  # reads stale forever — Conductor's own row is the standing example, "failed,
+  # Jul 17" (Q-07-1, spec 08). This RECORDS a finished deploy; it does NOT trigger
+  # one (no DeployAppJob), and it is authenticated by the same per-app HMAC as the
+  # push webhook — a report is as trusted as a trigger, no more.
+  def report_deployment
+    app = App.find_by(id: params[:app_id])
+    head(:not_found) and return unless app
+    head(:unauthorized) and return unless valid_signature?(app)
+
+    status = params[:status].to_s
+    unless %w[succeeded failed].include?(status)
+      render(json: { error: "status must be 'succeeded' or 'failed'" }, status: :unprocessable_entity) and return
+    end
+
+    deployment = app.deployments.create!(
+      status: status, kind: "ci",
+      commit_sha: params[:commit_sha].presence,
+      release_version: params[:release_version].presence,
+      server: app.server, completed_at: Time.current,
+      # Only trust a caller-supplied cause for a failure, and only a known one —
+      # never let an external report invent a cause class.
+      cause_class: (status == "failed" ? Deployment::CAUSE_CLASSES.find { |c| c == params[:cause_class] } : nil)
+    )
+    # Mirror the app-status side of a normal success so the older status column and
+    # deployed_at agree with the new Deployment row (deploy_health reads the row).
+    app.update!(status: "running", deployed_at: Time.current) if status == "succeeded"
+
+    render json: { ok: true, deployment_id: deployment.id }, status: :created
+  end
+
   private
 
   # GitHub: X-Hub-Signature-256: sha256=<hmac>. Compared over the raw body.
