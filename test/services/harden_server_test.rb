@@ -96,6 +96,25 @@ class HardenServerTest < ActiveSupport::TestCase
     assert_match(/ignoreip = 127\.0\.0\.1/, fw)
   end
 
+  test "includes the operator's configured trusted IPs in the fail2ban allowlist" do
+    ENV["CONDUCTOR_FAIL2BAN_ALLOWLIST"] = "59.101.26.90, 203.0.113.7"
+    root = FakeSsh.new
+    harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
+
+    fw = root.commands.find { |c| c.include?("ignoreip") }
+    assert_match(/59\.101\.26\.90/, fw, "operator IP must be whitelisted")
+    assert_match(/203\.0\.113\.7/, fw)
+  ensure
+    ENV.delete("CONDUCTOR_FAIL2BAN_ALLOWLIST")
+  end
+
+  test "operator_allowlist rejects non-IP junk (no shell injection into the script)" do
+    ENV["CONDUCTOR_FAIL2BAN_ALLOWLIST"] = "1.2.3.4 ; rm -rf / , 5.6.7.8"
+    assert_equal "1.2.3.4 5.6.7.8", HardenServer.operator_allowlist
+  ensure
+    ENV.delete("CONDUCTOR_FAIL2BAN_ALLOWLIST")
+  end
+
   test "closes an exposed host Postgres by rebinding off 0.0.0.0" do
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))

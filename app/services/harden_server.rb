@@ -44,28 +44,41 @@ class HardenServer
 
   VERIFY = "sudo -n true && echo DEPLOY_SUDO_OK".freeze
 
-  FIREWALL = <<~BASH.freeze
-    set -e
-    export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get install -y -qq ufw fail2ban >/dev/null 2>&1 || true
-    sudo ufw allow OpenSSH >/dev/null
-    sudo ufw allow 80/tcp >/dev/null
-    sudo ufw allow 443/tcp >/dev/null
-    # Let containers keep reaching host-bound services (e.g. a colocated Postgres).
-    for net in $(docker network ls -q 2>/dev/null | xargs -r docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | tr ' ' '\\n' | grep -E '^(172|10)\\.' | sort -u); do
-      sudo ufw allow from "$net" >/dev/null 2>&1 || true
-    done
-    # CRITICAL: never let fail2ban ban the IP Conductor is connecting FROM, or a
-    # burst of legit ops would lock Conductor (or the operator on this session)
-    # out of a box it manages. $SSH_CLIENT's first field is that source IP.
-    client_ip="${SSH_CLIENT%% *}"
-    sudo mkdir -p /etc/fail2ban/jail.d
-    printf '[sshd]\\nignoreip = 127.0.0.1/8 ::1 %s\\nbantime = 1h\\n' "$client_ip" | sudo tee /etc/fail2ban/jail.d/00-conductor-allowlist.local >/dev/null
-    sudo ufw --force enable >/dev/null
-    sudo systemctl enable fail2ban >/dev/null 2>&1 || true
-    sudo systemctl restart fail2ban >/dev/null 2>&1 || sudo systemctl start fail2ban >/dev/null 2>&1 || true
-    echo FIREWALL_OK
-  BASH
+  # Operator IPs that must never be fail2ban-banned (a laptop/office the operator
+  # SSHes in from). Conductor can't auto-detect these — it only knows its own
+  # source IP — so they're configured via CONDUCTOR_FAIL2BAN_ALLOWLIST (space- or
+  # comma-separated). Conductor's own connecting IP is always added on top.
+  IP_TOKEN = %r{\A(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F:]+)(?:/\d{1,3})?\z}
+
+  def self.operator_allowlist
+    ENV["CONDUCTOR_FAIL2BAN_ALLOWLIST"].to_s.split(/[\s,]+/).grep(IP_TOKEN).join(" ")
+  end
+
+  def firewall_script
+    <<~BASH
+      set -e
+      export DEBIAN_FRONTEND=noninteractive
+      sudo apt-get install -y -qq ufw fail2ban >/dev/null 2>&1 || true
+      sudo ufw allow OpenSSH >/dev/null
+      sudo ufw allow 80/tcp >/dev/null
+      sudo ufw allow 443/tcp >/dev/null
+      # Let containers keep reaching host-bound services (e.g. a colocated Postgres).
+      for net in $(docker network ls -q 2>/dev/null | xargs -r docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | tr ' ' '\\n' | grep -E '^(172|10)\\.' | sort -u); do
+        sudo ufw allow from "$net" >/dev/null 2>&1 || true
+      done
+      # CRITICAL: never let fail2ban ban the IP Conductor connects FROM (or the
+      # operator on this session), or a burst of legit ops locks management out of
+      # a box Conductor owns. $SSH_CLIENT's first field is Conductor's source IP;
+      # the operator's trusted IPs come from CONDUCTOR_FAIL2BAN_ALLOWLIST.
+      client_ip="${SSH_CLIENT%% *}"
+      sudo mkdir -p /etc/fail2ban/jail.d
+      printf '[sshd]\\nignoreip = 127.0.0.1/8 ::1 %s #{self.class.operator_allowlist}\\nbantime = 1h\\n' "$client_ip" | sudo tee /etc/fail2ban/jail.d/00-conductor-allowlist.local >/dev/null
+      sudo ufw --force enable >/dev/null
+      sudo systemctl enable fail2ban >/dev/null 2>&1 || true
+      sudo systemctl restart fail2ban >/dev/null 2>&1 || sudo systemctl start fail2ban >/dev/null 2>&1 || true
+      echo FIREWALL_OK
+    BASH
+  end
 
   CLOSE_DB = <<~BASH.freeze
     set -e
@@ -105,7 +118,7 @@ class HardenServer
     run_root("provision", PROVISION) or return failed_result
     return fail!("deploy+sudo verification failed — root left enabled, no lockout") unless deploy_sudo_ok?
 
-    run_root("firewall", FIREWALL)   or return failed_result
+    run_root("firewall", firewall_script) or return failed_result
     run_root("close_db",  CLOSE_DB)  or return failed_result
     run_root("ssh_harden", SSH_HARDEN) or return failed_result
 
