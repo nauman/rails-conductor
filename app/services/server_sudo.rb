@@ -27,8 +27,8 @@ module ServerSudo
   # One-time, root-run setup: writes the wrapper scripts (root-owned, 0755 — not
   # writable by the deploy user) and a sudoers rule granting NOPASSWD on exactly
   # those wrappers for this server's SSH user. No permanent root SSH; no shell escape.
-  def grant_command(server)
-    user = server.ssh_user_or_default
+  def grant_command(server, user: nil)
+    user ||= server.ssh_user_or_default
     <<~SH.strip
       sudo install -d -m 0755 #{WRAPPER_DIR}
       sudo tee #{CHECK} >/dev/null <<'CONDUCTOR'

@@ -43,7 +43,17 @@ class HardenServerTest < ActiveSupport::TestCase
     assert_equal :secure, result.audit_status
     assert_equal "deploy", @server.reload.ssh_user, "Conductor now manages the box as deploy"
     names = result.steps.map { |s| s[:step] }
-    assert_equal %w[provision verify_deploy_sudo firewall close_db ssh_harden], names
+    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db ssh_harden], names
+  end
+
+  test "installs the ServerSudo wrappers for the deploy user (readiness + apply_updates work post-harden)" do
+    root = FakeSsh.new
+    harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
+
+    grant = root.commands.find { |c| c.include?("/etc/sudoers.d/conductor") }
+    assert grant, "harden must install the scoped ServerSudo grant"
+    assert_match(/deploy ALL=\(root\) NOPASSWD:/, grant, "scoped grant must be for the deploy user")
+    assert_includes grant, "conductor-check"
   end
 
   test "SSH hardening runs only AFTER the deploy+sudo verification (no-lockout ordering)" do

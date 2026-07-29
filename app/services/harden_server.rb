@@ -120,6 +120,12 @@ class HardenServer
     run_root("provision", PROVISION) or return failed_result
     return fail!("deploy+sudo verification failed — root left enabled, no lockout") unless deploy_sudo_ok?
 
+    # Install the vetted ScopedSudo wrappers for the deploy user (while root is
+    # still reachable) so privileged ops (apply_updates/reboot) AND the "privileged
+    # ops readiness" check work via the least-privilege scoped grant — not just the
+    # broad grant provisioning laid down for bootstrapping.
+    run_root("grant_sudo_wrappers", ServerSudo.grant_command(@server, user: DEPLOY_USER)) or return failed_result
+
     run_root("firewall", firewall_script) or return failed_result
     run_root("close_db",  CLOSE_DB)  or return failed_result
     run_root("ssh_harden", SSH_HARDEN) or return failed_result
