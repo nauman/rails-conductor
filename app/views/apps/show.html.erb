@@ -7,6 +7,8 @@
         <%= turbo_stream_from @app %>
         <h1 class="font-display text-2xl text-ink tracking-display dark:text-white"><%= @app.name %></h1>
         <%= render "apps/status_badge", app: @app %>
+        <%# The same badge the fleet shows, so the two pages can never disagree. %>
+        <%= deploy_health_badge(@app) %>
       </div>
       <p class="mt-1 text-sm text-muted dark:text-faint">
         <% if @app.domain.present? %>
@@ -372,49 +374,20 @@
       </div>
     </div>
 
+    <%# Activity, not a status table: each deploy says what happened, why, and whether
+        somebody overrode the gate. Replaces the old columns-of-status table. %>
     <% if @deployments.any? %>
-      <table class="min-w-full divide-y divide-border dark:divide-border">
-        <thead class="bg-fill dark:bg-fill">
-          <tr>
-            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Status</th>
-            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Started</th>
-            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Duration</th>
-            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">By</th>
-            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Details</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border dark:divide-border">
-          <% @deployments.each do |deployment| %>
-            <tr>
-              <td class="px-4 py-2">
-                <%= rui_badge(text: deployment.status, color: deployment.status == "completed" ? :success : deployment.status == "failed" ? :danger : :slate, size: :sm) %>
-                <% if deployment.rollback? %>
-                  <span class="ml-1 text-2xs uppercase tracking-label text-muted dark:text-faint" title="Rolled back to <%= deployment.target_version&.first(12) %>">⤺ rollback</span>
-                <% end %>
-              </td>
-              <td class="px-4 py-2 text-sm text-body dark:text-faint">
-                <%= deployment.created_at.strftime("%b %d, %H:%M") %>
-              </td>
-              <td class="px-4 py-2 text-sm text-body dark:text-faint">
-                <%= deployment.formatted_duration %>
-              </td>
-              <td class="px-4 py-2 text-sm text-body dark:text-faint">
-                <%= deployment.user&.email || "System" %>
-              </td>
-              <td class="px-4 py-2 text-right whitespace-nowrap">
-                <% if @app.kamal? && deployment.rollback_target? %>
-                  <%= rui_button_to("Rollback", rollback_deployment_path(deployment), method: :post, variant: :link, size: :sm, color: :warning,
-                        data: { turbo_confirm: "Roll #{@app.name} back to release #{deployment.target_version&.first(12)}? This boots the previous image on the host (no rebuild)." }) %>
-                <% end %>
-                <%= rui_button("View", url: deployment_path(deployment), variant: :link, size: :sm, color: :slate) %>
-              </td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
+      <div class="divide-y divide-border">
+        <% @deployments.each do |deployment| %>
+          <%= render "apps/activity_row", deployment: deployment, app: @app %>
+        <% end %>
+      </div>
     <% else %>
-      <div class="p-4 text-center text-sm text-muted dark:text-faint">
-        No deployments yet.
+      <div class="p-6 text-center text-sm text-muted">
+        Nothing has deployed through Conductor yet.
+        <% if @app.intent_label %>
+          <span class="block mt-1 text-2xs"><%= @app.intent_label %><%= " — #{@app.intent_note}" if @app.intent_note.present? %></span>
+        <% end %>
       </div>
     <% end %>
   </div>

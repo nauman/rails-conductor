@@ -1,0 +1,62 @@
+<%# One deployment, told as an event rather than a table row (spec 08 / design M2).
+    What it says, in order of what an operator actually needs:
+      1. what happened + which release
+      2. WHY, when we know — a failure that wasn't the app's code says so, because
+         two of one week's failures here were Conductor's own bugs and reading them
+         as app failures sends someone to debug the wrong system
+      3. whether a human overrode the preflight gate (`forced`) — that is the single
+         most important thing to be able to see afterwards
+      4. who, and when
+
+    NOT shown: whether a human or an agent triggered it. Conductor doesn't record that
+    (no trigger/source column), and inventing an actor would be worse than omitting one. %>
+<div class="flex items-start justify-between gap-4 px-4 py-3 border-b border-border last:border-b-0">
+  <div class="flex items-start gap-3 min-w-0">
+    <% icon, tone = case deployment.status
+                    when "succeeded" then [ "✓", "bg-primary-tint text-primary" ]
+                    when "failed"    then [ "✕", "bg-danger-tint text-danger-deep" ]
+                    when "blocked"   then [ "⊘", "bg-warning-tint text-warning" ]
+                    else                  [ "•", "bg-fill text-muted" ]
+                    end %>
+    <span class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-card text-2xs font-semibold <%= tone %>">
+      <%= icon %>
+    </span>
+
+    <div class="min-w-0">
+      <div class="text-sm text-ink">
+        <span class="font-medium"><%= activity_headline(deployment) %></span>
+        <% if deployment.commit_sha.present? %>
+          <code class="ml-1 rounded bg-fill px-1.5 py-0.5 font-mono text-2xs text-body"><%= deployment.commit_sha.first(7) %></code>
+        <% end %>
+        <% if deployment.rollback? %>
+          <span class="ml-1 text-2xs uppercase tracking-label text-muted">⤺ rollback</span>
+        <% end %>
+      </div>
+
+      <% if (why = activity_reason(deployment)) %>
+        <p class="mt-0.5 text-2xs text-muted"><%= why %></p>
+      <% end %>
+
+      <% if deployment.forced? %>
+        <p class="mt-1 inline-flex items-center gap-1 rounded-pill bg-warning-tint px-2 py-0.5 text-2xs font-medium text-warning">
+          forced past preflight
+        </p>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="shrink-0 text-right">
+    <div class="font-mono text-2xs text-faint">
+      <%= deployment.created_at.strftime("%b %d, %H:%M") %>
+      <% if deployment.formatted_duration.present? %> · <%= deployment.formatted_duration %><% end %>
+    </div>
+    <div class="font-mono text-2xs text-faint"><%= deployment.user&.email || "system" %></div>
+    <div class="mt-1 flex items-center justify-end gap-2">
+      <% if app.kamal? && deployment.rollback_target? %>
+        <%= rui_button_to("Rollback", rollback_deployment_path(deployment), method: :post, variant: :link, size: :sm, color: :warning,
+              data: { turbo_confirm: "Roll #{app.name} back to release #{deployment.target_version&.first(12)}? This boots the previous image on the host (no rebuild)." }) %>
+      <% end %>
+      <%= rui_button("View", url: deployment_path(deployment), variant: :link, size: :sm, color: :slate) %>
+    </div>
+  </div>
+</div>

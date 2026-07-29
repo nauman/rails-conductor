@@ -36,4 +36,29 @@ module AppsHelper
     else                       "failed"
     end
   end
+
+  # What happened, in words. "blocked" never ran, so saying "failed" would imply it tried.
+  def activity_headline(deployment)
+    case deployment.status
+    when "succeeded" then deployment.rollback? ? "Rolled back" : "Deployed"
+    when "failed"    then "Deploy failed"
+    when "blocked"   then "Deploy refused by preflight"
+    when "cancelled" then "Deploy cancelled"
+    else                  "Deploying"
+    end
+  end
+
+  # WHY, only when we actually know. An unclassified failure says nothing rather than
+  # guessing "your code" — a wrong accusation costs more than a blank line.
+  def activity_reason(deployment)
+    if deployment.status == "blocked"
+      blockers = deployment.preflight_blockers
+      return blockers.present? ? "Gate said no: #{Array(blockers).join(', ')}" : "A preflight gate refused it"
+    end
+
+    case deployment.cause_class
+    when "infrastructure" then "Infrastructure, not app code — the host, registry, or Conductor itself"
+    when "app_code"       then "The app failed to build, migrate, or boot"
+    end
+  end
 end
