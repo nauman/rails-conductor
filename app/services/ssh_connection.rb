@@ -6,9 +6,17 @@ class SshConnection
 
   attr_reader :server, :error
 
-  def initialize(server)
+  # `user:` overrides the login user (defaults to the server's ssh_user). Used by
+  # provisioning orchestrations that must verify a freshly-created identity
+  # (e.g. deploy) over SSH before committing to it.
+  def initialize(server, user: nil)
     @server = server
+    @login_user = user
     @error = nil
+  end
+
+  def login_user
+    @login_user.presence || server.ssh_user_or_default
   end
 
   def test
@@ -29,7 +37,7 @@ class SshConnection
     begin
       Net::SSH.start(
         server.ip_address,
-        server.ssh_user_or_default,
+        login_user,
         **ssh_options
       ) do |ssh|
         @output = ssh.exec!(command)
@@ -61,7 +69,7 @@ class SshConnection
 
     Net::SSH.start(
       server.ip_address,
-      server.ssh_user_or_default,
+      login_user,
       **ssh_options
     ) do |ssh|
       channel = ssh.open_channel do |ch|
@@ -109,7 +117,7 @@ class SshConnection
 
     Net::SSH.start(
       server.ip_address,
-      server.ssh_user_or_default,
+      login_user,
       **ssh_options
     ) do |ssh|
       channel = ssh.open_channel do |ch|
@@ -153,7 +161,7 @@ class SshConnection
 
     Net::SSH.start(
       server.ip_address,
-      server.ssh_user_or_default,
+      login_user,
       **ssh_options
     ) do |ssh|
       ssh.scp.download!(remote_path, local_path)

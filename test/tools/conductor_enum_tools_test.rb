@@ -88,6 +88,10 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal UnsetEnvVariableTool, ConductorAppConfigTool::ACTIONS["unset_env"]
   end
 
+  test "ACTIONS maps harden to HardenServerTool" do
+    assert_equal HardenServerTool, ConductorServerTool::ACTIONS["harden"]
+  end
+
   test "conductor_app_config action=unset_env removes the env var" do
     app = @org.apps.create!(name: "Appone", deploy_method: "docker")
     app.env_variables.create!(key: "DATABASE_URL", value: "postgres://old", secret: true)
