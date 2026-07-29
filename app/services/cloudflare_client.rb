@@ -15,12 +15,20 @@ class CloudflareClient
     @http = http # injectable for tests: responds to get(path) → parsed Hash
   end
 
-  # GET /user/tokens/verify — is the token live?
+  # Is the token live? Prefer the user-scoped verify endpoint, but fall back to a
+  # real capability probe: an ACCOUNT-owned token is rejected by /user/tokens/verify
+  # ("Invalid API Token") even though it's perfectly valid for zone operations, so
+  # a token that can list zones is live regardless of what that endpoint says.
+  # (Credential#verify_cloudflare! already gates on zones for this reason; this keeps
+  # the client method itself honest so diagnostics/other callers don't misreport.)
   def verify
     body = get("/user/tokens/verify")
-    return failure(body) unless body["success"]
+    return Result.new(ok: true, data: body["result"]) if body["success"]
 
-    Result.new(ok: true, data: body["result"])
+    z = zones
+    return Result.new(ok: true, data: { "status" => "active", "scope" => "account", "zones" => z.data.length }) if z.ok?
+
+    failure(body)
   end
 
   # GET /zones — [{id, name, account_id}], first 50 (enough for our fleets).

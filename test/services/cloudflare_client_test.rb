@@ -14,11 +14,28 @@ class CloudflareClientTest < ActiveSupport::TestCase
     assert_equal "active", res.data["status"]
   end
 
-  test "verify surfaces the Cloudflare error message" do
-    http = FakeHttp.new("/user/tokens/verify" => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] })
+  test "verify surfaces the Cloudflare error when neither the token endpoint nor zones work" do
+    http = FakeHttp.new(
+      "/user/tokens/verify" => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] },
+      "/zones?per_page=50"  => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] }
+    )
     res = CloudflareClient.new("bad", http: http).verify
     refute res.ok?
     assert_match(/Invalid API Token/, res.error)
+  end
+
+  # An account-owned token is rejected by the user-scoped /user/tokens/verify but is
+  # perfectly valid for zone ops — verify must fall back to a zones probe and report
+  # it live, so Conductor never misreports a working account token as invalid.
+  test "verify falls back to a zones probe for an account-owned token" do
+    http = FakeHttp.new(
+      "/user/tokens/verify" => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] },
+      "/zones?per_page=50"  => { "success" => true, "result" => [ { "id" => "z1", "name" => "rubyonrails.link", "account" => { "id" => "acct1" } } ] }
+    )
+    res = CloudflareClient.new("account-token", http: http).verify
+    assert res.ok?, "an account token that can list zones must verify as live"
+    assert_equal 1, res.data["zones"]
+    assert_equal "account", res.data["scope"]
   end
 
   test "zones returns id/name/account_id triples" do
