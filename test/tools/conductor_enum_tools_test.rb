@@ -98,6 +98,31 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal RebootServerTool, ConductorServerTool::ACTIONS["reboot"]
   end
 
+  test "ACTIONS maps server (detail) to ServerDetailTool" do
+    assert_equal ServerDetailTool, ConductorReadTool::ACTIONS["server"]
+  end
+
+  test "conductor_read action=server probe:false returns the full stored detail, no live probes" do
+    key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
+    server = @org.servers.create!(name: "box6", status: "online", ip_address: "192.0.2.6",
+                                  ssh_key: key, ssh_user: "deploy", edge_type: "kamal_proxy",
+                                  last_harden_status: "succeeded", last_update_status: "succeeded")
+    server.apps.create!(name: "App", deploy_method: "docker", domain: "app.example.com")
+
+    res = ConductorReadTool.new(user: @user).call("action" => "server", "server_id" => server.id, "probe" => false)
+    assert res.success?, res.error
+    v = res.value
+    assert_equal "box6", v[:name]
+    assert v[:metrics].is_a?(Hash), "metrics block present"
+    assert_equal "deploy", v[:ssh][:user]
+    assert_equal "kamal_proxy", v[:edge][:type]
+    assert_equal "succeeded", v[:harden][:last_status]
+    assert_equal "app.example.com", v[:apps].first[:domain]
+    refute v.key?(:health), "probe:false must skip the live SSH probes"
+    refute v.key?(:audit)
+    refute v.key?(:storage)
+  end
+
   test "conductor_server action=harden enqueues a background job and returns immediately" do
     key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     server = @org.servers.create!(name: "box6", status: "online", ip_address: "192.0.2.6",
