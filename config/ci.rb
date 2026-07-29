@@ -5,6 +5,11 @@ CI.run do
 
   step "Style: Ruby", "bin/rubocop"
 
+  # Concurrent agents pick the same migration version eventually. Rails only raises when
+  # something loads the migration context, so the failure surfaces as an unrelated red
+  # test; this names it directly and takes a second.
+  step "Schema: Migration versions", "bin/check-migrations"
+
   step "Security: Gem audit", "bin/bundler-audit"
   step "Security: Importmap vulnerability audit", "bin/importmap audit"
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"

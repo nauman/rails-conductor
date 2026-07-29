@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+#
+# Two agents committing to one repo will eventually pick the same migration version.
+# Rails does catch it — ActiveRecord::DuplicateMigrationVersionError — but only when
+# something loads the migration context, so you find out from an unrelated red test
+# minutes later instead of from the thing you just did.
+#
+# The real cause is hand-authored version numbers. `bin/rails g migration` stamps
+# UTC to the second, which collides only if two agents generate inside the same second;
+# a hand-written 20260729000001/2/3 sequence collides whenever two people pick "the next
+# one" on the same day. This checks both that and the shape of the filename.
+migrations = Dir[File.expand_path("../db/**/migrate/*.rb", __dir__)]
+failures = []
+
+by_version = migrations.group_by { |path| File.basename(path)[/\A\d+/] }
+by_version.each do |version, paths|
+  next if version && paths.one?
+
+  if version.nil?
+    failures << "Not a migration filename: #{paths.map { |p| File.basename(p) }.join(', ')}"
+  else
+    failures << "Duplicate migration version #{version}:\n    " +
+                paths.map { |p| p.sub("#{Dir.pwd}/", "") }.join("\n    ")
+  end
+end
+
+# A same-day sequential stamp (…000001) is how the collisions happen. Warn, don't fail:
+# existing ones are already committed and renaming them would be worse.
+handwritten = by_version.keys.compact.select { |v| v.end_with?("000001", "000002", "000003") }
+if handwritten.any? && ENV["CI"].nil?
+  warn "note: #{handwritten.size} migration(s) use a hand-written sequential stamp. " \
+       "Prefer `bin/rails generate migration` — its UTC-to-the-second version is what " \
+       "keeps concurrent agents from colliding."
+end
+
+if failures.any?
+  warn "Migration check FAILED:\n\n#{failures.join("\n\n")}\n"
+  warn "Fix: renumber the newer file (git mv) — versions are ordering, not identity."
+  exit 1
+end
+
+puts "Migrations OK — #{migrations.size} files, no duplicate versions."
