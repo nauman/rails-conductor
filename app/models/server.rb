@@ -1,6 +1,10 @@
 class Server < ApplicationRecord
   PROVIDERS = %w[hetzner digitalocean linode vultr aws gcp azure].freeze
-  STATUSES = %w[online degraded offline].freeze
+  STATUSES = %w[online degraded offline rebooting].freeze
+
+  # How long after a Conductor-initiated reboot we treat the box being unreachable
+  # as expected (status stays "rebooting", no offline alert) rather than an outage.
+  REBOOT_GRACE = 8.minutes
 
   belongs_to :organization, optional: true
   belongs_to :ssh_key, optional: true
@@ -158,11 +162,25 @@ class Server < ApplicationRecord
       load_average: metrics[:load_average],
       status: "online",
       last_seen_at: Time.current,
-      metrics_updated_at: Time.current
+      metrics_updated_at: Time.current,
+      rebooting_at: nil # the box answered — the reboot window is over
     )
   end
 
+  # A Conductor-initiated reboot is in flight: show a transitional state and open
+  # the grace window so the expected unreachability isn't mistaken for an outage.
+  def mark_rebooting!
+    update!(status: "rebooting", rebooting_at: Time.current)
+  end
+
+  # Within the grace window after a reboot we issued — being unreachable is expected.
+  def rebooting_grace? = rebooting_at.present? && rebooting_at > REBOOT_GRACE.ago
+
   def mark_offline!
+    # Don't flip an intentional reboot to "offline" (or alert) while it's still
+    # within the expected-down grace window — that's a false alarm.
+    return if rebooting_grace?
+
     was_online = status != "offline"
     update!(status: "offline", last_seen_at: Time.current)
 

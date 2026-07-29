@@ -161,6 +161,7 @@ class ServersController < ApplicationController
   def reboot
     result = ServerReboot.new(@server).reboot!
     if result.success?
+      @server.mark_rebooting! # transitional state + grace window, so the UI shows "rebooting" now
       redirect_to @server, notice: result.message
     else
       redirect_to @server, alert: result.message

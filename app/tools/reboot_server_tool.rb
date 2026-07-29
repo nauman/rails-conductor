@@ -16,6 +16,11 @@ class RebootServerTool
     result = ServerReboot.new(server).reboot!
     return Result.fail(result.message) unless result.success?
 
+    # Reflect the reboot in the record immediately (transitional state + grace
+    # window), so the UI shows "rebooting" now — not "online" until a poll fails
+    # (which would also fire a false offline alert).
+    server.mark_rebooting!
+
     Result.ok({
       server:        server.name,
       status:        "rebooting",
