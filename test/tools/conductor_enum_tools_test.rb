@@ -84,6 +84,31 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal "production", app.env_variables.find_by(key: "RAILS_ENV").value
   end
 
+  test "ACTIONS maps unset_env to UnsetEnvVariableTool" do
+    assert_equal UnsetEnvVariableTool, ConductorAppConfigTool::ACTIONS["unset_env"]
+  end
+
+  test "conductor_app_config action=unset_env removes the env var" do
+    app = @org.apps.create!(name: "Appone", deploy_method: "docker")
+    app.env_variables.create!(key: "DATABASE_URL", value: "postgres://old", secret: true)
+
+    res = ConductorAppConfigTool.new(user: @user).call(
+      "action" => "unset_env", "app_id" => app.id, "key" => "DATABASE_URL"
+    )
+    assert res.success?, res.error
+    assert_equal true, res.value[:deleted]
+    assert_not app.env_variables.exists?(key: "DATABASE_URL"), "var should be gone"
+  end
+
+  test "conductor_app_config action=unset_env is idempotent for an absent key" do
+    app = @org.apps.create!(name: "Appone", deploy_method: "docker")
+    res = ConductorAppConfigTool.new(user: @user).call(
+      "action" => "unset_env", "app_id" => app.id, "key" => "NOPE"
+    )
+    assert res.success?, res.error
+    assert_equal false, res.value[:deleted]
+  end
+
   test "conductor_database action=register_cluster delegates to RegisterDatabaseClusterTool" do
     @org.servers.create!(name: "db-host", status: "offline")
     res = ConductorDatabaseTool.new(user: @user).call(

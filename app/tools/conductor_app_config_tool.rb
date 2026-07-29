@@ -5,6 +5,7 @@ class ConductorAppConfigTool
 
   ACTIONS = {
     "set_env"         => SetEnvVariableTool,
+    "unset_env"       => UnsetEnvVariableTool,
     "gen_deploy_key"  => GenerateDeployKeyTool,
     "install_webhook" => InstallWebhookTool
   }.freeze
@@ -13,12 +14,13 @@ class ConductorAppConfigTool
     name: "conductor_app_config",
     description: "App configuration. Set `action` to one of: " \
       "set_env (create/update an env var on an app — app_id/app_name, key, value, optional secret), " \
+      "unset_env (remove an env var from an app — app_id/app_name, key; idempotent. Use to drop a manual DATABASE_URL on a dedicated app so the derived DSN takes over), " \
       "gen_deploy_key (generate a read-only SSH deploy key for the app's private repo — app_id/app_name), " \
       "install_webhook (wire push-to-deploy — install a GitHub push webhook pointing at Conductor + enable auto_deploy in one call; needs an org GitHub token — app_id/app_name).",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[set_env gen_deploy_key install_webhook], description: "Which config operation" },
+        action:            { type: "string", enum: %w[set_env unset_env gen_deploy_key install_webhook], description: "Which config operation" },
         app_id:            { type: "integer", description: "target app by id" },
         app_name:          { type: "string",  description: "target app by name" },
         key:               { type: "string",  description: "set_env: variable name (UPPER_SNAKE_CASE)" },
