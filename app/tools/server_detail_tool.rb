@@ -43,7 +43,15 @@ class ServerDetailTool
       audit:   { last_status: server.last_audit_status, last_at: ts(server.last_audit_at) },
       updates: { last_status: server.last_update_status, last_scope: server.last_update_scope, last_at: ts(server.last_update_at) },
       harden:  { last_status: server.last_harden_status, last_at: ts(server.last_harden_at) },
-      cron_jobs: (server.cron_jobs rescue []),
+      # Scheduled jobs. NOTE: the model has no app_id — an app-scoped job (Heroku-
+      # Scheduler style) is just a command that docker-execs into the app container,
+      # so `scope` is INFERRED here until CronJob carries a real app association
+      # (backlog). Server-scoped = a raw host cron.
+      cron_jobs: (server.cron_jobs.map do |c|
+        { name: c.name, schedule: c.schedule, cron: c.cron_expression, enabled: c.enabled?,
+          scope: (c.command.to_s.match?(/docker|cid=/) ? "app" : "server"),
+          command: c.command.to_s[0, 100] }
+      end rescue []),
       ssh: {
         user:       server.ssh_user_or_default,
         port:       server.ssh_port_or_default,
