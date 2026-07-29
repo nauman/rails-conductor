@@ -49,7 +49,9 @@ module ServerSudo
       CONDUCTOR
       sudo tee #{REBOOT} >/dev/null <<'CONDUCTOR'
       #!/bin/sh
-      exec systemctl reboot
+      # Schedule a few seconds out so the triggering SSH command returns cleanly
+      # instead of dying with the connection as the box goes down.
+      exec systemd-run --quiet --on-active=3s --timer-property=AccuracySec=100ms systemctl reboot
       CONDUCTOR
       sudo chmod 0755 #{WRAPPERS.join(' ')}
       sudo chown root:root #{WRAPPERS.join(' ')}

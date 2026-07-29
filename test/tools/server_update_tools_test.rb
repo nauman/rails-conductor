@@ -183,6 +183,43 @@ class ServerUpdateToolsTest < ActiveSupport::TestCase
     assert_equal "all", result.value[:scope]
   end
 
+  test "apply_updates scope=all defaults to rebooting when a kernel update requires it" do
+    result = ApplyServerUpdatesTool.new(user: @user).call("server_id" => @server.id, "scope" => "all")
+    assert_equal true, result.value[:will_reboot]
+  end
+
+  test "apply_updates scope=security never reboots" do
+    result = ApplyServerUpdatesTool.new(user: @user).call("server_id" => @server.id, "scope" => "security")
+    assert_equal false, result.value[:will_reboot]
+  end
+
+  test "apply_updates reboot:false opts out of the scope=all auto-reboot" do
+    result = ApplyServerUpdatesTool.new(user: @user).call("server_id" => @server.id, "scope" => "all", "reboot" => false)
+    assert_equal false, result.value[:will_reboot]
+  end
+
+  test "reboot action delegates to ServerReboot" do
+    fake = Struct.new(:success?, :message).new(true, "Reboot sent to ssd-node.")
+    rebooter = Object.new
+    rebooter.define_singleton_method(:reboot!) { fake }
+    ServerReboot.stub(:new, ->(*) { rebooter }) do
+      result = ConductorServerTool.new(user: @user).call("action" => "reboot", "server_id" => @server.id)
+      assert result.success?, result.error
+      assert_equal "rebooting", result.value[:status]
+    end
+  end
+
+  test "reboot action surfaces a ServerReboot failure (e.g. no passwordless sudo)" do
+    fake = Struct.new(:success?, :message).new(false, "needs passwordless sudo")
+    rebooter = Object.new
+    rebooter.define_singleton_method(:reboot!) { fake }
+    ServerReboot.stub(:new, ->(*) { rebooter }) do
+      result = ConductorServerTool.new(user: @user).call("action" => "reboot", "server_id" => @server.id)
+      assert result.failure?
+      assert_includes result.error, "sudo"
+    end
+  end
+
   test "install_packages requires package names" do
     result = InstallServerPackagesTool.new(user: @user).call("server_id" => @server.id, "packages" => "")
     assert result.failure?

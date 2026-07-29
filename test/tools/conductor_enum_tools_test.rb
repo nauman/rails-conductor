@@ -94,6 +94,10 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal HardenServerTool, ConductorServerTool::ACTIONS["harden"]
   end
 
+  test "ACTIONS maps reboot to RebootServerTool" do
+    assert_equal RebootServerTool, ConductorServerTool::ACTIONS["reboot"]
+  end
+
   test "conductor_server action=harden enqueues a background job and returns immediately" do
     key = SshKey.create!(name: "k", private_key: valid_private_key, organization: @org)
     server = @org.servers.create!(name: "box6", status: "online", ip_address: "192.0.2.6",
