@@ -30,7 +30,10 @@ class AppTransferRunner
         source_server: @source, source_url: source_url,
         target_server: @target, target_url: target_url,
         credential: @credential, bucket: @bucket, provider: @provider,
-        object_key: "transfers/#{@app.slug}/#{@t.id}.sql.gz"
+        object_key: "transfers/#{@app.slug}/#{@t.id}.sql.gz",
+        # Source and target dedicated DBs resolve only by container DNS on each
+        # box's Docker network — run the pg client there, not on the host.
+        network: @app.deploy_network
       ).run!
     end
 

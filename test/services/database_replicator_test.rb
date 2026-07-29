@@ -45,6 +45,25 @@ class DatabaseReplicatorTest < ActiveSupport::TestCase
     assert(dst.commands.any? { |c| c.match?(/gunzip -c .* \| psql .*app-db/) })
   end
 
+  # A colocated dedicated DB resolves only by container DNS on the app's Docker
+  # network, so the pg client must run there — not on the host, which fails with
+  # "could not translate host name". aws/gzip stay on the host.
+  test "runs the pg client inside the Docker network when one is given" do
+    src = FakeSsh.new
+    dst = FakeSsh.new
+    assert replicate(source_ssh: src, target_ssh: dst, network: "kamal")
+
+    dump = src.commands.find { |c| c.include?("pg_dump") }
+    assert_match(%r{docker run --rm --network kamal postgres:16-alpine pg_dump .*old-db}, dump)
+    assert_includes dump, "| gzip", "gzip still runs on the host"
+
+    restore = dst.commands.find { |c| c.include?("psql") }
+    assert_match(%r{gunzip -c .* \| docker run --rm -i --network kamal postgres:16-alpine psql .*app-db}, restore)
+
+    # The R2 transfer stays on the host — only the DB dialogue moves to the network.
+    assert(src.commands.any? { |c| c.include?("aws s3 cp") && !c.include?("docker run") })
+  end
+
   test "raises with the failing step when a command fails" do
     src = FakeSsh.new(fail_on: "aws s3 cp") # upload fails
     err = assert_raises(DatabaseReplicator::Error) { replicate(source_ssh: src, target_ssh: FakeSsh.new) }

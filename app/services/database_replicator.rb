@@ -17,7 +17,8 @@ class DatabaseReplicator
 
   def initialize(source_server:, source_url:, target_server:, target_url:,
                  credential:, bucket:, object_key:, provider: "cloudflare_r2",
-                 source_ssh: nil, target_ssh: nil)
+                 source_ssh: nil, target_ssh: nil,
+                 network: nil, pg_image: PostgresContainerClient::DEFAULT_IMAGE)
     @source_server = source_server
     @source_url    = source_url
     @target_server = target_server
@@ -28,6 +29,15 @@ class DatabaseReplicator
     @provider      = provider
     @source_ssh    = source_ssh
     @target_ssh    = target_ssh
+    # When set, run the Postgres client (pg_dump/psql) INSIDE this Docker network
+    # rather than on the host. A colocated dedicated DB (`<app>-db`) is reachable
+    # only by container DNS on the app's network — the host can't resolve it — so
+    # host-run psql fails with "could not translate host name". Running the client
+    # in a throwaway container on that network makes both the shared source and the
+    # dedicated target resolve; using the DB's own image also matches client to
+    # server version (pg_dump refuses a server newer than the client).
+    @network       = network.presence
+    @pg_image      = pg_image
     @log = +""
   end
 
@@ -50,7 +60,7 @@ class DatabaseReplicator
 
   def dump_and_upload!
     tmp = remote_tmp
-    run_on(source_ssh, "pg_dump #{esc(@source_url)} | gzip > #{tmp}", "dump source database")
+    run_on(source_ssh, "#{pg_dump_cmd(@source_url)} | gzip > #{tmp}", "dump source database")
     run_on(source_ssh, "#{aws_env} aws s3 cp #{tmp} s3://#{@bucket}/#{@object_key}#{endpoint_flag}",
            "upload dump to #{@provider}")
     source_ssh.execute_with_status("rm -f #{tmp}")
@@ -60,8 +70,25 @@ class DatabaseReplicator
     tmp = remote_tmp
     run_on(target_ssh, "#{aws_env} aws s3 cp s3://#{@bucket}/#{@object_key} #{tmp}#{endpoint_flag}",
            "download dump on target")
-    run_on(target_ssh, "gunzip -c #{tmp} | psql #{esc(@target_url)}", "restore into target database")
+    run_on(target_ssh, "gunzip -c #{tmp} | #{psql_cmd(@target_url)}", "restore into target database")
     target_ssh.execute_with_status("rm -f #{tmp}")
+  end
+
+  # pg_dump reads from its args (no stdin); psql consumes the gunzipped dump on
+  # stdin, so its container needs `-i`. Both stream to/from the host pipe, so the
+  # dump file, gzip/gunzip and aws all stay on the host — only the DB dialogue
+  # moves onto the network.
+  def pg_dump_cmd(url) = "#{docker_pg} pg_dump #{esc(url)}".strip
+  def psql_cmd(url)    = "#{docker_pg(interactive: true)} psql #{esc(url)}".strip
+
+  # The `docker run` prefix that puts a one-shot client on the app's network, or
+  # "" to fall back to the host binary when no network is configured (tests, and
+  # any host-reachable DB).
+  def docker_pg(interactive: false)
+    return "" if @network.blank?
+
+    flags = interactive ? "--rm -i" : "--rm"
+    "docker run #{flags} --network #{esc(@network)} #{esc(@pg_image)}"
   end
 
   def run_on(ssh, command, label)

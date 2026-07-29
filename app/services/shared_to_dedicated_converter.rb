@@ -102,7 +102,10 @@ class SharedToDedicatedConverter
       DatabaseReplicator.new(
         source_server: @app.server, source_url: source_url,
         target_server: @app.server, target_url: target_url,
-        credential: credential, bucket: bucket, object_key: key, provider: provider
+        credential: credential, bucket: bucket, object_key: key, provider: provider,
+        # Both the shared source and the dedicated `<app>-db` target resolve only
+        # by container DNS on the app's Docker network — run the pg client there.
+        network: @app.deploy_network
       )
     end
     replicator.run!
