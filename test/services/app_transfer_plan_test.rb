@@ -66,6 +66,24 @@ class AppTransferPlanTest < ActiveSupport::TestCase
     assert(plan.warnings.any? { |w| w.match?(/domain/i) })
   end
 
+  # The gap this closes: the executor refuses shared-DB apps, but the dry-run used
+  # to emit no warning — it read as "ready" when a confirmed transfer would bounce.
+  test "warns that a shared-DB app must be converted before the transfer will run" do
+    @app.update!(database_mode: "shared")
+    assert(plan.warnings.any? { |w| w.match?(/convert_database/i) && w.match?(/shared/i) },
+           "the dry-run must surface that the executor refuses shared-DB apps")
+  end
+
+  test "warns that a non-Kamal app cannot be transferred yet" do
+    @app.update!(deploy_method: "docker")
+    assert(plan.warnings.any? { |w| w.match?(/Kamal only/i) })
+  end
+
+  test "a ready app (kamal + dedicated colocated) gets no executor-block warning" do
+    assert_empty(plan.warnings.select { |w| w.match?(/will refuse/i) },
+                 "a transfer-ready app should not be told the executor will refuse it")
+  end
+
   test "refuses a transfer to the same server" do
     assert_raises(AppTransferPlan::InvalidTarget) { plan(target: @source) }
   end

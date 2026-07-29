@@ -94,7 +94,26 @@ class AppTransferPlan
     end
     warnings << "App has no domain to repoint — add one on the target edge before cut-over." if app.domain.blank?
     warnings << "Dedicated replicate across differing Postgres majors uses dump/restore — verify client versions." if app.dedicated_db?
+    warnings.concat(executor_block_warnings)
     warnings
+  end
+
+  # The dry-run shows the intended change set, but the EXECUTOR (TransferAppTool)
+  # will refuse a move it can't complete — Kamal-only, dedicated + colocated DB.
+  # Surface those refusals HERE so the plan doesn't read as "ready" when a confirmed
+  # transfer would immediately bounce. Order + wording mirror the executor's
+  # executor_unsupported_reason so the operator sees the same blocker before and after.
+  def executor_block_warnings
+    blocks = []
+    blocks << "Transfer executes via Kamal only for now — #{app.slug} deploys via #{app.deploy_method}; the confirmed transfer will refuse." unless app.kamal?
+    unless app.dedicated_db?
+      blocks << "#{app.slug} is a shared-cluster DB — the confirmed transfer will refuse it. " \
+                "Run conductor_app action=convert_database FIRST (shared → dedicated colocated, reversible)."
+    end
+    if app.dedicated_db? && !app.colocated_db?
+      blocks << "#{app.slug} is a dedicated_host DB — the executor supports colocated dedicated DBs only for now; the confirmed transfer will refuse."
+    end
+    blocks
   end
 
   def step(phase, action, detail) = { phase: phase, action: action, detail: detail }
