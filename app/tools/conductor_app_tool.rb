@@ -32,7 +32,7 @@ class ConductorAppTool
         action:            { type: "string", enum: %w[create update deploy rollback sync_status convert_database transfer_plan transfer], description: "Which app operation" },
         target_server_id:   { type: "integer", description: "transfer_plan/transfer: destination server by id (or target_server_name)" },
         target_server_name: { type: "string",  description: "transfer_plan/transfer: destination server by name (or target_server_id)" },
-        mode:              { type: "string",  enum: %w[transfer clone], description: "transfer: 'transfer' (move, drains source) or 'clone' (copy, source stays live). Default transfer." },
+        mode:              { type: "string",  enum: %w[transfer clone stage], description: "transfer: 'transfer' (move + cut over + drain source), 'clone' (cut over, source stays live), or 'stage' (copy + deploy + publish, STOP before DNS so you can verify the target first). Default transfer." },
         confirm:           { type: "boolean", description: "transfer: required to execute. Without it, returns the dry-run plan and does NOTHING — a transfer redeploys, copies the DB, repoints DNS, and drains the source." },
         credential_id:     { type: "integer", description: "transfer (confirm): object-store (R2/S3) credential id used to copy the database" },
         bucket:            { type: "string",  description: "transfer (confirm): object-store bucket to stage the DB copy through" },

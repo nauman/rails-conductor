@@ -68,6 +68,27 @@ class AppTransferRunnerTest < ActiveSupport::TestCase
     assert t.reload.succeeded?
   end
 
+  # stage = the verify-before-cutover mode: copy + deploy + publish, then STOP.
+  # No cutover means DNS is never touched, so we can verify the app on the target
+  # before flipping traffic. Source stays fully live (like clone, but earlier).
+  test "stage runs database+compute+edge and stops before cutover (no DNS change)" do
+    fc = FakeCollaborators.new
+    t = transfer(mode: "stage")
+    assert AppTransferRunner.new(t, collaborators: fc).run
+
+    assert_equal %i[database compute edge], fc.calls
+    refute_includes fc.calls, :cutover, "stage must never repoint DNS"
+    refute_includes fc.calls, :drain
+    assert t.reload.succeeded?
+    assert_equal "edge", t.phase
+  end
+
+  test "stage leaves App#server on the source (source stays live)" do
+    t = transfer(mode: "stage")
+    AppTransferRunner.new(t, collaborators: FakeCollaborators.new).run
+    assert_equal @source, @app.reload.server, "stage must not move the app"
+  end
+
   test "a failing phase marks the transfer failed at that phase and stops" do
     fc = FailAtDatabase.new
     t = transfer

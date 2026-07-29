@@ -18,15 +18,14 @@ class TransferAppTool
     target = find_target(input)
     return Result.fail("Target server not found: #{input['target_server_id'] || input['target_server_name']}") unless target
 
-    mode = %w[transfer clone].include?(input["mode"]) ? input["mode"] : "transfer"
+    mode = %w[transfer clone stage].include?(input["mode"]) ? input["mode"] : "transfer"
 
     # Preview (dry-run) unless explicitly confirmed — never mutate on a bare call.
     unless truthy?(input["confirm"])
       plan = AppTransferPlan.new(app: app, target_server: target).call
       return Result.ok(plan.to_h.merge(
         status: "confirmation_required", action_taken: false, mode: mode,
-        message: "This will #{mode} #{app.name} #{app.server&.name} → #{target.name}: redeploy, copy the DB, " \
-                 "publish the edge, repoint DNS#{mode == 'transfer' ? ', then drain the source' : ' (source stays live)'}. " \
+        message: "This will #{mode} #{app.name} #{app.server&.name} → #{target.name}: #{mode_effect(mode)}. " \
                  "Re-call with confirm: true. (credential_id + bucket are OPTIONAL — derived from the app's own R2 config if omitted.)",
         _organization: app.organization
       ))
@@ -122,4 +121,17 @@ class TransferAppTool
   end
 
   def truthy?(value) = [ true, "true", "1", 1 ].include?(value)
+
+  # Plain-language effect of each mode for the confirm-preview. stage is the only
+  # one that leaves DNS untouched — spell that out so an operator isn't surprised.
+  def mode_effect(mode)
+    case mode
+    when "stage"
+      "copy the DB, deploy, and publish the edge, then STOP before DNS — source stays live so you can verify the target first"
+    when "clone"
+      "copy the DB, deploy, publish the edge, and repoint DNS (source stays live)"
+    else
+      "copy the DB, deploy, publish the edge, repoint DNS, then drain the source"
+    end
+  end
 end

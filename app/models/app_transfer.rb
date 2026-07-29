@@ -2,7 +2,10 @@
 # the spec-26 Part 3 pipeline. AppTransferRunner drives it through the phases and
 # records progress here so a crashed run is visible and rollback-able.
 class AppTransfer < ApplicationRecord
-  MODES    = %w[transfer clone].freeze
+  # transfer = full move (cut over + drain the source). clone = cut over but keep
+  # the source live. stage = copy + deploy + publish and STOP before cut-over, so
+  # the target can be verified before any DNS change (source stays fully live).
+  MODES    = %w[transfer clone stage].freeze
   STATUSES = %w[pending running succeeded failed].freeze
   # The ordered pipeline. `database` (provision the target DB + replicate data)
   # runs BEFORE `compute` (deploy to the target) so the app boots against a
@@ -26,14 +29,22 @@ class AppTransfer < ApplicationRecord
 
   def clone?     = mode == "clone"
   def transfer?  = mode == "transfer"
+  def stage?     = mode == "stage"
   def running?   = status == "running"
   def succeeded? = status == "succeeded"
   def failed?    = status == "failed"
   def done?      = succeeded? || failed?
 
-  # The phases this run executes: a clone skips `drain` so the source stays live.
+  # The phases this run executes:
+  #   stage    → database, compute, edge          (stop before DNS; verify first)
+  #   clone    → database, compute, edge, cutover  (cut over, source stays live)
+  #   transfer → all five                          (cut over, then drain source)
   def planned_phases
-    clone? ? PHASES - [ "drain" ] : PHASES
+    case mode
+    when "stage" then PHASES - %w[cutover drain]
+    when "clone" then PHASES - %w[drain]
+    else PHASES
+    end
   end
 
   def append_log(line)
