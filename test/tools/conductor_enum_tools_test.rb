@@ -109,7 +109,8 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
                                   last_harden_status: "succeeded", last_update_status: "succeeded")
     server.apps.create!(name: "App", deploy_method: "docker", domain: "app.example.com")
 
-    res = ConductorReadTool.new(user: @user).call("action" => "server", "server_id" => server.id, "probe" => false)
+    # Default (no probe) is the fast stored summary — no live SSH.
+    res = ConductorReadTool.new(user: @user).call("action" => "server", "server_id" => server.id)
     assert res.success?, res.error
     v = res.value
     assert_equal "box6", v[:name]
@@ -118,9 +119,8 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
     assert_equal "kamal_proxy", v[:edge][:type]
     assert_equal "succeeded", v[:harden][:last_status]
     assert_equal "app.example.com", v[:apps].first[:domain]
-    refute v.key?(:health), "probe:false must skip the live SSH probes"
-    refute v.key?(:audit)
-    refute v.key?(:storage)
+    assert v[:audit].key?(:last_status), "stored audit rollup present without a live probe"
+    refute v.key?(:live), "default must skip the live SSH probes (no 504 risk)"
   end
 
   test "conductor_server action=harden enqueues a background job and returns immediately" do

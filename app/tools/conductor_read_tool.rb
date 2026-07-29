@@ -20,7 +20,7 @@ class ConductorReadTool
     name: "conductor_read",
     description: "Read-only fleet visibility. Set `action` to one of: " \
       "fleet_status (all servers + their apps/health, incl. cpu/memory/disk/load/uptime), " \
-      "server (ONE server's full detail — everything the UI shows: metrics, deep health, security audit, storage, privileged-ops readiness, last update/harden, cron jobs, ssh + edge, apps. server_id/server_name; runs live SSH probes — pass probe:false for stored-only/fast), " \
+      "server (ONE server's detail — metrics, stored audit/update/harden rollups, cron jobs, ssh + edge, apps. server_id/server_name. Fast by default; pass probe:true to ALSO run live SSH probes for the deep panels — health, audit checks, storage, privileged-ops readiness — under a `live` key, slower and can time out on a loaded box), " \
       "situation (RESUME point — in-flight ops, needs-attention worklist, recent events; call first on reconnect), " \
       "logs (recent script-run/deployment logs — server_id, script_run_id, limit), " \
       "deployment (one deployment's status + log — deployment_id, app_id, app_name, tail), " \
@@ -32,7 +32,7 @@ class ConductorReadTool
       properties: {
         action:          { type: "string", enum: %w[fleet_status server situation logs deployment transfer cloudflare], description: "Which read to perform" },
         server_name:     { type: "string",  description: "server: target server by name" },
-        probe:           { type: "boolean", description: "server: run live SSH probes (health/audit/storage/sudo). Default true; false = stored fields only (fast)" },
+        probe:           { type: "boolean", description: "server: also run live SSH probes (health/audit/storage/sudo) under `live`. Default false (fast, stored-only); true is slower + can time out on a loaded box" },
         transfer_id:     { type: "integer", description: "transfer: a specific app-transfer by id" },
         recent_limit:    { type: "integer", description: "situation: recent terminal deployments to include (default 8, max 25)" },
         organization_id: { type: "integer", description: "Optional org scope (fleet_status, logs)" },

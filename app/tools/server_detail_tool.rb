@@ -15,7 +15,10 @@ class ServerDetailTool
     server = find_server(input)
     return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless server
 
-    probe = input.key?("probe") ? (input["probe"] != false) : true
+    # Default to the FAST stored summary — the live SSH probes (health/audit/
+    # storage/sudo) are several round-trips and can blow the gateway timeout on a
+    # loaded box. Opt into them with probe:true when you need the deep panels.
+    probe = input["probe"] == true
     ssh   = SshConnection.new(server)
 
     data = {
@@ -35,6 +38,9 @@ class ServerDetailTool
         updated_at: ts(server.metrics_updated_at),
         last_seen:  ts(server.last_seen_at)
       },
+      # Stored rollups (instant) — the badge state the UI shows before any live
+      # re-check. Pass probe:true to add the live health/audit/storage/sudo detail.
+      audit:   { last_status: server.last_audit_status, last_at: ts(server.last_audit_at) },
       updates: { last_status: server.last_update_status, last_scope: server.last_update_scope, last_at: ts(server.last_update_at) },
       harden:  { last_status: server.last_harden_status, last_at: ts(server.last_harden_at) },
       cron_jobs: (server.cron_jobs rescue []),
@@ -49,10 +55,12 @@ class ServerDetailTool
     }
 
     if probe
-      data[:health]         = safe { health(server, ssh) }
-      data[:audit]          = safe { audit(server, ssh) }
-      data[:storage]        = safe { storage(server, ssh) }
-      data[:privileged_ops] = safe { { ready: ServerSudo.ready?(ssh) } }
+      data[:live] = {
+        health:         safe { health(server, ssh) },
+        audit:          safe { audit(server, ssh) },
+        storage:        safe { storage(server, ssh) },
+        privileged_ops: safe { { ready: ServerSudo.ready?(ssh) } }
+      }
     end
 
     Result.ok(data)
