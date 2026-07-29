@@ -31,6 +31,11 @@ class DashboardIncidentsTest < ActionDispatch::IntegrationTest
     css_select(%(*[data-incident-resource="#{app.name} deployment"]))
   end
 
+  # The apps table was folded into the Fleet status panel, which keys rows by app name.
+  def fleet_row_for(app)
+    css_select(%(*[data-fleet-app="#{app.name}"]))
+  end
+
   test "a failure that a later deploy fixed raises no incident" do
     app = app_with("failed", "failed", "succeeded")
 
@@ -75,19 +80,19 @@ class DashboardIncidentsTest < ActionDispatch::IntegrationTest
 
   # The panel used to list the last 10 DEPLOYMENTS, so one app that failed twice and then
   # shipped cleanly took three rows and read as three problems. The fleet shows state.
-  test "the apps panel shows one row per app, whatever its deploy history" do
+  test "an app appears once, whatever its deploy history" do
     app = app_with("failed", "failed", "succeeded")
 
     get dashboard_path
-    assert_equal 1, css_select(%(*[data-app-row="#{app.slug}"])).size
-    assert_match(/deployed/, css_select(%(*[data-app-row="#{app.slug}"])).first.text)
+    assert_equal 1, fleet_row_for(app).size, "two failures and a fix is still one app"
+    assert_match(/deployed/, fleet_row_for(app).first.text)
   end
 
   test "an app that never deployed here says so rather than looking healthy" do
     app = @org.apps.create!(name: "Untouched", slug: "untouched-#{SecureRandom.hex(2)}")
 
     get dashboard_path
-    row = css_select(%(*[data-app-row="#{app.slug}"])).first
+    row = fleet_row_for(app).first
     assert row, "an app with no deploys still belongs on the fleet"
     assert_match(/not deployed here/i, row.text)
   end
@@ -98,16 +103,19 @@ class DashboardIncidentsTest < ActionDispatch::IntegrationTest
                             created_at: 1.minute.ago)
 
     get dashboard_path
-    assert_match(/not app code/i, css_select(%(*[data-app-row="#{app.slug}"])).first.text)
+    assert_match(/not app code/i, fleet_row_for(app).first.text)
   end
 
-  test "apps needing a decision are listed before healthy ones" do
+  # Row ORDER stopped carrying meaning when the apps table was folded into Fleet status,
+  # which groups by server. A broken app is found by its badge and by the incident list —
+  # so assert the thing that is actually true rather than the thing that used to be.
+  test "a broken app is marked wherever it sits in the fleet" do
     healthy = app_with("succeeded")
     broken = app_with("failed")
 
     get dashboard_path
-    rows = css_select("*[data-app-row]").map { |r| r["data-app-row"] }
-    assert_operator rows.index(broken.slug), :<, rows.index(healthy.slug),
-                    "the broken app should not be below the healthy one"
+    assert_match(/failed/i, fleet_row_for(broken).first.text)
+    assert_match(/deployed/i, fleet_row_for(healthy).first.text)
+    assert_equal 1, deployment_incidents_for(broken).size, "and it raises exactly one incident"
   end
 end

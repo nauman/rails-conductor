@@ -55,6 +55,15 @@
                   <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pl-4 text-2xs text-muted">
                     <span data-health-dimension="desired">Desired: <strong class="font-medium text-body"><%= health.desired_state.humanize %></strong></span>
                     <span data-health-dimension="observed">Observed: <strong class="font-medium text-body"><%= health.monitoring_state == 'unsupported' ? 'Not monitored' : health.observed_state.humanize %></strong></span>
+                    <%# Runtime and deploy state are different questions — "it's running" and
+                        "the last deploy failed" are both true more often than you'd like. One
+                        row answers both rather than two tables disagreeing. %>
+                    <span data-health-dimension="deploy">
+                      <%= deploy_health_badge(app) %>
+                      <% if (sha = app.last_deployment&.commit_sha).present? %>
+                        <code class="ml-1 rounded bg-fill px-1 py-0.5 font-mono text-2xs text-body"><%= sha.first(7) %></code>
+                      <% end %>
+                    </span>
                     <span data-health-dimension="monitoring" class="<%= health.monitoring_state.in?(%w[failed stale unavailable]) ? 'text-warning' : '' %>"><%= health.monitoring_label %></span>
                   </div>
                 </div>

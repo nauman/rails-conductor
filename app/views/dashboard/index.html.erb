@@ -7,12 +7,26 @@
   <div class="max-w-7xl mx-auto px-4 py-10">
     <div class="grid gap-8 lg:grid-cols-3">
       <div class="lg:col-span-2">
-        <span class="inline-flex items-center gap-2 rounded-pill bg-primary-tint px-3 py-1 text-2xs font-semibold uppercase tracking-label text-primary">
-          Live Ops
+        <%# An ops page opens with the state of the fleet, not a promise about it. The
+            headline is a sentence about right now — and when nothing is wrong it says so,
+            which is the only time "all clear" means anything. %>
+        <span class="inline-flex items-center gap-2 rounded-pill px-3 py-1 text-2xs font-semibold uppercase tracking-label <%= @issues.any? { |i| i[:severity] == 'critical' } ? 'bg-danger-tint text-danger-deep' : @issues.any? ? 'bg-warning-tint text-warning' : 'bg-primary-tint text-primary' %>">
+          <%= current_organization.name %>
         </span>
-        <h1 class="mt-4 font-display text-4xl text-ink tracking-display sm:text-5xl">Monitor the rails stack at a glance.</h1>
+        <h1 class="mt-4 font-display text-4xl text-ink tracking-display sm:text-5xl">
+          <% criticals = @issues.count { |i| i[:severity] == "critical" } %>
+          <% if criticals.positive? %>
+            <%= pluralize(criticals, "thing") %> need<%= "s" if criticals == 1 %> you now.
+          <% elsif @issues.any? %>
+            Nothing urgent, <%= pluralize(@issues.size, "thing") %> to look at.
+          <% else %>
+            Everything is running.
+          <% end %>
+        </h1>
         <p class="mt-3 max-w-2xl text-base text-muted">
-          Track VM health, backup status, and app deployments in one place. Keep everything calm, clean, and fast.
+          <%= pluralize(@stats[:apps_count], "app") %> across <%= pluralize(@stats[:servers_count], "server") %><%=
+            ", #{@apps_failing.size} failing" if @apps_failing.any? %>.
+          <%= "Last deploy #{time_ago_in_words(@recent_deployments.first.created_at)} ago." if @recent_deployments.any? %>
         </p>
         <div class="mt-6 grid gap-4 sm:grid-cols-4">
           <%= link_to servers_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
@@ -31,10 +45,17 @@
             <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:apps_count] %></div>
             <div class="mt-1 text-2xs text-muted"><%= @stats[:apps_running] %> running</div>
           <% end %>
-          <%= link_to backups_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
-            <div class="text-2xs font-semibold uppercase tracking-label text-muted">Backups</div>
-            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:backups_completed] %></div>
-            <div class="mt-1 text-2xs text-muted">completed</div>
+          <%# Zero backups is not a score, it's the most dangerous fact on the page. A
+              number rendered like every other number reads as "nothing to see". %>
+          <% unprotected = @apps.count { |a| a.naggable? && a.backups.empty? } %>
+          <%= link_to backups_path, class: "rounded-large border bg-surface p-4 shadow-soft transition-colors #{unprotected.positive? ? 'border-danger/40 hover:border-danger' : 'border-border hover:border-border-strong'}" do %>
+            <div class="text-2xs font-semibold uppercase tracking-label <%= unprotected.positive? ? 'text-danger' : 'text-muted' %>">Backups</div>
+            <div class="mt-2 font-mono font-display text-2xl tracking-display <%= unprotected.positive? ? 'text-danger' : 'text-ink' %>">
+              <%= @stats[:apps_count] - unprotected %><span class="text-base text-muted">/<%= @stats[:apps_count] %></span>
+            </div>
+            <div class="mt-1 text-2xs <%= unprotected.positive? ? 'text-danger' : 'text-muted' %>">
+              <%= unprotected.positive? ? "#{unprotected} unprotected" : "all protected" %>
+            </div>
           <% end %>
           <%= link_to credentials_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
             <div class="text-2xs font-semibold uppercase tracking-label text-muted">Credentials</div>
@@ -178,45 +199,9 @@
     </div>
   <% end %>
 
-  <%# Apps — state, not history (spec 08). The old panel listed the last 10 DEPLOYMENTS,
-      so an app that failed twice and then shipped cleanly filled three rows and read as
-      three problems. What an operator needs on a fleet page is "where does each app
-      stand right now"; the run-by-run history belongs on the app's own page. %>
-  <% if @apps.any? %>
-    <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="font-display text-xl text-ink">Apps</h2>
-          <p class="text-sm text-muted">
-            <% if @apps_failing.any? %>
-              <span class="text-danger font-medium"><%= pluralize(@apps_failing.size, "app") %> failing now</span> ·
-            <% end %>
-            <%= @apps.count %> total<%= " · #{@apps_never_deployed.size} never deployed here" if @apps_never_deployed.any? %>
-          </p>
-        </div>
-        <%= link_to "View all", apps_path, class: "text-2xs font-semibold uppercase tracking-label text-faint hover:text-muted" %>
-      </div>
-      <div class="mt-4 overflow-x-auto">
-        <table class="min-w-full">
-          <thead>
-            <tr class="text-2xs font-semibold uppercase tracking-label text-muted">
-              <th class="pb-2 text-left">App</th>
-              <th class="pb-2 text-left">Server</th>
-              <th class="pb-2 text-left">Runtime</th>
-              <th class="pb-2 text-left">Last deploy</th>
-              <th class="pb-2 text-left">Release</th>
-              <th class="pb-2 text-right">Details</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            <% @dashboard_apps.each do |app| %>
-              <%= render "dashboard/app_row", app: app %>
-            <% end %>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  <% end %>
+  <%# The apps table lived here. It has been folded INTO Fleet status above: two tables
+      answering overlapping questions is how a dashboard starts contradicting itself, and
+      the fleet panel already had per-server grouping and the actions. %>
 
   <% if @servers.any? %>
     <div>
