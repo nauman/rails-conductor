@@ -175,6 +175,14 @@ class Deployment < ApplicationRecord
     AlertMailer.deployment_failed(self).deliver_later
   end
 
+  # Reap a stuck deployment: flip it to the terminal `cancelled` state so it leaves
+  # the one-active-deploy-per-app index and the app can deploy again. Used when a
+  # deploy's driver process is gone (e.g. a job-retry race orphaned it at
+  # "deploying"). Does NOT touch app.status — a cancel is not a failure of the app.
+  def cancel!
+    update!(status: "cancelled", completed_at: Time.current)
+  end
+
   private
 
   # Coarse blame from the failure text. Deliberately conservative: only signatures
