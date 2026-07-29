@@ -86,6 +86,16 @@ class HardenServerTest < ActiveSupport::TestCase
     assert_match(/NOPASSWD:ALL/, provision)
   end
 
+  test "whitelists Conductor's connecting IP in fail2ban so it can't self-lock" do
+    root = FakeSsh.new
+    harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
+
+    fw = root.commands.find { |c| c.include?("fail2ban") && c.include?("ignoreip") }
+    assert fw, "firewall step must configure a fail2ban allowlist"
+    assert_match(/SSH_CLIENT/, fw, "must whitelist the IP Conductor connects from")
+    assert_match(/ignoreip = 127\.0\.0\.1/, fw)
+  end
+
   test "closes an exposed host Postgres by rebinding off 0.0.0.0" do
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))

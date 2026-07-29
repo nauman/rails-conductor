@@ -55,8 +55,15 @@ class HardenServer
     for net in $(docker network ls -q 2>/dev/null | xargs -r docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | tr ' ' '\\n' | grep -E '^(172|10)\\.' | sort -u); do
       sudo ufw allow from "$net" >/dev/null 2>&1 || true
     done
+    # CRITICAL: never let fail2ban ban the IP Conductor is connecting FROM, or a
+    # burst of legit ops would lock Conductor (or the operator on this session)
+    # out of a box it manages. $SSH_CLIENT's first field is that source IP.
+    client_ip="${SSH_CLIENT%% *}"
+    sudo mkdir -p /etc/fail2ban/jail.d
+    printf '[sshd]\\nignoreip = 127.0.0.1/8 ::1 %s\\nbantime = 1h\\n' "$client_ip" | sudo tee /etc/fail2ban/jail.d/00-conductor-allowlist.local >/dev/null
     sudo ufw --force enable >/dev/null
-    sudo systemctl enable --now fail2ban >/dev/null 2>&1 || true
+    sudo systemctl enable fail2ban >/dev/null 2>&1 || true
+    sudo systemctl restart fail2ban >/dev/null 2>&1 || sudo systemctl start fail2ban >/dev/null 2>&1 || true
     echo FIREWALL_OK
   BASH
 
