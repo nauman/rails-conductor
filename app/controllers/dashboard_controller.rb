@@ -95,6 +95,19 @@ class DashboardController < ApplicationController
                   message: deployment_failure_message(deployment), action: "deployment" }
     end
 
+    # Capacity imbalance: a box under real strain while another has obvious headroom.
+    # This is the argument for app-transfer, and it only means anything when BOTH halves
+    # are true — a strained box with nowhere to move to isn't an imbalance, it's a
+    # capacity problem, and two idle boxes are just an idle fleet.
+    if (imbalance = capacity_imbalance(org))
+      strained, roomy = imbalance
+      issues << { type: "capacity", severity: "warning", resource: strained,
+                  message: "#{strained.name} is out of room (#{strained.cpu_percent}% CPU, " \
+                           "#{strained.apps.size} #{'app'.pluralize(strained.apps.size)}) while " \
+                           "#{roomy.name} idles at #{roomy.cpu_percent}%",
+                  action: "capacity" }
+    end
+
     # Failed backups
     org.backups.where(status: "failed").where("created_at > ?", 7.days.ago).each do |backup|
       issues << { type: "backup", severity: "warning", resource: backup, message: "Backup failed" }
@@ -127,6 +140,29 @@ class DashboardController < ApplicationController
     # Sort by severity (critical first)
     severity_order = { "critical" => 0, "warning" => 1, "info" => 2 }
     issues.sort_by { |i| severity_order[i[:severity]] }
+  end
+
+  # A box is "strained" at 60% CPU and "roomy" at 20% with more memory to give. Deliberately
+  # a wide gap: a nag that fires on normal variation gets ignored, and moving an app between
+  # boxes is expensive enough that it should only be suggested when it's obviously worth it.
+  STRAINED_CPU = 60
+  ROOMY_CPU = 20
+
+  # Returns [strained, roomy] or nil. Only fresh metrics count — a 90% reading from two
+  # hours ago is not evidence about now, and acting on it would move an app for nothing.
+  def capacity_imbalance(org)
+    fresh = org.servers.where(status: "online").where("metrics_updated_at > ?", 15.minutes.ago).to_a
+    return nil if fresh.size < 2
+
+    strained = fresh.select { |s| s.cpu_percent.to_i >= STRAINED_CPU }
+                    .max_by { |s| s.cpu_percent.to_i }
+    return nil unless strained
+
+    roomy = fresh.select { |s| s.cpu_percent.to_i <= ROOMY_CPU && s.memory_total_mb.to_i > strained.memory_total_mb.to_i }
+                 .max_by { |s| s.memory_total_mb.to_i }
+    return nil unless roomy
+
+    [ strained, roomy ]
   end
 
   # Name the kind of failure when we know it, so an operator doesn't go debugging
