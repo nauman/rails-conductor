@@ -1,20 +1,17 @@
-<% content_for :title, "Conductor · Overview" %>
-<%# Live fleet: server metrics and deploy state push themselves to this page.
-    One subscription for the whole dashboard rather than one per record. %>
-<%= turbo_stream_from current_organization, :dashboard %>
-
+<%# Ops header (design: conductor/design/fleet.html). The page opens with the fleet's
+    condition and the counts that qualify it — no hero, no static tip. What used to be four
+    large tiles and a marketing promise is one line and a strip, because the space belongs
+    to what needs you. %>
 <section class="border-b border-border bg-bg-alt">
-  <div class="max-w-7xl mx-auto px-4 py-10">
-    <div class="grid gap-8 lg:grid-cols-3">
-      <div class="lg:col-span-2">
-        <%# An ops page opens with the state of the fleet, not a promise about it. The
-            headline is a sentence about right now — and when nothing is wrong it says so,
-            which is the only time "all clear" means anything. %>
-        <span class="inline-flex items-center gap-2 rounded-pill px-3 py-1 text-2xs font-semibold uppercase tracking-label <%= @issues.any? { |i| i[:severity] == 'critical' } ? 'bg-danger-tint text-danger-deep' : @issues.any? ? 'bg-warning-tint text-warning' : 'bg-primary-tint text-primary' %>">
-          <%= current_organization.name %>
-        </span>
-        <h1 class="mt-4 font-display text-4xl text-ink tracking-display sm:text-5xl">
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
           <% criticals = @issues.count { |i| i[:severity] == "critical" } %>
+          <span class="h-2 w-2 rounded-pill <%= criticals.positive? ? 'bg-danger-bright' : @issues.any? ? 'bg-warning-bright' : 'bg-primary' %>"></span>
+          <span class="font-mono text-2xs uppercase tracking-label text-muted"><%= current_organization.name %></span>
+        </div>
+        <h1 class="mt-1 font-display text-3xl text-ink tracking-display">
           <% if criticals.positive? %>
             <%= pluralize(criticals, "thing") %> need<%= "s" if criticals == 1 %> you now.
           <% elsif @issues.any? %>
@@ -23,83 +20,39 @@
             Everything is running.
           <% end %>
         </h1>
-        <p class="mt-3 max-w-2xl text-base text-muted">
-          <%= pluralize(@stats[:apps_count], "app") %> across <%= pluralize(@stats[:servers_count], "server") %><%=
-            ", #{@apps_failing.size} failing" if @apps_failing.any? %>.
-          <%= "Last deploy #{time_ago_in_words(@recent_deployments.first.created_at)} ago." if @recent_deployments.any? %>
-        </p>
-        <div class="mt-6 grid gap-4 sm:grid-cols-4">
-          <%= link_to servers_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
-            <div class="text-2xs font-semibold uppercase tracking-label text-muted">Servers</div>
-            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:servers_count] %></div>
-            <div class="mt-1 text-2xs text-muted">
-              <% if @stats[:servers_degraded] > 0 %>
-                <%= @stats[:servers_degraded] %> degraded · <%= @stats[:servers_online] %> online
-              <% else %>
-                <%= @stats[:servers_online] %> online
-              <% end %>
-            </div>
-          <% end %>
-          <%= link_to apps_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
-            <div class="text-2xs font-semibold uppercase tracking-label text-muted">Apps</div>
-            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:apps_count] %></div>
-            <div class="mt-1 text-2xs text-muted"><%= @stats[:apps_running] %> running</div>
-          <% end %>
-          <%# Zero backups is not a score, it's the most dangerous fact on the page. A
-              number rendered like every other number reads as "nothing to see". %>
-          <% unprotected = @apps.count { |a| a.naggable? && a.backups.empty? } %>
-          <%= link_to backups_path, class: "rounded-large border bg-surface p-4 shadow-soft transition-colors #{unprotected.positive? ? 'border-danger/40 hover:border-danger' : 'border-border hover:border-border-strong'}" do %>
-            <div class="text-2xs font-semibold uppercase tracking-label <%= unprotected.positive? ? 'text-danger' : 'text-muted' %>">Backups</div>
-            <div class="mt-2 font-mono font-display text-2xl tracking-display <%= unprotected.positive? ? 'text-danger' : 'text-ink' %>">
-              <%= @stats[:apps_count] - unprotected %><span class="text-base text-muted">/<%= @stats[:apps_count] %></span>
-            </div>
-            <div class="mt-1 text-2xs <%= unprotected.positive? ? 'text-danger' : 'text-muted' %>">
-              <%= unprotected.positive? ? "#{unprotected} unprotected" : "all protected" %>
-            </div>
-          <% end %>
-          <%= link_to credentials_path, class: "rounded-large border border-border bg-surface p-4 shadow-soft hover:border-border-strong transition-colors" do %>
-            <div class="text-2xs font-semibold uppercase tracking-label text-muted">Credentials</div>
-            <div class="mt-2 font-mono font-display text-2xl text-ink tracking-display"><%= @stats[:credentials_count] %></div>
-            <div class="mt-1 text-2xs text-muted"><%= @stats[:credentials_active] %> active</div>
-          <% end %>
-        </div>
       </div>
-      <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
-        <h2 class="text-2xs font-semibold uppercase tracking-label text-muted">Quick Actions</h2>
-        <ul class="mt-4 space-y-3 text-sm">
-          <li>
-            <%= link_to new_server_path, class: "flex items-center gap-3 text-body hover:text-ink" do %>
-              <span class="h-2 w-2 rounded-pill bg-primary-sage"></span>
-              Add new server
-            <% end %>
-          </li>
-          <li>
-            <%= link_to new_app_path, class: "flex items-center gap-3 text-body hover:text-ink" do %>
-              <span class="h-2 w-2 rounded-pill bg-primary-sage"></span>
-              Register an app
-            <% end %>
-          </li>
-          <li>
-            <%= link_to new_credential_path, class: "flex items-center gap-3 text-body hover:text-ink" do %>
-              <span class="h-2 w-2 rounded-pill bg-primary-sage"></span>
-              Add API credential
-            <% end %>
-          </li>
-        </ul>
-        <div class="mt-6 rounded-card border border-dashed border-border bg-fill p-4 text-2xs text-muted">
-          <div class="font-semibold uppercase tracking-label text-body">Tip</div>
-          <span class="mt-1 block">Keep Caddy + Kamal config snapshots next to R2 backups for audit trails.</span>
-        </div>
+      <div class="flex items-center gap-2">
+        <%= link_to "Servers", servers_path, class: "rounded-control border border-border-strong bg-surface px-3 py-2 text-sm font-medium text-body hover:bg-fill" %>
+        <%= link_to "Apps", apps_path, class: "rounded-control border border-border-strong bg-surface px-3 py-2 text-sm font-medium text-body hover:bg-fill" %>
+        <%= link_to "New app", new_app_path, class: "rounded-control bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-strong" %>
       </div>
+    </div>
+
+    <%# Counts as a strip, not as cards: they are context for the headline, not the point
+        of the page. Backups is the exception — it turns red because zero is dangerous. %>
+    <% unprotected = @apps.count { |a| a.naggable? && a.backups.empty? } %>
+    <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs">
+      <%= link_to servers_path, class: "text-muted hover:text-ink" do %>
+        <span class="text-ink font-semibold"><%= @stats[:servers_count] %></span> servers<%= ", #{@stats[:servers_degraded]} degraded" if @stats[:servers_degraded].to_i.positive? %>
+      <% end %>
+      <%= link_to apps_path, class: "text-muted hover:text-ink" do %>
+        <span class="text-ink font-semibold"><%= @stats[:apps_count] %></span> apps<%= ", #{@apps_failing.size} failing" if @apps_failing.any? %>
+      <% end %>
+      <%= link_to backups_path, class: "#{unprotected.positive? ? 'text-danger' : 'text-muted'} hover:text-ink" do %>
+        <span class="<%= unprotected.positive? ? 'text-danger font-semibold' : 'text-ink font-semibold' %>"><%= @stats[:apps_count] - unprotected %>/<%= @stats[:apps_count] %></span>
+        backed up
+      <% end %>
+      <%= link_to credentials_path, class: "text-muted hover:text-ink" do %>
+        <span class="text-ink font-semibold"><%= @stats[:credentials_active] %></span> credentials
+      <% end %>
+      <% if @recent_deployments.any? %>
+        <span class="text-faint">last deploy <%= time_ago_in_words(@recent_deployments.first.created_at) %> ago</span>
+      <% end %>
     </div>
   </div>
 </section>
 
 <section class="max-w-7xl mx-auto px-4 py-10 space-y-10">
-  <%# Container Status Overview %>
-  <% if @apps.any? %>
-    <%= render "dashboard/kamal_overview" %>
-  <% end %>
 
   <%# Issues Section - What needs attention %>
   <% if @issues.any? %>
@@ -197,6 +150,12 @@
         </div>
       </div>
     </div>
+  <% end %>
+
+  <%# Where it runs, then what's on it — capacity first, because the answer to "why is
+      this app struggling" is usually the box, and the fleet list is long. %>
+  <% if @apps.any? %>
+    <%= render "dashboard/kamal_overview" %>
   <% end %>
 
   <%# The apps table lived here. It has been folded INTO Fleet status above: two tables
