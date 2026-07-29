@@ -91,7 +91,17 @@ class HardenServer
       sudo sed -i "s/^[[:space:]]*#\\?[[:space:]]*listen_addresses[[:space:]]*=.*/listen_addresses = '$addrs'/" "$conf"
       changed=1
     done
-    [ "$changed" = 1 ] && { sudo systemctl restart postgresql; sleep 3; }
+    if [ "$changed" = 1 ]; then
+      # Reboot-safe ordering: Postgres binds the docker bridge gateways, but those
+      # only exist AFTER docker starts. On boot Postgres starts first, silently
+      # binds localhost only, and colocated containers crashloop (can't reach the
+      # DB). Order Postgres after docker so the gateways exist when it binds.
+      sudo mkdir -p /etc/systemd/system/postgresql@.service.d
+      printf '[Unit]\\nAfter=docker.service\\nWants=docker.service\\n' | sudo tee /etc/systemd/system/postgresql@.service.d/10-after-docker.conf >/dev/null
+      sudo systemctl daemon-reload
+      sudo systemctl restart postgresql
+      sleep 3
+    fi
     echo CLOSE_DB_OK
   BASH
 
