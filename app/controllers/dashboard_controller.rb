@@ -10,7 +10,8 @@ class DashboardController < ApplicationController
     # decision are first: failing, then never-deployed, then everything else by name.
     # includes(:deployments) keeps deploy_health off the N+1 path.
     @apps_failing = @apps.select(&:deploy_failing?)
-    @apps_never_deployed = @apps.select { |a| a.deploy_health.nil? }
+    # Parked apps (placeholder / awaiting a calm.page theme) are not gaps — you decided.
+    @apps_never_deployed = @apps.select { |a| a.deploy_health.nil? && a.naggable? }
     @dashboard_apps = (@apps_failing + @apps_never_deployed +
                        (@apps - @apps_failing - @apps_never_deployed)).first(10)
 

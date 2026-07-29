@@ -13,6 +13,12 @@ module AppsHelper
   #   blocked    refused by preflight; it never ran, so don't say "failed".
   #   otherwise  in flight (pending/building/deploying) — not yet a failure.
   def deploy_health_badge(app)
+    # Intent first: "not deployed here" on an app you deliberately parked reads as an
+    # accusation. What you decided outranks what the deploy log happens to say.
+    if (label = app.intent_label) && app.deploy_health.nil?
+      return rui_badge(text: label, color: app.intent == "unmanaged" ? :warning : :slate)
+    end
+
     case app.deploy_health
     when nil          then rui_badge(text: "not deployed here", color: :slate)
     when "succeeded"  then rui_badge(text: "deployed", color: :success)

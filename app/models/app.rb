@@ -9,6 +9,15 @@ class App < ApplicationRecord
   # a DB-dedicated host). Both are orthogonal and convertible live.
   DATABASE_MODES = %w[shared dedicated].freeze
   DATABASE_PLACEMENTS = %w[colocated dedicated_host].freeze
+  # What YOU have decided about this app, as distinct from what state it happens to be in.
+  #   managed           Conductor's to run — the default, and the only one we chase.
+  #   unmanaged         running elsewhere and not adopted yet. A real gap; offer adoption.
+  #   pending_migration deliberately running until it becomes something else (e.g. a
+  #                     calm.page theme). Not a gap — a decision with a finish line.
+  #   placeholder       a name and a domain, nothing more. Exclude from everything.
+  # Nagging about a decision already made is how a checklist becomes noise.
+  INTENTS = %w[managed unmanaged pending_migration placeholder].freeze
+  NAGGABLE_INTENTS = %w[managed unmanaged].freeze
 
   belongs_to :organization, optional: true
   belongs_to :server, optional: true
@@ -121,6 +130,7 @@ class App < ApplicationRecord
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
   validates :database_mode, inclusion: { in: DATABASE_MODES }
   validates :database_placement, inclusion: { in: DATABASE_PLACEMENTS }
+  validates :intent, inclusion: { in: INTENTS }
   # Only KamalDeployer runs seeds — the flag on a docker/native app would never
   # execute yet would defeat the preflight's failed-seed gate. Enforce here so
   # every path (UI, MCP, direct) obeys, not just the controller.
@@ -139,6 +149,8 @@ class App < ApplicationRecord
   # The app(s) representing Conductor itself — deploys are reconciled on boot
   # rather than observed inline (see SelfDeployReconciler).
   scope :self_managed, -> { where(self_managed: true) }
+  # The only apps a checklist, backup nag or adoption prompt may talk about.
+  scope :naggable, -> { where(intent: %w[managed unmanaged]) }
 
   # Live status: when a status-relevant field changes (from a deploy, a status
   # sync, anywhere), push a Turbo Stream that replaces the badge on any open page
@@ -226,6 +238,21 @@ class App < ApplicationRecord
   # nil when the app has never deployed through Conductor: "unknown" is a real,
   # different state from "fine", and half this fleet is in it.
   def deploy_health = last_deployment&.status
+
+  # A short label for the intents that need explaining. `managed` is the norm and gets no
+  # badge — a badge on every row is a badge nobody reads.
+  def intent_label
+    case intent
+    when "pending_migration" then "pending migration"
+    when "placeholder"       then "placeholder"
+    when "unmanaged"         then "not adopted"
+    end
+  end
+
+  # May a checklist, backup nag or adoption prompt talk about this app at all?
+  # Distinct from needs_attention? below, which asks "is something wrong right now".
+  # A parked decision is neither wrong nor worth chasing.
+  def naggable? = NAGGABLE_INTENTS.include?(intent)
 
   # Currently broken — the last attempt failed, or was refused before it ran.
   # An in-flight deploy is deliberately neither: it hasn't failed yet.
@@ -394,6 +421,9 @@ class App < ApplicationRecord
   end
 
   def needs_attention?
+    # An app you've parked (placeholder, or running until it becomes a calm.page theme)
+    # can't "need attention" — you already decided. Chasing it is how a nag becomes noise.
+    return false unless naggable?
     return true if status == "failed" || status_check_error.present?
 
     # A stopped container only warrants attention if the app is meant to be

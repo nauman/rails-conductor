@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_29_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -68,6 +68,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_000001) do
     t.string "domain"
     t.string "health_check_path", default: "/up"
     t.string "image_name"
+    t.string "intent", default: "managed", null: false
+    t.string "intent_note"
     t.datetime "last_status_check_at"
     t.string "name", null: false
     t.text "notes"
@@ -85,6 +87,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_000001) do
     t.datetime "updated_at", null: false
     t.string "webhook_secret"
     t.index ["container_status"], name: "index_apps_on_container_status"
+    t.index ["intent"], name: "index_apps_on_intent"
     t.index ["organization_id"], name: "index_apps_on_organization_id"
     t.index ["server_id"], name: "index_apps_on_server_id"
     t.index ["slug"], name: "index_apps_on_slug", unique: true

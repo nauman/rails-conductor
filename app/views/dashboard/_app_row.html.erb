@@ -8,7 +8,12 @@
   </td>
   <td class="py-2 font-mono text-xs text-muted"><%= app.server_name %></td>
   <td class="py-2 font-mono text-xs text-muted"><%= app.deploy_method %></td>
-  <td class="py-2"><%= deploy_health_badge(app) %></td>
+  <td class="py-2">
+    <%= deploy_health_badge(app) %>
+    <% if app.intent_note.present? %>
+      <span class="block font-mono text-2xs text-faint mt-0.5"><%= app.intent_note %></span>
+    <% end %>
+  </td>
   <td class="py-2 font-mono text-xs text-muted"><%= app.last_deployment&.commit_sha&.first(7) || "—" %></td>
   <td class="py-2 text-right">
     <%= link_to "View", app_path(app), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
