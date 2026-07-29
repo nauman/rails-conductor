@@ -55,7 +55,7 @@ class ServerAudit
     checks = [
       check(:firewall,     "Firewall (ufw)",        p["UFW"] == "active",         "active", (p["UFW"].presence || "inactive")),
       check(:fail2ban,     "fail2ban",              p["FAIL2BAN"] == "active",    "active", "not running", level: :warn),
-      check(:ssh_root,     "SSH root login",        p["SSH_ROOT"] == "no",        "disabled", "ENABLED"),
+      ssh_root_check(p["SSH_ROOT"]),
       check(:ssh_password, "SSH password auth",     p["SSH_PASSWORD"] == "no",    "disabled (key-only)", "ENABLED"),
       check(:db_exposure,  "Database exposure",     p["DB_PUBLIC"].to_s.strip.empty?, "not internet-facing", "PUBLIC: #{p['DB_PUBLIC']}"),
       # Pending security updates are *attention*, not *at_risk*: patches are worth
@@ -75,6 +75,23 @@ class ServerAudit
     end
 
     Result.new(status: rollup, checks: checks, error: nil)
+  end
+
+  # Root SSH login is graded on THREE states, not two: fully off is best, but
+  # key-only (`prohibit-password`, reported by sshd as `without-password`) is a
+  # defensible posture — no password brute-force — so it's a warn (attention),
+  # not an at-risk fail. Password-allowed root (`yes`) stays a fail (active
+  # exposure). This lets an operator keep key-only root without the box grading
+  # at_risk and blocking every deploy.
+  def ssh_root_check(val)
+    case val
+    when "no"
+      Check.new(key: :ssh_root, label: "SSH root login", status: :ok, detail: "disabled")
+    when "without-password", "prohibit-password"
+      Check.new(key: :ssh_root, label: "SSH root login", status: :warn, detail: "key-only (no password)")
+    else
+      Check.new(key: :ssh_root, label: "SSH root login", status: :fail, detail: (val.presence || "ENABLED"))
+    end
   end
 
   def check(key, label, ok, ok_detail, bad_detail, level: :fail)

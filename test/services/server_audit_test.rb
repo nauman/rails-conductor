@@ -29,10 +29,18 @@ class ServerAuditTest < ActiveSupport::TestCase
     assert r.checks.none? { |c| [ :warn, :fail ].include?(c.status) }
   end
 
-  test "SSH root login enabled is a fail -> at_risk" do
+  test "SSH root login with password (yes) is a fail -> at_risk" do
     r = audit(SECURE.sub("SSH_ROOT:no", "SSH_ROOT:yes"))
     assert_equal :fail, r.checks.find { |c| c.key == :ssh_root }.status
     assert_equal :at_risk, r.status
+  end
+
+  test "key-only root login (without-password) is a warn -> attention, not at_risk" do
+    r = audit(SECURE.sub("SSH_ROOT:no", "SSH_ROOT:without-password"))
+    root = r.checks.find { |c| c.key == :ssh_root }
+    assert_equal :warn, root.status, "key-only root is defensible — warn, not fail"
+    assert_match(/key-only/i, root.detail)
+    assert_equal :attention, r.status, "key-only root must not grade at_risk (would block deploys)"
   end
 
   test "a publicly-exposed database is a fail" do
