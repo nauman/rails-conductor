@@ -100,6 +100,24 @@ class DashboardController < ApplicationController
       issues << { type: "backup", severity: "warning", resource: backup, message: "Backup failed" }
     end
 
+    # A restore that failed is louder than a backup that failed: the dump exists and does
+    # not work, which is the case people discover at the worst possible moment.
+    org.backups.select(&:alarming?).each do |backup|
+      issues << { type: "backup", severity: "critical", resource: backup,
+                  message: "Restore test failed — this backup does not work" }
+    end
+
+    # Apps with no backup at all. One row for the fleet, not one per app: twelve separate
+    # criticals would bury everything else, and the fix is a single button either way.
+    # Parked apps are excluded — App.naggable is the same gate the checklist uses.
+    unprotected = org.apps.naggable.reject { |app| app.backups.any? }
+    if unprotected.any?
+      issues << { type: "backup_coverage", severity: "warning", resource: nil,
+                  message: "#{unprotected.size} #{'app'.pluralize(unprotected.size)} " \
+                           "#{unprotected.one? ? 'has' : 'have'} no backup",
+                  action: "protect_all" }
+    end
+
     org.backups.enabled.find_each do |backup|
       next unless backup.dispatch_overdue?
 

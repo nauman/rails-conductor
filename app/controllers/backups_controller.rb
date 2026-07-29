@@ -43,6 +43,22 @@ class BackupsController < ApplicationController
     redirect_to backups_path, notice: "Backup deleted."
   end
 
+  # Protect every app that should be protected, with defaults the operator can change
+  # afterwards. Skips apps that already have a backup, and apps the operator has parked —
+  # acting on a placeholder is the same mistake as nagging about one.
+  def protect_all
+    protected_now = current_organization.apps.naggable.reject { |app| app.backups.any? }
+                                        .filter_map { |app| BackupDefaults.new(app).protect! }
+
+    notice = if protected_now.any?
+      "Protected #{helpers.pluralize(protected_now.size, 'app')} — nightly, keep 14 days. Change any of it below."
+    else
+      "Nothing to protect: every app that should have a backup already has one."
+    end
+
+    redirect_to backups_path, notice: notice
+  end
+
   def run
     BackupJob.perform_later(@backup.id)
     redirect_to @backup, notice: "Backup started. Check back for status."

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_29_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -111,6 +111,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_000003) do
     t.bigint "size_bytes", default: 0
     t.string "status", default: "pending"
     t.datetime "updated_at", null: false
+    t.string "verification_note"
+    t.string "verification_status", default: "never_tested", null: false
+    t.datetime "verified_at"
     t.index ["app_id"], name: "index_backups_on_app_id"
     t.index ["credential_id"], name: "index_backups_on_credential_id"
     t.index ["enabled", "next_run_at"], name: "index_backups_on_enabled_and_next_run_at"

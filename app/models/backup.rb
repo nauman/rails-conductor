@@ -6,6 +6,9 @@ class Backup < ApplicationRecord
   PROVIDERS = %w[aws_s3 cloudflare_r2 wasabi backblaze_b2 do_spaces minio local].freeze
   STATUSES = %w[pending running completed failed warning].freeze
   SCHEDULES = %w[hourly daily weekly monthly].freeze
+  # Whether a RESTORE has proved this backup, which is a different question from whether
+  # the dump uploaded (design B2).
+  VERIFICATION_STATUSES = %w[never_tested verified failed].freeze
 
   belongs_to :organization, optional: true
   belongs_to :server, optional: true
@@ -16,6 +19,7 @@ class Backup < ApplicationRecord
   validates :bucket_name, presence: true
   validates :status, inclusion: { in: STATUSES }
   validates :schedule, inclusion: { in: SCHEDULES }, allow_blank: true
+  validates :verification_status, inclusion: { in: VERIFICATION_STATUSES }
 
   scope :completed, -> { where(status: "completed") }
   scope :failed, -> { where(status: "failed") }
@@ -26,6 +30,38 @@ class Backup < ApplicationRecord
   scope :due, -> { enabled.where("next_run_at <= ?", Time.current) }
 
   after_save :calculate_next_run, if: -> { saved_change_to_enabled? || saved_change_to_schedule? }
+
+  # One word for "how safe is this really". Ordered by what an operator needs to hear
+  # first — a schedule that has stopped running beats a verification from last week,
+  # because the newest data isn't backed up at all.
+  def verification_state
+    return :never_run if last_run_at.blank?
+    return :restore_failed if verification_status == "failed"
+    return :stale if overdue?
+    return :verified if verification_status == "verified"
+
+    :unverified
+  end
+
+  # Has the promise been kept? Measured from the LAST RUN against the schedule, not from
+  # next_run_at — a scheduler that stopped writing next_run_at would otherwise look fine
+  # forever, which is the failure most likely to go unnoticed. Two intervals of grace, so a
+  # single missed night is not an alarm.
+  SCHEDULE_INTERVAL = { "hourly" => 1.hour, "daily" => 1.day, "weekly" => 1.week, "monthly" => 30.days }.freeze
+
+  def overdue?
+    return false unless enabled? && last_run_at.present?
+
+    interval = SCHEDULE_INTERVAL[schedule] || 1.day
+    last_run_at < (interval * 2).ago
+  end
+
+  # Proved by an actual restore. Deliberately NOT true for :unverified — the whole point
+  # of the distinction is that an untested dump doesn't get to look green.
+  def proven? = verification_state == :verified
+
+  # Worth an incident: the dump exists and does not work.
+  def alarming? = verification_state == :restore_failed
 
   def formatted_size
     return "0 B" if size_bytes.zero?

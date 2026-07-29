@@ -181,6 +181,11 @@ Rails.application.routes.draw do
     member do
       post :run
     end
+    collection do
+      # One button for the whole fleet (design B1): 0 of 12 apps were protected because
+      # enabling one asked four questions. This asks none.
+      post :protect_all
+    end
   end
 
   resources :scripts

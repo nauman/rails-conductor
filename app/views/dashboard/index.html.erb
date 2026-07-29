@@ -96,7 +96,14 @@
       </div>
       <div class="mt-4 space-y-2">
         <% @issues.first(5).each do |issue| %>
-          <% resource_label = issue[:type] == "deployment" ? "#{issue[:resource].app.name} deployment" : issue[:type] == "backup" ? "#{issue[:resource].bucket_name} backup" : issue[:resource].name %>
+          <%# Some issues are about the FLEET, not one record (e.g. "3 apps have no backup"),
+              so resource may be nil — one row with one action beats twelve criticals. %>
+          <% resource_label = case issue[:type]
+                              when "deployment"       then "#{issue[:resource].app.name} deployment"
+                              when "backup"           then "#{issue[:resource].bucket_name} backup"
+                              when "backup_coverage"  then "Backups"
+                              else issue[:resource]&.name
+                              end %>
           <div class="flex items-center justify-between rounded-card bg-surface px-4 py-3 border <%= issue[:severity] == 'critical' ? 'border-danger/30' : issue[:severity] == 'warning' ? 'border-warning/40' : 'border-border' %>" data-incident-resource="<%= resource_label %>">
             <div class="flex items-center gap-3">
               <% if issue[:severity] == "critical" %>
@@ -116,6 +123,8 @@
                     <%= issue[:resource].app.name %> deployment
                   <% elsif issue[:type] == "backup" %>
                     <%= issue[:resource].bucket_name %> backup
+                  <% elsif issue[:type] == "backup_coverage" %>
+                    Backups
                   <% end %>
                 </span>
                 <span class="text-sm text-muted ml-2"><%= issue[:message] %></span>
@@ -133,6 +142,9 @@
               <%= link_to "View", deployment_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
             <% elsif issue[:type] == "backup" %>
               <%= link_to "View", backup_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+            <% elsif issue[:type] == "backup_coverage" %>
+              <%# The whole point of the design: the nag carries the fix. %>
+              <%= rui_button_to("Protect all", protect_all_backups_path, method: :post, variant: :solid, size: :sm, color: :primary) %>
             <% end %>
           </div>
         <% end %>
