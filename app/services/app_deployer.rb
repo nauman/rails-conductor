@@ -58,14 +58,19 @@ class AppDeployer
 
   # `display` is what gets logged/broadcast — pass a redacted variant for any
   # command that embeds secrets, so decrypted values never reach the log.
+  # Decide success from the command's EXIT STATUS, not from whether it wrote to
+  # stderr. git writes normal progress ("Cloning into '…'") to stderr even on
+  # exit 0, so the old exec!-based path could neither see a real failure nor
+  # trust a real success — execute_with_status captures the exit code and keeps
+  # stderr as log output.
   def run(command, display: command)
     log "> #{display}"
-    ssh.execute(command)
-    if ssh.success?
-      log ssh.output if ssh.output.present?
+    result = ssh.execute_with_status(command)
+    if result[:success]
+      log result[:output] if result[:output].present?
       true
     else
-      log "FAILED: #{ssh.error}"
+      log "FAILED (exit #{result[:exit_code]}): #{result[:stderr].presence || result[:output]}"
       false
     end
   end
@@ -93,18 +98,25 @@ class AppDeployer
   end
 
   def clone_or_pull_repo
-    run("mkdir -p #{app_dir}")
+    return false unless run("mkdir -p #{app_dir}")
 
     # Deploy the exact commit recorded on the deployment when one was given (e.g.
     # a webhook's `after` sha) so the audit trail matches what actually shipped —
     # not whatever HEAD happens to be. Fall back to the branch tip otherwise.
     target = deployment.commit_sha.presence || "origin/#{app.branch}"
 
-    if run("test -d #{app_dir}/.git && echo 'exists'") && ssh.output&.include?("exists")
+    # Probe existence with a command that always exits 0 (a missing checkout is
+    # not a failure), then branch on the output.
+    run("test -d #{app_dir}/.git && echo exists || echo missing")
+    if ssh.output.to_s.include?("exists")
       run("cd #{app_dir} && git fetch origin && git reset --hard #{target}")
     else
-      run("rm -rf #{app_dir} && git clone --branch #{app.branch} #{app.repository_url} #{app_dir}")
-      run("cd #{app_dir} && git reset --hard #{target}") if deployment.commit_sha.present?
+      # Return the CLONE's real result — never leak the `nil` from a trailing
+      # `... if commit_sha.present?` on a first deploy (commit_sha is null then),
+      # which is what falsely failed the step even though the clone succeeded.
+      return false unless run("rm -rf #{app_dir} && git clone --branch #{app.branch} #{app.repository_url} #{app_dir}")
+
+      deployment.commit_sha.present? ? run("cd #{app_dir} && git reset --hard #{target}") : true
     end
   end
 
