@@ -12,7 +12,7 @@
     <%= form_with url: update_runbook_app_path(app), method: :patch do |f| %>
       <label class="block text-xs font-medium text-body dark:text-faint mb-1">Runbook (markdown) — read before deploying</label>
       <%= f.text_area "app[deploy_runbook]", value: app.deploy_runbook, rows: app.deploy_runbook.present? ? 8 : 3,
-            class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm font-mono",
+            class: "block w-full rounded-control border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm font-mono",
             placeholder: "## Deploy steps\n1. Boot the db accessory\n2. Restore prod DB\n3. kamal deploy" %>
       <div class="mt-2 text-right"><%= f.rui_button("Save runbook", color: :primary, size: :sm) %></div>
     <% end %>
@@ -44,7 +44,7 @@
     <%= form_with model: [app, DeployChecklistItem.new], class: "flex items-end gap-3" do |f| %>
       <div class="flex-1">
         <label class="block text-xs font-medium text-body dark:text-faint mb-1">Add a step</label>
-        <%= f.text_field :content, class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm", placeholder: "Restore prod DB into the staging cluster" %>
+        <%= f.text_field :content, class: "block w-full rounded-control border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm", placeholder: "Restore prod DB into the staging cluster" %>
       </div>
       <%= f.rui_button("Add", color: :primary, size: :sm) %>
     <% end %>

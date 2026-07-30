@@ -4,7 +4,7 @@
       <div class="text-xs uppercase tracking-label text-muted">Self-describing deploy · <%= @app.name %></div>
       <h1 class="font-display text-2xl text-ink">Deploy config (Kamal · ADR 0001)</h1>
     </div>
-    <%= link_to "Back", @app, class: "inline-flex items-center rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill" %>
+    <%= link_to "Back", @app, class: "inline-flex items-center rounded-control border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill" %>
   </div>
 
   <p class="mt-2 text-sm text-muted">
@@ -26,7 +26,7 @@
         </div>
       </div>
       <%= button_to(@app.self_describing? ? "Disable" : "Enable", toggle_self_describing_app_path(@app), method: :patch,
-            class: "shrink-0 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill",
+            class: "shrink-0 rounded-control border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill",
             form: { data: { turbo_confirm: (@app.self_describing? ? nil : "Enable self-describing deploy? The next deploy will use -d production.") } }) %>
     </div>
   </div>

@@ -6,11 +6,11 @@
     <div class="mt-3 flex flex-wrap items-center gap-2">
       <%= button_to("Apply security updates", apply_updates_server_path(server, scope: "security"), method: :post,
             disabled: server.update_running?,
-            class: "rounded-lg bg-primary-strong px-4 py-1.5 text-sm font-medium text-white hover:bg-primary disabled:opacity-60 cursor-pointer") %>
+            class: "rounded-control bg-primary-strong px-4 py-1.5 text-sm font-medium text-white hover:bg-primary disabled:opacity-60 cursor-pointer") %>
       <%= button_to("Apply all updates", apply_updates_server_path(server, scope: "all"), method: :post,
             disabled: server.update_running?,
             form: { data: { turbo_confirm: "‘All updates’ may upgrade Docker or the kernel, which restarts services and briefly bounces every app on this box. Continue?" } },
-            class: "rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-medium text-body hover:bg-fill disabled:opacity-60 cursor-pointer") %>
+            class: "rounded-control border border-border bg-surface px-4 py-1.5 text-sm font-medium text-body hover:bg-fill disabled:opacity-60 cursor-pointer") %>
     </div>
     <p class="mt-2 text-2xs text-muted">
       <strong>Security-only</strong> is safe — no service restart. <strong>All updates</strong> can restart Docker/kernel → a few seconds of app downtime.
@@ -22,7 +22,7 @@
       <div class="mt-4 border-t border-border pt-3">
         <div class="flex items-center justify-between gap-3">
           <span class="flex min-w-0 items-center gap-2">
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-label <%= badge %>"><%= st %></span>
+            <span class="inline-flex items-center rounded-pill px-2 py-0.5 text-2xs font-semibold uppercase tracking-label <%= badge %>"><%= st %></span>
             <span class="truncate font-mono text-xs text-muted"><%= server.last_update_scope %> updates</span>
           </span>
           <span class="shrink-0 text-xs text-muted"><%= time_ago_in_words(server.last_update_at) %> ago</span>

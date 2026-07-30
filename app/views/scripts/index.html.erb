@@ -18,7 +18,7 @@
     <% group = @scripts.select { |s| s.script_type == type } %>
     <% next if group.empty? %>
     <div class="mb-6">
-      <h2 class="text-xs font-semibold text-muted uppercase tracking-wider mb-3"><%= type %></h2>
+      <h2 class="font-mono text-2xs uppercase tracking-label text-muted mb-3"><%= type %></h2>
       <div class="bg-surface rounded-card border border-border divide-y divide-border">
         <% group.each do |script| %>
           <div class="flex items-center justify-between px-5 py-4">
@@ -45,7 +45,7 @@
   <% if @scripts.empty? %>
     <div class="text-center py-16 bg-surface rounded-card border border-border">
       <p class="text-muted mb-3">No scripts yet.</p>
-      <%= link_to "Create your first script", new_script_path, class: "text-info hover:underline text-sm" %>
+      <%= link_to "Create your first script", new_script_path, class: "text-primary hover:underline text-sm" %>
     </div>
   <% end %>
 </div>

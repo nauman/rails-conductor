@@ -13,10 +13,10 @@
       <div class="flex-1 min-w-48">
         <%= f.label :name, "Database name", class: "block text-xs font-medium text-body" %>
         <%= f.text_field :name, required: true, placeholder: "myapp_production",
-              class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary-tint0 focus:ring-primary-tint0 sm:text-sm font-mono" %>
+              class: "mt-1 block w-full rounded-control border-border-strong shadow-soft focus:border-primary-tint0 focus:ring-primary-tint0 sm:text-sm font-mono" %>
         <p class="mt-1 text-xs text-faint">Role + database are created; a password is generated.</p>
       </div>
-      <%= f.submit "Create", class: "cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary" %>
+      <%= f.submit "Create", class: "cursor-pointer rounded-control bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary" %>
     <% end %>
   </div>
 

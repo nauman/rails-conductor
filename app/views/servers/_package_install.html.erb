@@ -8,10 +8,10 @@
     <%= form_with url: install_packages_server_path(server), method: :post, class: "mt-3 flex items-center gap-2" do %>
       <%= text_field_tag :packages, "", placeholder: "htop ncdu jq",
             disabled: server.package_install_running?,
-            class: "min-w-0 flex-1 rounded-lg border border-border px-3 py-1.5 text-sm font-mono disabled:opacity-50" %>
+            class: "min-w-0 flex-1 rounded-control border border-border px-3 py-1.5 text-sm font-mono disabled:opacity-50" %>
       <%= submit_tag(server.package_install_running? ? "Installing…" : "Install",
             disabled: server.package_install_running?,
-            class: "rounded-lg bg-primary-strong px-4 py-1.5 text-sm font-medium text-white hover:bg-primary disabled:opacity-60 cursor-pointer") %>
+            class: "rounded-control bg-primary-strong px-4 py-1.5 text-sm font-medium text-white hover:bg-primary disabled:opacity-60 cursor-pointer") %>
     <% end %>
 
     <% if server.last_package_install_at.present? %>
@@ -20,7 +20,7 @@
       <div class="mt-4 border-t border-border pt-3">
         <div class="flex items-center justify-between gap-3">
           <span class="flex min-w-0 items-center gap-2">
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-label <%= badge %>"><%= st %></span>
+            <span class="inline-flex items-center rounded-pill px-2 py-0.5 text-2xs font-semibold uppercase tracking-label <%= badge %>"><%= st %></span>
             <span class="truncate font-mono text-xs text-muted"><%= server.last_package_install_packages %></span>
           </span>
           <span class="shrink-0 text-xs text-muted"><%= time_ago_in_words(server.last_package_install_at) %> ago</span>

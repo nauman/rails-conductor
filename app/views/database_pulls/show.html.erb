@@ -9,7 +9,7 @@
       <p class="mt-1 font-mono text-2xs text-muted">
         pull #<%= @pull.id %> · 
         <%= @pull.source_label %> from
-        <%= link_to @pull.server.name, server_path(@pull.server), class: "text-info hover:underline" %>
+        <%= link_to @pull.server.name, server_path(@pull.server), class: "text-primary hover:underline" %>
         <% if @pull.restore? %>&middot; restoring into <code class="font-mono"><%= @pull.restore_target %></code><% end %>
         &middot; started <%= time_ago_in_words(@pull.created_at) %> ago
       </p>

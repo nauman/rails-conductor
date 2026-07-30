@@ -1,43 +1,46 @@
 <% content_for :title, "Logs · #{@server.name} · Conductor" %>
 
-<section class="max-w-5xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display dark:text-white">Server Logs</h1>
-      <p class="mt-1 text-sm text-muted dark:text-faint">
-        <%= link_to @server.name, server_path(@server), class: "hover:underline" %> ·
-        <%= @container ? "container #{@container}" : "system journal" %> ·
-        Last <%= @tail %> lines · live tail
-      </p>
-      <details class="mt-2 text-xs text-muted dark:text-faint">
-        <summary class="cursor-pointer hover:text-body dark:hover:text-white">Tail on the box</summary>
-        <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @server.ssh_user %>@<%= @server.ip_address %>
+<%# Server logs. The header says WHICH stream you're reading, because a container's stdout
+    and the host journal answer different questions. %>
+<%= render layout: "shared/page_head",
+      locals: {
+        eyebrow: @server.name,
+        title: @container ? "Container output · #{@container}" : "System journal.",
+        lede: "Last #{@tail} lines, re-read on a timer. Conductor tails the box — it doesn't store your logs.",
+        stats: [
+          { value: @server.display_status, label: "server", tone: @server.display_status == "online" ? :default : :danger },
+          { value: @tail, label: "lines" },
+          { value: @container || "host journal", label: "source" }
+        ]
+      } do %>
+  <label class="inline-flex cursor-pointer items-center gap-2 rounded-control border border-border-strong bg-surface px-3 py-2 text-sm font-medium text-body hover:bg-fill">
+    <input type="checkbox" id="auto-refresh" checked class="rounded border-border-strong text-ink focus:ring-primary">
+    <span>Live tail</span>
+  </label>
+  <%= rui_button("Re-read", url: logs_server_path(@server, container: @container), id: "manual-refresh", variant: :outline, color: :slate) %>
+  <%= rui_button("Back to server", url: server_path(@server), variant: :outline, color: :slate) %>
+<% end %>
+
+<section class="max-w-7xl mx-auto px-4 py-8">
+  <details class="mb-4 text-2xs text-muted">
+    <summary class="cursor-pointer font-mono uppercase tracking-label hover:text-body">Tail it on the box</summary>
+    <pre class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-card bg-ink px-3 py-2 font-mono text-2xs text-faint">ssh <%= @server.ssh_user %>@<%= @server.ip_address %>
 <%= @container ? "docker logs -f --tail #{@tail} #{@container}" : "journalctl -n #{@tail} -f" %></pre>
-      </details>
-    </div>
-    <div class="flex items-center gap-2">
-      <label class="inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint cursor-pointer hover:bg-fill dark:hover:bg-fill">
-        <input type="checkbox" id="auto-refresh" checked class="rounded border-border-strong dark:border-border-strong text-ink dark:text-white focus:ring-primary">
-        <span>Live tail</span>
-      </label>
-      <%= link_to "Refresh", logs_server_path(@server, container: @container), id: "manual-refresh", class: "inline-flex items-center gap-2 rounded-lg bg-ink dark:bg-fill px-4 py-2 text-sm font-medium text-white hover:bg-body dark:hover:bg-fill-strong" %>
-      <%= link_to "Back to Server", server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
-    </div>
-  </div>
+  </details>
 
   <%# Source picker: system journal + each app's container (incl. Conductor itself) %>
-  <div class="mt-6 flex flex-wrap items-center gap-2">
+  <div class="flex flex-wrap items-center gap-2">
     <%= link_to "System (journalctl)", logs_server_path(@server),
-          class: "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-mono border #{@container ? 'border-border dark:border-border-strong text-muted hover:bg-fill' : 'border-primary bg-primary-tint text-primary'}" %>
+          class: "inline-flex items-center gap-2 rounded-pill px-3 py-1.5 font-mono text-2xs border #{@container ? 'border-border text-muted hover:bg-fill' : 'border-primary bg-primary-tint text-primary'}" %>
     <% @containers.each do |app| %>
       <%= link_to app.container_name, logs_server_path(@server, container: app.container_name),
-            class: "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-mono border #{@container == app.container_name ? 'border-primary bg-primary-tint text-primary' : 'border-border dark:border-border-strong text-muted hover:bg-fill'}" %>
+            class: "inline-flex items-center gap-2 rounded-pill px-3 py-1.5 font-mono text-2xs border #{@container == app.container_name ? 'border-primary bg-primary-tint text-primary' : 'border-border text-muted hover:bg-fill'}" %>
     <% end %>
   </div>
 
   <div class="mt-6 rounded-large border border-border-strong bg-ink shadow-soft overflow-hidden" id="log-container">
     <div class="p-4 border-b border-border-strong flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-white font-mono"><%= @container ? "docker logs #{@container}" : "journalctl @ #{@server.name}" %></h3>
+      <h2 class="font-mono text-2xs uppercase tracking-label text-white/70"><%= @container ? "docker logs #{@container}" : "journalctl @ #{@server.name}" %></h2>
       <div class="flex items-center gap-3">
         <span id="refresh-indicator" class="hidden">
           <svg class="h-4 w-4 text-faint animate-spin" fill="none" viewBox="0 0 24 24">

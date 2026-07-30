@@ -87,7 +87,7 @@
 
   <div class="flex items-center justify-between pt-2">
     <%= link_to "Cancel", servers_path, class: "text-sm font-medium text-body hover:text-ink" %>
-    <%= f.submit server.persisted? ? "Save changes" : "Add server", class: "inline-flex items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body cursor-pointer" %>
+    <%= f.submit server.persisted? ? "Save changes" : "Add server", class: "inline-flex items-center rounded-control bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body cursor-pointer" %>
   </div>
   <% unless server.persisted? %>
     <p class="text-right text-xs text-faint">Next: open the server and hit <em>Test connection</em> to confirm SSH works.</p>

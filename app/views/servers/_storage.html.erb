@@ -28,8 +28,8 @@
       <%# --- Swap + Memory + Inodes --- %>
       <div class="mt-5 grid gap-4 sm:grid-cols-3 text-sm">
         <% [["Memory", storage.memory], ["Swap", storage.swap]].each do |label, u| %>
-          <div class="rounded-lg bg-fill p-3">
-            <div class="text-xs uppercase tracking-wide text-faint"><%= label %></div>
+          <div class="rounded-card bg-fill p-3">
+            <div class="font-mono text-2xs uppercase tracking-label text-faint"><%= label %></div>
             <% if u %>
               <div class="mt-1 text-body"><%= number_to_human_size(u[:used]) %> / <%= number_to_human_size(u[:total]) %></div>
               <div class="text-xs text-muted"><%= u[:percent] %>% used</div>
@@ -39,8 +39,8 @@
           </div>
         <% end %>
         <% root_inode = storage.inodes.find { |i| i.mount == "/" } || storage.inodes.first %>
-        <div class="rounded-lg bg-fill p-3">
-          <div class="text-xs uppercase tracking-wide text-faint">Inodes (/)</div>
+        <div class="rounded-card bg-fill p-3">
+          <div class="font-mono text-2xs uppercase tracking-label text-faint">Inodes (/)</div>
           <% if root_inode %>
             <div class="mt-1 text-body"><%= number_with_delimiter(root_inode.used) %> used</div>
             <div class="text-xs text-muted"><%= root_inode.percent %>% of <%= number_with_delimiter(root_inode.size) %></div>
@@ -53,7 +53,7 @@
       <%# --- Largest directories --- %>
       <% if storage.top_dirs.any? %>
         <div class="mt-5">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">Largest directories</h3>
+          <h3 class="font-mono text-2xs uppercase tracking-label text-muted">Largest directories</h3>
           <% max = storage.top_dirs.map(&:bytes).max.to_f %>
           <ul class="mt-2 space-y-1.5">
             <% storage.top_dirs.first(12).each do |d| %>
