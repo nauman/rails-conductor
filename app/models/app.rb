@@ -71,9 +71,13 @@ class App < ApplicationRecord
   # KAMAL_NETWORK env var. nil for non-Kamal apps — their reachability wiring is
   # not built yet, so the provisioner refuses rather than create an island.
   def deploy_network
-    return nil unless kamal?
+    return nil if native? # host-process apps have no docker network
+    return env_hash["KAMAL_NETWORK"].presence || "kamal" if kamal?
 
-    env_hash["KAMAL_NETWORK"].presence || "kamal"
+    # Docker apps also need to join the shared docker network so linked containers
+    # (Conductor's shared postgres, kamal-proxy) resolve by name — otherwise the
+    # container lands on the default bridge and can't reach conductor-postgres.
+    env_hash["DOCKER_NETWORK"].presence || env_hash["KAMAL_NETWORK"].presence || "kamal"
   end
 
   # The provisioned dedicated database backing this app ON a given server

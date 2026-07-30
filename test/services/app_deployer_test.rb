@@ -79,4 +79,41 @@ class AppDeployerTest < ActiveSupport::TestCase
     assert ssh.commands.any? { |c| c.include?("git fetch") }, "existing .git should pull, not clone"
     refute ssh.commands.any? { |c| c.include?("git clone") }
   end
+
+  # A docker app whose DB is a container name (conductor-postgres) must join the
+  # shared network, or it crash-loops on host-name resolution.
+  test "start_container joins the app's docker network" do
+    ssh = FakeSsh.new do |cmd|
+      cmd.include?("docker ps -q -f name=") ? result(success: true, stdout: "cid123\n") : result(success: true)
+    end
+    d = deployer_with(ssh) # docker app → deploy_network "kamal"
+
+    assert d.send(:start_container)
+    runcmd = ssh.commands.find { |c| c.start_with?("docker run") }
+    assert_includes runcmd, "--network kamal"
+  end
+
+  test "docker deploy records the shipped sha (no more commit_sha: null)" do
+    sha = "8566f11c1bff253f268d2c6190d9773f6eb3b568"
+    ssh = FakeSsh.new do |cmd|
+      if cmd.include?("test -d")             then result(success: true, stdout: "missing\n")
+      elsif cmd.include?("git clone")        then result(success: true, stderr: "Cloning into '…'\n")
+      elsif cmd.include?("git rev-parse")    then result(success: true, stdout: "#{sha}\n")
+      else result(success: true)
+      end
+    end
+    d = deployer_with(ssh, commit_sha: nil)
+
+    assert d.send(:clone_or_pull_repo)
+    assert_equal sha, d.deployment.reload.commit_sha
+  end
+
+  test "deploy_network: docker + kamal get the shared network, native gets none" do
+    org = Organization.create_for(User.create!(email: "dn@example.com"), name: "Acme")
+    mk = ->(m) { org.apps.create!(name: "a-#{m}", slug: "a-#{m}", deploy_method: m, repository_url: "https://x/y.git") }
+
+    assert_equal "kamal", mk.("docker").deploy_network
+    assert_equal "kamal", mk.("kamal").deploy_network
+    assert_nil mk.("native").deploy_network
+  end
 end

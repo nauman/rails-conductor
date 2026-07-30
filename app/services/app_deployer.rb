@@ -108,16 +108,29 @@ class AppDeployer
     # Probe existence with a command that always exits 0 (a missing checkout is
     # not a failure), then branch on the output.
     run("test -d #{app_dir}/.git && echo exists || echo missing")
-    if ssh.output.to_s.include?("exists")
-      run("cd #{app_dir} && git fetch origin && git reset --hard #{target}")
-    else
-      # Return the CLONE's real result — never leak the `nil` from a trailing
-      # `... if commit_sha.present?` on a first deploy (commit_sha is null then),
-      # which is what falsely failed the step even though the clone succeeded.
-      return false unless run("rm -rf #{app_dir} && git clone --branch #{app.branch} #{app.repository_url} #{app_dir}")
+    ok =
+      if ssh.output.to_s.include?("exists")
+        run("cd #{app_dir} && git fetch origin && git reset --hard #{target}")
+      else
+        # Return the CLONE's real result — never leak the `nil` from a trailing
+        # `... if commit_sha.present?` on a first deploy (commit_sha is null then),
+        # which is what falsely failed the step even though the clone succeeded.
+        run("rm -rf #{app_dir} && git clone --branch #{app.branch} #{app.repository_url} #{app_dir}") &&
+          (deployment.commit_sha.present? ? run("cd #{app_dir} && git reset --hard #{target}") : true)
+      end
 
-      deployment.commit_sha.present? ? run("cd #{app_dir} && git reset --hard #{target}") : true
-    end
+    record_shipped_sha if ok
+    ok
+  end
+
+  # Record what actually shipped, so a docker deploy's audit row carries the sha
+  # (the kamal path already does this; the docker path recorded commit_sha: null).
+  def record_shipped_sha
+    return if deployment.commit_sha.present?
+
+    run("cd #{app_dir} && git rev-parse HEAD")
+    sha = ssh.output.to_s[/\b[0-9a-f]{40}\b/]
+    deployment.update!(commit_sha: sha) if sha
   end
 
   def build_image
@@ -144,6 +157,10 @@ class AppDeployer
       "--restart unless-stopped",
       "-p #{port}:#{port}"
     ]
+    # Join the shared docker network so a container-name DB host (conductor-postgres)
+    # resolves — without it the app lands on the default bridge and crash-loops on
+    # `could not translate host name`.
+    prefix << "--network #{app.deploy_network}" if app.deploy_network.present?
     suffix = [
       "-e PORT=#{port}",
       "-e RAILS_ENV=production",
