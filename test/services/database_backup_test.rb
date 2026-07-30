@@ -109,4 +109,22 @@ class DatabaseBackupTest < ActiveSupport::TestCase
     assert_equal "postgres://derived/db", DatabaseBackup.new(b).send(:resolve_database_url, fake_ssh)
   end
 
+  # The universal fallback: an app with no derived URL AND no DATABASE_URL env
+  # (older apps wired via database.yml) still reports its DSN through ActiveRecord.
+  test "resolve_database_url asks the app via rails runner when there is no DATABASE_URL env" do
+    app = @org.apps.create!(name: "k3", slug: "k3", deploy_method: "kamal", repository_url: "https://x/y.git")
+    app.define_singleton_method(:derived_database_url) { |*| nil }
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+
+    fake_ssh = Object.new
+    fake_ssh.define_singleton_method(:execute) do |cmd|
+      @last = cmd.include?("printenv") ? "" : "warn: noise\nCONDUCTOR_DSN=postgres://u:p@conductor-postgres:5432/appdb\n"
+      true
+    end
+    fake_ssh.define_singleton_method(:output) { @last }
+
+    url = DatabaseBackup.new(b).send(:resolve_database_url, fake_ssh)
+    assert_equal "postgres://u:p@conductor-postgres:5432/appdb", url
+  end
+
 end

@@ -85,10 +85,20 @@ class DatabaseBackup
     false
   end
 
-  # The app's live DATABASE_URL. Conductor's DB records are incomplete (shared /
-  # unregistered apps have no derived URL), but the app's OWN container always
-  # carries it — read it there as a fallback. One simple `sh -c` command (verified
-  # to work), unlike the nested one-liner that silently dumped nothing.
+  # ActiveRecord reports the app's real DSN however it's wired (DATABASE_URL,
+  # database.yml, or credentials) — so an app can tell us its own connection even
+  # when it exposes no DATABASE_URL env. Prints CONDUCTOR_DSN=<url> for us to parse.
+  RAILS_DSN_PROBE =
+    "bin/rails runner \"require %q(cgi); c=ActiveRecord::Base.connection_db_config.configuration_hash; " \
+    "puts %q(CONDUCTOR_DSN=postgres://)+CGI.escape(c[:username].to_s)+%q(:)+CGI.escape(c[:password].to_s)+" \
+    "%q(@)+c[:host].to_s+%q(:)+(c[:port]||5432).to_s+%q(/)+c[:database].to_s\"".freeze
+
+  # The app's live DATABASE_URL, resolved most-authoritative first:
+  #   1. Conductor's derived URL (dedicated DBs it manages), then
+  #   2. the container's DATABASE_URL env (Conductor-managed apps set it), then
+  #   3. ASK THE APP — older/unregistered apps (e.g. Kuickr) carry no derived URL
+  #      and no DATABASE_URL env; they configure the DB via database.yml, but
+  #      ActiveRecord still resolves the real connection, so the app reports it.
   def resolve_database_url(ssh)
     app = backup.app
     derived = app&.derived_database_url(server: backup.server || app&.server)
@@ -98,7 +108,11 @@ class DatabaseBackup
     return nil unless container
 
     ssh.execute("docker exec #{container} printenv DATABASE_URL")
-    ssh.output.to_s.strip.presence
+    env_url = ssh.output.to_s.strip
+    return env_url if env_url.start_with?("postgres")
+
+    ssh.execute("docker exec #{container} #{RAILS_DSN_PROBE}")
+    ssh.output.to_s[/CONDUCTOR_DSN=(\S+)/, 1]
   end
 
   # Build the dump command. Two hard-won requirements the old host `pg_dump
