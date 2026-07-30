@@ -47,13 +47,31 @@ class SelfDeployReconcilerTest < ActiveSupport::TestCase
     assert_equal "deploying", dep.reload.status
   end
 
-  test "ignores deployments of non-self-managed apps" do
+  test "leaves a non-self app whose sha does NOT match the running version alone" do
+    # A non-self app deployed FROM Conductor records ITS OWN repo's sha, which is
+    # never this Conductor container's KAMAL_VERSION — so it never matches and is
+    # never touched (the realistic case).
     other = @org.apps.create!(name: "Appone", slug: "appone", deploy_method: "kamal", self_managed: false)
-    dep = other.deployments.create!(status: "deploying", started_at: 2.minutes.ago, commit_sha: "match123")
+    dep = other.deployments.create!(status: "deploying", started_at: 2.minutes.ago, commit_sha: "otherrepo-sha")
 
-    SelfDeployReconciler.run(version: "match123")
+    SelfDeployReconciler.run(version: "conductor-sha")
 
-    assert_equal "deploying", dep.reload.status, "must not touch other apps' deployments"
+    assert_equal "deploying", dep.reload.status, "must not touch other apps' in-progress deployments"
+    refute other.reload.self_managed, "must not flag an unrelated app"
+  end
+
+  # Self-heal: an app whose in-progress deployment's sha IS the running container's
+  # version is, by definition, deploying ITSELF — even if it was never flagged
+  # self_managed (the exact state that made Conductor's own deploys loop). Detect
+  # it by the match, flag it, and finalize — so the bug can't silently recur.
+  test "auto-flags + succeeds a self-deploy detected by a version match on an unflagged app" do
+    unflagged = @org.apps.create!(name: "Conductor2", slug: "conductor2", deploy_method: "kamal", self_managed: false)
+    dep = unflagged.deployments.create!(status: "deploying", started_at: 2.minutes.ago, commit_sha: "selfsha123456")
+
+    SelfDeployReconciler.run(version: "selfsha123456")
+
+    assert unflagged.reload.self_managed, "a version-matched deploy means the app deploys itself — flag it"
+    assert_equal "succeeded", dep.reload.status
   end
 
   test "no-ops when version is blank (not running a kamal release)" do
