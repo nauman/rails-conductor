@@ -117,6 +117,55 @@ class CaddyClientTest < ActiveSupport::TestCase
     refute_includes ssh.commands.last, "example.com\\\""
   end
 
+  def test_enable_on_demand_tls_writes_the_permission_gate_and_a_scoped_policy
+    ssh = FakeSsh.new([
+      { stdout: "{}" }, # fetch_config
+      { stdout: "" }    # load_config
+    ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    res = client.enable_on_demand_tls(subject: "*.calm.page", ask_url: "http://127.0.0.1:9080/caddy/ask")
+
+    assert_equal "*.calm.page", res["subject"]
+    assert res["on_demand"]
+    assert_equal 2, ssh.commands.size
+    loaded = ssh.commands.last
+    assert_includes loaded, "/load"
+    # Caddy 2.8+ ask gate is a `permission` module — not the pre-2.8 bare `ask`.
+    assert_includes loaded, "permission"
+    assert_includes loaded, "module"
+    assert_includes loaded, "127.0.0.1:9080/caddy/ask"
+    assert_includes loaded, "on_demand"
+    assert_includes loaded, ".calm.page" # `*` is shell-escaped, the zone tail is not
+  end
+
+  def test_enable_on_demand_tls_is_idempotent_and_keeps_other_zones
+    existing = {
+      "apps" => { "tls" => { "automation" => { "policies" => [
+        { "subjects" => [ "*.other.com" ], "on_demand" => true },
+        { "subjects" => [ "*.calm.page" ], "on_demand" => true }
+      ] } } }
+    }
+    ssh = FakeSsh.new([
+      { stdout: JSON.generate(existing) }, # fetch_config
+      { stdout: "" }                       # load_config
+    ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    client.enable_on_demand_tls(subject: "*.calm.page", ask_url: "http://127.0.0.1:9080/caddy/ask")
+
+    loaded = ssh.commands.last
+    assert_includes loaded, ".other.com" # a different app's policy is preserved
+    assert_equal 1, loaded.scan(".calm.page").size, "the same-subject policy must be replaced, not duplicated"
+  end
+
+  def test_enable_on_demand_tls_rejects_a_non_http_ask_url
+    client = CaddyClient.new(build_server, ssh_connection: FakeSsh.new([]))
+    assert_raises(CaddyClient::Error) do
+      client.enable_on_demand_tls(subject: "*.calm.page", ask_url: "not-a-url")
+    end
+  end
+
   private
 
   def build_server

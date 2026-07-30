@@ -72,6 +72,7 @@ class KamalDeployer
     write_self_describing_config if app.self_describing?
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
+    stop_prior_container_if_fixed_port
     return false unless run_kamal_deploy
     return false unless run_gated_migrations
     return false unless run_seeds_if_requested
@@ -344,6 +345,28 @@ class KamalDeployer
     File.write(path, key.end_with?("\n") ? key : "#{key}\n")
     File.chmod(0o600, path)
     path
+  end
+
+  # Proxy-less (host-Caddy) apps publish a FIXED host port, so kamal's normal roll
+  # — boot the new container ALONGSIDE the old, health-check it, then retire the
+  # old — can't bind: the old container still holds the port and `docker run` dies
+  # with "port is already allocated" (the deploy #182 failure). When the app is in
+  # that mode — signalled by CADDY_PUBLISH_PORT, the exact flag that makes its
+  # deploy.yml drop the proxy block and publish a fixed 127.0.0.1:<port>:3000 — stop
+  # the prior container FIRST so the port frees before boot. Brief downtime, and
+  # only for fixed-port apps; kamal-proxy apps keep their zero-downtime roll.
+  #
+  # Advisory by design: `kamal app stop` is idempotent (a no-op on a first deploy),
+  # skipped for self-managed apps (which would kill their own deploy job), and we
+  # never block the deploy on it — a genuine conflict still surfaces at boot.
+  def stop_prior_container_if_fixed_port
+    return true if app.self_managed?
+    return true unless deploy_env.key?("CADDY_PUBLISH_PORT")
+
+    log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
+    result = @shell.run("bash", "-lc", "#{kamal_bin} app stop#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
+    true
   end
 
   # Runs `kamal deploy`, recovering from a stale deploy lock. Kamal takes a global

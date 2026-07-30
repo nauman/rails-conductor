@@ -107,6 +107,53 @@ class CaddyClient
     }
   end
 
+  # Turn on Caddy on-demand TLS for a (usually wildcard) subject, gated by an
+  # `ask` endpoint. This is what lets `*.calm.page` subdomains each get their own
+  # Let's Encrypt cert on first request WITHOUT a proxied wildcard at Cloudflare
+  # (Enterprise-only) or a DNS-challenge wildcard cert.
+  #
+  # Two things are written into apps.tls.automation:
+  #   • on_demand.permission — the ask gate (Caddy 2.8+ shape, `permission`
+  #     module:http, NOT the pre-2.8 bare `ask` string). Caddy calls it before
+  #     issuing any on-demand cert; a non-2xx refuses issuance.
+  #   • a policy {subjects:[subject], on_demand:true} — scopes on-demand to this
+  #     zone so a matching SNI is issued on demand instead of being pre-managed
+  #     (a wildcard subject would otherwise force a DNS-challenge cert).
+  #
+  # Idempotent: re-running replaces this subject's policy rather than stacking a
+  # duplicate, and preserves any OTHER apps' policies already on the box.
+  def enable_on_demand_tls(subject:, ask_url:)
+    subject = subject.to_s.strip.downcase
+    ask_url = ask_url.to_s.strip
+    raise Error, "Subject is required" if subject.blank?
+    raise Error, "Subject contains whitespace" if subject.match?(/\s/)
+    raise Error, "ask_url must be an http(s) URL" unless ask_url.match?(%r{\Ahttps?://}i)
+
+    config = fetch_config
+    config = {} unless config.is_a?(Hash)
+    config["apps"] ||= {}
+    tls = (config["apps"]["tls"] ||= {})
+    automation = (tls["automation"] ||= {})
+
+    automation["on_demand"] = {
+      "permission" => { "module" => "http", "endpoint" => ask_url }
+    }
+
+    policies = Array(automation["policies"])
+    policies.reject! { |p| Array(p["subjects"]).map { |s| s.to_s.downcase } == [ subject ] }
+    policies.unshift({ "subjects" => [ subject ], "on_demand" => true })
+    automation["policies"] = policies
+
+    load_config(config)
+
+    {
+      "subject" => subject,
+      "ask_url" => ask_url,
+      "on_demand" => true,
+      "server_name" => server.name
+    }
+  end
+
   private
 
   def http_servers(config)

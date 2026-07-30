@@ -92,6 +92,31 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+  # Regression for deploy #182: a proxy-less (host-Caddy) app publishes a FIXED
+  # host port, so kamal's boot-new-alongside-old roll dies with "port already
+  # allocated". CADDY_PUBLISH_PORT signals that mode — stop the prior container
+  # BEFORE boot so the port frees.
+  test "fixed-port (CADDY_PUBLISH_PORT) app stops the prior container before kamal deploy" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    cmds = shell.runs.map { |r| r[:command].last }
+    stop_idx   = cmds.index { |c| c.include?("kamal app stop") }
+    deploy_idx = cmds.index { |c| c.include?("kamal deploy") }
+    assert stop_idx, "expected a 'kamal app stop' before boot for a fixed-port app"
+    assert deploy_idx, "expected a kamal deploy step"
+    assert stop_idx < deploy_idx, "stop must run BEFORE deploy so the fixed port is free"
+  end
+
+  test "kamal-proxy app (no CADDY_PUBLISH_PORT) does NOT stop first — keeps the zero-downtime roll" do
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    cmds = shell.runs.map { |r| r[:command].last }
+    refute cmds.any? { |c| c.include?("kamal app stop") }, "proxy apps must keep the boot-alongside roll"
+  end
+
 
   # Regression: the control container's PATH under `bash -lc` (a login shell)
   # doesn't include the bundle's bin dir, so bare `kamal` is not found — and the
