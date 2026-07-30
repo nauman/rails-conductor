@@ -5,12 +5,14 @@ class UpdateAppTool
 
   DEFINITION = {
     name: 'update_app',
-    description: "Update an app's configuration (deploy method, repository, branch, domain, port, notes).",
+    description: "Update an app's configuration (deploy method, repository, branch, domain, port, notes, home server).",
     input_schema: {
       type: 'object',
       properties: {
         app_id:         { type: 'integer', description: 'App id (or use app_name)' },
         app_name:       { type: 'string',  description: 'App name (or use app_id)' },
+        server_id:      { type: 'integer', description: "Set the app's home server by id (or server_name) — corrects/adopts where Conductor records the app lives (e.g. after a hand-moved deploy). Org-scoped." },
+        server_name:    { type: 'string',  description: "Set the app's home server by name (or server_id)." },
         deploy_method:  { type: 'string',  description: 'One of: docker, native, kamal' },
         repository_url: { type: 'string',  description: 'Git repository URL' },
         branch:         { type: 'string',  description: 'Deploy branch' },
@@ -36,6 +38,15 @@ class UpdateAppTool
     return Result.fail("App not found: #{input['app_id'] || input['app_name']}") unless app
 
     attrs = UPDATABLE.each_with_object({}) { |k, h| h[k] = input[k] if input.key?(k) }
+
+    # Home-server change: resolve name/id to a server the actor may touch; the App
+    # model's same-organization validation rejects a cross-org server on update.
+    if input.key?("server_id") || input.key?("server_name")
+      srv = find_server(input)
+      return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless srv
+      attrs["server_id"] = srv.id
+    end
+
     return Result.fail("Nothing to update. Provide at least one field.") if attrs.empty?
 
     if attrs.key?("deploy_method") && !App::DEPLOY_METHODS.include?(attrs["deploy_method"])
