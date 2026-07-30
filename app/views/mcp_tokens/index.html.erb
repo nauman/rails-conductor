@@ -1,19 +1,22 @@
 <% content_for :title, "MCP Tokens · Conductor" %>
 
-<section class="max-w-3xl mx-auto px-4 py-10">
-  <div>
-    <h1 class="font-display text-2xl text-ink tracking-display">MCP Tokens</h1>
-    <p class="mt-1 text-sm text-muted">Per-user tokens scoped to <strong><%= current_organization.name %></strong>. Use one as the bearer token for any MCP agent (Claude, Cursor, Codex) to deploy this org's apps over MCP. See the <%= link_to "MCP guide", "/docs/mcp", class: "text-primary underline" %>.</p>
-  </div>
+<%= render partial: "shared/page_head",
+      locals: {
+        title: "Let an agent drive this fleet.",
+        lede: "Per-user tokens scoped to this organization. Use one as the bearer token for any MCP client, or connect through the browser and skip tokens entirely.",
+        stats: [ { value: @tokens.size, label: "tokens" } ]
+      } %>
+
+<section class="max-w-3xl mx-auto px-4 py-8">
 
   <% if @new_token %>
-    <div class="mt-6 rounded-large border border-primary/30 bg-primary-tint p-5">
+    <div class=" rounded-large border border-primary/30 bg-primary-tint p-5">
       <div class="text-2xs font-semibold uppercase tracking-label text-primary">New token — copy it now, it won't be shown again</div>
       <code class="mt-2 block font-mono text-xs bg-surface rounded-card px-3 py-2 break-all"><%= @new_token %></code>
     </div>
   <% end %>
 
-  <div class="mt-6 rounded-large border border-border bg-surface p-6 shadow-soft">
+  <div class="mt-5 rounded-large border border-border bg-surface p-6 shadow-soft">
     <h2 class="text-sm font-semibold text-ink">Create a token</h2>
     <%= form_with url: mcp_tokens_path, method: :post, class: "mt-4 flex flex-wrap items-end gap-3" do %>
       <div class="flex-1 min-w-[180px]">

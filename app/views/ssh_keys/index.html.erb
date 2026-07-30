@@ -1,105 +1,101 @@
 <% content_for :title, "SSH Keys · Conductor" %>
 
-<section class="max-w-7xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display">SSH Keys</h1>
-      <p class="mt-1 text-sm text-muted">Manage SSH keys for server connections.</p>
-    </div>
-    <%= link_to new_ssh_key_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      Add SSH Key
-    <% end %>
-  </div>
+<%# SSH is how Conductor reaches every box, so a key with no server attached is usually a
+    setup that was never finished — worth saying, not just listing. %>
+<% unattached = @ssh_keys.select { |k| k.servers.empty? } %>
+<%= render layout: "shared/page_head",
+      locals: {
+        title: @ssh_keys.empty? ? "No keys — Conductor can't reach any server." : "#{pluralize(@ssh_keys.size, "key")} for #{pluralize(@ssh_keys.sum { |k| k.servers.count }, "server")}.",
+        lede: "Conductor connects over plain SSH — no agent on your boxes. It holds the private half, encrypted; the public half lives in the server's authorized_keys.",
+        stats: [
+          { value: @ssh_keys.size, label: "keys" },
+          ({ value: unattached.size, label: "attached to nothing", tone: :warning } if unattached.any?)
+        ].compact
+      } do %>
+  <%= rui_button("Add SSH key", url: new_ssh_key_path, color: :primary, size: :md) %>
+<% end %>
 
+<section class="max-w-7xl mx-auto px-4 py-8 space-y-5">
   <% if @ssh_keys.any? %>
-    <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
-      <table class="min-w-full divide-y divide-border">
-        <thead class="bg-fill">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Name</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Type</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Fingerprint</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Servers</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border">
-          <% @ssh_keys.each do |ssh_key| %>
-            <tr>
-              <td class="px-6 py-4">
-                <%= link_to ssh_key.name, ssh_key_path(ssh_key), class: "text-sm font-medium text-ink hover:underline" %>
-              </td>
-              <td class="px-6 py-4 text-sm text-muted">
-                <code class="bg-fill-strong px-2 py-1 rounded text-xs"><%= ssh_key.key_type || "unknown" %></code>
-              </td>
-              <td class="px-6 py-4 text-sm text-muted">
-                <code class="text-xs"><%= ssh_key.fingerprint&.truncate(30) || "—" %></code>
-              </td>
-              <td class="px-6 py-4 text-sm text-muted">
-                <%= ssh_key.servers.count %> server<%= ssh_key.servers.count == 1 ? "" : "s" %>
-              </td>
-              <td class="px-6 py-4 text-right text-sm">
-                <%= link_to "Edit", edit_ssh_key_path(ssh_key), class: "font-medium text-body hover:text-ink" %>
-                <span class="text-faint mx-2">·</span>
-                <%= button_to "Delete", ssh_key_path(ssh_key), method: :delete,
-                    data: { turbo_confirm: "Are you sure? This cannot be undone." },
-                    class: "font-medium text-danger hover:text-danger-deep" %>
-              </td>
+    <%= render layout: "shared/panel", locals: { title: "Keys", flush: true } do %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-fill font-mono text-2xs uppercase tracking-label text-muted">
+              <th class="px-5 py-2 text-left font-semibold">Name</th>
+              <th class="px-5 py-2 text-left font-semibold">Type</th>
+              <th class="px-5 py-2 text-left font-semibold">Fingerprint</th>
+              <th class="px-5 py-2 text-left font-semibold">In use by</th>
+              <th class="px-5 py-2 text-right font-semibold"></th>
             </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            <% @ssh_keys.each do |ssh_key| %>
+              <tr class="border-t border-border hover:bg-bg-alt">
+                <td class="px-5 py-2.5">
+                  <%= link_to ssh_key.name, ssh_key_path(ssh_key), class: "font-medium text-ink hover:underline" %>
+                </td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= ssh_key.key_type || "unknown" %></td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= ssh_key.fingerprint&.truncate(30) || "—" %></td>
+                <td class="px-5 py-2.5 font-mono text-2xs <%= ssh_key.servers.empty? ? "text-warning-deep" : "text-muted" %>">
+                  <%= ssh_key.servers.empty? ? "no servers" : pluralize(ssh_key.servers.count, "server") %>
+                </td>
+                <td class="whitespace-nowrap px-5 py-2.5 text-right">
+                  <%= rui_button("Edit", url: edit_ssh_key_path(ssh_key), variant: :ghost, size: :sm, color: :slate) %>
+                  <%= rui_button_to("Delete", ssh_key_path(ssh_key), method: :delete, variant: :ghost, size: :sm, color: :danger,
+                        data: { turbo_confirm: "Delete #{ssh_key.name}? Any server using it loses access." }) %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
   <% else %>
-    <div class="mt-6 rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
-      <svg class="mx-auto h-12 w-12 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
-      </svg>
-      <div class="mt-4 text-sm text-muted">No SSH keys yet.</div>
-      <p class="mt-1 text-xs text-faint">Add an SSH key to connect to your servers.</p>
-      <%= link_to "Add your first SSH key", new_ssh_key_path, class: "mt-4 inline-block text-sm font-medium text-ink hover:underline" %>
+    <div class="rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <h2 class="font-display text-xl text-ink">No SSH keys yet</h2>
+      <p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+        Without one, Conductor can read nothing and deploy nowhere. Let it generate a
+        dedicated key — then you can revoke its access by deleting one line on a server.
+      </p>
+      <%= rui_button "Add your first SSH key", url: new_ssh_key_path, color: :primary, class: "mt-5" %>
     </div>
   <% end %>
 
-  <div class="mt-8 rounded-card border border-border bg-fill p-5">
-    <h3 class="text-sm font-semibold text-body">Why Conductor needs an SSH key</h3>
-    <p class="mt-1.5 text-sm text-muted">
-      Conductor connects to your servers over SSH to deploy apps, run scripts, collect
-      metrics, and take backups — no agent required. An SSH key is a pair: a
-      <strong>public</strong> key that lives <em>on the server</em> (it says "trust whoever
-      holds the match"), and a <strong>private</strong> key that Conductor holds and keeps
-      encrypted at rest. You give Conductor the <em>private</em> key here; you put the
-      <em>public</em> key on each server.
+  <%= render layout: "shared/panel", locals: { title: "Setting one up", meta: "about a minute" } do %>
+    <p class="text-sm text-muted">
+      A key is a pair: a <strong class="text-body">public</strong> half that lives on the
+      server (it says "trust whoever holds the match"), and a
+      <strong class="text-body">private</strong> half Conductor holds, encrypted at rest.
     </p>
-
-    <h3 class="mt-4 text-sm font-semibold text-body">Set one up (≈1 minute)</h3>
-    <ol class="mt-2 text-sm text-body space-y-2.5 list-decimal list-inside">
-      <li>
-        <span class="font-medium">Let Conductor generate the key</span> — click
-        <em>Add SSH Key</em> above and choose <em>Generate a deploy key</em>. Conductor
-        creates the keypair on its own server and keeps the private half encrypted.
-        You never generate anything on your own machine.
+    <ol class="mt-4 space-y-3 text-sm text-body">
+      <li class="flex gap-3">
+        <span class="font-mono text-2xs text-faint">01</span>
+        <span>
+          <strong class="font-medium">Let Conductor generate it</strong> — choose
+          <em>Generate a deploy key</em>. The keypair is created here and the private half
+          never leaves; you generate nothing on your own machine.
+        </span>
       </li>
-      <li>
-        <span class="font-medium">Authorize the public key on your server</span> —
-        Conductor shows you the public key with a copy button. Add it to the server's
-        <code class="bg-surface px-1 py-0.5 rounded text-2xs">~/.ssh/authorized_keys</code>
-        for the user Conductor logs in as (usually <code class="text-2xs">deploy</code> or <code class="text-2xs">root</code>):
-        <div class="mt-1.5 ml-5"><code class="block bg-surface px-2 py-1 rounded text-xs">ssh-copy-id -i &lt;key&gt;.pub deploy@YOUR_SERVER_IP</code></div>
+      <li class="flex gap-3">
+        <span class="font-mono text-2xs text-faint">02</span>
+        <span>
+          <strong class="font-medium">Authorize the public half</strong> on the box, for the
+          user Conductor logs in as:
+          <code class="mt-1.5 block rounded-card bg-fill px-2 py-1 font-mono text-2xs">ssh-copy-id -i &lt;key&gt;.pub deploy@YOUR_SERVER_IP</code>
+        </span>
       </li>
-      <li>
-        <span class="font-medium">Attach it to a server</span> — when you add or edit a
-        server, pick this key under <em>SSH connection</em>, then hit
-        <em>Test connection</em> to confirm.
+      <li class="flex gap-3">
+        <span class="font-mono text-2xs text-faint">03</span>
+        <span>
+          <strong class="font-medium">Attach it to a server</strong> and hit
+          <em>Test connection</em> to confirm before relying on it.
+        </span>
       </li>
     </ol>
-
-    <p class="mt-4 text-xs text-faint">
-      Prefer your own key? You can still paste an existing private key on the
-      <em>Add SSH Key</em> page — but letting Conductor own a dedicated key means you can
-      revoke its access independently, just by removing its line from a server's
-      <code class="bg-surface px-1 py-0.5 rounded text-2xs">authorized_keys</code>.
+    <p class="mt-4 text-2xs text-faint">
+      You can paste an existing private key instead — but a dedicated key means revoking
+      Conductor's access is one line in <code>authorized_keys</code>, not a rotation.
     </p>
-  </div>
+  <% end %>
 </section>

@@ -1,43 +1,49 @@
 <% content_for :title, "Logs · #{@app.name} · Conductor" %>
 
-<section class="max-w-5xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display dark:text-white">Container Logs</h1>
-      <p class="mt-1 text-sm text-muted dark:text-faint">
-        <%= link_to @app.name, app_path(@app), class: "hover:underline" %> ·
-        Last <%= @tail %> lines · live tail
-      </p>
-      <details class="mt-2 text-xs text-muted dark:text-faint">
-        <summary class="cursor-pointer hover:text-body dark:hover:text-white">Tail on the box (multi-app: filter by service label)</summary>
-        <% if @app.native? %>
-          <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
+<%# Container logs. The header states where the lines come from, because "Container Logs"
+    over a native systemd service was quietly wrong. %>
+<%= render layout: "shared/page_head",
+      locals: {
+        eyebrow: @app.name,
+        title: "Live output from #{@app.log_source_label}.",
+        lede: "Last #{@tail} lines, re-read on a timer. Conductor tails the box — it doesn't store your logs.",
+        stats: [
+          { value: @app.container_status.presence || "unknown", label: "runtime",
+            tone: @app.container_running? ? :default : :danger },
+          { value: @tail, label: "lines" },
+          { value: @app.server&.name || "—", label: "server", url: (server_path(@app.server) if @app.server) }
+        ]
+      } do %>
+  <label class="inline-flex cursor-pointer items-center gap-2 rounded-control border border-border-strong bg-surface px-3 py-2 text-sm font-medium text-body hover:bg-fill">
+    <input type="checkbox" id="auto-refresh" checked class="rounded border-border-strong text-ink focus:ring-primary">
+    <span>Live tail</span>
+  </label>
+  <%= rui_button("Re-read", url: logs_app_path(@app), id: "manual-refresh", variant: :outline, color: :slate) %>
+  <%= rui_button("Back to app", url: app_path(@app), variant: :outline, color: :slate) %>
+<% end %>
+
+<section class="max-w-7xl mx-auto px-4 py-8">
+  <%# How to tail it yourself, for when you need more than this page gives. %>
+  <details class="mb-4 text-2xs text-muted">
+    <summary class="cursor-pointer font-mono uppercase tracking-label hover:text-body">Tail it on the box</summary>
+    <% if @app.native? %>
+      <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
 journalctl --user -u <%= @app.service_name %> -n <%= @tail %> -f</pre>
-        <% elsif @app.kamal? %>
-          <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
+    <% elsif @app.kamal? %>
+      <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
 # Kamal names the container <service>-<role>-<version> — resolve it by the service label:
 docker logs -f --tail <%= @tail %> $(docker ps -q -f label=service=<%= @app.kamal_service %> | head -1)
 # or from the app repo: kamal app logs -f</pre>
-        <% else %>
-          <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
+    <% else %>
+      <pre class="mt-2 font-mono text-2xs bg-ink text-faint rounded-card px-3 py-2 overflow-x-auto whitespace-pre-wrap">ssh <%= @app.server&.ssh_user %>@<%= @app.server&.ip_address %>
 docker logs -f --tail <%= @tail %> <%= @app.container_name %></pre>
-        <% end %>
-      </details>
-    </div>
-    <div class="flex items-center gap-2">
-      <label class="inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint cursor-pointer hover:bg-fill dark:hover:bg-fill">
-        <input type="checkbox" id="auto-refresh" checked class="rounded border-border-strong dark:border-border-strong text-ink dark:text-white focus:ring-primary">
-        <span>Live tail</span>
-      </label>
-      <%= link_to "Refresh", logs_app_path(@app), id: "manual-refresh", class: "inline-flex items-center gap-2 rounded-lg bg-ink dark:bg-fill px-4 py-2 text-sm font-medium text-white hover:bg-body dark:hover:bg-fill-strong" %>
-      <%= link_to "Back to App", app_path(@app), class: "inline-flex items-center gap-2 rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-body px-4 py-2 text-sm font-medium text-body dark:text-faint hover:bg-fill dark:hover:bg-fill" %>
-    </div>
-  </div>
+    <% end %>
+  </details>
 
   <div class="mt-8 rounded-large border border-border-strong bg-ink shadow-soft overflow-hidden" id="log-container">
     <div class="p-4 border-b border-border-strong flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <h3 class="text-sm font-semibold text-white font-mono"><%= @app.log_source_label %></h3>
+        <h2 class="font-mono text-2xs uppercase tracking-label text-white/70"><%= @app.log_source_label %></h2>
         <span id="refresh-indicator" class="hidden">
           <svg class="h-4 w-4 text-faint animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

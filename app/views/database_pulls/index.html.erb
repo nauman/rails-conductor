@@ -1,55 +1,65 @@
-<% content_for :title, "Database pulls" %>
+<% content_for :title, "Database pulls · Conductor" %>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <div class="flex items-center justify-between mb-6">
-    <div>
-      <h1 class="text-2xl font-bold text-ink">Database pulls</h1>
-      <p class="text-sm text-muted mt-1">Dumps pulled from your servers down to this Conductor host.</p>
-    </div>
-    <%= link_to "New pull", new_database_pull_path, class: "px-4 py-2 text-sm font-medium rounded-md bg-ink hover:bg-body text-white" %>
-  </div>
+<% failed = @pulls.count { |p| p.status == "failed" } %>
+<%= render layout: "shared/page_head",
+      locals: {
+        title: failed.positive? ? "#{pluralize(failed, "pull")} failed." : "#{pluralize(@pulls.size, "pull")} on this host.",
+        lede: "Dumps pulled from your servers down to the machine Conductor runs on — for a local restore, an inspection, or a copy of production data.",
+        stats: [
+          { value: @pulls.size, label: "pulls" },
+          { value: @pulls.count { |p| p.status == "success" }, label: "succeeded" },
+          ({ value: failed, label: "failed", tone: :danger } if failed.positive?)
+        ].compact
+      } do %>
+  <%= rui_button("New pull", url: new_database_pull_path, color: :primary, size: :md) %>
+<% end %>
 
+<section class="max-w-7xl mx-auto px-4 py-8">
   <% if @pulls.any? %>
-    <div class="bg-white rounded-card border border-border overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-fill-strong text-left text-muted">
-          <tr>
-            <th class="px-4 py-2 font-medium">#</th>
-            <th class="px-4 py-2 font-medium">Source</th>
-            <th class="px-4 py-2 font-medium">Server</th>
-            <th class="px-4 py-2 font-medium">Restore target</th>
-            <th class="px-4 py-2 font-medium">Size</th>
-            <th class="px-4 py-2 font-medium">Status</th>
-            <th class="px-4 py-2 font-medium">When</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border">
-          <% @pulls.each do |pull| %>
-            <tr class="hover:bg-fill-strong/50">
-              <td class="px-4 py-2"><%= link_to "##{pull.id}", database_pull_path(pull), class: "text-info hover:underline" %></td>
-              <td class="px-4 py-2"><%= pull.source_label %></td>
-              <td class="px-4 py-2"><%= pull.server&.name %></td>
-              <td class="px-4 py-2 font-mono text-xs"><%= pull.restore_target.presence || "—" %></td>
-              <td class="px-4 py-2"><%= pull.formatted_size %></td>
-              <td class="px-4 py-2">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                  <%= case pull.status
-                      when 'pending' then 'bg-fill-strong text-body'
-                      when 'running' then 'bg-info-tint text-info'
-                      when 'success' then 'bg-primary-tint text-primary'
-                      when 'failed'  then 'bg-danger-tint text-danger-deep'
-                      end %>"><%= pull.status.capitalize %></span>
-              </td>
-              <td class="px-4 py-2 text-muted"><%= time_ago_in_words(pull.created_at) %> ago</td>
+    <%= render layout: "shared/panel", locals: { title: "Pulls", flush: true } do %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-fill font-mono text-2xs uppercase tracking-label text-muted">
+              <th class="px-5 py-2 text-left font-semibold">#</th>
+              <th class="px-5 py-2 text-left font-semibold">Source</th>
+              <th class="px-5 py-2 text-left font-semibold">Server</th>
+              <th class="px-5 py-2 text-left font-semibold">Restored into</th>
+              <th class="px-5 py-2 text-left font-semibold">Size</th>
+              <th class="px-5 py-2 text-left font-semibold">Status</th>
+              <th class="px-5 py-2 text-right font-semibold">When</th>
             </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            <% @pulls.each do |pull| %>
+              <tr class="border-t border-border hover:bg-bg-alt">
+                <td class="px-5 py-2.5">
+                  <%= link_to "##{pull.id}", database_pull_path(pull), class: "font-mono text-2xs font-medium text-ink hover:underline" %>
+                </td>
+                <td class="px-5 py-2.5 text-sm text-body"><%= pull.source_label %></td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= pull.server&.name || "—" %></td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= pull.restore_target.presence || "—" %></td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= pull.formatted_size %></td>
+                <td class="px-5 py-2.5">
+                  <span class="font-mono text-2xs font-semibold <%= { "success" => "text-primary", "failed" => "text-danger", "running" => "text-warning-deep" }[pull.status] || "text-muted" %>">
+                    <%= pull.status %>
+                  </span>
+                </td>
+                <td class="px-5 py-2.5 text-right font-mono text-2xs text-faint"><%= time_ago_in_words(pull.created_at) %> ago</td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
   <% else %>
-    <div class="bg-white rounded-card border border-border px-6 py-12 text-center">
-      <p class="text-muted">No database pulls yet.</p>
-      <%= link_to "Pull a database", new_database_pull_path, class: "inline-block mt-3 text-info hover:underline" %>
+    <div class="rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <h2 class="font-display text-xl text-ink">No pulls yet</h2>
+      <p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+        Pull a production database down to restore it locally — the same dump path the
+        backups use, so a successful pull is also evidence the backup would restore.
+      </p>
+      <%= rui_button "Pull a database", url: new_database_pull_path, color: :primary, class: "mt-5" %>
     </div>
   <% end %>
-</div>
+</section>
