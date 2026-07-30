@@ -1,18 +1,16 @@
 <% content_for :title, "Organizations · Conductor" %>
 
-<section class="mx-auto max-w-3xl px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display">Organizations</h1>
-      <p class="mt-1 text-sm text-muted">Separate workspaces you belong to. Switch the active one or create another.</p>
-    </div>
-    <%= link_to new_organization_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      New organization
-    <% end %>
-  </div>
+<%= render layout: "shared/page_head",
+      locals: {
+        title: "You belong to #{pluralize(@organizations.size, "workspace")}.",
+        lede: "Each organization has its own servers, apps, databases, backups and members — nothing crosses between them.",
+        stats: [ { value: current_organization.name, label: "active now" } ]
+      } do %>
+  <%= rui_button("New organization", url: new_organization_path, color: :primary, size: :md) %>
+<% end %>
 
-  <div class="mt-6 rounded-large border border-border bg-surface shadow-soft">
+<section class="mx-auto max-w-3xl px-4 py-8">
+  <div class="rounded-large border border-border bg-surface shadow-soft">
     <ul class="divide-y divide-border">
       <% @organizations.each do |org| %>
         <li class="flex items-center justify-between px-5 py-4">

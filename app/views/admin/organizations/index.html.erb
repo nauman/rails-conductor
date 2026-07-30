@@ -1,10 +1,10 @@
 <section class="mx-auto max-w-4xl">
   <div class="flex items-center justify-between">
-    <h1 class="font-display text-xl text-ink">Admin · Organizations</h1>
+    <h1 class="font-display text-2xl text-ink tracking-display">Organizations</h1>
     <nav class="flex gap-1 text-sm">
-      <%= link_to "Organizations", admin_organizations_path, class: "px-3 py-1.5 rounded-full bg-ink text-white" %>
-      <%= link_to "Users", admin_users_path, class: "px-3 py-1.5 rounded-full hover:bg-fill-strong text-body" %>
-      <%= link_to "MCP Activity", admin_mcp_calls_path, class: "px-3 py-1.5 rounded-full hover:bg-fill-strong text-body" %>
+      <%= link_to "Organizations", admin_organizations_path, class: "rounded-pill bg-ink px-3 py-1.5 font-mono text-2xs uppercase tracking-label text-white" %>
+      <%= link_to "Users", admin_users_path, class: "rounded-pill px-3 py-1.5 font-mono text-2xs uppercase tracking-label text-muted hover:bg-fill-strong hover:text-ink" %>
+      <%= link_to "MCP Activity", admin_mcp_calls_path, class: "rounded-pill px-3 py-1.5 font-mono text-2xs uppercase tracking-label text-muted hover:bg-fill-strong hover:text-ink" %>
     </nav>
   </div>
 

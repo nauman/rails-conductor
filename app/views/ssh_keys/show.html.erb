@@ -1,34 +1,35 @@
 <% content_for :title, "#{@ssh_key.name} · Conductor" %>
 
-<section class="max-w-7xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display"><%= @ssh_key.name %></h1>
-      <p class="mt-1 text-sm text-muted">
-        <code class="bg-fill-strong px-2 py-1 rounded text-xs"><%= @ssh_key.key_type || "unknown" %></code>
-        key added <%= time_ago_in_words(@ssh_key.created_at) %> ago
-      </p>
-    </div>
-    <div class="flex items-center gap-2">
-      <%= link_to "Edit", edit_ssh_key_path(@ssh_key), class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
-      <%= link_to "Back", ssh_keys_path, class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
-    </div>
-  </div>
+<%= render layout: "shared/page_head",
+      locals: {
+        eyebrow: "#{@ssh_key.key_type || "unknown"} key",
+        title: @ssh_key.name,
+        lede: "Conductor holds the private half encrypted. The public half below goes in each server's authorized_keys.",
+        stats: [
+          { value: @ssh_key.servers.count, label: "servers using it",
+            tone: @ssh_key.servers.empty? ? :warning : :default },
+          { value: "#{time_ago_in_words(@ssh_key.created_at)} ago", label: "added" }
+        ]
+      } do %>
+  <%= rui_button("Edit", url: edit_ssh_key_path(@ssh_key), variant: :outline, color: :slate) %>
+  <%= rui_button("All keys", url: ssh_keys_path, variant: :outline, color: :slate) %>
+<% end %>
 
-  <div class="mt-8 grid gap-6 lg:grid-cols-2">
+<section class="max-w-7xl mx-auto px-4 py-8">
+  <div class="grid gap-5 lg:grid-cols-2">
     <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
-      <h2 class="text-sm font-semibold text-ink">Key Details</h2>
+      <h2 class="text-sm font-semibold text-ink">Key details</h2>
       <dl class="mt-4 space-y-4">
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Fingerprint</dt>
+          <dt class="font-mono text-2xs uppercase tracking-label text-muted">Fingerprint</dt>
           <dd class="mt-1 text-sm text-ink font-mono"><%= @ssh_key.fingerprint || "—" %></dd>
         </div>
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Key Type</dt>
+          <dt class="font-mono text-2xs uppercase tracking-label text-muted">Key Type</dt>
           <dd class="mt-1 text-sm text-ink"><%= @ssh_key.key_type || "Unknown" %></dd>
         </div>
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Has Passphrase</dt>
+          <dt class="font-mono text-2xs uppercase tracking-label text-muted">Has Passphrase</dt>
           <dd class="mt-1 text-sm text-ink"><%= @ssh_key.passphrase.present? ? "Yes" : "No" %></dd>
         </div>
       </dl>
@@ -46,8 +47,8 @@
       </div>
       <p class="mt-1 text-xs text-muted">Conductor connects to your servers with this key. Add the public half to each server so it trusts Conductor.</p>
       <% if @ssh_key.public_key.present? %>
-        <textarea id="ssh-public-key" readonly rows="3" class="mt-3 block w-full rounded-lg bg-fill p-3 font-mono text-xs text-body break-all resize-none focus:outline-none"><%= @ssh_key.public_key %></textarea>
-        <div class="mt-3 rounded-lg border border-border bg-bg-alt p-3 text-xs text-muted">
+        <textarea id="ssh-public-key" readonly rows="3" class="mt-3 block w-full rounded-control bg-fill p-3 font-mono text-2xs text-body break-all resize-none focus:outline-none"><%= @ssh_key.public_key %></textarea>
+        <div class="mt-3 rounded-card border border-border bg-bg-alt p-3 text-2xs text-muted">
           <div class="font-medium text-body">Authorize it on a server</div>
           <p class="mt-1">Log into the server as the user Conductor will use (e.g. <code class="text-2xs">deploy</code> or <code class="text-2xs">root</code>) and append the line above to <code class="text-2xs">~/.ssh/authorized_keys</code> — or from your machine:</p>
           <code class="mt-1.5 block bg-surface px-2 py-1 rounded text-2xs break-all">ssh-copy-id -i &lt;this-key&gt;.pub deploy@YOUR_SERVER_IP</code>
@@ -60,38 +61,27 @@
   </div>
 
   <% if @ssh_key.servers.any? %>
-    <div class="mt-8">
-      <h2 class="font-display text-lg text-ink">Servers using this key</h2>
-      <div class="mt-4 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
-        <table class="min-w-full divide-y divide-border">
-          <thead class="bg-fill">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Server</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">IP Address</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Status</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            <% @ssh_key.servers.each do |server| %>
-              <tr>
-                <td class="px-6 py-4">
-                  <%= link_to server.name, server_path(server), class: "text-sm font-medium text-ink hover:underline" %>
-                </td>
-                <td class="px-6 py-4 text-sm text-muted"><%= server.ip_address || "—" %></td>
-                <td class="px-6 py-4">
-                  <span class="<%= status_badge(server.status) %>"><%= server.status %></span>
-                </td>
-              </tr>
-            <% end %>
-          </tbody>
-        </table>
-      </div>
+    <div class="mt-5">
+      <%= render layout: "shared/panel",
+            locals: { title: "Servers using this key", flush: true,
+                      meta: "deleting the key cuts Conductor off from all of them" } do %>
+        <div class="divide-y divide-border">
+          <% @ssh_key.servers.each do |server| %>
+            <div class="flex items-center justify-between gap-3 px-5 py-3">
+              <div class="min-w-0">
+                <%= link_to server.name, server_path(server), class: "text-sm font-medium text-ink hover:underline" %>
+                <div class="font-mono text-2xs text-faint"><%= server.ip_address || "no IP" %></div>
+              </div>
+              <span class="<%= status_badge(server.display_status) %>"><%= server.display_status %></span>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
     </div>
   <% end %>
 
-  <div class="mt-10 pt-6 border-t border-border">
-    <%= button_to "Delete SSH Key", ssh_key_path(@ssh_key), method: :delete,
-        data: { turbo_confirm: "Are you sure you want to delete this SSH key?" },
-        class: "text-sm font-medium text-danger hover:text-danger-deep" %>
+  <div class="mt-5 rounded-large border border-border bg-surface px-5 py-4 shadow-soft">
+    <%= rui_button_to("Delete SSH key", ssh_key_path(@ssh_key), method: :delete, variant: :link, color: :danger, size: :sm,
+          data: { turbo_confirm: (@ssh_key.servers.any? ? "Delete #{@ssh_key.name}? #{@ssh_key.servers.count} server(s) use it and Conductor will lose access." : "Delete #{@ssh_key.name}?") }) %>
   </div>
 </section>

@@ -1,10 +1,10 @@
 <% content_for :title, "Edit #{@ssh_key.name} · Conductor" %>
 
-<section class="max-w-2xl mx-auto px-4 py-10">
-  <div class="mb-8">
-    <h1 class="font-display text-2xl text-ink tracking-display">Edit SSH Key</h1>
-    <p class="mt-1 text-sm text-muted">Update SSH key configuration.</p>
-  </div>
+<%= render partial: "shared/page_head",
+      locals: { title: "Edit #{@ssh_key.name}.",
+                lede: "Replacing the private key means re-authorizing the new public half on every server that used this one." } %>
+
+<section class="max-w-3xl mx-auto px-4 py-8">
 
   <%= render "form", ssh_key: @ssh_key %>
 </section>

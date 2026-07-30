@@ -3,11 +3,13 @@
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-ink">Script Run #<%= @script_run.id %></h1>
-      <p class="text-sm text-muted mt-1">
-        <%= @script_run.script.name %> on
-        <%= link_to @script_run.server.name, server_path(@script_run.server), class: "text-info hover:underline" %>
-        &middot; started <%= time_ago_in_words(@script_run.created_at) %> ago
+      <h1 class="font-display text-2xl text-ink tracking-display">
+        <%= @script_run.script.name %> on <%= @script_run.server.name %>
+      </h1>
+      <p class="mt-1 font-mono text-2xs text-muted">
+        run #<%= @script_run.id %> ·
+        <%= link_to @script_run.server.name, server_path(@script_run.server), class: "hover:text-ink" %> ·
+        started <%= time_ago_in_words(@script_run.created_at) %> ago
       </p>
     </div>
     <div class="flex items-center gap-3">

@@ -1,16 +1,17 @@
 <% content_for :title, @script.name %>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <div class="flex items-center justify-between mb-6">
-    <div>
-      <h1 class="text-2xl font-bold text-ink"><%= @script.name %></h1>
-      <p class="text-sm text-muted mt-1">Type: <%= @script.script_type %><% if @script.built_in? %> &middot; built-in<% end %></p>
-    </div>
-    <div class="flex gap-2">
-      <%= link_to "Edit", edit_script_path(@script), class: "px-3 py-1.5 text-sm rounded-md bg-fill-strong hover:bg-fill-strong text-body" %>
-      <%= link_to "All Scripts", scripts_path, class: "px-3 py-1.5 text-sm rounded-md bg-fill-strong hover:bg-fill-strong text-body" %>
-    </div>
-  </div>
+<%= render layout: "shared/page_head",
+      locals: {
+        eyebrow: @script.built_in? ? "built-in script" : "your script",
+        title: @script.name,
+        lede: @script.description.presence,
+        stats: [ { value: @script.script_type, label: "type" } ]
+      } do %>
+  <%= rui_button("Edit", url: edit_script_path(@script), variant: :outline, color: :slate) %>
+  <%= rui_button("All scripts", url: scripts_path, variant: :outline, color: :slate) %>
+<% end %>
+
+<div class="max-w-5xl mx-auto px-4 py-8">
 
   <% if @script.description.present? %>
     <p class="text-body mb-6"><%= @script.description %></p>

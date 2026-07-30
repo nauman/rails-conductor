@@ -1,10 +1,18 @@
 <% content_for :title, "Provisioning Scripts" %>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-ink">Provisioning Scripts</h1>
-    <%= link_to "New Script", new_script_path, class: "px-4 py-2 text-sm font-medium rounded-md bg-ink hover:bg-body text-white" %>
-  </div>
+<%= render layout: "shared/page_head",
+      locals: {
+        title: "#{pluralize(@scripts.size, "script")} you can run on a box.",
+        lede: "Shell run over SSH as the server's Conductor user. Built-ins ship with Conductor; your own are versioned here and scheduled from a server's page.",
+        stats: [
+          { value: @scripts.size, label: "scripts" },
+          { value: @scripts.count(&:built_in?), label: "built-in" }
+        ]
+      } do %>
+  <%= rui_button("New script", url: new_script_path, color: :primary, size: :md) %>
+<% end %>
+
+<div class="max-w-5xl mx-auto px-4 py-8">
 
   <% Script::TYPES.each do |type| %>
     <% group = @scripts.select { |s| s.script_type == type } %>

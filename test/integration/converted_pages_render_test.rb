@@ -62,7 +62,14 @@ class ConvertedPagesRenderTest < ActionDispatch::IntegrationTest
       "edit backup" => edit_backup_path(@backup),
       "new credential" => new_credential_path,
       "edit credential" => edit_credential_path(@credential),
-      "new ssh key" => new_ssh_key_path
+      "new ssh key" => new_ssh_key_path,
+      "ssh key detail" => ssh_key_path(@key),
+      "edit ssh key" => edit_ssh_key_path(@key),
+      "scripts" => scripts_path,
+      "organizations" => organizations_path,
+      "admin organizations" => admin_organizations_path,
+      "admin users" => admin_users_path,
+      "admin mcp activity" => admin_mcp_calls_path
     }
 
     paths.each do |name, path|
