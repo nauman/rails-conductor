@@ -30,11 +30,7 @@ class DatabaseBackup
     filename = "#{backup.bucket_name}_#{timestamp}.sql.gz"
     local_path = "/tmp/#{filename}"
 
-    # Resolve the app's real DATABASE_URL first (in Ruby, one simple call), then
-    # dump with the proven single-command form. Resolving separately avoids the
-    # fragile nested-$() one-liner that silently produced empty dumps under sh -c.
-    url = resolve_database_url(ssh)
-    dump_cmd = build_dump_command(local_path, url)
+    dump_cmd = build_dump_command(ssh, local_path)
     unless ssh.execute(dump_cmd)
       return fail_with("Database dump failed: #{ssh.error}")
     end
@@ -115,18 +111,25 @@ class DatabaseBackup
     ssh.output.to_s[/CONDUCTOR_DSN=(\S+)/, 1]
   end
 
-  # Build the dump command. Two hard-won requirements the old host `pg_dump
-  # $DATABASE_URL` missed (it silently produced an empty 20-byte gzip):
-  #   1. VERSION MATCH — pg_dump refuses a server newer than the client. The app
-  #      containers ship pg_dump 15 while the DBs are 16, so dumping IN them wrote
-  #      nothing. Run pg_dump from a matching Postgres image instead.
-  #   2. RESOLVABLE HOST — the DB URL host is a container name resolvable only on
-  #      the app's docker network, so run that matching client THERE.
-  # A failed dump can still leave an empty gzip, so run! also rejects any dump
-  # under MIN_DUMP_BYTES.
-  def build_dump_command(output_path, url)
-    net = backup.app&.deploy_network
+  # Build the dump command, most-reliable source first:
+  #   1. DEDICATED DB CONTAINER (<slug>-db) — the best source: it has the exact
+  #      server-version pg_dump (no client-too-old refusal, incl. pg18), local
+  #      access, and runs even when the APP is stopped. pg_dumpall captures every
+  #      database + roles. Superuser is POSTGRES_USER, or `postgres` when the image
+  #      left it unset (e.g. the pgvector image).
+  #   2. SHARED-cluster apps (no dedicated container) — resolve the app's DSN and
+  #      run a version-matched pg_dump on the app's docker network.
+  # A failed dump can still leave an empty gzip, so run! rejects anything under
+  # MIN_DUMP_BYTES.
+  def build_dump_command(ssh, output_path)
+    app = backup.app
 
+    if (db = dedicated_db_container(ssh, app))
+      return %(docker exec #{esc(db)} sh -c 'pg_dumpall -U "${POSTGRES_USER:-postgres}"' | gzip > #{output_path})
+    end
+
+    url = resolve_database_url(ssh)
+    net = app&.deploy_network
     if url.present? && net.present?
       "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump #{esc(url)} | gzip > #{output_path}"
     elsif url.present?
@@ -135,6 +138,15 @@ class DatabaseBackup
       # Last resort (native/host app): DATABASE_URL from the host env.
       %(pg_dump "$DATABASE_URL" | gzip > #{output_path})
     end
+  end
+
+  # The app's dedicated DB container name if one is actually running on the box,
+  # else nil. Named <slug>-db by DedicatedDbProvisioner.
+  def dedicated_db_container(ssh, app)
+    return nil unless app
+    name = "#{app.slug}-db"
+    ssh.execute("docker ps -q -f name=^#{esc(name)}$")
+    ssh.output.to_s.strip.present? ? name : nil
   end
 
   # A shell expression resolving to the app's running container id, or nil for a

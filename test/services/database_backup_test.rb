@@ -55,27 +55,53 @@ class DatabaseBackupTest < ActiveSupport::TestCase
     assert DatabaseBackup.new(b).send(:upload_to_storage, Object.new, "/tmp/x", "x")
   end
 
-  # The dump fix: pg_dump refuses a server newer than the client (app containers
-  # ship 15, DBs are 16), and the DB host only resolves on the app network — so
-  # dump via a matching Postgres image run ON that network with the resolved URL.
-  test "dump command runs a version-matched client on the app network with the url" do
-    app = @org.apps.create!(name: "k", slug: "k", deploy_method: "kamal", repository_url: "https://x/y.git")
-    app.define_singleton_method(:deploy_network) { "kamal-net" }
+  # Best source: the dedicated DB container — exact server version (incl. pg18),
+  # local, and running even when the app is stopped. pg_dumpall = all dbs + roles.
+  test "dumps from the dedicated DB container when one is running" do
+    app = @org.apps.create!(name: "calm-page", slug: "calm-page", deploy_method: "kamal", repository_url: "https://x/y.git")
     b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
-    cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz", "postgres://u:pw@k-db:5432/kp")
+    ssh = Object.new
+    ssh.define_singleton_method(:execute) { |cmd| @o = cmd.include?("docker ps -q -f name=") ? "abc123" : ""; true }
+    ssh.define_singleton_method(:output) { @o }
+    cmd = DatabaseBackup.new(b).send(:build_dump_command, ssh, "/tmp/x.sql.gz")
 
-    assert_includes cmd, "docker run --rm --network kamal-net"
-    assert_includes cmd, "postgres:16-alpine"
-    assert_includes cmd, "pg_dump"
-    assert_includes cmd, "k-db:5432/kp"
-    assert_includes cmd, "| gzip > /tmp/x.sql.gz"
-    refute_includes cmd, "pg_dump $DATABASE_URL" # never the broken host form
+    assert_includes cmd, "docker exec calm-page-db"
+    assert_includes cmd, "pg_dumpall"
+    assert_includes cmd, "POSTGRES_USER:-postgres" # superuser fallback for images that leave it unset
+    assert_includes cmd, "gzip > /tmp/x.sql.gz"
   end
 
-  test "dump command falls back to the host DATABASE_URL only when no url is resolvable" do
+  # Shared-cluster apps have no dedicated container — resolve the DSN and dump
+  # version-matched on the app network.
+  test "shared app (no dedicated container) dumps version-matched on the network" do
+    app = @org.apps.create!(name: "kuickr", slug: "kuickr", deploy_method: "kamal", repository_url: "https://x/y.git")
+    app.define_singleton_method(:derived_database_url) { |*| nil }
+    app.define_singleton_method(:deploy_network) { "kamal" }
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    ssh = Object.new
+    ssh.define_singleton_method(:execute) do |cmd|
+      @o = if cmd.include?("docker ps -q -f name=") then ""
+           elsif cmd.include?("printenv") then ""
+           else "CONDUCTOR_DSN=postgres://u:p@conductor-postgres:5432/kdb" end
+      true
+    end
+    ssh.define_singleton_method(:output) { @o }
+    cmd = DatabaseBackup.new(b).send(:build_dump_command, ssh, "/tmp/x.sql.gz")
+
+    assert_includes cmd, "docker run --rm --network kamal"
+    assert_includes cmd, "postgres:16-alpine"
+    assert_includes cmd, "conductor-postgres:5432/kdb"
+    assert_includes cmd, "| gzip > /tmp/x.sql.gz"
+    refute_includes cmd, "docker exec" # not the dedicated path
+  end
+
+  test "native app (no dedicated container, no resolvable url) falls back to host DATABASE_URL" do
     app = @org.apps.create!(name: "n", slug: "n", deploy_method: "native", repository_url: "https://x/y.git")
     b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
-    cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz", nil)
+    ssh = Object.new
+    ssh.define_singleton_method(:execute) { |*| @o = ""; true }
+    ssh.define_singleton_method(:output) { @o }
+    cmd = DatabaseBackup.new(b).send(:build_dump_command, ssh, "/tmp/x.sql.gz")
 
     assert_equal %(pg_dump "$DATABASE_URL" | gzip > /tmp/x.sql.gz), cmd
     refute_includes cmd, "docker run"
