@@ -18,11 +18,17 @@ module ToolAuthorization
   # Non-mutating actions, per tool. A read-scoped token may call exactly these.
   # Previously this was a whole-tool list, which wrongly refused read tokens the
   # read-only actions living inside mutating tools (transfer_plan, cron list,
-  # runbook get, storage audit, server audit).
+  # runbook get, storage audit).
+  #
+  # The bar for entry is "changes nothing" — not "feels like a read". An action
+  # that opens SSH or writes a row belongs in the mutating set even if its name
+  # sounds observational.
   READ_ONLY_ACTIONS = {
     "conductor_read"     => :all,
     "conductor_app"      => %w[transfer_plan],
-    "conductor_server"   => %w[audit test_connection],
+    # NB: server `audit` and `test_connection` are deliberately NOT here — both
+    # open SSH and persist (metrics, edge detection, an audit rollup), so a
+    # read-scoped token must not reach them.
     "conductor_cron"     => %w[list],
     "conductor_runbook"  => %w[get],
     "conductor_storage"  => %w[audit configure]
@@ -48,6 +54,10 @@ module ToolAuthorization
     },
     "conductor_domain" => {
       "remove" => :destroy, "delete_dns" => :destroy, "remove_stray_proxy" => :destroy
+    },
+    "conductor_app_config" => {
+      # Destroys the app's existing deploy key and stores a new private key.
+      "gen_deploy_key" => :credentials
     },
     "conductor_github" => {
       # Creates/updates a Credential holding a GitHub token.

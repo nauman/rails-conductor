@@ -4,6 +4,9 @@ class AppsController < ApplicationController
   # db:seed in production. Neither is an editor capability.
   owner_only :destroy, :destroy
   owner_only :execute, :toggle_seed_on_next_deploy
+  # Generating a deploy key destroys the existing encrypted private key and
+  # stores a new one — a credential write, not app config.
+  owner_only :credentials, :generate_deploy_key
   before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site, :put_behind_cloudflare ]
   # Needs @app loaded to compare against the requested repository.
   before_action :require_repository_capability!, only: :update
@@ -298,8 +301,13 @@ class AppsController < ApplicationController
   # owners. Branch is left editable — shipping a hotfix branch is exactly what
   # the editor role is for.
   def require_repository_capability!
-    requested = params.dig(:app, :repository_url).presence
-    return if requested.nil? || requested == @app.repository_url
+    return unless params[:app]&.key?(:repository_url)
+
+    # Compare on the normalized value, and treat "" / whitespace as a real
+    # change — CLEARING the repository is an owner-only repository change too
+    # (it disables deploys), not a no-op to be waved through.
+    requested = params.dig(:app, :repository_url).to_s.strip
+    return if requested == @app.repository_url.to_s.strip
     return if OperatorPolicy.can?(current_user, current_organization, :repository)
 
     redirect_to @app, alert: "Changing an app's source repository requires an organization owner."

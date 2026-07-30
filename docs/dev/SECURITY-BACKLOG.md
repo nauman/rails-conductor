@@ -52,3 +52,48 @@ SC-009, rather than widening who can reach it.
 ### Related
 
 - `docs/scenarios/sc-009-editor-role.md` — the role work that surfaced this.
+
+---
+
+## SB-002 · Last-owner invariant is callback-only
+
+**Status:** open · **Severity:** medium · **Found:** 2026-07-31 (audit during SC-009)
+
+### Exposure
+
+`Membership` enforces "an organization always has an owner" with a validation
+(`on: :update`) and a `before_destroy` callback (`app/models/membership.rb`).
+That covers every ordinary model write — controllers, jobs, normal console use —
+but callbacks are skippable by design:
+
+- `update_column` / `update_columns` / `update_attribute` skip validations.
+- `delete` and relation `delete_all` skip destroy callbacks.
+- Raw SQL skips both.
+
+Any of these can leave an organization with zero owners, which makes it
+permanently unmanageable through the UI: member management requires
+`:manage_members`, which requires an owner.
+
+### Interim mitigation (in place)
+
+Every application code path goes through validated writes, and the invariant
+covers the two real ways it was reachable (demotion and moving an owner
+membership to another org). The gap is deliberate console/raw-SQL use.
+
+### What a real fix requires
+
+A database-level constraint, since the guarantee cannot be expressed in Ruby:
+
+1. A Postgres `AFTER INSERT OR UPDATE OR DELETE ... FOR EACH STATEMENT` trigger
+   on `memberships` that raises when an organization is left with no
+   `role = 1` row — deferred to end-of-transaction so multi-step ownership
+   handovers still work.
+2. Alternatively, a nightly reconciliation job that reports ownerless orgs, if a
+   trigger is judged too heavy. Detection, not prevention.
+
+Recovery today is manual: a platform admin can re-assign ownership from the
+console.
+
+### Related
+
+- `docs/scenarios/sc-009-editor-role.md`

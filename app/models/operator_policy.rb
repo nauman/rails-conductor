@@ -32,6 +32,11 @@ module OperatorPolicy
   #   :repository     — repointing an app at a different source repository
   OWNER_ONLY = %i[destroy execute credentials manage_members repository].freeze
 
+  # Capabilities an editor holds. Anything outside OWNER_ONLY + EDITOR is
+  # unrecognized and denied to non-owners (see `can?`).
+  EDITOR = %i[deploy configure read].freeze
+  KNOWN = (OWNER_ONLY + EDITOR).freeze
+
   # May this user perform ordinary (non-owner-only) infrastructure operations?
   def operator?(user, organization)
     return false if user.nil?
@@ -47,10 +52,12 @@ module OperatorPolicy
     return false if user.nil?
     return true if user.admin?
 
-    if OWNER_ONLY.include?(capability)
-      !!organization&.owner?(user)
-    else
-      operator?(user, organization)
-    end
+    # Fail CLOSED on anything unrecognized. A typo (`:credential`) or a string
+    # instead of a symbol must not silently widen access to editors — an
+    # authorization API whose default is "grant" is a bug waiting to be typed.
+    return !!organization&.owner?(user) unless KNOWN.include?(capability)
+    return !!organization&.owner?(user) if OWNER_ONLY.include?(capability)
+
+    operator?(user, organization)
   end
 end

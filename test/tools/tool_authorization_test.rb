@@ -37,7 +37,8 @@ class ToolAuthorizationTest < ActiveSupport::TestCase
       [ "conductor_server", "add_ssh_key" ] => "credentials",
       [ "conductor_domain", "delete_dns" ] => "destroy",
       [ "conductor_github", "set_token" ] => "credentials",
-      [ "conductor_cron", "schedule" ] => "execute"
+      [ "conductor_cron", "schedule" ] => "execute",
+      [ "conductor_app_config", "gen_deploy_key" ] => "credentials"
     }.each do |(tool, action), capability|
       res = call(tool, { "action" => action }, user: @editor)
 
@@ -78,6 +79,16 @@ class ToolAuthorizationTest < ActiveSupport::TestCase
     repoint = call("conductor_app", { "action" => "update", "repository_url" => "https://x/y" }, user: @editor)
     assert_not repoint.success?
     assert_match(/repository/, repoint.error)
+  end
+
+  # An action that opens SSH and writes rows is not a read, however it is named.
+  test "SSH-touching server actions are not readable by a read-scoped token" do
+    Current.read_only = true
+
+    %w[test_connection audit].each do |action|
+      res = call("conductor_server", { "action" => action }, user: @owner)
+      assert_match(/read-only/i, res.error.to_s, "conductor_server/#{action} must not be read-only")
+    end
   end
 
   test "a read-only token reaches read actions inside mutating tools" do

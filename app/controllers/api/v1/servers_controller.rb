@@ -1,6 +1,10 @@
 module Api
   module V1
     class ServersController < Api::BaseController
+      # Matches the web gate: provisioning runs a Script over the server's SSH
+      # identity. Gated now, before the stub gains real behavior.
+      before_action -> { require_capability!(:execute) }, only: :provision
+
       def index
         servers = current_organization.servers
         render json: servers.map { |s| server_json(s) }

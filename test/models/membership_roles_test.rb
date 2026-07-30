@@ -61,6 +61,35 @@ class MembershipRolesTest < ActiveSupport::TestCase
     assert @org.reload.owner?(@owner)
   end
 
+  test "an owner cannot be moved to another org, orphaning the first" do
+    other = Organization.create!(name: "Other")
+    other.add_member(User.create!(email: "x@example.com"), role: :owner)
+
+    assert_not @owner_m.update(organization: other)
+    assert_equal @org, @owner_m.reload.organization
+  end
+
+  test "an owner may move away once the org has another owner" do
+    @org.add_member(User.create!(email: "o2@example.com"), role: :owner)
+    other = Organization.create!(name: "Other")
+
+    assert @owner_m.update(organization: other)
+  end
+
+  test "deleting the last owner's user reports WHY, not a silent false" do
+    assert_not @owner.destroy
+    assert @owner.errors.full_messages.any?, "destroy must explain itself"
+    assert_match(/last owner/i, @owner.errors.full_messages.to_sentence)
+    assert_match(/Acme/, @owner.errors.full_messages.to_sentence)
+  end
+
+  test "a user with a co-owner elsewhere can still be deleted" do
+    @org.add_member(User.create!(email: "o2@example.com"), role: :owner)
+
+    assert @owner.destroy
+    assert_not User.exists?(@owner.id)
+  end
+
   test "destroying the organization may still cascade its owner membership" do
     assert @org.destroy
     assert_not Membership.exists?(@owner_m.id)

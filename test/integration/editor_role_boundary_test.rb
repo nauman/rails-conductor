@@ -79,6 +79,42 @@ class EditorRoleBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # Found by audit: generate_deploy_key destroys the stored private key and
+  # writes a new one — a credential write wearing app-config clothing.
+  test "an editor cannot generate or rotate a deploy key" do
+    sign_in_as(@editor)
+    assert_no_difference -> { DeployKey.count } do
+      post generate_deploy_key_app_path(@web_app)
+    end
+    assert_response :redirect
+    assert_match(/owner/i, flash[:alert].to_s)
+  end
+
+  test "the deploy key button is not offered to an editor" do
+    sign_in_as(@editor)
+    get app_path(@web_app)
+
+    assert_select "form[action=?]", generate_deploy_key_app_path(@web_app), count: 0
+  end
+
+  # Found by audit: `.presence` made "" look like "no change requested".
+  test "an editor cannot CLEAR the repository either" do
+    sign_in_as(@editor)
+
+    [ "", "   " ].each do |blank|
+      patch app_path(@web_app), params: { app: { repository_url: blank } }
+      assert_equal "https://github.com/acme/shop", @web_app.reload.repository_url,
+                   "blank repository_url (#{blank.inspect}) must not slip through"
+    end
+  end
+
+  test "an editor may submit the unchanged repository_url" do
+    sign_in_as(@editor)
+    patch app_path(@web_app), params: { app: { repository_url: "https://github.com/acme/shop", notes: "ok" } }
+
+    assert_equal "ok", @web_app.reload.notes
+  end
+
   test "an editor cannot toggle seed-on-next-deploy" do
     sign_in_as(@editor)
     patch toggle_seed_on_next_deploy_app_path(@web_app)

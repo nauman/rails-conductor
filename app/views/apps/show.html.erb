@@ -232,9 +232,13 @@
                 <h3 class="font-mono text-2xs uppercase tracking-label text-muted">Deploy key</h3>
                 <p class="mt-1 text-2xs text-muted">Read-only key for cloning a private repo. Add the public half to the repo's GitHub deploy keys.</p>
               </div>
-              <%= rui_button_to((@app.deploy_key ? "Regenerate" : "Generate"), generate_deploy_key_app_path(@app), method: :post,
-                    variant: :outline, size: :sm, color: :slate,
-                    data: { turbo_confirm: (@app.deploy_key ? "Regenerate the deploy key? You'll need to re-add the new public key on GitHub." : nil) }) %>
+              <% if current_can?(:credentials) %>
+                <%= rui_button_to((@app.deploy_key ? "Regenerate" : "Generate"), generate_deploy_key_app_path(@app), method: :post,
+                      variant: :outline, size: :sm, color: :slate,
+                      data: { turbo_confirm: (@app.deploy_key ? "Regenerate the deploy key? You'll need to re-add the new public key on GitHub." : nil) }) %>
+              <% else %>
+                <span class="font-mono text-2xs text-faint">owner only</span>
+              <% end %>
             </div>
             <% if @app.deploy_key %>
               <code class="mt-3 block w-full overflow-x-auto rounded-card bg-ink px-3 py-2 font-mono text-2xs text-surface"><%= @app.deploy_key.public_key %></code>

@@ -226,9 +226,8 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
   # read-scoped tokens, because authorization was tool-shaped.
   test "read-only actions inside mutating tools are allowed for read tokens" do
     {
-      "conductor_app" => "transfer_plan", "conductor_server" => "audit",
-      "conductor_cron" => "list", "conductor_runbook" => "get",
-      "conductor_storage" => "audit"
+      "conductor_app" => "transfer_plan", "conductor_cron" => "list",
+      "conductor_runbook" => "get", "conductor_storage" => "audit"
     }.each do |tool, action|
       assert ToolAuthorization.read_only?(tool, action), "#{tool}/#{action} should be readable"
     end

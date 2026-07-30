@@ -12,12 +12,18 @@ class ApplicationController < ActionController::Base
   before_action :set_current_organization
   before_action :require_onboarding
 
-  helper_method :current_user, :user_signed_in?, :current_admin?, :current_organization, :current_operator?
+  helper_method :current_user, :user_signed_in?, :current_admin?, :current_organization, :current_operator?, :current_can?
 
   # Owner-or-admin of the active org — the boundary for privileged operations and
   # for revealing secrets in views (OperatorPolicy is the single source).
   def current_operator?
     OperatorPolicy.operator?(current_user, current_organization)
+  end
+
+  # View-side capability check, so the UI stops offering controls the actor
+  # cannot use. Same policy the controllers enforce — this hides, it never gates.
+  def current_can?(capability)
+    OperatorPolicy.can?(current_user, current_organization, capability)
   end
 
   rescue_from ActiveRecord::RecordNotFound do |_exception|

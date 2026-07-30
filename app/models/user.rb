@@ -44,7 +44,13 @@ class User < ApplicationRecord
   # Deleting a user cascades their memberships, which would silently strip an
   # organization of its last owner. Refuse up front and name the org, so the
   # admin transfers ownership first rather than discovering an orphan later.
-  before_destroy :ensure_not_the_last_owner_anywhere
+  #
+  # `prepend: true` matters: `has_many dependent: :destroy` registers its own
+  # before_destroy when the association is declared above, and callbacks run in
+  # declaration order. Without prepend, Membership's guard aborts the cascade
+  # first and this one never runs — destroy returns false with NO error, and the
+  # caller shows a blank alert.
+  before_destroy :ensure_not_the_last_owner_anywhere, prepend: true
 
   def orphaned_organizations
     organizations.select { |org| org.owner?(self) && org.memberships.owner.where.not(user_id: id).none? }

@@ -42,9 +42,19 @@ class OperatorPolicyTest < ActiveSupport::TestCase
     end
   end
 
-  test "an unrecognized capability falls back to the operator gate" do
+  test "a known editor capability is granted to editors" do
     assert OperatorPolicy.can?(@editor, @org, :deploy)
     assert_not OperatorPolicy.can?(@member, @org, :deploy)
+  end
+
+  # An authorization API whose default is "grant" is a bug waiting to be typed.
+  test "an unrecognized capability fails closed, not open" do
+    [ :credential, :destroyy, "destroy", :nonsense ].each do |typo|
+      assert_not OperatorPolicy.can?(@editor, @org, typo),
+                 "#{typo.inspect} must not be granted to an editor"
+      assert OperatorPolicy.can?(@owner, @org, typo),
+             "#{typo.inspect} should still resolve for an owner"
+    end
   end
 
   test "capabilities are org-scoped — membership elsewhere grants nothing" do
