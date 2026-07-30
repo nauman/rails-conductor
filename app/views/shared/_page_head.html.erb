@@ -1,0 +1,50 @@
+<%# The header band every page opens with (design: conductor/design/*.html).
+    Same shape as the dashboard: an eyebrow for context, a display-face headline that
+    states the situation rather than naming the table, an optional counts strip, and the
+    actions on the right. One partial rather than per-page markup, because the reason the
+    app looked "old everywhere" was fourteen pages each inventing their own header.
+
+    Locals:
+      title:   the headline (say the situation, not the noun)
+      eyebrow: small uppercase context line — defaults to the organization
+      lede:    one supporting sentence, optional
+      stats:   [{ value:, label:, url:, tone: :default|:danger|:warning }] — optional
+    Block: the action buttons. %>
+<% stats = local_assigns.fetch(:stats, []) %>
+<section class="border-b border-border bg-bg-alt">
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div class="min-w-0">
+        <div class="font-mono text-2xs uppercase tracking-label text-muted">
+          <%= local_assigns.fetch(:eyebrow) { current_organization&.name } %>
+        </div>
+        <h1 class="mt-1 font-display text-3xl text-ink tracking-display"><%= title %></h1>
+        <% if local_assigns[:lede].present? %>
+          <p class="mt-1.5 max-w-xl text-sm text-muted"><%= lede %></p>
+        <% end %>
+      </div>
+      <% if block_given? %>
+        <div class="flex flex-wrap items-center gap-2"><%= yield %></div>
+      <% end %>
+    </div>
+
+    <% if stats.any? %>
+      <%# A wrapping strip, not tiles: these qualify the headline, they aren't the page. %>
+      <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs">
+        <% stats.each do |stat| %>
+          <% tone = stat[:tone] || :default %>
+          <% value_class = tone == :danger ? "text-danger font-semibold" : tone == :warning ? "text-warning-deep font-semibold" : "text-ink font-semibold" %>
+          <% body = capture do %>
+            <span class="<%= value_class %>"><%= stat[:value] %></span>
+            <span class="<%= tone == :danger ? "text-danger" : "text-muted" %>"><%= stat[:label] %></span>
+          <% end %>
+          <% if stat[:url] %>
+            <%= link_to body, stat[:url], class: "hover:text-ink" %>
+          <% else %>
+            <span><%= body %></span>
+          <% end %>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</section>

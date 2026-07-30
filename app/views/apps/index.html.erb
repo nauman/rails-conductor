@@ -1,66 +1,60 @@
 <% content_for :title, "Apps · Conductor" %>
 
-<section class="max-w-7xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display">Apps</h1>
-      <p class="mt-1 text-sm text-muted">Deployed Rails applications.</p>
-    </div>
-    <div class="flex items-center gap-2">
-      <%= button_to "Put fleet behind Cloudflare", put_all_behind_cloudflare_apps_path, method: :post,
-            form: { data: { turbo_confirm: "Proxy every app's domain through Cloudflare (SSL: Full)? Speeds up far-away visitors." } },
-            class: "inline-flex items-center gap-2 rounded-lg border border-primary bg-surface px-4 py-2 text-sm font-medium text-primary hover:bg-primary-tint" %>
-      <%= link_to new_app_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        Add App
-      <% end %>
-    </div>
-  </div>
+<%# The same table as the dashboard's fleet panel, with the full list rather than a peek.
+    Cards gave every app equal weight and buried the one that's broken behind port and
+    slug; a row you can scan puts runtime and deploy state under the same eye. %>
+<% failing = @apps.count(&:deploy_failing?) %>
+<% unprotected = @apps.count { |a| a.naggable? && a.backups.empty? } %>
+<%= render layout: "shared/page_head",
+      locals: {
+        title: failing.positive? ? "#{pluralize(failing, "app")} #{failing == 1 ? "needs" : "need"} a look." : "#{pluralize(@apps.size, "app")}, all shipping.",
+        stats: [
+          { value: @apps.size, label: "total" },
+          ({ value: failing, label: "failing", tone: :danger } if failing.positive?),
+          { value: @apps.map(&:server_id).uniq.size, label: "servers", url: servers_path },
+          ({ value: unprotected, label: "unprotected", tone: :danger, url: backups_path } if unprotected.positive?)
+        ].compact
+      } do %>
+  <%= rui_button_to("Put fleet behind Cloudflare", put_all_behind_cloudflare_apps_path, method: :post,
+        variant: :outline, size: :md, color: :primary,
+        data: { turbo_confirm: "Proxy every app's domain through Cloudflare (SSL: Full)? Speeds up far-away visitors." }) %>
+  <%= rui_button("New app", url: new_app_path, color: :primary, size: :md) %>
+<% end %>
 
+<section class="max-w-7xl mx-auto px-4 py-8">
   <% if @apps.any? %>
-    <div class="mt-6 grid gap-4 lg:grid-cols-2">
-      <% @apps.each do |app| %>
-        <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-          <%= turbo_stream_from app %>
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm font-semibold text-ink"><%= app.name %></div>
-              <div class="text-xs text-muted">
-                <% if app.domain.present? %>
-                  <a href="<%= app.url %>" target="_blank" class="hover:underline"><%= app.domain %></a>
-                <% else %>
-                  No domain
-                <% end %>
-              </div>
-            </div>
-            <%= render "apps/status_badge", app: app %>
-          </div>
-          <div class="mt-4 grid grid-cols-3 gap-3 text-xs text-muted">
-            <div class="rounded-lg bg-fill p-3">
-              <div class="uppercase tracking-wide text-faint">Server</div>
-              <div class="mt-1 text-sm font-semibold text-ink"><%= app.server_name %></div>
-            </div>
-            <div class="rounded-lg bg-fill p-3">
-              <div class="uppercase tracking-wide text-faint">Port</div>
-              <div class="mt-1 text-sm font-semibold text-ink"><%= app.port || "—" %></div>
-            </div>
-            <div class="rounded-lg bg-fill p-3">
-              <div class="uppercase tracking-wide text-faint">Slug</div>
-              <div class="mt-1 text-sm font-semibold text-ink"><%= app.slug %></div>
-            </div>
-          </div>
-          <div class="mt-4 flex items-center gap-2">
-            <%= link_to "View", app_path(app), class: "text-xs font-medium text-body hover:text-ink" %>
-            <span class="text-faint">·</span>
-            <%= link_to "Edit", edit_app_path(app), class: "text-xs font-medium text-body hover:text-ink" %>
-          </div>
-        </div>
-      <% end %>
-    </div>
+    <%= render layout: "shared/panel",
+          locals: { title: "All apps", flush: true,
+                    meta: "#{@apps.size} total#{" · #{failing} failing now" if failing.positive?}" } do %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-fill font-mono text-2xs uppercase tracking-label text-muted">
+              <th class="px-5 py-2 text-left font-semibold">App</th>
+              <th class="px-5 py-2 text-left font-semibold">Server</th>
+              <th class="px-5 py-2 text-left font-semibold">Runtime</th>
+              <th class="px-5 py-2 text-left font-semibold">Last deploy</th>
+              <th class="px-5 py-2 text-left font-semibold">Release</th>
+              <th class="px-5 py-2 text-right font-semibold"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @apps.each do |app| %>
+              <%= turbo_stream_from app %>
+              <%= render "dashboard/app_row", app: app %>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
   <% else %>
-    <div class="mt-6 rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
-      <div class="text-sm text-muted">No apps yet.</div>
-      <%= link_to "Add your first app", new_app_path, class: "mt-2 inline-block text-sm font-medium text-ink hover:underline" %>
+    <div class="rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <h2 class="font-display text-xl text-ink">No apps yet</h2>
+      <p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+        Point Conductor at a repository and a server, and it deploys, routes and backs the
+        app up from there.
+      </p>
+      <%= rui_button "Add your first app", url: new_app_path, color: :primary, class: "mt-5" %>
     </div>
   <% end %>
 </section>

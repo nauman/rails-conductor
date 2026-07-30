@@ -1,421 +1,344 @@
 <% content_for :title, "#{@app.name} · Conductor" %>
+<%= turbo_stream_from @app %>
 
-<section class="max-w-7xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <div class="flex items-center gap-3">
-        <%= turbo_stream_from @app %>
-        <h1 class="font-display text-2xl text-ink tracking-display dark:text-white"><%= @app.name %></h1>
-        <%= render "apps/status_badge", app: @app %>
-        <%# The same badge the fleet shows, so the two pages can never disagree. %>
-        <%= deploy_health_badge(@app) %>
-      </div>
-      <p class="mt-1 text-sm text-muted dark:text-faint">
-        <% if @app.domain.present? %>
-          <%= rui_link(@app.domain, url: @app.url, external: true) %> ·
-        <% end %>
-        <code class="text-xs bg-fill-strong dark:bg-fill px-1.5 py-0.5 rounded"><%= @app.slug %></code>
-        <% if @app.deployed_at.present? %>
-          · Deployed <%= time_ago_in_words(@app.deployed_at) %> ago
-        <% end %>
-      </p>
-      <% if @app.notes.present? %>
-        <p class="mt-2 max-w-2xl text-sm text-body dark:text-faint whitespace-pre-line"><%= @app.notes %></p>
-      <% end %>
-    </div>
-    <div class="flex items-center gap-2">
-      <% if @app.deployable? %>
-        <% if @app.deployments.in_progress.any? %>
-          <%= rui_badge(text: "Deploying...", color: :warning, size: :lg) %>
-        <% elsif @preflight&.blocked? %>
-          <%= rui_badge(text: "Deploy blocked", color: :danger, size: :lg) %>
-        <% else %>
-          <%= rui_button_to("Deploy", deploy_app_path(@app), method: :post, variant: :solid, color: :success) %>
-        <% end %>
-      <% end %>
-      <% if @app.status == "running" %>
-        <%= rui_button_to("Restart", restart_app_path(@app), method: :post, variant: :outline, color: :slate) %>
-        <%= rui_button_to("Stop", stop_app_path(@app), method: :post, variant: :outline, color: :slate, data: { turbo_confirm: "Stop this app?" }) %>
-      <% end %>
-      <% if @app.kamal? %>
-        <%= rui_button("Deploy config", url: deploy_config_app_path(@app), variant: :outline, color: :slate) %>
-      <% end %>
-      <%= rui_button("Edit", url: edit_app_path(@app), variant: :outline, color: :slate) %>
-      <%= rui_button("Back", url: apps_path, variant: :outline, color: :slate) %>
-    </div>
-  </div>
+<%# App overview (design: conductor/design/app-overview.html).
+    Twelve equal-weight panels in one column meant the state you came to check sat at the
+    same size as a webhook secret you read once. Now: state and history in the main column,
+    configuration in a sidebar. Nothing was removed — it was ranked.
 
-  <% if @preflight %>
-    <%= render "preflight", preflight: @preflight %>
-  <% end %>
-
-  <% if @app.monitorable? %>
-    <%= render "site_monitor", app: @app %>
-  <% end %>
-
-  <% if @app.native? %>
-    <%# Service Status (Native) %>
-    <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
-      <h2 class="text-sm font-semibold text-ink dark:text-white">Service Status</h2>
-      <div class="mt-4 grid gap-4 sm:grid-cols-4">
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Status</dt>
-          <dd class="mt-1 flex items-center gap-2">
-            <% if @app.status == "running" %>
-              <span class="h-2 w-2 rounded-full bg-primary-tint0"></span>
-              <span class="text-sm font-medium text-primary dark:text-primary-sage">Running</span>
-            <% elsif @app.status == "failed" %>
-              <span class="h-2 w-2 rounded-full bg-danger-tint0"></span>
-              <span class="text-sm font-medium text-danger-deep dark:text-danger-bright">Failed</span>
-            <% else %>
-              <span class="h-2 w-2 rounded-full bg-faint"></span>
-              <span class="text-sm font-medium text-body dark:text-faint"><%= @app.status.capitalize %></span>
-            <% end %>
-          </dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Service Name</dt>
-          <dd class="mt-1 text-sm text-ink dark:text-white font-mono"><%= @app.service_name %></dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Deploy Method</dt>
-          <dd class="mt-1 text-sm text-ink dark:text-white">Native (Puma + systemd)</dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">App Directory</dt>
-          <dd class="mt-1 text-sm text-ink dark:text-white font-mono text-xs truncate"><%= @app.app_dir %></dd>
-        </div>
-      </div>
-    </div>
-  <% else %>
-    <%# Container Status (Docker) %>
-    <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
-      <div class="flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-ink dark:text-white">Container Status</h2>
-        <% if @app.can_sync_status? %>
-          <%= rui_button_to("Sync Status", sync_status_app_path(@app), method: :post, variant: :outline, size: :sm, color: :slate) %>
-        <% end %>
-      </div>
-      <div class="mt-4 grid gap-4 sm:grid-cols-4">
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Container</dt>
-          <dd class="mt-1 flex items-center gap-2">
-            <% case @app.container_status %>
-            <% when "running" %>
-              <span class="h-2 w-2 rounded-full bg-primary-tint0"></span>
-              <span class="text-sm font-medium text-primary dark:text-primary-sage">Running</span>
-            <% when "exited", "dead" %>
-              <span class="h-2 w-2 rounded-full bg-danger-tint0"></span>
-              <span class="text-sm font-medium text-danger-deep dark:text-danger-bright"><%= @app.container_status.capitalize %></span>
-            <% when "restarting" %>
-              <span class="h-2 w-2 rounded-full bg-warning-tint0 animate-pulse"></span>
-              <span class="text-sm font-medium text-warning dark:text-warning-bright">Restarting</span>
-            <% else %>
-              <span class="h-2 w-2 rounded-full bg-faint"></span>
-              <span class="text-sm font-medium text-body dark:text-faint">Unknown</span>
-            <% end %>
-          </dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Started At</dt>
-          <dd class="mt-1 text-sm text-ink dark:text-white">
-            <%= @app.container_started_at.present? ? time_ago_in_words(@app.container_started_at) + " ago" : "—" %>
-          </dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Last Checked</dt>
-          <dd class="mt-1 text-sm text-ink dark:text-white">
-            <%= @app.last_status_check_at.present? ? time_ago_in_words(@app.last_status_check_at) + " ago" : "Never" %>
-          </dd>
-        </div>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Container Name</dt>
-          <dd class="mt-1 text-sm text-ink dark:text-white font-mono"><%= @app.container_name %></dd>
-        </div>
-      </div>
-      <% if @app.status_check_error.present? %>
-        <%= rui_alert(type: :danger, class: "mt-4") do %>
-          <span class="font-medium">Error:</span> <%= @app.status_check_error %>
-        <% end %>
-      <% end %>
-    </div>
-  <% end %>
-
-  <%# Stats Grid %>
-  <div class="mt-8 grid gap-6 lg:grid-cols-4">
-    <div class="rounded-large border border-border dark:border-border bg-surface dark:bg-body p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Server</div>
-      <div class="mt-2 font-display text-xl text-ink dark:text-white"><%= @app.server_name %></div>
-    </div>
-    <div class="rounded-large border border-border dark:border-border bg-surface dark:bg-body p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Port</div>
-      <div class="mt-2 font-display text-xl text-ink dark:text-white"><%= @app.port || "—" %></div>
-    </div>
-    <div class="rounded-large border border-border dark:border-border bg-surface dark:bg-body p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Branch</div>
-      <div class="mt-2 font-display text-xl text-ink dark:text-white"><%= @app.branch || "—" %></div>
-    </div>
-    <div class="rounded-large border border-border dark:border-border bg-surface dark:bg-body p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">SSL</div>
-      <div class="mt-2 font-display text-xl text-ink dark:text-white"><%= @app.ssl_enabled? ? "Enabled" : "Disabled" %></div>
-    </div>
-  </div>
-
-  <%# Repository Info %>
-  <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
-    <h2 class="text-sm font-semibold text-ink dark:text-white">Repository</h2>
-    <% if @app.repository_url.present? %>
-      <div class="mt-3 grid gap-4 sm:grid-cols-3 text-sm">
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">URL</dt>
-          <dd class="mt-1 text-ink dark:text-white truncate"><%= @app.repository_url %></dd>
-        </div>
-        <% if @app.docker? %>
-          <div>
-            <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Dockerfile</dt>
-            <dd class="mt-1 text-ink dark:text-white"><%= @app.dockerfile_path %></dd>
-          </div>
-        <% end %>
-        <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Health Check</dt>
-          <dd class="mt-1 text-ink dark:text-white"><%= @app.health_check_path || "—" %></dd>
-        </div>
-      </div>
+    The `dark:` utilities the old markup carried are gone: the palette is token-based and
+    the dark theme redefines the tokens, so components never name a theme. %>
+<% health = AppHealth.new(@app) %>
+<%= render layout: "shared/page_head",
+      locals: {
+        eyebrow: @app.domain.presence || @app.slug,
+        title: @app.name,
+        lede: @app.notes.presence,
+        stats: [
+          { value: @app.server_name, label: "server", url: (server_path(@app.server) if @app.server) },
+          { value: @app.deploy_method.titleize, label: @app.native? ? "puma + systemd" : "container" },
+          { value: @app.last_deployment&.commit_sha&.first(7) || "—",
+            label: @app.deployed_at ? "deployed #{time_ago_in_words(@app.deployed_at)} ago" : "never deployed here",
+            tone: @app.deploy_failing? ? :danger : :default },
+          { value: @app.branch.presence || "main", label: "branch" },
+          { value: @app.backups.any? ? "on" : "off", label: "backups",
+            tone: (@app.backups.empty? && @app.naggable?) ? :danger : :default, url: backups_path }
+        ]
+      } do %>
+  <% if @app.deployable? %>
+    <% if @app.deployments.in_progress.any? %>
+      <%= rui_badge(text: "Deploying…", color: :warning, size: :lg) %>
+    <% elsif @preflight&.blocked? %>
+      <%= rui_badge(text: "Deploy blocked", color: :danger, size: :lg) %>
     <% else %>
-      <p class="mt-2 text-sm text-muted dark:text-faint">No repository configured. <%= rui_link("Edit app", url: edit_app_path(@app)) %> to add one.</p>
+      <%= rui_button_to("Deploy", deploy_app_path(@app), method: :post, variant: :solid, color: :success) %>
     <% end %>
-
-    <%# Deploy key (for cloning a private repo) %>
-    <% if @app.repository_url.present? %>
-      <div class="mt-4 pt-4 border-t border-border dark:border-border">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Deploy Key</h3>
-            <p class="mt-1 text-xs text-muted dark:text-faint">Read-only key Conductor uses to clone a private repo. Add the public key to the repo's GitHub deploy keys.</p>
-          </div>
-          <%= button_to (@app.deploy_key ? "Regenerate" : "Generate"), generate_deploy_key_app_path(@app), method: :post,
-                data: { turbo_confirm: @app.deploy_key ? "Regenerate the deploy key? You'll need to re-add the new public key on GitHub." : nil },
-                class: "rounded-lg border border-border dark:border-border-strong bg-surface dark:bg-fill px-3 py-1.5 text-xs font-medium text-body dark:text-body hover:bg-fill dark:hover:bg-fill-strong" %>
-        </div>
-        <% if @app.deploy_key %>
-          <div class="mt-3">
-            <code class="block w-full overflow-x-auto rounded-lg bg-ink text-surface px-3 py-2 text-xs"><%= @app.deploy_key.public_key %></code>
-            <p class="mt-1 text-xs text-faint">Add at <span class="font-mono">github.com/&lt;owner&gt;/&lt;repo&gt;/settings/keys/new</span> (read-only). Fingerprint: <%= @app.deploy_key.fingerprint %></p>
-          </div>
-        <% end %>
-      </div>
-    <% end %>
-  </div>
-
-  <%# Auto-deploy on push %>
-  <div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
-    <div class="flex items-center justify-between gap-4">
-      <div>
-        <h2 class="text-sm font-semibold text-ink">Auto-deploy on push</h2>
-        <p class="mt-1 text-sm text-muted">Deploy automatically when GitHub pushes to <code class="text-xs bg-fill-strong px-1.5 py-0.5 rounded"><%= @app.branch.presence || "main" %></code>.</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <% if @app.auto_deploy? %>
-          <span class="inline-flex items-center rounded-pill bg-primary-tint px-2.5 py-1 text-2xs font-semibold uppercase tracking-label text-primary ring-1 ring-inset ring-primary/20">On</span>
-        <% else %>
-          <span class="inline-flex items-center rounded-pill bg-fill px-2.5 py-1 text-2xs font-semibold uppercase tracking-label text-muted ring-1 ring-inset ring-border-strong">Off</span>
-        <% end %>
-        <%= button_to (@app.auto_deploy? ? "Disable" : "Enable"), toggle_auto_deploy_app_path(@app), method: :patch,
-              class: "rounded-control border border-border-strong px-3 py-1.5 text-sm font-medium text-body hover:bg-fill" %>
-      </div>
-    </div>
-    <% if @app.auto_deploy? %>
-      <div class="mt-4 space-y-3 border-t border-border pt-4">
-        <p class="text-2xs font-semibold uppercase tracking-label text-muted">GitHub webhook (Settings → Webhooks → Add webhook)</p>
-        <div>
-          <div class="text-2xs uppercase tracking-label text-faint">Payload URL</div>
-          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= request.base_url %><%= @app.webhook_path %></code>
-        </div>
-        <div>
-          <div class="text-2xs uppercase tracking-label text-faint">Secret</div>
-          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= current_operator? ? @app.webhook_secret : "••••••••" %></code>
-        </div>
-        <p class="text-2xs text-faint">Content type: <code>application/json</code> · Events: just the push event. Conductor verifies the signature and deploys only on the <code><%= @app.branch.presence || "main" %></code> branch.</p>
-      </div>
-    <% end %>
-  </div>
-
-  <%# CI deploy reporting (Q-07-1) — for apps that deploy via CI, not through
-      Conductor's own deploy path. The CI job POSTs its result here so it becomes a
-      real Deployment row; without it the app's dashboard row reads stale forever.
-      Shown to OPERATORS regardless of auto-deploy (a CI-deployed app has it off),
-      because these are the two values the CI needs to authenticate. %>
-  <% if current_operator? %>
-    <div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
-      <div>
-        <h2 class="text-sm font-semibold text-ink">CI deploy reporting</h2>
-        <p class="mt-1 text-sm text-muted">If this app deploys via its own CI (not through Conductor), have the CI job POST its result here so the deploy is recorded and this app's health stops reading stale. Set these two as GitHub Actions <strong>repository secrets</strong>.</p>
-      </div>
-      <div class="mt-4 space-y-3 border-t border-border pt-4">
-        <div>
-          <div class="text-2xs uppercase tracking-label text-faint">Report URL &middot; <code>POST</code></div>
-          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= request.base_url %><%= @app.deployment_report_path %></code>
-        </div>
-        <div>
-          <div class="text-2xs uppercase tracking-label text-faint"><code>CONDUCTOR_APP_ID</code></div>
-          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= @app.id %></code>
-        </div>
-        <div>
-          <div class="text-2xs uppercase tracking-label text-faint"><code>CONDUCTOR_DEPLOY_WEBHOOK_SECRET</code></div>
-          <code class="mt-1 block font-mono text-xs bg-fill rounded-card px-3 py-2 break-all"><%= @app.webhook_secret %></code>
-        </div>
-        <p class="text-2xs text-faint">Signed with <code>HMAC-SHA256</code> over the raw body (<code>X-Hub-Signature-256</code>), same scheme as the push webhook. Body: <code>{"status":"succeeded|failed","commit_sha":"…","release_version":"…"}</code>.</p>
-      </div>
-    </div>
   <% end %>
+  <% if @app.status == "running" %>
+    <%= rui_button_to("Restart", restart_app_path(@app), method: :post, variant: :outline, color: :slate) %>
+    <%= rui_button_to("Stop", stop_app_path(@app), method: :post, variant: :outline, color: :slate, data: { turbo_confirm: "Stop this app?" }) %>
+  <% end %>
+  <%= rui_button("Edit", url: edit_app_path(@app), variant: :outline, color: :slate) %>
+<% end %>
 
-  <%# Database %>
-  <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body p-6 shadow-soft">
-    <div class="flex items-center justify-between">
-      <h2 class="text-sm font-semibold text-ink dark:text-white">Database</h2>
-      <% if @app.databases.none? %>
-        <%= rui_button_to("Provision database", provision_database_app_path(@app), method: :post, variant: :solid, color: :primary, size: :sm) %>
+<section class="max-w-7xl mx-auto px-4 py-8">
+  <%# Anything blocking or alarming goes above the fold, before the two columns. %>
+  <div class="space-y-5">
+    <% if @preflight %>
+      <%= render "preflight", preflight: @preflight %>
+    <% end %>
+    <% if @app.status_check_error.present? %>
+      <%= rui_alert(type: :danger) do %>
+        <span class="font-medium">Status check failed:</span> <%= @app.status_check_error %>
+        <span class="block mt-0.5 text-2xs">Runtime state below is the last thing we could read, not necessarily what's true now.</span>
       <% end %>
-    </div>
-    <% if @app.databases.any? %>
-      <% @app.databases.each do |db| %>
-        <div class="mt-4 rounded-lg bg-fill dark:bg-ink p-4">
-          <div class="flex items-center justify-between">
-            <div class="font-mono text-sm text-ink dark:text-white"><%= db.name %></div>
-            <%= rui_badge(text: db.status, color: db.status == "active" ? :success : db.status == "error" ? :danger : :warning, size: :sm) %>
-          </div>
-          <dl class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-            <div><dt class="text-faint">Host</dt><dd class="font-mono text-body dark:text-body"><%= db.database_cluster.container_name %>:<%= db.database_cluster.port %></dd></div>
-            <div><dt class="text-faint">Role</dt><dd class="font-mono text-body dark:text-body"><%= db.username %></dd></div>
-            <div class="sm:col-span-2"><dt class="text-faint">DATABASE_URL</dt><dd class="font-mono text-body dark:text-body break-all select-all"><%= current_operator? ? db.database_url : "postgres://•••••@#{db.database_cluster.container_name}/#{db.name}" %></dd></div>
-          </dl>
-          <p class="mt-2 text-xs text-faint">Add this to the app's deploy config / env.</p>
-        </div>
-      <% end %>
-    <% else %>
-      <p class="mt-2 text-sm text-muted dark:text-faint">No database yet. Provision one on a registered <%= rui_link("cluster", url: database_clusters_path) %> — role, database, and password are created automatically.</p>
+    <% end %>
+    <% if @app.monitorable? %>
+      <%= render "site_monitor", app: @app %>
     <% end %>
   </div>
 
-  <%= render "runbook", app: @app %>
-
-  <%# Environment Variables %>
-  <div id="env-vars" class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body shadow-soft overflow-hidden">
-    <div class="p-4 border-b border-border dark:border-border bg-fill dark:bg-fill flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-ink dark:text-white">Environment Variables</h3>
-      <%= rui_badge(text: pluralize(@env_variables.count, "variable"), color: :slate, size: :sm) %>
-    </div>
-
-    <%# Add new variable form %>
-    <div class="p-4 border-b border-border dark:border-border">
-      <%= form_with model: [@app, EnvVariable.new], class: "flex items-end gap-3" do |f| %>
-        <div class="w-40">
-          <label class="block text-xs font-medium text-body dark:text-faint mb-1">Key</label>
-          <%= f.text_field :key, class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm font-mono", placeholder: "DATABASE_URL" %>
-        </div>
-        <div class="flex-1">
-          <label class="block text-xs font-medium text-body dark:text-faint mb-1">Value</label>
-          <%= f.text_field :value, class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm font-mono", placeholder: "postgres://..." %>
-        </div>
-        <div class="flex items-center gap-2">
-          <%= f.check_box :secret, class: "rounded border-border-strong dark:border-border-strong text-ink focus:ring-primary" %>
-          <%= f.label :secret, "Secret", class: "text-sm text-body dark:text-faint" %>
-        </div>
-        <%= f.rui_button(color: :primary, size: :sm) %>
-      <% end %>
-    </div>
-
-    <% if @env_variables.any? %>
-      <table class="min-w-full divide-y divide-border dark:divide-border">
-        <thead class="bg-fill dark:bg-fill">
-          <tr>
-            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Key</th>
-            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Value</th>
-            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted dark:text-faint">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border dark:divide-border">
-          <% @env_variables.each do |var| %>
-            <tr>
-              <td class="px-4 py-2 text-sm font-mono text-ink dark:text-white"><%= var.key %></td>
-              <td class="px-4 py-2 text-sm font-mono text-body dark:text-faint">
-                <% if var.secret? %>
-                  <span class="text-faint dark:text-muted">••••••••</span>
-                <% else %>
-                  <span class="truncate max-w-xs block"><%= var.value %></span>
-                <% end %>
-              </td>
-              <td class="px-4 py-2 text-right">
-                <%= rui_button_to("Remove", app_env_variable_path(@app, var), method: :delete, variant: :link, color: :danger, size: :sm, data: { turbo_confirm: "Remove #{var.key}?" }) %>
-              </td>
-            </tr>
+  <div class="mt-5 grid gap-5 lg:grid-cols-3 lg:items-start">
+    <%# Main column — the state, then the story. %>
+    <div class="space-y-5 lg:col-span-2">
+      <%= render layout: "shared/panel",
+            locals: { title: @app.native? ? "Service" : "Container",
+                      meta: health.monitoring_label,
+                      tone: (@app.status_check_error.present? ? :warning : :default) } do %>
+        <dl class="grid gap-5 sm:grid-cols-3">
+          <div>
+            <dt class="font-mono text-2xs uppercase tracking-label text-muted">Observed</dt>
+            <dd class="mt-1 flex items-center gap-2">
+              <% observed = @app.native? ? @app.status : @app.container_status.presence %>
+              <% running = observed == "running" %>
+              <span class="h-2 w-2 rounded-pill <%= running ? "bg-primary" : observed.in?(%w[exited dead failed]) ? "bg-danger-bright" : observed == "restarting" ? "bg-warning-bright animate-pulse" : "bg-faint" %>"></span>
+              <span class="text-sm font-medium <%= running ? "text-primary" : observed.in?(%w[exited dead failed]) ? "text-danger-deep" : "text-body" %>">
+                <%= observed&.capitalize || "Unknown" %>
+              </span>
+              <span class="font-mono text-2xs text-faint">· wants <%= health.desired_state %></span>
+            </dd>
+          </div>
+          <div>
+            <dt class="font-mono text-2xs uppercase tracking-label text-muted">Up since</dt>
+            <dd class="mt-1 text-sm text-ink">
+              <%= @app.container_started_at.present? ? "#{time_ago_in_words(@app.container_started_at)} ago" : "—" %>
+            </dd>
+          </div>
+          <div>
+            <dt class="font-mono text-2xs uppercase tracking-label text-muted"><%= @app.native? ? "Service" : "Container" %></dt>
+            <dd class="mt-1 truncate font-mono text-xs text-ink"><%= @app.native? ? @app.service_name : @app.container_name %></dd>
+          </div>
+        </dl>
+        <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <% if @app.can_sync_status? %>
+            <%= rui_button_to("Re-check now", sync_status_app_path(@app), method: :post, variant: :outline, size: :sm, color: :slate) %>
           <% end %>
-        </tbody>
-      </table>
-    <% else %>
-      <div class="p-4 text-center text-sm text-muted dark:text-faint">
-        No environment variables configured.
-      </div>
-    <% end %>
-  </div>
+          <% if @app.container_id.present? || @app.native? %>
+            <%= rui_button("Logs", url: logs_app_path(@app), variant: :outline, size: :sm, color: :slate) %>
+          <% end %>
+          <%= rui_button("Background jobs", url: jobs_app_path(@app), variant: :outline, size: :sm, color: :slate) %>
+          <% if @app.kamal? %>
+            <%= rui_button("Deploy config", url: deploy_config_app_path(@app), variant: :outline, size: :sm, color: :slate) %>
+          <% end %>
+          <% if @app.native? %>
+            <span class="font-mono text-2xs text-faint"><%= @app.app_dir %></span>
+          <% end %>
+        </div>
+      <% end %>
 
-  <%# Deployment History %>
-  <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body shadow-soft overflow-hidden">
-    <div class="p-4 border-b border-border dark:border-border bg-fill dark:bg-fill flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-ink dark:text-white">Deployment History</h3>
-      <div class="flex items-center gap-3">
-        <%= turbo_frame_tag "app_jobs_#{@app.id}", src: jobs_app_path(@app), loading: :lazy do %>
-          <span class="text-2xs text-faint">jobs…</span>
-        <% end %>
-        <%= rui_button("Jobs", url: jobs_app_path(@app), variant: :link, size: :sm, color: :slate) %>
-        <% if @app.container_id.present? || @app.native? %>
-          <%= rui_button("View Logs", url: logs_app_path(@app), variant: :link, size: :sm, color: :slate) %>
-        <% end %>
-      </div>
-    </div>
-
-    <%# Activity, not a status table: each deploy says what happened, why, and whether
-        somebody overrode the gate. Replaces the old columns-of-status table. %>
-    <% if @deployments.any? %>
-      <div class="divide-y divide-border">
-        <% @deployments.each do |deployment| %>
-          <%= render "apps/activity_row", deployment: deployment, app: @app %>
-        <% end %>
-      </div>
-    <% else %>
-      <div class="p-6 text-center text-sm text-muted">
-        Nothing has deployed through Conductor yet.
-        <% if @app.intent_label %>
-          <span class="block mt-1 text-2xs"><%= @app.intent_label %><%= " — #{@app.intent_note}" if @app.intent_note.present? %></span>
-        <% end %>
-      </div>
-    <% end %>
-  </div>
-
-  <%# Backups %>
-  <% if @app.backups.any? %>
-    <div class="mt-8 rounded-large border border-border dark:border-border bg-surface dark:bg-body shadow-soft overflow-hidden">
-      <div class="p-4 border-b border-border dark:border-border bg-fill dark:bg-fill">
-        <h3 class="text-sm font-semibold text-ink dark:text-white">Recent Backups</h3>
-      </div>
-      <div class="divide-y divide-border dark:divide-border">
-        <% @app.backups.recent.limit(5).each do |backup| %>
-          <div class="flex items-center justify-between px-4 py-3">
-            <div>
-              <div class="text-sm font-medium text-ink dark:text-white"><%= backup.bucket_name %></div>
-              <div class="text-xs text-muted dark:text-faint"><%= backup.formatted_size %> · <%= backup.time_ago %></div>
-            </div>
-            <div class="flex items-center gap-3">
-              <%= rui_badge(text: backup.status, color: backup.status == "completed" ? :success : backup.status == "failed" ? :danger : :slate, size: :sm) %>
-              <%= rui_button("View", url: backup_path(backup), variant: :link, size: :sm, color: :slate) %>
-            </div>
+      <%# Activity, not a status table: each deploy says what happened, why, and whether
+          somebody overrode the gate. %>
+      <%= render layout: "shared/panel",
+            locals: { title: "Activity", flush: true,
+                      meta: @deployments.any? ? "last #{@deployments.size} deploys" : nil,
+                      link: { label: "Jobs", url: jobs_app_path(@app) } } do %>
+        <% if @deployments.any? %>
+          <div class="divide-y divide-border">
+            <% @deployments.each do |deployment| %>
+              <%= render "apps/activity_row", deployment: deployment, app: @app %>
+            <% end %>
+          </div>
+        <% else %>
+          <div class="p-6 text-center text-sm text-muted">
+            Nothing has deployed through Conductor yet.
+            <% if @app.intent_label %>
+              <span class="mt-1 block font-mono text-2xs text-faint"><%= @app.intent_label %><%= " — #{@app.intent_note}" if @app.intent_note.present? %></span>
+            <% end %>
           </div>
         <% end %>
+      <% end %>
+
+      <div id="env-vars">
+        <%= render layout: "shared/panel",
+              locals: { title: "Environment", flush: true,
+                        meta: pluralize(@env_variables.count, "variable") } do %>
+          <div class="border-b border-border p-4">
+            <%= form_with model: [ @app, EnvVariable.new ], class: "flex flex-wrap items-end gap-3" do |f| %>
+              <div class="w-40">
+                <label class="mb-1 block font-mono text-2xs uppercase tracking-label text-muted">Key</label>
+                <%= f.text_field :key, class: "block w-full rounded-control border-border-strong font-mono text-sm shadow-soft focus:border-primary focus:ring-primary", placeholder: "DATABASE_URL" %>
+              </div>
+              <div class="min-w-48 flex-1">
+                <label class="mb-1 block font-mono text-2xs uppercase tracking-label text-muted">Value</label>
+                <%= f.text_field :value, class: "block w-full rounded-control border-border-strong font-mono text-sm shadow-soft focus:border-primary focus:ring-primary", placeholder: "postgres://…" %>
+              </div>
+              <label class="flex items-center gap-2 pb-2 text-sm text-body">
+                <%= f.check_box :secret, class: "rounded border-border-strong text-ink focus:ring-primary" %>
+                Secret
+              </label>
+              <%= f.rui_button(color: :primary, size: :sm) %>
+            <% end %>
+          </div>
+
+          <% if @env_variables.any? %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <tbody>
+                  <% @env_variables.each do |var| %>
+                    <tr class="border-b border-border last:border-b-0">
+                      <td class="px-4 py-2 font-mono text-xs text-ink"><%= var.key %></td>
+                      <td class="px-4 py-2 font-mono text-xs text-body">
+                        <% if var.secret? %>
+                          <span class="text-faint">••••••••</span>
+                        <% else %>
+                          <span class="block max-w-xs truncate"><%= var.value %></span>
+                        <% end %>
+                      </td>
+                      <td class="px-4 py-2 text-right">
+                        <%= rui_button_to("Remove", app_env_variable_path(@app, var), method: :delete, variant: :link, color: :danger, size: :sm, data: { turbo_confirm: "Remove #{var.key}?" }) %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="p-4 text-center text-sm text-muted">No environment variables configured.</div>
+          <% end %>
+        <% end %>
+      </div>
+
+      <%= render "runbook", app: @app %>
+    </div>
+
+    <%# Sidebar — configuration and the facts you set once. %>
+    <div class="space-y-5">
+      <%= render layout: "shared/panel",
+            locals: { title: "Database",
+                      tone: (@app.databases.any? { |db| db.status == "error" } ? :danger : :default) } do %>
+        <% if @app.databases.any? %>
+          <% @app.databases.each do |db| %>
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-sm text-ink"><%= db.name %></span>
+              <%= rui_badge(text: db.status, color: db.status == "active" ? :success : db.status == "error" ? :danger : :warning, size: :sm) %>
+            </div>
+            <dl class="mt-3 space-y-2 font-mono text-2xs">
+              <div><dt class="text-faint">Host</dt><dd class="text-body"><%= db.database_cluster.container_name %>:<%= db.database_cluster.port %></dd></div>
+              <div><dt class="text-faint">Role</dt><dd class="text-body"><%= db.username %></dd></div>
+              <div>
+                <dt class="text-faint">DATABASE_URL</dt>
+                <dd class="break-all text-body select-all"><%= current_operator? ? db.database_url : "postgres://•••••@#{db.database_cluster.container_name}/#{db.name}" %></dd>
+              </div>
+            </dl>
+          <% end %>
+        <% else %>
+          <p class="text-sm text-muted">
+            No database yet. Provision one on a registered <%= rui_link("cluster", url: database_clusters_path) %> — role,
+            database and password are created for you.
+          </p>
+          <div class="mt-3">
+            <%= rui_button_to("Provision database", provision_database_app_path(@app), method: :post, variant: :solid, color: :primary, size: :sm) %>
+          </div>
+        <% end %>
+      <% end %>
+
+      <%= render layout: "shared/panel", locals: { title: "Repository" } do %>
+        <% if @app.repository_url.present? %>
+          <dl class="space-y-2 font-mono text-2xs">
+            <div><dt class="text-faint">Remote</dt><dd class="break-all text-body"><%= @app.repository_url %></dd></div>
+            <% if @app.docker? %>
+              <div><dt class="text-faint">Dockerfile</dt><dd class="text-body"><%= @app.dockerfile_path %></dd></div>
+            <% end %>
+            <div><dt class="text-faint">Health check</dt><dd class="text-body"><%= @app.health_check_path.presence || "—" %></dd></div>
+            <div><dt class="text-faint">SSL</dt><dd class="text-body"><%= @app.ssl_enabled? ? "enabled" : "disabled" %></dd></div>
+            <div><dt class="text-faint">Port</dt><dd class="text-body"><%= @app.port || "—" %></dd></div>
+          </dl>
+
+          <div class="mt-4 border-t border-border pt-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h3 class="font-mono text-2xs uppercase tracking-label text-muted">Deploy key</h3>
+                <p class="mt-1 text-2xs text-muted">Read-only key for cloning a private repo. Add the public half to the repo's GitHub deploy keys.</p>
+              </div>
+              <%= rui_button_to((@app.deploy_key ? "Regenerate" : "Generate"), generate_deploy_key_app_path(@app), method: :post,
+                    variant: :outline, size: :sm, color: :slate,
+                    data: { turbo_confirm: (@app.deploy_key ? "Regenerate the deploy key? You'll need to re-add the new public key on GitHub." : nil) }) %>
+            </div>
+            <% if @app.deploy_key %>
+              <code class="mt-3 block w-full overflow-x-auto rounded-card bg-ink px-3 py-2 font-mono text-2xs text-surface"><%= @app.deploy_key.public_key %></code>
+              <p class="mt-1 font-mono text-2xs text-faint"><%= @app.deploy_key.fingerprint %></p>
+            <% end %>
+          </div>
+        <% else %>
+          <p class="text-sm text-muted">
+            No repository configured. <%= rui_link("Edit app", url: edit_app_path(@app)) %> to add one.
+          </p>
+        <% end %>
+      <% end %>
+
+      <%= render layout: "shared/panel",
+            locals: { title: "Deploy on push",
+                      meta: @app.auto_deploy? ? "on · #{@app.branch.presence || "main"}" : "off" } do %>
+        <div class="flex items-start justify-between gap-3">
+          <p class="text-sm text-muted">
+            Deploy automatically when GitHub pushes to
+            <code class="rounded bg-fill-strong px-1.5 py-0.5 font-mono text-2xs"><%= @app.branch.presence || "main" %></code>.
+          </p>
+          <%= rui_button_to((@app.auto_deploy? ? "Disable" : "Enable"), toggle_auto_deploy_app_path(@app), method: :patch,
+                variant: :outline, size: :sm, color: :slate) %>
+        </div>
+        <% if @app.auto_deploy? %>
+          <div class="mt-4 space-y-3 border-t border-border pt-4">
+            <p class="font-mono text-2xs uppercase tracking-label text-muted">GitHub → Settings → Webhooks</p>
+            <div>
+              <div class="font-mono text-2xs text-faint">Payload URL</div>
+              <code class="mt-1 block break-all rounded-card bg-fill px-3 py-2 font-mono text-2xs"><%= request.base_url %><%= @app.webhook_path %></code>
+            </div>
+            <div>
+              <div class="font-mono text-2xs text-faint">Secret</div>
+              <code class="mt-1 block break-all rounded-card bg-fill px-3 py-2 font-mono text-2xs"><%= current_operator? ? @app.webhook_secret : "••••••••" %></code>
+            </div>
+            <p class="text-2xs text-faint">
+              Content type <code>application/json</code>, push event only. Conductor verifies the
+              signature and deploys only <code><%= @app.branch.presence || "main" %></code>.
+            </p>
+          </div>
+        <% end %>
+      <% end %>
+
+      <%# CI deploy reporting (Q-07-1) — for apps whose own CI deploys them. Without it the
+          app's row reads stale forever, because no Deployment is ever created. Operators
+          only: these two values authenticate the report. %>
+      <% if current_operator? %>
+        <%= render layout: "shared/panel", locals: { title: "CI deploy reporting" } do %>
+          <p class="text-sm text-muted">
+            If this app deploys from its own CI, have the job POST the result here so the
+            deploy is recorded and this app stops reading stale. Set both as GitHub Actions
+            repository secrets.
+          </p>
+          <div class="mt-3 space-y-3">
+            <div>
+              <div class="font-mono text-2xs text-faint">POST</div>
+              <code class="mt-1 block break-all rounded-card bg-fill px-3 py-2 font-mono text-2xs"><%= request.base_url %><%= @app.deployment_report_path %></code>
+            </div>
+            <div>
+              <div class="font-mono text-2xs text-faint">CONDUCTOR_APP_ID</div>
+              <code class="mt-1 block rounded-card bg-fill px-3 py-2 font-mono text-2xs"><%= @app.id %></code>
+            </div>
+            <div>
+              <div class="font-mono text-2xs text-faint">CONDUCTOR_DEPLOY_WEBHOOK_SECRET</div>
+              <code class="mt-1 block break-all rounded-card bg-fill px-3 py-2 font-mono text-2xs"><%= @app.webhook_secret %></code>
+            </div>
+            <p class="text-2xs text-faint">
+              <code>HMAC-SHA256</code> over the raw body (<code>X-Hub-Signature-256</code>), same
+              scheme as the push webhook. Body:
+              <code>{"status":"succeeded|failed","commit_sha":"…","release_version":"…"}</code>.
+            </p>
+          </div>
+        <% end %>
+      <% end %>
+
+      <%= render layout: "shared/panel",
+            locals: { title: "Backups", link: { label: "All backups", url: backups_path },
+                      tone: (@app.backups.empty? && @app.naggable? ? :danger : :default) } do %>
+        <% if @app.backups.any? %>
+          <div class="space-y-2">
+            <% @app.backups.recent.limit(5).each do |backup| %>
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <%= link_to backup.bucket_name, backup_path(backup), class: "block truncate text-sm font-medium text-ink hover:underline" %>
+                  <div class="font-mono text-2xs text-faint"><%= backup.formatted_size %> · <%= backup.time_ago %></div>
+                </div>
+                <span class="shrink-0 font-mono text-2xs font-semibold <%= backup.proven? ? "text-primary" : backup.alarming? ? "text-danger" : "text-muted" %>">
+                  <%= backup.proven? ? "restore tested" : backup.alarming? ? "restore failed" : "untested" %>
+                </span>
+              </div>
+            <% end %>
+          </div>
+        <% elsif @app.naggable? %>
+          <p class="text-sm text-muted">This app's database isn't backed up.</p>
+          <div class="mt-3">
+            <%= rui_button_to("Protect it nightly", protect_all_backups_path, method: :post, variant: :solid, size: :sm, color: :primary) %>
+          </div>
+        <% else %>
+          <p class="text-sm text-muted">Not backed up — <%= @app.intent_label.to_s.downcase.presence || "parked" %>.</p>
+        <% end %>
+      <% end %>
+
+      <div class="rounded-large border border-border bg-surface px-5 py-4 shadow-soft">
+        <%= rui_button_to("Delete app", app_path(@app), method: :delete, variant: :link, color: :danger, size: :sm,
+              data: { turbo_confirm: "Delete #{@app.name}? This cannot be undone." }) %>
       </div>
     </div>
-  <% end %>
-
-  <div class="mt-10 pt-6 border-t border-border dark:border-border">
-    <%= rui_button_to("Delete App", app_path(@app), method: :delete, variant: :link, color: :danger, data: { turbo_confirm: "Are you sure you want to delete this app?" }) %>
   </div>
 </section>

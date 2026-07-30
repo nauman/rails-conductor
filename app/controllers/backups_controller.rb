@@ -4,6 +4,9 @@ class BackupsController < ApplicationController
 
   def index
     @backups = current_organization.backups.includes(:server, :app, :credential).order(created_at: :desc)
+    # Coverage leads the page: the fleet had 0 of 12 apps protected and the old list
+    # couldn't show that, because an app with no backup has no row.
+    @unprotected_apps = current_organization.apps.naggable.includes(:backups).reject { |app| app.backups.any? }
   end
 
   def show

@@ -1,67 +1,114 @@
 <% content_for :title, "Backups · Conductor" %>
 
-<section class="max-w-7xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="font-display text-2xl text-ink tracking-display">Backups</h1>
-      <p class="mt-1 text-sm text-muted">Database backups to cloud storage.</p>
-    </div>
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 text-sm">
-        <span class="text-muted"><%= Backup.completed.count %> completed</span>
-        <span class="text-faint">·</span>
-        <span class="text-muted"><%= Backup.failed.count %> failed</span>
+<%# Coverage first, then proof, then the list (design: conductor/design/backups.html).
+    The old page listed backup rows, which structurally cannot show the thing that
+    mattered — an unprotected app has no row. So it read as "all fine" while nothing was
+    protected. %>
+<% proven = @backups.count(&:proven?) %>
+<% alarming = @backups.select(&:alarming?) %>
+<% stale = @backups.select { |b| b.verification_state == :stale } %>
+<% unprotected = @unprotected_apps.size %>
+<%= render layout: "shared/page_head",
+      locals: {
+        title: if unprotected.positive?
+                 "#{pluralize(unprotected, "app")} #{unprotected == 1 ? "has" : "have"} no backup."
+               elsif alarming.any?
+                 "#{pluralize(alarming.size, "backup")} won't restore."
+               elsif stale.any?
+                 "#{pluralize(stale.size, "backup")} behind schedule."
+               else
+                 "Everything is backed up."
+               end,
+        lede: "A dump nobody has restored is a promise, not a backup. Verification is tracked separately from success.",
+        stats: [
+          { value: @backups.size, label: "backups" },
+          { value: proven, label: "restore-tested", tone: proven.zero? && @backups.any? ? :warning : :default },
+          ({ value: unprotected, label: "apps unprotected", tone: :danger, url: apps_path } if unprotected.positive?),
+          ({ value: alarming.size, label: "failing restore", tone: :danger } if alarming.any?)
+        ].compact
+      } do %>
+  <% if unprotected.positive? %>
+    <%= rui_button_to("Protect #{pluralize(unprotected, "app")}", protect_all_backups_path, method: :post,
+          variant: :solid, size: :md, color: :primary) %>
+  <% end %>
+  <%= rui_button("New backup", url: new_backup_path, variant: unprotected.positive? ? :outline : :solid, color: :primary, size: :md) %>
+<% end %>
+
+<section class="max-w-7xl mx-auto px-4 py-8 space-y-5">
+  <% if @unprotected_apps.any? %>
+    <%# Named apps, not a count: "3 unprotected" is a statistic, "these three databases"
+        is a decision. One button covers all of them with defaults you can change after. %>
+    <%= render layout: "shared/panel",
+          locals: { title: "Not backed up", tone: :danger,
+                    meta: "nightly to your connected storage, keep 14 days — change any of it after" } do %>
+      <div class="flex flex-wrap gap-1.5">
+        <% @unprotected_apps.each do |app| %>
+          <%= link_to app.name, app_path(app),
+                class: "rounded-card border border-danger/30 bg-danger-tint3 px-2.5 py-1 font-mono text-2xs text-danger-deep hover:bg-danger-tint2" %>
+        <% end %>
       </div>
-      <%= link_to new_backup_path, class: "inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body" do %>
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        New Backup
-      <% end %>
-    </div>
-  </div>
+      <div class="mt-4">
+        <%= rui_button_to("Protect all of them", protect_all_backups_path, method: :post,
+              variant: :solid, size: :sm, color: :primary) %>
+      </div>
+    <% end %>
+  <% end %>
 
   <% if @backups.any? %>
-    <div class="mt-6 rounded-large border border-border bg-surface shadow-soft overflow-hidden">
-      <table class="min-w-full divide-y divide-border">
-        <thead class="bg-fill">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Bucket</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Source</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Provider</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Schedule</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Last Run</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Next Run</th>
-            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">Status</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border">
-          <% @backups.each do |backup| %>
-            <tr>
-              <td class="px-6 py-4">
-                <%= link_to backup.bucket_name, backup_path(backup), class: "text-sm font-medium text-ink hover:underline" %>
-              </td>
-              <td class="px-6 py-4 text-sm text-muted"><%= backup.source_name %></td>
-              <td class="px-6 py-4 text-sm text-muted"><%= backup.provider.titleize.gsub("_", " ") %></td>
-              <td class="px-6 py-4 text-sm text-muted">
-                <% if backup.enabled? %>
-                  <span class="text-primary-strong"><%= backup.schedule_display %></span>
-                <% else %>
-                  <span class="text-faint">Manual</span>
-                <% end %>
-              </td>
-              <td class="px-6 py-4 text-sm text-muted"><%= backup.time_ago %></td>
-              <td class="px-6 py-4 text-sm text-muted"><%= backup.next_run_display %></td>
-              <td class="px-6 py-4">
-                <span class="<%= status_badge(backup.status) %>"><%= backup.status %></span>
-              </td>
+    <%= render layout: "shared/panel",
+          locals: { title: "Backups", flush: true,
+                    meta: "#{@backups.size} configured · #{proven} proved by a restore" } do %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-fill font-mono text-2xs uppercase tracking-label text-muted">
+              <th class="px-5 py-2 text-left font-semibold">Destination</th>
+              <th class="px-5 py-2 text-left font-semibold">Source</th>
+              <th class="px-5 py-2 text-left font-semibold">Schedule</th>
+              <th class="px-5 py-2 text-left font-semibold">Last run</th>
+              <th class="px-5 py-2 text-left font-semibold">Trust</th>
+              <th class="px-5 py-2 text-right font-semibold">Size</th>
             </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-  <% else %>
-    <div class="mt-6 rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
-      <div class="text-sm text-muted">No backups recorded yet.</div>
-      <p class="mt-2 text-xs text-faint">Backups will appear here when they run.</p>
+          </thead>
+          <tbody>
+            <% @backups.each do |backup| %>
+              <% state = backup.verification_state %>
+              <% trust = case state
+                         when :verified      then [ "Restore tested", "text-primary" ]
+                         when :restore_failed then [ "Restore FAILED", "text-danger" ]
+                         when :stale          then [ "Behind schedule", "text-warning-deep" ]
+                         when :never_run      then [ "Never run", "text-warning-deep" ]
+                         else [ "Untested", "text-muted" ]
+                         end %>
+              <tr class="border-t border-border hover:bg-bg-alt" data-backup-row="<%= backup.id %>">
+                <td class="px-5 py-2.5">
+                  <%= link_to backup.bucket_name, backup_path(backup), class: "font-medium text-ink hover:underline" %>
+                  <span class="block font-mono text-2xs text-faint"><%= backup.provider.titleize.gsub("_", " ") %></span>
+                </td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= backup.source_name %></td>
+                <td class="px-5 py-2.5 font-mono text-2xs <%= backup.enabled? ? "text-muted" : "text-faint" %>">
+                  <%= backup.enabled? ? backup.schedule_display : "manual only" %>
+                  <span class="block text-faint">next <%= backup.next_run_display %></span>
+                </td>
+                <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= backup.time_ago %></td>
+                <td class="px-5 py-2.5" data-verification-state="<%= state %>">
+                  <span class="font-mono text-2xs font-semibold <%= trust[1] %>"><%= trust[0] %></span>
+                  <span class="block font-mono text-2xs text-faint"><%= backup.status %></span>
+                </td>
+                <td class="px-5 py-2.5 text-right font-mono text-2xs text-muted"><%= backup.formatted_size %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+  <% elsif @unprotected_apps.empty? %>
+    <div class="rounded-large border border-dashed border-border-strong bg-fill p-12 text-center">
+      <h2 class="font-display text-xl text-ink">Nothing to back up yet</h2>
+      <p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+        Add an app with a database and Conductor can protect it nightly without asking you
+        for a bucket.
+      </p>
     </div>
   <% end %>
 </section>

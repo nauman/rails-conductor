@@ -1,0 +1,23 @@
+<%# A titled surface. Every panel in the redesign has the same anatomy — a thin header row
+    with the name, an optional line of context under it, an optional single action on the
+    right, then the body — so it belongs in one place.
+
+    Locals: title:, meta: (string, optional), link: { label:, url: } (optional),
+            tone: :default|:danger|:warning (border emphasis), flush: true (no body padding,
+            for tables that draw their own edges).
+    Block: the body. %>
+<% tone = local_assigns.fetch(:tone, :default) %>
+<div class="rounded-large border bg-surface shadow-soft overflow-hidden <%= tone == :danger ? "border-danger/40" : tone == :warning ? "border-warning/40" : "border-border" %>">
+  <div class="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+    <div class="min-w-0">
+      <h2 class="text-sm font-semibold text-ink"><%= title %></h2>
+      <% if local_assigns[:meta].present? %>
+        <p class="mt-0.5 font-mono text-2xs text-faint"><%= meta %></p>
+      <% end %>
+    </div>
+    <% if local_assigns[:link] %>
+      <%= link_to link[:label], link[:url], class: "shrink-0 font-mono text-2xs text-faint hover:text-ink" %>
+    <% end %>
+  </div>
+  <div class="<%= local_assigns.fetch(:flush, false) ? "" : "p-5" %>"><%= yield %></div>
+</div>
