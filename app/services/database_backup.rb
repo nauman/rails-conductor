@@ -82,27 +82,42 @@ class DatabaseBackup
     false
   end
 
-  # Build the dump command. Two hard-won requirements the old host `pg_dump
+  # Build the dump command. Three hard-won requirements the old host `pg_dump
   # $DATABASE_URL` missed (it silently produced an empty 20-byte gzip):
-  #   1. VERSION MATCH — pg_dump refuses a server newer than the client. The app
-  #      containers ship pg_dump 15 while the DBs are 16, so dumping there wrote
+  #   1. THE REAL URL — Conductor's DB records are incomplete (shared / unregistered
+  #      apps have no derived URL), but the app's OWN container always carries the
+  #      live DATABASE_URL. Read it from there, so dedicated AND shared apps work.
+  #   2. VERSION MATCH — pg_dump refuses a server newer than the client. The app
+  #      containers ship pg_dump 15 while the DBs are 16, so dumping IN them wrote
   #      nothing. Run pg_dump from a matching Postgres image instead.
-  #   2. RESOLVABLE HOST — a dedicated DB's URL host is a container name that only
-  #      resolves on the app's docker network, so run the client THERE.
-  # Same throwaway-container-on-the-network approach DatabaseReplicator uses. A
-  # failed dump can still leave an empty gzip (the pipe exits with gzip's success),
-  # so run! also rejects any dump under MIN_DUMP_BYTES rather than trust the exit.
+  #   3. RESOLVABLE HOST — the DB URL host is a container name resolvable only on
+  #      the app's docker network, so run that matching client THERE.
+  # A failed dump can still leave an empty gzip (the pipe exits with gzip's
+  # success), so run! also rejects any dump under MIN_DUMP_BYTES.
   def build_dump_command(output_path)
     app = backup.app
-    url = app&.derived_database_url(server: backup.server || app&.server)
+    container = dump_source_container(app)
     net = app&.deploy_network
 
-    if url.present? && net.present?
-      client = "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump #{esc(url)}"
-      "#{client} | gzip > #{output_path}"
+    if container && net.present?
+      client = "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump"
+      %(u="$(docker exec #{container} printenv DATABASE_URL)"; #{client} "$u" | gzip > #{output_path})
     else
-      # Native/host apps (no network + a host-resolvable DATABASE_URL in env).
+      # Native/host apps: no container; DATABASE_URL lives in the host/systemd env.
       %(pg_dump "$DATABASE_URL" | gzip > #{output_path})
+    end
+  end
+
+  # A shell expression that resolves to the app's running container id, or nil for
+  # a native (host-process) app. Kamal containers are per-release (found by label);
+  # non-kamal docker apps have the fixed name conductor-<slug>.
+  def dump_source_container(app)
+    return nil unless app
+    if app.kamal?
+      svc = esc(app.kamal_service_candidates.first.to_s)
+      "$(docker ps -q --filter label=service=#{svc} --filter label=role=web | head -1)"
+    elsif app.deploy_method == "docker"
+      esc(app.container_name)
     end
   end
 
