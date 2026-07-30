@@ -9,7 +9,8 @@ class ConductorDomainTool
     "purge_cloudflare"      => PurgeCloudflareTool,
     "set_dns"               => SetDnsRecordTool,
     "delete_dns"            => DeleteDnsRecordTool,
-    "enable_on_demand_tls"  => EnableOnDemandTlsTool
+    "enable_on_demand_tls"  => EnableOnDemandTlsTool,
+    "remove_stray_proxy"    => RemoveStrayProxyTool
   }.freeze
 
   DEFINITION = {
@@ -21,12 +22,14 @@ class ConductorDomainTool
       "purge_cloudflare (purge an app's Cloudflare cache — app_id or app_name, optional files array of URLs; omit files to purge everything. Use after a deploy that left stale/404'd assets at the edge), " \
       "set_dns (create/update a Cloudflare A/CNAME record via a connected account that owns the zone — domain, content, optional type=A, proxied=false. Idempotent; zero vault), " \
       "delete_dns (delete a Cloudflare DNS record by name — domain. Idempotent; for cleaning up a subdomain that pointed at a decommissioned host), " \
-      "enable_on_demand_tls (turn on Caddy on-demand TLS for a zone on a host-Caddy server so each subdomain gets its own Let's Encrypt cert on first request, gated by an app ask endpoint — server_id/server_name, domain, ask_upstream; use when Cloudflare can't proxy the wildcard). " \
+      "enable_on_demand_tls (turn on Caddy on-demand TLS for a zone on a host-Caddy server so each subdomain gets its own Let's Encrypt cert on first request, gated by an app ask endpoint — server_id/server_name, domain, ask_upstream; use when Cloudflare can't proxy the wildcard), " \
+      "remove_stray_proxy (remove an INERT kamal-proxy container left on a host-Caddy box after it migrated off kamal-proxy — server_id/server_name. Report-first: bare call inspects, confirm:true removes. Refuses unless the box is host-Caddy AND kamal-proxy routes/binds nothing, so it can't break a live proxy box). " \
       "All change live routing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:    { type: "string", enum: %w[add remove put_behind_cloudflare purge_cloudflare set_dns delete_dns enable_on_demand_tls], description: "Which domain operation" },
+        action:    { type: "string", enum: %w[add remove put_behind_cloudflare purge_cloudflare set_dns delete_dns enable_on_demand_tls remove_stray_proxy], description: "Which domain operation" },
+        confirm:   { type: "boolean", description: "remove_stray_proxy: required to remove; without it returns the inspection report only" },
         server_name:  { type: "string",  description: "enable_on_demand_tls: host-Caddy server by name (or server_id)" },
         ask_upstream: { type: "string",  description: "enable_on_demand_tls: host:port serving the ask endpoint (app loopback publish, e.g. 127.0.0.1:9080)" },
         ask_path:     { type: "string",  description: "enable_on_demand_tls: ask endpoint path (default /caddy/ask)" },
