@@ -180,8 +180,10 @@ class ApiOrgScopingTest < ActionDispatch::IntegrationTest
   # --- Membership revocation + scope (audit P1-4) ---
 
   test "a token stops working once its user is removed from the token's org" do
+    # Leave a second owner behind: an org may never be stripped of its last one.
+    @org_a.add_member(User.create!(email: "successor@example.com"), role: :owner)
     membership = @org_a.memberships.find_by(user: @user_a)
-    membership.destroy
+    assert membership.destroy
     get api_v1_server_path(@server_a), headers: auth(@raw_a)
     assert_response :unauthorized
   end

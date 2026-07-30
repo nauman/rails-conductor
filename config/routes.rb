@@ -90,7 +90,7 @@ Rails.application.routes.draw do
   resource :onboarding, only: [:show, :update], controller: "onboarding"
 
   # Organization members + invitations
-  resources :members, only: [:index, :destroy]
+  resources :members, only: [:index, :update, :destroy]
   resources :invitations, only: [:create]
   get "/invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
 

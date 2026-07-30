@@ -37,8 +37,17 @@ module Api
       end
 
       unless OperatorPolicy.operator?(current_user, current_organization)
-        render json: { error: "This action requires an organization owner" }, status: :forbidden
+        render json: { error: "This action requires an organization owner or editor" }, status: :forbidden
       end
+    end
+
+    # Owner-only bands (see OperatorPolicy). Controllers whose actions execute
+    # code or touch stored credentials call this explicitly — the blanket
+    # operator gate above admits editors, who must not reach them.
+    def require_capability!(capability)
+      return if OperatorPolicy.can?(current_user, current_organization, capability)
+
+      render json: { error: "This action requires an organization owner" }, status: :forbidden
     end
 
     def current_user

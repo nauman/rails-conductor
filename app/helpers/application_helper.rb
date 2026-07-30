@@ -30,6 +30,16 @@ module ApplicationHelper
     link_to label, path, class: "block px-3 py-1.5 rounded-control text-sm #{state}"
   end
 
+  # Org role → rui_badge colour. Owner reads as the privileged role (primary),
+  # editor as a distinct operating role (info), member as neutral.
+  def role_badge_color(role)
+    case role.to_s
+    when "owner"  then :primary
+    when "editor" then :info
+    else :slate
+    end
+  end
+
   def status_badge(status)
     success = "bg-primary-tint text-primary ring-primary/20"
     warn    = "bg-warning-tint text-warning ring-warning/25"

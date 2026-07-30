@@ -211,10 +211,26 @@ class ConductorEnumToolsTest < ActiveSupport::TestCase
        conductor_domain conductor_github conductor_runbook conductor_storage].each { |n| assert_includes names, n }
   end
 
-  test "mutating enum tools are NOT read-only allowed" do
-    %w[conductor_app conductor_app_config conductor_server conductor_database
-       conductor_domain conductor_github conductor_runbook conductor_storage].each do |n|
-      refute_includes ToolRegistry::READ_ONLY_TOOLS, n
+  test "mutating enum actions are NOT read-only allowed" do
+    {
+      "conductor_app" => "deploy", "conductor_app_config" => "set_env",
+      "conductor_server" => "harden", "conductor_database" => "provision",
+      "conductor_domain" => "add", "conductor_github" => "set_token",
+      "conductor_runbook" => "set_runbook", "conductor_storage" => "migrate"
+    }.each do |tool, action|
+      refute ToolAuthorization.read_only?(tool, action), "#{tool}/#{action} must not be read-only"
+    end
+  end
+
+  # Read-only ACTIONS living inside mutating tools were previously refused to
+  # read-scoped tokens, because authorization was tool-shaped.
+  test "read-only actions inside mutating tools are allowed for read tokens" do
+    {
+      "conductor_app" => "transfer_plan", "conductor_server" => "audit",
+      "conductor_cron" => "list", "conductor_runbook" => "get",
+      "conductor_storage" => "audit"
+    }.each do |tool, action|
+      assert ToolAuthorization.read_only?(tool, action), "#{tool}/#{action} should be readable"
     end
   end
 end

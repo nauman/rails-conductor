@@ -20,9 +20,12 @@ class UsersController < ApplicationController
   def destroy
     if @user == current_user
       redirect_to users_path, alert: "You cannot remove yourself."
-    else
-      @user.destroy
+    elsif @user.destroy
       redirect_to users_path, notice: "User removed."
+    else
+      # User refuses to be deleted while it is the last owner of an org —
+      # otherwise the cascade would silently leave that org unmanageable.
+      redirect_to users_path, alert: @user.errors.full_messages.to_sentence
     end
   end
 

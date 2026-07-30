@@ -47,6 +47,6 @@ class ConductorReadToolTest < ActiveSupport::TestCase
 
   test "is registered and allowed for read-only tokens" do
     assert_equal ConductorReadTool, ToolRegistry.find("conductor_read")
-    assert_includes ToolRegistry::READ_ONLY_TOOLS, "conductor_read"
+    assert ToolAuthorization.read_only?("conductor_read", "fleet_status")
   end
 end

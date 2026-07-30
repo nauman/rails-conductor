@@ -1,6 +1,12 @@
 class AppsController < ApplicationController
   include OperatorOnly
+  # Destroying an app removes real infrastructure records; seeding runs
+  # db:seed in production. Neither is an editor capability.
+  owner_only :destroy, :destroy
+  owner_only :execute, :toggle_seed_on_next_deploy
   before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site, :put_behind_cloudflare ]
+  # Needs @app loaded to compare against the requested repository.
+  before_action :require_repository_capability!, only: :update
 
   def index
     @apps = current_organization.apps.includes(:server).order(created_at: :desc)
@@ -283,5 +289,19 @@ class AppsController < ApplicationController
       :repository_url, :branch, :dockerfile_path, :image_name,
       :health_check_path, :ssl_enabled, :deploy_method, :notes, :self_managed
     )
+  end
+
+  # An editor deploys, and deploying ships code — that is the job, and creating a
+  # new app with a chosen repo is ordinary work. Repointing an EXISTING app at a
+  # different repository is a change of trust rather than of config: the app
+  # owners rely on quietly starts building someone else's code. That stays with
+  # owners. Branch is left editable — shipping a hotfix branch is exactly what
+  # the editor role is for.
+  def require_repository_capability!
+    requested = params.dig(:app, :repository_url).presence
+    return if requested.nil? || requested == @app.repository_url
+    return if OperatorPolicy.can?(current_user, current_organization, :repository)
+
+    redirect_to @app, alert: "Changing an app's source repository requires an organization owner."
   end
 end

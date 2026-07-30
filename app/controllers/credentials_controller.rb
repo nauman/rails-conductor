@@ -1,6 +1,7 @@
 class CredentialsController < ApplicationController
   include OperatorOnly
   operator_only_all_actions! # reads expose decrypted secrets — owner/admin only
+  owner_only_controller! :credentials # fleet-wide provider keys, not per-app config
   before_action :set_credential, only: [:edit, :update, :destroy, :verify]
 
   def index

@@ -8,7 +8,7 @@ class InvitationsController < ApplicationController
   def create
     invitation = current_organization.invitations.create!(
       email: invite_params[:email].to_s.downcase.strip,
-      role: %w[member owner].include?(invite_params[:role]) ? invite_params[:role] : "member",
+      role: Invitation.roles.key?(invite_params[:role]) ? invite_params[:role] : "member",
       invited_by: current_user
     )
     InvitationMailer.invite(invitation).deliver_later
@@ -32,7 +32,7 @@ class InvitationsController < ApplicationController
   end
 
   def require_owner!
-    return if current_organization.owner?(current_user)
+    return if OperatorPolicy.can?(current_user, current_organization, :manage_members)
 
     redirect_to members_path, alert: "Only organization owners can invite people."
   end

@@ -1,5 +1,9 @@
 class CronJobsController < ApplicationController
   include OperatorOnly
+  # A cron job is a raw command on a box, installed into a real crontab.
+  # Scheduling one is ad-hoc code execution however it is dressed up, so
+  # every mutation here is owner-only until an allowlisted-task design exists.
+  owner_only :execute, :create, :schedule_script, :update, :destroy
   before_action :set_server
 
   # Create a scheduled job and install it into the server's crontab.

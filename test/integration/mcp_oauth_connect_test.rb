@@ -241,6 +241,9 @@ class McpOauthConnectTest < ActionDispatch::IntegrationTest
 
   test "a token stops working when its user leaves the org" do
     raw = connect!
+    # An org must always keep an owner, so hand ownership over before leaving —
+    # otherwise Membership's last-owner invariant (correctly) refuses.
+    @org.add_member(User.create!(email: "successor@example.com"), role: :owner)
     @org.memberships.find_by(user: @user).destroy!
 
     call_tool("conductor_read", { action: "fleet_status" }, bearer: raw)

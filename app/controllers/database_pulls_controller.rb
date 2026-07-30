@@ -1,5 +1,9 @@
 class DatabasePullsController < ApplicationController
   include OperatorOnly
+  # A pull interpolates an env-var name into a remote shell command and can
+  # drop/recreate a local database by name (see docs/dev/SECURITY-BACKLOG.md).
+  # Owner-only until that input is validated and the restore target allowlisted.
+  owner_only :execute, :new, :create
   before_action :set_pull, only: [:show]
 
   def index

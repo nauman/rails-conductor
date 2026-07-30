@@ -1,10 +1,11 @@
 <%= render partial: "shared/page_head",
       locals: {
         title: "#{pluralize(@memberships.size, "member")} in #{current_organization.name}.",
-        lede: "Owners can invite and remove people and manage everything in this organization.",
+        lede: "Owners manage the organization. Editors deploy and run the fleet but can't delete resources, run commands, or read stored credentials. Members can only look.",
         stats: [
           { value: @memberships.size, label: "members" },
           { value: @memberships.count(&:owner?), label: "owners" },
+          ({ value: @memberships.count(&:editor?), label: "editors" } if @memberships.any?(&:editor?)),
           ({ value: @invitations.size, label: "invites pending", tone: :warning } if @invitations.any?)
         ].compact
       } %>
@@ -20,7 +21,7 @@
         </div>
         <div>
           <%= f.label :role, "Role", class: "mb-1 block font-mono text-2xs uppercase tracking-label text-muted" %>
-          <%= f.select :role, [ [ "Member", "member" ], [ "Owner", "owner" ] ], {},
+          <%= f.select :role, [ [ "Editor", "editor" ], [ "Member", "member" ], [ "Owner", "owner" ] ], {},
                 class: "block rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary" %>
         </div>
         <%= f.submit "Send invite", class: "cursor-pointer rounded-control bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong" %>
@@ -30,20 +31,42 @@
 
   <%= render layout: "shared/panel", locals: { title: "People", flush: true } do %>
     <div class="divide-y divide-border">
+      <% owner_count = @memberships.count(&:owner?) %>
       <% @memberships.each do |membership| %>
-        <div class="flex items-center justify-between gap-3 px-5 py-3">
+        <% last_owner = membership.owner? && owner_count == 1 %>
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-ink"><%= membership.user.email %></span>
-            <%= rui_badge(text: membership.role, color: membership.owner? ? :primary : :slate, size: :sm) %>
+            <% unless @can_manage %>
+              <%= rui_badge(text: membership.role, color: role_badge_color(membership.role), size: :sm) %>
+            <% end %>
             <% if membership.user_id == current_user.id %>
               <span class="font-mono text-2xs text-faint">you</span>
             <% end %>
           </div>
-          <% if @can_manage && membership.user_id != current_user.id %>
-            <%= rui_button_to("Remove", member_path(membership), method: :delete, variant: :ghost, size: :sm, color: :danger,
-                  data: { turbo_confirm: "Remove #{membership.user.email}?" }) %>
+
+          <% if @can_manage %>
+            <div class="flex items-center gap-2">
+              <%= form_with url: member_path(membership), method: :patch, class: "contents",
+                    data: { controller: "auto-submit", turbo: true } do %>
+                <%= select_tag :role,
+                      options_for_select([ [ "Member", "member" ], [ "Editor", "editor" ], [ "Owner", "owner" ] ], membership.role),
+                      disabled: last_owner,
+                      title: (last_owner ? "This organization must always have an owner." : nil),
+                      data: { action: "change->auto-submit#submit" },
+                      class: "rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary disabled:bg-fill disabled:text-faint" %>
+                <noscript><%= submit_tag "Save", class: "ml-1 rounded-control border border-border-strong px-2 py-1 text-2xs" %></noscript>
+              <% end %>
+              <% if membership.user_id != current_user.id && !last_owner %>
+                <%= rui_button_to("Remove", member_path(membership), method: :delete, variant: :ghost, size: :sm, color: :danger,
+                      data: { turbo_confirm: "Remove #{membership.user.email}?" }) %>
+              <% end %>
+            </div>
           <% end %>
         </div>
+      <% end %>
+      <% if @can_manage && owner_count == 1 %>
+        <p class="px-5 py-3 text-2xs text-muted">The sole owner's role is locked — promote someone else to owner first.</p>
       <% end %>
 
       <% @invitations.each do |invitation| %>

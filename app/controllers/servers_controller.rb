@@ -2,6 +2,10 @@ require "shellwords"
 
 class ServersController < ApplicationController
   include OperatorOnly
+  owner_only :destroy, :destroy
+  # provision runs a Script over the server's SSH identity; hardening and
+  # package installation mutate the host as root. Ad-hoc execution, so owner-only.
+  owner_only :execute, :provision, :install_packages
   before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :storage, :audit, :install_packages, :apply_updates, :sudo_check, :reboot ]
 
   def index

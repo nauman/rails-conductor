@@ -40,6 +40,15 @@ class User < ApplicationRecord
 
   has_many :memberships, dependent: :destroy
   has_many :organizations, through: :memberships
+
+  # Deleting a user cascades their memberships, which would silently strip an
+  # organization of its last owner. Refuse up front and name the org, so the
+  # admin transfers ownership first rather than discovering an orphan later.
+  before_destroy :ensure_not_the_last_owner_anywhere
+
+  def orphaned_organizations
+    organizations.select { |org| org.owner?(self) && org.memberships.owner.where.not(user_id: id).none? }
+  end
   has_many :api_tokens, dependent: :destroy
   has_many :conversations, dependent: :destroy
 
@@ -50,6 +59,14 @@ class User < ApplicationRecord
   end
 
   private
+
+  def ensure_not_the_last_owner_anywhere
+    orphaned = orphaned_organizations
+    return if orphaned.empty?
+
+    errors.add(:base, "is the last owner of #{orphaned.map(&:name).to_sentence} — transfer ownership first")
+    throw :abort
+  end
 
   def permission_for(record)
     case record

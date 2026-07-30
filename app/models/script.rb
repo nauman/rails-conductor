@@ -20,12 +20,14 @@ class Script < ApplicationRecord
   }
 
   # A global/built-in script is platform-admin-only; an org script is editable by
-  # an operator (owner/admin) of the owning org. Never editable across tenants.
+  # an OWNER of the owning org. Never editable across tenants. Editing a script
+  # body is authoring code that later runs as root over SSH, so it sits in the
+  # :execute band with running one — an editor gets neither.
   def editable_by?(user, organization)
     return false if user.nil?
     return user.admin? if built_in? || organization_id.nil?
 
-    organization_id == organization&.id && OperatorPolicy.operator?(user, organization)
+    organization_id == organization&.id && OperatorPolicy.can?(user, organization, :execute)
   end
 
   scope :provision, -> { where(script_type: 'provision') }

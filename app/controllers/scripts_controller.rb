@@ -1,5 +1,8 @@
 class ScriptsController < ApplicationController
   include OperatorOnly
+  # Scripts are arbitrary shell run over a server's SSH identity. Nothing in
+  # this controller — including reading a script body — is editor-safe.
+  owner_only_controller! :execute
   before_action :set_script, only: [ :show, :edit, :update, :destroy ]
   before_action :require_editable_script!, only: [ :edit, :update, :destroy ]
 

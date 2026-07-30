@@ -1,6 +1,9 @@
 module Api
   module V1
     class ScriptsController < Api::BaseController
+      # Running a script is arbitrary shell over the server's SSH identity.
+      before_action -> { require_capability!(:execute) }, only: :run
+
       def index
         scripts = Script.visible_to(current_organization)
         render json: scripts.map { |s| script_json(s) }

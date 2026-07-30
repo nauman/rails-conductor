@@ -39,6 +39,16 @@ class Organization < ApplicationRecord
     memberships.exists?(user: user, role: :owner)
   end
 
+  # Owner or editor — may run ordinary infrastructure operations here. Asked
+  # through OperatorPolicy rather than directly; see that class for the bands.
+  def operator?(user)
+    memberships.exists?(user: user, role: [ :owner, :editor ])
+  end
+
+  def role_for(user)
+    memberships.find_by(user: user)&.role
+  end
+
   def onboarded?
     onboarded_at.present?
   end

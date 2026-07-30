@@ -1,5 +1,7 @@
 class DatabasesController < ApplicationController
   include OperatorOnly
+  # destroy drops the live database AND its role — not recoverable.
+  owner_only :destroy, :destroy
   # Provision a database (role + database + password) on a cluster.
   def create
     cluster = current_organization.database_clusters.find(params[:database_cluster_id])

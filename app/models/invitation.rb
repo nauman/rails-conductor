@@ -4,7 +4,8 @@ class Invitation < ApplicationRecord
 
   has_secure_token
 
-  enum :role, { member: 0, owner: 1 }, default: :member
+  # Must mirror Membership.roles exactly — accept! copies this straight across.
+  enum :role, { member: 0, owner: 1, editor: 2 }, default: :member
 
   validates :email, presence: true
 

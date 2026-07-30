@@ -23,23 +23,31 @@ class ToolRegistry
     TOOLS.find { |t| t::DEFINITION[:name] == name }
   end
 
-  # Tools a read-only token may call. conductor_read is the only non-mutating
-  # tool; everything else mutates infra and needs a deploy-scoped token.
-  READ_ONLY_TOOLS = %w[conductor_read].freeze
-
   def self.call(name, input, user:)
     tool_class = find(name)
     return Result.fail("Unknown tool: #{name}") unless tool_class
 
-    if Current.read_only && !READ_ONLY_TOOLS.include?(name)
-      return Result.fail("This token is read-only; '#{name}' requires a deploy-scoped token.")
+    input ||= {}
+    action = input["action"].to_s
+    read_only_call = ToolAuthorization.read_only?(name, action)
+
+    if Current.read_only && !read_only_call
+      return Result.fail("This token is read-only; '#{name}' action '#{action}' requires a deploy-scoped token.")
     end
 
     # Same OperatorPolicy as the web layer: mutating tools execute real
     # infrastructure, so a plain member cannot run them even with a self-minted
-    # deploy token — only an org owner or platform admin can.
-    unless READ_ONLY_TOOLS.include?(name) || OperatorPolicy.operator?(user, Current.organization)
-      return Result.fail("This action requires an organization owner.")
+    # deploy token — only an owner, editor, or platform admin can.
+    unless read_only_call || OperatorPolicy.operator?(user, Current.organization)
+      return Result.fail("This action requires an organization owner or editor.")
+    end
+
+    # Owner-only bands, resolved per ACTION (and per input field) before the
+    # handler runs — EnumDispatch invokes the handler immediately, so this
+    # cannot be checked after dispatch. See ToolAuthorization.
+    capability = ToolAuthorization.capability_for(name, action, input)
+    if capability && !OperatorPolicy.can?(user, Current.organization, capability)
+      return Result.fail("'#{name}' action '#{action}' requires an organization owner (#{capability}).")
     end
 
     tool_class.new(user: user).call(input)

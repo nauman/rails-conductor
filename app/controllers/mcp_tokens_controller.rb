@@ -6,18 +6,27 @@ class McpTokensController < ApplicationController
     @tokens = current_organization_tokens.order(created_at: :desc)
     @new_token = flash[:new_token] # raw value shown once after create
     @connections = oauth_connections
+    @can_deploy = OperatorPolicy.operator?(current_user, current_organization)
+    @role = current_organization.role_for(current_user)
   end
 
   def create
-    scope = ApiToken::SCOPES.include?(params[:scope]) ? params[:scope] : "deploy"
+    requested = ApiToken::SCOPES.include?(params[:scope]) ? params[:scope] : "deploy"
     # A non-operator can only mint read tokens — a deploy token would be useless
-    # anyway (the tool layer rejects their mutations) and shouldn't be offered.
-    scope = "read" unless OperatorPolicy.operator?(current_user, current_organization)
+    # anyway (the tool layer rejects their mutations). The form no longer offers
+    # the option, but keep the coercion as defence-in-depth for direct POSTs, and
+    # say so rather than silently downgrading.
+    scope = OperatorPolicy.operator?(current_user, current_organization) ? requested : "read"
+    downgraded = scope != requested
+
     name = params[:name].presence || "agent-token"
     raw, = ApiToken.generate(user: current_user, name: name,
                              organization: current_organization, scope: scope)
-    redirect_to mcp_tokens_path, flash: { new_token: raw,
-      notice: "Token created — copy it now, it won't be shown again." }
+
+    notice = "Token created — copy it now, it won't be shown again."
+    notice += " Scope was set to read-only: deploying over MCP needs the editor role, so ask an owner of #{current_organization.name}." if downgraded
+
+    redirect_to mcp_tokens_path, flash: { new_token: raw, notice: notice }
   end
 
   def destroy
