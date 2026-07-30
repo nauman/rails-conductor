@@ -30,8 +30,11 @@ class DatabaseBackup
     filename = "#{backup.bucket_name}_#{timestamp}.sql.gz"
     local_path = "/tmp/#{filename}"
 
-    # Dump the database (assumes PostgreSQL - extend for MySQL)
-    dump_cmd = build_dump_command(local_path)
+    # Resolve the app's real DATABASE_URL first (in Ruby, one simple call), then
+    # dump with the proven single-command form. Resolving separately avoids the
+    # fragile nested-$() one-liner that silently produced empty dumps under sh -c.
+    url = resolve_database_url(ssh)
+    dump_cmd = build_dump_command(local_path, url)
     unless ssh.execute(dump_cmd)
       return fail_with("Database dump failed: #{ssh.error}")
     end
@@ -82,35 +85,47 @@ class DatabaseBackup
     false
   end
 
-  # Build the dump command. Three hard-won requirements the old host `pg_dump
+  # The app's live DATABASE_URL. Conductor's DB records are incomplete (shared /
+  # unregistered apps have no derived URL), but the app's OWN container always
+  # carries it — read it there as a fallback. One simple `sh -c` command (verified
+  # to work), unlike the nested one-liner that silently dumped nothing.
+  def resolve_database_url(ssh)
+    app = backup.app
+    derived = app&.derived_database_url(server: backup.server || app&.server)
+    return derived if derived.present?
+
+    container = dump_source_container(app)
+    return nil unless container
+
+    ssh.execute("docker exec #{container} printenv DATABASE_URL")
+    ssh.output.to_s.strip.presence
+  end
+
+  # Build the dump command. Two hard-won requirements the old host `pg_dump
   # $DATABASE_URL` missed (it silently produced an empty 20-byte gzip):
-  #   1. THE REAL URL — Conductor's DB records are incomplete (shared / unregistered
-  #      apps have no derived URL), but the app's OWN container always carries the
-  #      live DATABASE_URL. Read it from there, so dedicated AND shared apps work.
-  #   2. VERSION MATCH — pg_dump refuses a server newer than the client. The app
+  #   1. VERSION MATCH — pg_dump refuses a server newer than the client. The app
   #      containers ship pg_dump 15 while the DBs are 16, so dumping IN them wrote
   #      nothing. Run pg_dump from a matching Postgres image instead.
-  #   3. RESOLVABLE HOST — the DB URL host is a container name resolvable only on
+  #   2. RESOLVABLE HOST — the DB URL host is a container name resolvable only on
   #      the app's docker network, so run that matching client THERE.
-  # A failed dump can still leave an empty gzip (the pipe exits with gzip's
-  # success), so run! also rejects any dump under MIN_DUMP_BYTES.
-  def build_dump_command(output_path)
-    app = backup.app
-    container = dump_source_container(app)
-    net = app&.deploy_network
+  # A failed dump can still leave an empty gzip, so run! also rejects any dump
+  # under MIN_DUMP_BYTES.
+  def build_dump_command(output_path, url)
+    net = backup.app&.deploy_network
 
-    if container && net.present?
-      client = "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump"
-      %(u="$(docker exec #{container} printenv DATABASE_URL)"; #{client} "$u" | gzip > #{output_path})
+    if url.present? && net.present?
+      "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump #{esc(url)} | gzip > #{output_path}"
+    elsif url.present?
+      "pg_dump #{esc(url)} | gzip > #{output_path}"
     else
-      # Native/host apps: no container; DATABASE_URL lives in the host/systemd env.
+      # Last resort (native/host app): DATABASE_URL from the host env.
       %(pg_dump "$DATABASE_URL" | gzip > #{output_path})
     end
   end
 
-  # A shell expression that resolves to the app's running container id, or nil for
-  # a native (host-process) app. Kamal containers are per-release (found by label);
-  # non-kamal docker apps have the fixed name conductor-<slug>.
+  # A shell expression resolving to the app's running container id, or nil for a
+  # native app. Kamal containers are per-release (found by label); non-kamal
+  # docker apps have the fixed name conductor-<slug>.
   def dump_source_container(app)
     return nil unless app
     if app.kamal?
