@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_000007) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -223,6 +223,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_000007) do
     t.index ["app_id"], name: "index_databases_on_app_id"
     t.index ["database_cluster_id"], name: "index_databases_on_database_cluster_id"
     t.index ["organization_id"], name: "index_databases_on_organization_id"
+  end
+
+  create_table "decommissions", force: :cascade do |t|
+    t.bigint "app_id", null: false
+    t.datetime "created_at", null: false
+    t.boolean "dry_run", default: false, null: false
+    t.text "findings"
+    t.datetime "finished_at"
+    t.text "log"
+    t.bigint "organization_id", null: false
+    t.string "phase"
+    t.bigint "server_id", null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_id", "created_at"], name: "index_decommissions_on_app_id_and_created_at"
+    t.index ["app_id"], name: "index_decommissions_on_app_id"
+    t.index ["organization_id"], name: "index_decommissions_on_organization_id"
+    t.index ["server_id"], name: "index_decommissions_on_server_id"
+    t.index ["status"], name: "index_decommissions_on_status"
   end
 
   create_table "deploy_checklist_items", force: :cascade do |t|
@@ -592,6 +612,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_000007) do
   add_foreign_key "databases", "apps"
   add_foreign_key "databases", "database_clusters"
   add_foreign_key "databases", "organizations"
+  add_foreign_key "decommissions", "apps"
+  add_foreign_key "decommissions", "organizations"
+  add_foreign_key "decommissions", "servers"
   add_foreign_key "deploy_checklist_items", "apps"
   add_foreign_key "deploy_keys", "apps"
   add_foreign_key "deployments", "apps"

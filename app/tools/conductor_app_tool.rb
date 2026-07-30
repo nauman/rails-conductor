@@ -13,6 +13,7 @@ class ConductorAppTool
     "convert_database" => ConvertDatabaseAppTool,
     "transfer_plan" => TransferPlanAppTool,
     "transfer"      => TransferAppTool,
+    "retire"        => RetireAppTool,
     "runner"        => RunAppRunnerTool
   }.freeze
 
@@ -28,16 +29,19 @@ class ConductorAppTool
       "convert_database (convert a shared-cluster app to a dedicated colocated DB IN PLACE so it can be transferred — app_id/app_name; requires confirm:true, a bare call previews. REVERSIBLE until redeploy: the shared DB is left intact and the old DSN kept as DATABASE_URL_PRE_CONVERT. credential_id/bucket optional — derived from the app's own R2 config), " \
       "transfer_plan (READ-ONLY dry-run of moving an app to another server — app_id/app_name + target_server_id/target_server_name; emits the staged change set + warnings, mutates nothing), " \
       "transfer (EXECUTE a move/clone to another server — app + target_server + mode + credential_id/bucket for the DB copy; requires confirm:true, a bare call returns the plan and does nothing), " \
+      "retire (DECOMMISSION an app FROM a box — app_id/app_name + from_server_id/from_server_name (named EXPLICITLY, never defaulted). DISCOVERY-FIRST: a bare call SSH-inspects the box and returns what actually holds the app's port/containers/dedicated-DB (a native puma vs docker, stale idle containers, records still homed here) and mutates NOTHING; confirm:true then stops+removes the app's OWN service-labeled containers, its dedicated DB container+volume, and the stale Conductor records for THAT box, recording an audit trail + folding learnings into the runbook. Refuses to retire the app's live home (move it first) and NEVER drops a shared-cluster DB), " \
       "runner (run a one-off Rails command inside the app's LIVE container over SSH — the non-interactive `kamal console`: app_id/app_name + either `ruby` (arbitrary Ruby via `rails runner`) or `task` (a bare rails/rake task like db:migrate:status). kamal + docker apps only. Runs real code against production — a mutating script is destructive, confirm first). " \
       "deploy, rollback, transfer, and a mutating runner are destructive/outward-facing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer runner], description: "Which app operation" },
+        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer retire runner], description: "Which app operation" },
         target_server_id:   { type: "integer", description: "transfer_plan/transfer: destination server by id (or target_server_name)" },
         target_server_name: { type: "string",  description: "transfer_plan/transfer: destination server by name (or target_server_id)" },
+        from_server_id:     { type: "integer", description: "retire: the box to retire the app FROM, by id (or from_server_name). Named explicitly — never defaulted." },
+        from_server_name:   { type: "string",  description: "retire: the box to retire the app FROM, by name (or from_server_id). Named explicitly — never defaulted." },
         mode:              { type: "string",  enum: %w[transfer clone stage], description: "transfer: 'transfer' (move + cut over + drain source), 'clone' (cut over, source stays live), or 'stage' (copy + deploy + publish, STOP before DNS so you can verify the target first). Default transfer." },
-        confirm:           { type: "boolean", description: "transfer: required to execute. Without it, returns the dry-run plan and does NOTHING — a transfer redeploys, copies the DB, repoints DNS, and drains the source." },
+        confirm:           { type: "boolean", description: "transfer/retire: required to execute. Without it, returns the dry-run plan (transfer) or the discovery report (retire) and does NOTHING." },
         credential_id:     { type: "integer", description: "transfer (confirm): object-store (R2/S3) credential id used to copy the database" },
         bucket:            { type: "string",  description: "transfer (confirm): object-store bucket to stage the DB copy through" },
         provider:          { type: "string",  description: "transfer (confirm): object-store vendor for the DB copy (default cloudflare_r2; any S3-compatible BackupVendors key)" },
