@@ -40,4 +40,39 @@ class DeployAppJobTest < ActiveSupport::TestCase
     end
     assert_equal :docker, called
   end
+
+  # Fix for the self-deploy loop + false "deploy failed" emails: when Conductor
+  # deploys itself, kamal SIGTERMs this job mid-roll and SolidQueue re-runs it. A
+  # re-run of a self-managed deploy that's already "deploying" must NOT invoke the
+  # deployer again (that re-run raced the lock, failed, and emailed) — the reconciler
+  # finalizes the row when the new release boots.
+  test "self-managed deploy already mid-roll is NOT re-run" do
+    app = @org.apps.create!(name: "conductor", slug: "conductor", server: @server,
+                            deploy_method: "kamal", repository_url: "https://example.com/r.git",
+                            self_managed: true)
+    deployment = app.deployments.create!(status: "deploying", commit_sha: "abc123def456")
+
+    called = false
+    KamalDeployer.stub(:new, ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = true }; obj }) do
+      DeployAppJob.new.perform(deployment.id)
+    end
+
+    refute called, "a mid-roll self-managed deploy must not be re-run"
+    assert_equal "deploying", deployment.reload.status
+    assert_match(/re-entered/i, deployment.log.to_s)
+  end
+
+  test "a fresh self-managed deploy (not yet deploying) still runs" do
+    app = @org.apps.create!(name: "conductor2", slug: "conductor2", server: @server,
+                            deploy_method: "kamal", repository_url: "https://example.com/r.git",
+                            self_managed: true)
+    deployment = app.deployments.create! # status defaults to pending, not "deploying"
+
+    called = false
+    KamalDeployer.stub(:new, ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = true }; obj }) do
+      DeployAppJob.new.perform(deployment.id)
+    end
+
+    assert called, "a first-run self-managed deploy must proceed normally"
+  end
 end
