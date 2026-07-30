@@ -78,10 +78,17 @@ class DatabaseBackup
   def build_dump_command(output_path)
     app = backup.app
     if app&.kamal?
+      # Kamal: dynamic per-release container, found by its service+role labels.
       svc = Shellwords.escape(app.kamal_service_candidates.first.to_s)
       cid = "$(docker ps -q --filter label=service=#{svc} --filter label=role=web | head -1)"
       %(docker exec #{cid} sh -c 'pg_dump "$DATABASE_URL"' | gzip > #{output_path})
+    elsif app&.deploy_method == "docker"
+      # Non-kamal docker: fixed-name container (conductor-<slug>). Also holds
+      # DATABASE_URL in the container, so it needs the same in-container dump —
+      # NOT the host-env form, which would back up nothing here too.
+      %(docker exec #{Shellwords.escape(app.container_name)} sh -c 'pg_dump "$DATABASE_URL"' | gzip > #{output_path})
     else
+      # Native (classic host process): DATABASE_URL lives in the host/systemd env.
       "pg_dump $DATABASE_URL | gzip > #{output_path}"
     end
   end

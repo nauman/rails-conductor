@@ -70,6 +70,16 @@ class DatabaseBackupTest < ActiveSupport::TestCase
     assert_includes cmd, "gzip > /tmp/x.sql.gz"
   end
 
+  test "non-kamal docker app dumps from its fixed container (conductor-<slug>), not the host" do
+    app = @org.apps.create!(name: "d", slug: "d", deploy_method: "docker", repository_url: "https://x/y.git")
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz")
+
+    assert_includes cmd, "docker exec conductor-d"
+    assert_includes cmd, %(pg_dump "$DATABASE_URL")
+    refute_equal "pg_dump $DATABASE_URL | gzip > /tmp/x.sql.gz", cmd
+  end
+
   test "native app keeps the host-env DATABASE_URL dump" do
     app = @org.apps.create!(name: "n", slug: "n", deploy_method: "native", repository_url: "https://x/y.git")
     b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
