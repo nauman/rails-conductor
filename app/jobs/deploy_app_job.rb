@@ -5,7 +5,7 @@ class DeployAppJob < ApplicationJob
     deployment = Deployment.find(deployment_id)
     app = deployment.app
 
-    return if reentrant_self_deploy_midroll?(app, deployment)
+    return if reentrant_self_deploy?(app, deployment)
 
     deployer =
       case app.deploy_method
@@ -18,27 +18,31 @@ class DeployAppJob < ApplicationJob
 
   private
 
-  # Self-deploy re-entry guard — the fix for the false "deploy failed" emails.
+  # Self-deploy re-entry guard — the fix for the self-deploy loop + false emails.
   #
-  # When Conductor deploys ITSELF, kamal boots the new release and then stops the
-  # old container — SIGTERM'ing the worker running THIS job, right AFTER the new
-  # release is already live and serving. SolidQueue then re-runs the interrupted
-  # job. That re-run would invoke kamal again, collide on the deploy lock
-  # ("Deploy lock found"), mark the deployment failed, and fire a failure email —
-  # a FALSE alarm, because the new release is up. SelfDeployReconciler already
-  # finalizes the row to succeeded when the new container boots (it matches the
-  # live KAMAL_VERSION to this row's sha).
+  # When Conductor deploys ITSELF, kamal boots the new release and stops the old
+  # container — SIGTERM'ing the worker running THIS job, right after the new
+  # release is already live. SolidQueue then re-runs the interrupted job. A re-run
+  # that invokes kamal again re-rolls the container (killing itself again → loop),
+  # races the deploy lock, and emails false failures.
   #
-  # So: if a self-managed deployment has already entered the release swap
-  # ("deploying"), don't re-run kamal. Let the reconciler close it out. A genuine
-  # early failure (before the swap) still runs and still alerts.
-  def reentrant_self_deploy_midroll?(app, deployment)
-    return false unless app.self_managed? && deployment.status == "deploying"
+  # A freshly-created deployment is "pending" until deploy! calls start!. So a
+  # self-managed deployment in ANY other state (building / deploying / succeeded /
+  # failed / cancelled) is a re-run of a job whose first execution already ran —
+  # NOT a fresh deploy. Bail. This must include the terminal states, not just
+  # "deploying": SelfDeployReconciler finalizes the row to "succeeded" on the new
+  # container's boot, and a guard that only caught "deploying" let the next re-run
+  # slip past a "succeeded" row and start a brand-new roll — an infinite handoff
+  # between the reconciler and the job. Only "pending" proceeds; the reconciler
+  # owns finalization of everything else.
+  def reentrant_self_deploy?(app, deployment)
+    return false unless app.self_managed?
+    return false if deployment.status == "pending"
 
     deployment.append_log(
-      "DeployAppJob re-entered while this self-managed deploy is mid-roll — not " \
-      "re-running kamal (a re-run would race the deploy lock and email a false " \
-      "failure). The new release reconciles this deployment when it boots."
+      "DeployAppJob re-entered for a self-managed deploy in state " \
+      "'#{deployment.status}' — not re-running kamal (a re-run would re-roll and " \
+      "loop). SelfDeployReconciler owns finalization of this row."
     )
     true
   end

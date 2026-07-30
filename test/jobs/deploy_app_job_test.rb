@@ -75,4 +75,21 @@ class DeployAppJobTest < ActiveSupport::TestCase
 
     assert called, "a first-run self-managed deploy must proceed normally"
   end
+
+  # The infinite-handoff hole: the reconciler finalizes the row to "succeeded" on
+  # the new container's boot; a re-run that saw a terminal row and re-deployed
+  # kept the loop alive. A re-run of ANY non-pending self-managed deploy must bail.
+  test "a re-run of a terminal (succeeded/failed) self-managed deploy is NOT re-run" do
+    app = @org.apps.create!(name: "conductor3", slug: "conductor3", server: @server,
+                            deploy_method: "kamal", repository_url: "https://example.com/r.git",
+                            self_managed: true)
+    %w[succeeded failed cancelled building].each do |state|
+      dep = app.deployments.create!(status: state, commit_sha: "sha-#{state}")
+      called = false
+      KamalDeployer.stub(:new, ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = true }; obj }) do
+        DeployAppJob.new.perform(dep.id)
+      end
+      refute called, "a re-run of a '#{state}' self-managed deploy must not re-run kamal"
+    end
+  end
 end
