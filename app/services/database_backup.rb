@@ -1,6 +1,10 @@
 require "shellwords"
 
 class DatabaseBackup
+  # A real gzipped pg_dump — even of an empty schema — is well over this; an empty
+  # gzip stream (what a failed dump leaves) is ~20 bytes. Below this = not a backup.
+  MIN_DUMP_BYTES = 200
+
   attr_reader :backup, :error
 
   def initialize(backup)
@@ -36,6 +40,14 @@ class DatabaseBackup
     ssh.execute("stat -f%z #{local_path} 2>/dev/null || stat -c%s #{local_path}")
     size_bytes = ssh.output.to_s.strip.to_i
 
+    # Refuse to record an empty/near-empty dump as a success. A failed pg_dump can
+    # still leave a ~20-byte gzip (an empty stream), and a real dump — even of an
+    # empty schema — is far larger. Recording that as "completed" is the exact
+    # "reports success, protects nothing" trap, so fail loud instead.
+    if size_bytes < MIN_DUMP_BYTES
+      return fail_with("Dump produced only #{size_bytes} bytes — treating as a failed/empty backup, not recording success")
+    end
+
     # Upload to cloud storage
     unless upload_to_storage(ssh, local_path, filename)
       return fail_with("Upload failed: #{@error}")
@@ -70,28 +82,31 @@ class DatabaseBackup
     false
   end
 
-  # Kamal apps hold DATABASE_URL inside the CONTAINER, not the host shell — a host
-  # `pg_dump $DATABASE_URL` has no target and silently backs up nothing (verified:
-  # host DATABASE_URL is empty on the fleet). Dump from inside the running web
-  # container so pg_dump gets the real DSN, and the secret never hits the host
-  # process list. Native/docker apps keep the host-env assumption.
+  # Build the dump command. Two hard-won requirements the old host `pg_dump
+  # $DATABASE_URL` missed (it silently produced an empty 20-byte gzip):
+  #   1. VERSION MATCH — pg_dump refuses a server newer than the client. The app
+  #      containers ship pg_dump 15 while the DBs are 16, so dumping there wrote
+  #      nothing. Run pg_dump from a matching Postgres image instead.
+  #   2. RESOLVABLE HOST — a dedicated DB's URL host is a container name that only
+  #      resolves on the app's docker network, so run the client THERE.
+  # Same throwaway-container-on-the-network approach DatabaseReplicator uses. A
+  # failed dump can still leave an empty gzip (the pipe exits with gzip's success),
+  # so run! also rejects any dump under MIN_DUMP_BYTES rather than trust the exit.
   def build_dump_command(output_path)
     app = backup.app
-    if app&.kamal?
-      # Kamal: dynamic per-release container, found by its service+role labels.
-      svc = Shellwords.escape(app.kamal_service_candidates.first.to_s)
-      cid = "$(docker ps -q --filter label=service=#{svc} --filter label=role=web | head -1)"
-      %(docker exec #{cid} sh -c 'pg_dump "$DATABASE_URL"' | gzip > #{output_path})
-    elsif app&.deploy_method == "docker"
-      # Non-kamal docker: fixed-name container (conductor-<slug>). Also holds
-      # DATABASE_URL in the container, so it needs the same in-container dump —
-      # NOT the host-env form, which would back up nothing here too.
-      %(docker exec #{Shellwords.escape(app.container_name)} sh -c 'pg_dump "$DATABASE_URL"' | gzip > #{output_path})
+    url = app&.derived_database_url(server: backup.server || app&.server)
+    net = app&.deploy_network
+
+    if url.present? && net.present?
+      client = "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump #{esc(url)}"
+      "#{client} | gzip > #{output_path}"
     else
-      # Native (classic host process): DATABASE_URL lives in the host/systemd env.
-      "pg_dump $DATABASE_URL | gzip > #{output_path}"
+      # Native/host apps (no network + a host-resolvable DATABASE_URL in env).
+      %(pg_dump "$DATABASE_URL" | gzip > #{output_path})
     end
   end
+
+  def esc(value) = Shellwords.escape(value.to_s)
 
   def upload_to_storage(ssh, local_path, filename)
     return true if backup.provider == "local" # nothing to upload — keep the file

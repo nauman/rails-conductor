@@ -55,36 +55,34 @@ class DatabaseBackupTest < ActiveSupport::TestCase
     assert DatabaseBackup.new(b).send(:upload_to_storage, Object.new, "/tmp/x", "x")
   end
 
-  # The dump-source fix: kamal apps hold DATABASE_URL in the CONTAINER, so a host
-  # `pg_dump $DATABASE_URL` (host env is empty, verified on the fleet) backs up
-  # nothing. Dump from inside the running web container instead.
-  test "kamal app dumps from inside the running container, not the host shell" do
+  # The dump fix: pg_dump refuses a server newer than the client (app containers
+  # ship 15, DBs are 16 → empty backups), and a dedicated DB's URL host only
+  # resolves on the app network. So dump via a matching Postgres image run ON that
+  # network with the derived URL — never the host `pg_dump $DATABASE_URL`.
+  test "dumps via a version-matched client on the app network when URL + network are known" do
     app = @org.apps.create!(name: "k", slug: "k", deploy_method: "kamal", repository_url: "https://x/y.git")
+    app.define_singleton_method(:derived_database_url) { |*| "postgres://u:pw@k-db:5432/k_production" }
+    app.define_singleton_method(:deploy_network) { "kamal-net" }
     b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
     cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz")
 
-    assert_includes cmd, "docker exec"
-    assert_includes cmd, "label=service="
-    assert_includes cmd, "role=web"
-    assert_includes cmd, %(pg_dump "$DATABASE_URL")
-    assert_includes cmd, "gzip > /tmp/x.sql.gz"
+    assert_includes cmd, "docker run --rm --network kamal-net"
+    assert_includes cmd, "postgres:16-alpine"
+    assert_includes cmd, "pg_dump"
+    assert_includes cmd, "k-db:5432/k_production"
+    assert_includes cmd, "| gzip > /tmp/x.sql.gz"
+    refute_includes cmd, "pg_dump $DATABASE_URL" # never the broken host form
   end
 
-  test "non-kamal docker app dumps from its fixed container (conductor-<slug>), not the host" do
-    app = @org.apps.create!(name: "d", slug: "d", deploy_method: "docker", repository_url: "https://x/y.git")
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
-    cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz")
-
-    assert_includes cmd, "docker exec conductor-d"
-    assert_includes cmd, %(pg_dump "$DATABASE_URL")
-    refute_equal "pg_dump $DATABASE_URL | gzip > /tmp/x.sql.gz", cmd
-  end
-
-  test "native app keeps the host-env DATABASE_URL dump" do
+  test "falls back to host-env DATABASE_URL when no network/URL is known" do
     app = @org.apps.create!(name: "n", slug: "n", deploy_method: "native", repository_url: "https://x/y.git")
+    app.define_singleton_method(:derived_database_url) { |*| nil }
+    app.define_singleton_method(:deploy_network) { nil }
     b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
     cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz")
 
-    assert_equal "pg_dump $DATABASE_URL | gzip > /tmp/x.sql.gz", cmd
+    assert_equal %(pg_dump "$DATABASE_URL" | gzip > /tmp/x.sql.gz), cmd
+    refute_includes cmd, "docker run"
   end
+
 end
