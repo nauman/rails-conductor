@@ -74,7 +74,10 @@ class KamalDeployer
     log_ssh_diagnostics
     note_self_deploy if app.self_managed?
     stop_prior_container_if_fixed_port
-    return false unless run_kamal_deploy
+    unless run_kamal_deploy
+      recover_after_stop_first
+      return false
+    end
     return false unless run_gated_migrations
     return false unless run_seeds_if_requested
 
@@ -388,7 +391,24 @@ class KamalDeployer
     log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
     result = @shell.run("bash", "-lc", "#{kamal_bin} app stop#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
+    @stopped_prior = true
     true
+  end
+
+  # Safety net for the stop-first path. Stopping the old container BEFORE boot means
+  # a failed deploy leaves the app with NOTHING running — strictly worse than a
+  # normal failed roll where the old container keeps serving (this is what briefly
+  # took calm.page down: the image was fine, a lock race just failed the run). So on
+  # a post-stop failure, best-effort `kamal app boot` to bring the app back up
+  # (boots the latest good version kamal retains). Only fires when we actually
+  # stopped first; never raises — recovery must not mask the original failure.
+  def recover_after_stop_first
+    return unless @stopped_prior
+
+    log "=== deploy failed after stop-first — best-effort rebooting so the app isn't left down ==="
+    @shell.run("bash", "-lc", "#{kamal_bin} app boot#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+  rescue StandardError => e
+    log "recovery reboot failed (#{e.message}); manual `kamal app boot` may be needed"
   end
 
   # Runs `kamal deploy`, recovering from a stale deploy lock. Kamal takes a global

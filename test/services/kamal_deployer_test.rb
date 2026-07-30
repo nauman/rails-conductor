@@ -109,6 +109,23 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert stop_idx < deploy_idx, "stop must run BEFORE deploy so the fixed port is free"
   end
 
+  # Safety net: stopping the old container first means a failed deploy would leave
+  # the app down. On a post-stop failure the deployer must best-effort reboot it
+  # (this is what would have instantly restored calm.page during the blip).
+  test "fixed-port deploy that fails after stop-first reboots the app so it is not left down" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    shell = FailOnShell.new("kamal deploy")
+    deploy_with(shell)
+
+    cmds = shell.runs.map { |r| r[:command].last }
+    stop_idx = cmds.index { |c| c.include?("kamal app stop") }
+    boot_idx = cmds.rindex { |c| c.include?("kamal app boot") }
+    assert stop_idx, "expected stop-first"
+    assert boot_idx, "expected a recovery 'kamal app boot' after the failed deploy"
+    assert boot_idx > stop_idx, "recovery boot must run after the stop"
+    assert_equal "failed", @deployment.reload.status
+  end
+
   # Forced invariant: host-Caddy box ⟹ kamal-proxy OFF. Refuse a deploy whose
   # config doesn't explicitly disable kamal-proxy, so it can't collide on :80/:443.
   test "refuses to deploy onto a host-Caddy box when config lacks an explicit proxy: false" do
