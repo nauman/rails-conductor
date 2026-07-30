@@ -77,6 +77,8 @@
               </span>
               <span class="font-mono text-2xs text-faint">· wants <%= health.desired_state %></span>
             </dd>
+            <%# Live: App#broadcast_status_badge targets this dom_id. %>
+            <dd class="mt-2"><%= render "apps/status_badge", app: @app %></dd>
           </div>
           <div>
             <dt class="font-mono text-2xs uppercase tracking-label text-muted">Up since</dt>

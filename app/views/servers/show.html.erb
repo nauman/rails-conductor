@@ -1,261 +1,249 @@
 <% content_for :title, "#{@server.name} · Conductor" %>
+<%# Live updates for the async package install / system update results. %>
+<%= turbo_stream_from @server %>
 
-<section class="max-w-7xl mx-auto px-4 py-10">
-  <div class="flex items-center justify-between">
-    <div>
-      <div class="flex items-center gap-3">
-        <h1 class="font-display text-2xl text-ink tracking-display"><%= @server.name %></h1>
-        <span class="<%= status_badge(@server.display_status) %>"><%= @server.display_status %></span>
-      </div>
-      <p class="mt-1 text-sm text-muted">
-        <%= @server.provider&.titleize %> · <%= @server.region || "No region" %>
-        <% if @server.ip_address.present? %>
-          · <code class="text-xs bg-fill-strong px-1.5 py-0.5 rounded"><%= @server.ip_address %></code>
-        <% end %>
-      </p>
-    </div>
-    <div class="flex items-center gap-2">
-      <% if @server.ssh_configured? %>
-        <%= button_to refresh_metrics_server_path(@server), method: :post, class: "inline-flex items-center gap-2 rounded-lg bg-primary-strong px-4 py-2 text-sm font-medium text-white hover:bg-primary" do %>
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          Refresh Metrics
-        <% end %>
-        <%= link_to logs_server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" do %>
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          Logs
-        <% end %>
-      <% end %>
-      <%= link_to "Edit", edit_server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
-      <%= link_to "Back", servers_path, class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-body hover:bg-fill" %>
-    </div>
-  </div>
-
-  <div class="mt-8 grid gap-6 lg:grid-cols-4">
-    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted">CPU</div>
-      <div class="mt-2 text-3xl font-semibold text-ink"><%= @server.cpu_display %></div>
-    </div>
-    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Memory</div>
-      <div class="mt-2 text-3xl font-semibold text-ink"><%= @server.formatted_memory %></div>
-    </div>
-    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Disk</div>
-      <div class="mt-2 text-3xl font-semibold text-ink"><%= @server.disk_display %></div>
-    </div>
-    <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-      <div class="text-xs font-semibold uppercase tracking-wide text-muted">Uptime</div>
-      <div class="mt-2 text-3xl font-semibold text-ink"><%= @server.formatted_uptime %></div>
-      <% if @server.metrics_updated_at.present? %>
-        <div class="mt-1 text-xs text-muted">Updated <%= time_ago_in_words(@server.metrics_updated_at) %> ago</div>
-      <% end %>
-    </div>
-  </div>
-
-  <div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-sm font-semibold text-ink">SSH Connection</h2>
-        <p class="mt-1 text-xs text-muted">
-          <% if @server.ssh_configured? %>
-            <span class="text-primary-strong">Configured</span> · <%= @server.ssh_user_or_default %>@<%= @server.ip_address %>:<%= @server.ssh_port_or_default %>
-          <% else %>
-            <span class="text-warning">Not configured</span> · Add an SSH key and IP address to enable
-          <% end %>
-        </p>
-      </div>
-      <% if @server.ssh_configured? %>
-        <%= button_to test_connection_server_path(@server), method: :post, class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" do %>
-          Test Connection
-        <% end %>
-      <% else %>
-        <%= link_to "Configure SSH", edit_server_path(@server), class: "inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" %>
-      <% end %>
-    </div>
-
-    <% if @server.ssh_key.present? %>
-      <div class="mt-4 pt-4 border-t border-border">
-        <dl class="grid gap-4 sm:grid-cols-3 text-sm">
-          <div>
-            <dt class="text-xs font-semibold uppercase tracking-wide text-muted">SSH Key</dt>
-            <dd class="mt-1 text-ink">
-              <%= link_to @server.ssh_key.name, ssh_key_path(@server.ssh_key), class: "hover:underline" %>
-            </dd>
-          </div>
-          <div>
-            <dt class="text-xs font-semibold uppercase tracking-wide text-muted">User</dt>
-            <dd class="mt-1 text-ink"><%= @server.ssh_user_or_default %></dd>
-          </div>
-          <div>
-            <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Port</dt>
-            <dd class="mt-1 text-ink"><%= @server.ssh_port_or_default %></dd>
-          </div>
-          <div>
-            <dt class="text-xs font-semibold uppercase tracking-wide text-muted">Web edge</dt>
-            <dd class="mt-1 text-ink">
-              <% if @server.edge_detected? %>
-                <span class="inline-flex items-center gap-1.5">
-                  <%= rui_badge(text: @server.edge_label, color: @server.edge_type == "caddy" ? :primary : (@server.edge_type == "kamal_proxy" ? :slate : :warning), size: :sm) %>
-                </span>
-                <% if @server.edge_detail.present? %>
-                  <span class="block mt-1 text-xs text-muted"><%= @server.edge_detail %></span>
-                <% end %>
-              <% else %>
-                <span class="text-muted text-xs">Not yet detected — run Test connection</span>
-              <% end %>
-            </dd>
-          </div>
-        </dl>
-      </div>
-    <% end %>
-  </div>
-
-  <%# Live updates for the async package install result. %>
-  <%= turbo_stream_from @server %>
+<%# One server (design: conductor/design/fleet.html, server detail). Four big numbers in
+    boxes told you values; the bars tell you how much room is left, which is the question
+    you actually arrive with. Everything else is grouped by what you'd do with it:
+    capacity, access, the apps riding on it, then scheduled work. %>
+<% cpu = @server.cpu_percent.to_i %>
+<% disk = @server.disk_percent.to_i %>
+<% mem = @server.memory_total_mb.to_i.positive? ? (@server.memory_used_mb.to_i * 100 / @server.memory_total_mb.to_i) : 0 %>
+<%= render layout: "shared/page_head",
+      locals: {
+        eyebrow: [ @server.provider&.titleize, @server.region ].compact_blank.join(" · ").presence || @server.ip_address,
+        title: if @server.display_status != "online"
+                 "#{@server.name} is #{@server.display_status}."
+               elsif [ cpu, mem, disk ].max >= 80
+                 "#{@server.name} is near capacity."
+               else
+                 @server.name
+               end,
+        stats: [
+          { value: @server.display_status, label: "status", tone: @server.display_status == "online" ? :default : :danger },
+          { value: @server.cpu_display, label: "cpu", tone: cpu >= 80 ? :danger : cpu >= 60 ? :warning : :default },
+          { value: @server.formatted_memory, label: "memory", tone: mem >= 80 ? :danger : :default },
+          { value: @server.disk_display, label: "disk", tone: disk >= 80 ? :danger : disk >= 60 ? :warning : :default },
+          { value: @server.formatted_uptime, label: "uptime" },
+          { value: @server.apps.size, label: "apps", url: apps_path },
+          ({ value: "#{time_ago_in_words(@server.metrics_updated_at)} ago", label: "measured" } if @server.metrics_updated_at.present?)
+        ].compact
+      } do %>
   <% if @server.ssh_configured? %>
-    <div class="mt-8 grid gap-4 md:grid-cols-2">
+    <%= rui_button_to("Refresh metrics", refresh_metrics_server_path(@server), method: :post, variant: :solid, color: :primary) %>
+    <%= rui_button("Logs", url: logs_server_path(@server), variant: :outline, color: :slate) %>
+  <% end %>
+  <%= rui_button("Edit", url: edit_server_path(@server), variant: :outline, color: :slate) %>
+<% end %>
+
+<section class="max-w-7xl mx-auto px-4 py-8 space-y-5">
+  <%# Capacity, as bars. Same card the fleet and the dashboard show, so a box looks like
+      itself wherever you meet it. %>
+  <div class="grid gap-5 lg:grid-cols-3 lg:items-start">
+    <%= render "dashboard/server_card", server: @server %>
+
+    <div class="space-y-5 lg:col-span-2">
+      <%= render layout: "shared/panel",
+            locals: { title: "Access",
+                      meta: @server.ssh_configured? ? "#{@server.ssh_user_or_default}@#{@server.ip_address}:#{@server.ssh_port_or_default}" : "no SSH — Conductor can't manage this box yet",
+                      tone: @server.ssh_configured? ? :default : :warning } do %>
+        <% if @server.ssh_configured? %>
+          <dl class="grid gap-4 sm:grid-cols-4 text-sm">
+            <div>
+              <dt class="font-mono text-2xs uppercase tracking-label text-muted">Key</dt>
+              <dd class="mt-1 text-ink">
+                <% if @server.ssh_key %>
+                  <%= link_to @server.ssh_key.name, ssh_key_path(@server.ssh_key), class: "hover:underline" %>
+                <% else %>
+                  —
+                <% end %>
+              </dd>
+            </div>
+            <div>
+              <dt class="font-mono text-2xs uppercase tracking-label text-muted">User</dt>
+              <dd class="mt-1 text-ink"><%= @server.ssh_user_or_default %></dd>
+            </div>
+            <div>
+              <dt class="font-mono text-2xs uppercase tracking-label text-muted">Port</dt>
+              <dd class="mt-1 text-ink"><%= @server.ssh_port_or_default %></dd>
+            </div>
+            <div>
+              <dt class="font-mono text-2xs uppercase tracking-label text-muted">Web edge</dt>
+              <dd class="mt-1">
+                <% if @server.edge_detected? %>
+                  <%= rui_badge(text: @server.edge_label, color: @server.edge_type == "caddy" ? :primary : (@server.edge_type == "kamal_proxy" ? :slate : :warning), size: :sm) %>
+                  <% if @server.edge_detail.present? %>
+                    <span class="mt-1 block font-mono text-2xs text-muted"><%= @server.edge_detail %></span>
+                  <% end %>
+                <% else %>
+                  <span class="font-mono text-2xs text-muted">unknown — run Test connection</span>
+                <% end %>
+              </dd>
+            </div>
+          </dl>
+          <div class="mt-4 border-t border-border pt-4">
+            <%= rui_button_to("Test connection", test_connection_server_path(@server), method: :post, variant: :outline, size: :sm, color: :slate) %>
+          </div>
+        <% else %>
+          <p class="text-sm text-muted">
+            Add an SSH key and IP address and Conductor can read health, deploy apps and
+            manage routing on this box.
+          </p>
+          <div class="mt-3">
+            <%= rui_button("Configure SSH", url: edit_server_path(@server), variant: :solid, size: :sm, color: :primary) %>
+          </div>
+        <% end %>
+      <% end %>
+
+      <% if @server.apps.any? %>
+        <%= render layout: "shared/panel",
+              locals: { title: "Apps on this box", flush: true,
+                        meta: "#{@server.apps.count { |a| a.status == "running" }} of #{@server.apps.size} running" } do %>
+          <div class="divide-y divide-border">
+            <% @server.apps.sort_by { |a| [ a.status == "running" ? 0 : 1, a.name.downcase ] }.each do |app| %>
+              <div class="flex items-center justify-between gap-3 px-5 py-3">
+                <div class="min-w-0">
+                  <%= link_to app.name, app_path(app), class: "text-sm font-medium text-ink hover:underline" %>
+                  <div class="font-mono text-2xs text-faint"><%= app.domain.presence || app.slug %></div>
+                </div>
+                <div class="flex shrink-0 items-center gap-3">
+                  <%= deploy_health_badge(app) %>
+                  <%= render "apps/status_badge", app: app %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+
+  <% if @server.ssh_configured? %>
+    <%# Checks that need an SSH round trip, each lazy so the page paints first. %>
+    <div class="grid gap-5 md:grid-cols-2">
       <%= turbo_frame_tag dom_id(@server, :health), src: health_server_path(@server), loading: :lazy do %>
-        <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Checking server health…</div>
+        <div class="rounded-large border border-border bg-surface p-5 text-sm text-muted shadow-soft">Checking server health…</div>
       <% end %>
       <%= turbo_frame_tag dom_id(@server, :audit), src: audit_server_path(@server), loading: :lazy do %>
-        <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Running security audit…</div>
+        <div class="rounded-large border border-border bg-surface p-5 text-sm text-muted shadow-soft">Running security audit…</div>
       <% end %>
       <%= turbo_frame_tag dom_id(@server, :storage), src: storage_server_path(@server), loading: :lazy, class: "md:col-span-2" do %>
-        <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Loading storage detail…</div>
+        <div class="rounded-large border border-border bg-surface p-5 text-sm text-muted shadow-soft">Loading storage detail…</div>
       <% end %>
       <%= turbo_frame_tag dom_id(@server, :sudo_check), src: sudo_check_server_path(@server), loading: :lazy do %>
-        <div class="rounded-large border border-border bg-surface p-5 shadow-soft text-sm text-muted">Checking privileged-ops readiness…</div>
+        <div class="rounded-large border border-border bg-surface p-5 text-sm text-muted shadow-soft">Checking privileged-ops readiness…</div>
       <% end %>
-      <div class="rounded-large border border-border bg-surface p-5 shadow-soft">
-        <h3 class="text-sm font-semibold text-ink">Power</h3>
-        <p class="mt-1 text-xs text-muted">Reboot over SSH — it drops offline briefly, then Conductor babysits recovery: once it's back, apps are verified and any that crashed are restarted.</p>
-        <%= button_to "Reboot server", reboot_server_path(@server), method: :post,
-              form: { data: { turbo_confirm: "Reboot #{@server.name}? Apps on it go down for the reboot, then Conductor auto-verifies + restarts them." } },
-              class: "mt-3 inline-flex items-center gap-2 rounded-lg border border-danger bg-surface px-3 py-1.5 text-xs font-medium text-danger-deep hover:bg-danger-tint" %>
+
+      <%= render layout: "shared/panel", locals: { title: "Power" } do %>
+        <p class="text-sm text-muted">
+          Reboot over SSH. The box drops offline briefly, then Conductor babysits recovery:
+          once it's back, apps are verified and any that crashed are restarted.
+        </p>
+        <div class="mt-3">
+          <%= rui_button_to("Reboot server", reboot_server_path(@server), method: :post,
+                variant: :outline, size: :sm, color: :danger,
+                data: { turbo_confirm: "Reboot #{@server.name}? Apps on it go down for the reboot, then Conductor auto-verifies and restarts them." }) %>
+        </div>
         <% if @server.last_recovery_at.present? %>
           <div class="mt-4 border-t border-border pt-3">
-            <p class="text-xs font-medium text-ink">Last reboot recovery
-              <span class="text-muted font-normal">· <%= time_ago_in_words(@server.last_recovery_at) %> ago</span>
+            <p class="font-mono text-2xs uppercase tracking-label text-muted">
+              Last recovery · <%= time_ago_in_words(@server.last_recovery_at) %> ago
             </p>
-            <pre class="mt-2 whitespace-pre-wrap rounded-lg bg-fill p-3 text-[11px] leading-relaxed text-muted"><%= @server.last_recovery_report %></pre>
+            <pre class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-card bg-fill p-3 font-mono text-2xs leading-relaxed text-muted"><%= @server.last_recovery_report %></pre>
           </div>
         <% end %>
-      </div>
+      <% end %>
+
       <%= render "servers/package_install", server: @server %>
       <%= render "servers/system_update", server: @server %>
     </div>
-  <% end %>
 
-  <% if @server.apps.any? %>
-    <div class="mt-8">
-      <h2 class="font-display text-lg text-ink">Apps on this server</h2>
-      <div class="mt-4 space-y-3">
-        <% @server.apps.each do |app| %>
-          <div class="flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3">
-            <div>
-              <div class="text-sm font-semibold text-ink"><%= app.name %></div>
-              <div class="text-xs text-muted"><%= app.domain || "No domain" %></div>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="<%= status_badge(app.status) %>"><%= app.status %></span>
-              <%= link_to "View", app_path(app), class: "text-xs font-medium text-body hover:text-ink" %>
-            </div>
-          </div>
-        <% end %>
-      </div>
-    </div>
-  <% end %>
-
-  <% if @server.ssh_configured? %>
-    <div class="mt-8 rounded-large border border-border bg-surface p-6 shadow-soft">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-sm font-semibold text-ink">Scheduled Jobs</h2>
-          <p class="mt-1 text-xs text-muted">Cron entries Conductor manages in this server's crontab.</p>
-        </div>
-      </div>
-
-      <% jobs = @server.cron_jobs.order(:name) %>
+    <%# Recurring work on this box. Heroku calls these scheduler jobs; here they are real
+        crontab entries Conductor owns, so what you see is what the box will run. %>
+    <% jobs = @server.cron_jobs.order(:name) %>
+    <%= render layout: "shared/panel",
+          locals: { title: "Scheduled jobs", flush: true,
+                    meta: jobs.any? ? "#{jobs.count(&:enabled?)} of #{jobs.size} enabled · Conductor-managed crontab entries" : "nothing scheduled yet" } do %>
       <% if jobs.any? %>
-        <div class="mt-4 divide-y divide-border border-t border-border">
+        <div class="divide-y divide-border">
           <% jobs.each do |job| %>
-            <div class="flex items-center justify-between gap-4 py-3">
+            <div class="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="text-sm font-semibold text-ink"><%= job.name %></span>
-                  <span class="<%= job.enabled? ? "bg-primary-tint text-primary" : "bg-fill-strong text-muted" %> rounded-full px-2 py-0.5 text-xs font-medium"><%= job.status %></span>
+                  <span class="text-sm font-medium text-ink"><%= job.name %></span>
+                  <span class="rounded-pill px-2 py-0.5 font-mono text-2xs font-semibold uppercase tracking-label <%= job.enabled? ? "bg-primary-tint text-primary" : "bg-fill-strong text-muted" %>"><%= job.status %></span>
                 </div>
-                <div class="mt-1 text-xs text-muted">
-                  <code class="bg-fill-strong px-1.5 py-0.5 rounded"><%= job.cron_expression %></code>
-                  · <span class="font-mono text-body"><%= truncate(job.command, length: 64) %></span>
+                <div class="mt-1 font-mono text-2xs text-muted">
+                  <%= job.schedule %> · <code class="rounded bg-fill-strong px-1.5 py-0.5"><%= job.cron_expression %></code>
                 </div>
-                <div class="mt-0.5 text-xs text-faint">Schedule: <%= job.schedule %></div>
+                <div class="mt-0.5 truncate font-mono text-2xs text-faint"><%= truncate(job.command, length: 80) %></div>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <%= button_to (job.enabled? ? "Disable" : "Enable"), server_cron_job_path(@server, job), method: :patch,
-                      class: "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body hover:bg-fill" %>
-                <%= button_to "Delete", server_cron_job_path(@server, job), method: :delete,
-                      data: { turbo_confirm: "Remove '#{job.name}' from the crontab?" },
-                      class: "rounded-lg border border-danger/30 bg-surface px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-tint" %>
+              <div class="flex shrink-0 items-center gap-2">
+                <%= rui_button_to((job.enabled? ? "Disable" : "Enable"), server_cron_job_path(@server, job), method: :patch,
+                      variant: :outline, size: :sm, color: :slate) %>
+                <%= rui_button_to("Remove", server_cron_job_path(@server, job), method: :delete,
+                      variant: :outline, size: :sm, color: :danger,
+                      data: { turbo_confirm: "Remove '#{job.name}' from the crontab?" }) %>
               </div>
             </div>
           <% end %>
         </div>
-      <% else %>
-        <p class="mt-4 text-sm text-muted">No scheduled jobs yet.</p>
       <% end %>
 
-      <%= form_with url: server_cron_jobs_path(@server), method: :post, class: "mt-5 pt-5 border-t border-border grid gap-3 sm:grid-cols-12 items-end" do |f| %>
-        <div class="sm:col-span-3">
-          <label class="block text-xs font-semibold uppercase tracking-wide text-muted">Name</label>
-          <%= text_field_tag "cron_job[name]", nil, placeholder: "Nightly audit", required: true,
-                class: "mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm" %>
-        </div>
-        <div class="sm:col-span-3">
-          <label class="block text-xs font-semibold uppercase tracking-wide text-muted">Schedule</label>
-          <%= text_field_tag "cron_job[schedule]", nil, placeholder: "every day at 3am", required: true,
-                class: "mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm" %>
-        </div>
-        <div class="sm:col-span-4">
-          <label class="block text-xs font-semibold uppercase tracking-wide text-muted">Command</label>
-          <%= text_field_tag "cron_job[command]", nil, placeholder: "/usr/local/bin/server-audit", required: true,
-                class: "mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-mono" %>
-        </div>
-        <div class="sm:col-span-2">
-          <%= f.submit "Schedule", class: "w-full rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-body cursor-pointer" %>
-        </div>
-      <% end %>
-      <p class="mt-2 text-xs text-faint">Schedule accepts plain English ("every 2 hours", "daily at 3am") or raw cron ("0 3 * * *").</p>
-
-      <% maintenance = Script.maintenance.built_in.order(:name) %>
-      <% if maintenance.any? %>
-        <div class="mt-6 pt-5 border-t border-border">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">One-click maintenance</h3>
-          <p class="mt-1 text-xs text-muted">Install a built-in maintenance script onto this server and schedule it.</p>
-          <div class="mt-3 space-y-2">
-            <% maintenance.each do |script| %>
-              <%= form_with url: schedule_script_server_cron_jobs_path(@server), method: :post, class: "flex items-center gap-3" do %>
-                <%= hidden_field_tag "script_id", script.id %>
-                <div class="min-w-0 flex-1">
-                  <div class="text-sm font-medium text-ink"><%= script.name %></div>
-                  <% if script.description.present? %>
-                    <div class="text-xs text-muted truncate"><%= script.description %></div>
-                  <% end %>
-                </div>
-                <%= text_field_tag "schedule", "every day at 4am", required: true,
-                      class: "w-44 rounded-lg border border-border px-3 py-1.5 text-sm" %>
-                <%= submit_tag "Schedule", class: "rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill cursor-pointer" %>
-              <% end %>
-            <% end %>
+      <div class="border-t border-border bg-bg-alt px-5 py-4">
+        <%= form_with url: server_cron_jobs_path(@server), method: :post, class: "grid items-end gap-3 sm:grid-cols-12" do |f| %>
+          <div class="sm:col-span-3">
+            <label class="block font-mono text-2xs uppercase tracking-label text-muted">Name</label>
+            <%= text_field_tag "cron_job[name]", nil, placeholder: "Nightly audit", required: true,
+                  class: "mt-1 w-full rounded-control border border-border px-3 py-2 text-sm" %>
           </div>
-        </div>
-      <% end %>
-    </div>
+          <div class="sm:col-span-3">
+            <label class="block font-mono text-2xs uppercase tracking-label text-muted">Schedule</label>
+            <%= text_field_tag "cron_job[schedule]", nil, placeholder: "every day at 3am", required: true,
+                  class: "mt-1 w-full rounded-control border border-border px-3 py-2 text-sm" %>
+          </div>
+          <div class="sm:col-span-4">
+            <label class="block font-mono text-2xs uppercase tracking-label text-muted">Command</label>
+            <%= text_field_tag "cron_job[command]", nil, placeholder: "/usr/local/bin/server-audit", required: true,
+                  class: "mt-1 w-full rounded-control border border-border px-3 py-2 font-mono text-sm" %>
+          </div>
+          <div class="sm:col-span-2">
+            <%= f.submit "Schedule", class: "w-full cursor-pointer rounded-control bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong" %>
+          </div>
+        <% end %>
+        <p class="mt-2 font-mono text-2xs text-faint">
+          Plain English ("every 2 hours", "daily at 3am") or raw cron ("0 3 * * *").
+        </p>
+
+        <% maintenance = Script.maintenance.built_in.order(:name) %>
+        <% if maintenance.any? %>
+          <div class="mt-5 border-t border-border pt-4">
+            <h3 class="font-mono text-2xs uppercase tracking-label text-muted">One-click maintenance</h3>
+            <p class="mt-1 text-2xs text-muted">Install a built-in script onto this box and schedule it.</p>
+            <div class="mt-3 space-y-2">
+              <% maintenance.each do |script| %>
+                <%= form_with url: schedule_script_server_cron_jobs_path(@server), method: :post, class: "flex flex-wrap items-center gap-3" do %>
+                  <%= hidden_field_tag "script_id", script.id %>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-sm font-medium text-ink"><%= script.name %></div>
+                    <% if script.description.present? %>
+                      <div class="truncate text-2xs text-muted"><%= script.description %></div>
+                    <% end %>
+                  </div>
+                  <%= text_field_tag "schedule", "every day at 4am", required: true,
+                        class: "w-44 rounded-control border border-border px-3 py-1.5 text-sm" %>
+                  <%= submit_tag "Schedule", class: "cursor-pointer rounded-control border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-body hover:bg-fill" %>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
   <% end %>
 
-  <div class="mt-10 pt-6 border-t border-border">
-    <%= button_to "Delete Server", server_path(@server), method: :delete,
-        data: { turbo_confirm: "Are you sure you want to delete this server?" },
-        class: "text-sm font-medium text-danger hover:text-danger-deep" %>
+  <div class="rounded-large border border-border bg-surface px-5 py-4 shadow-soft">
+    <%= rui_button_to("Delete server", server_path(@server), method: :delete, variant: :link, color: :danger, size: :sm,
+          data: { turbo_confirm: "Delete #{@server.name}? Conductor stops managing it; the box itself is untouched." }) %>
   </div>
 </section>

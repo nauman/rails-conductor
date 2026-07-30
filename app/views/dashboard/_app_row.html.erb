@@ -10,7 +10,13 @@
 <tr id="<%= dom_id(app, :dashboard_row) %>" class="border-t border-border hover:bg-bg-alt"
     data-fleet-app="<%= app.name %>" data-app-row="<%= app.slug %>">
   <td class="px-5 py-2.5">
-    <%= link_to app.name, app_path(app), class: "font-medium text-ink hover:underline" %>
+    <div class="flex items-center gap-2">
+      <%= link_to app.name, app_path(app), class: "font-medium text-ink hover:underline" %>
+      <%# App#broadcast_status_badge replaces this by dom_id, so a status sync updates the
+          row without a reload. The lifecycle badge (deploying/failed) is a different
+          question from the container's observed state next to it. %>
+      <%= render "apps/status_badge", app: app %>
+    </div>
     <span class="block font-mono text-2xs text-faint"><%= app.domain.presence || app.slug %></span>
   </td>
   <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= app.server_name %></td>
