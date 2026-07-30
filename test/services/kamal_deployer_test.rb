@@ -109,6 +109,30 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert stop_idx < deploy_idx, "stop must run BEFORE deploy so the fixed port is free"
   end
 
+  # Forced invariant: host-Caddy box ⟹ kamal-proxy OFF. Refuse a deploy whose
+  # config doesn't explicitly disable kamal-proxy, so it can't collide on :80/:443.
+  test "refuses to deploy onto a host-Caddy box when config lacks an explicit proxy: false" do
+    @server.update!(edge_type: "caddy")
+    write_checkout_file("config/deploy.yml", "service: appone\nservers:\n  web:\n    hosts:\n      - 10.0.0.9\n")
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    assert_equal "failed", @deployment.reload.status
+    cmds = shell.runs.map { |r| r[:command].last }
+    refute cmds.any? { |c| c.include?("kamal deploy") }, "must block BEFORE kamal deploy"
+  end
+
+  test "allows a proxy-less (proxy: false) app on a host-Caddy box" do
+    @server.update!(edge_type: "caddy")
+    write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n    hosts:\n      - 10.0.0.9\n")
+    shell = FakeShell.new(success: true)
+    deploy_with(shell)
+
+    cmds = shell.runs.map { |r| r[:command].last }
+    assert cmds.any? { |c| c.include?("kamal deploy") }, "proxy: false must pass the caddy-edge guard"
+    assert_equal "succeeded", @deployment.reload.status
+  end
+
   test "kamal-proxy app (no CADDY_PUBLISH_PORT) does NOT stop first — keeps the zero-downtime roll" do
     shell = FakeShell.new(success: true)
     deploy_with(shell)

@@ -65,6 +65,7 @@ class KamalDeployer
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     return false unless verify_synced_head
+    return false unless verify_proxy_off_on_caddy_edge
     record_commit_sha
     return false unless verify_required_secrets
     materialize_master_key
@@ -359,6 +360,27 @@ class KamalDeployer
   # Advisory by design: `kamal app stop` is idempotent (a no-op on a first deploy),
   # skipped for self-managed apps (which would kill their own deploy job), and we
   # never block the deploy on it — a genuine conflict still surfaces at boot.
+  # Forced invariant: a host-Caddy box runs NO kamal-proxy. kamal-proxy would
+  # seize :80/:443 and collide with the host Caddy fronting the shared box
+  # (calm.page deploy #185 did exactly this). On a caddy-edge target the config
+  # MUST turn kamal-proxy off EXPLICITLY — merely omitting the `proxy:` block is
+  # not enough, kamal 2.x still boots it. Assert a literal `proxy: false` is present
+  # in config/deploy*.yml (calm.page's is inside a Caddy-mode ERB branch; platepose
+  # sets it flat — both satisfy the grep). If absent, refuse rather than let the
+  # collision reach the box. Non-caddy targets (or an undetected edge) are exempt.
+  def verify_proxy_off_on_caddy_edge
+    return true unless deploy_server&.edge_type == "caddy"
+
+    configs = Dir.glob(File.join(checkout_dir, "config", "deploy*.yml"))
+    return true if configs.any? { |f| File.read(f).match?(/^\s*proxy:\s*false\b/) }
+
+    fail_with("Refusing to deploy #{app.name} to #{deploy_server.name}: it fronts with host Caddy, so " \
+              "kamal-proxy must be OFF, but no explicit `proxy: false` is set in config/deploy*.yml. " \
+              "`kamal deploy` would boot kamal-proxy on :80/:443 and collide with host Caddy. Add a " \
+              "role-level `proxy: false` (see calm.page / platepose).")
+    false
+  end
+
   def stop_prior_container_if_fixed_port
     return true if app.self_managed?
     return true unless deploy_env.key?("CADDY_PUBLISH_PORT")
