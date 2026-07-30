@@ -1,0 +1,64 @@
+<%# Needs attention — the design's first panel, and the reason the page exists.
+    One row per thing that wants a decision: severity dot, what it is, what it means in a
+    sentence, and the action that fixes it. A triage list you can't act on is just anxiety,
+    so every row carries its own verb. %>
+<div class="rounded-large border bg-surface shadow-soft <%= issues.any? { |i| i[:severity] == 'critical' } ? 'border-danger/40' : issues.any? ? 'border-warning/40' : 'border-border' %>">
+  <div class="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+    <h2 class="text-sm font-semibold text-ink">Needs attention</h2>
+    <span class="font-mono text-2xs text-faint">
+      <%= issues.any? ? "#{issues.size} open" : "clear" %>
+    </span>
+  </div>
+
+  <% if issues.empty? %>
+    <div class="px-5 py-6 text-sm text-muted">
+      Nothing needs a decision. Servers online, no failing deploys, every app protected.
+    </div>
+  <% else %>
+    <% issues.first(6).each do |issue| %>
+      <% resource = issue[:resource] %>
+      <% label = case issue[:type]
+                 when "deployment"      then "#{resource.app.name} deployment"
+                 when "backup"          then "#{resource.bucket_name} backup"
+                 when "backup_coverage" then "Backups"
+                 when "capacity"        then "Capacity"
+                 else resource&.name
+                 end %>
+      <div class="flex items-start justify-between gap-4 border-b border-border px-5 py-3 last:border-b-0"
+           data-incident-resource="<%= label %>">
+        <div class="flex items-start gap-3 min-w-0">
+          <span class="mt-1.5 h-2 w-2 shrink-0 rounded-pill <%= issue[:severity] == 'critical' ? 'bg-danger-bright' : issue[:severity] == 'warning' ? 'bg-warning-bright' : 'bg-faint' %>"></span>
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-ink"><%= label %></div>
+            <div class="mt-0.5 text-2xs text-muted"><%= issue[:message] %></div>
+          </div>
+        </div>
+        <div class="shrink-0">
+          <% case issue[:type]
+             when "backup_coverage" %>
+            <%= rui_button_to("Protect all", protect_all_backups_path, method: :post, variant: :solid, size: :sm, color: :primary) %>
+          <% when "capacity" %>
+            <%= link_to "View", server_path(resource), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+          <% when "deployment" %>
+            <%= link_to "Log", deployment_path(resource), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+          <% when "backup" %>
+            <%= link_to "View", backup_path(resource), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+          <% when "server" %>
+            <%= link_to "View", server_path(resource), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+          <% when "app" %>
+            <% if issue[:action] == "sync" %>
+              <%= rui_button_to("Sync", sync_status_app_path(resource), method: :post, variant: :outline, size: :sm, color: :slate) %>
+            <% elsif issue[:action] == "logs" %>
+              <%= rui_button("Logs", url: logs_app_path(resource), variant: :outline, size: :sm, color: :slate) %>
+            <% else %>
+              <%= link_to "View", app_path(resource), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+            <% end %>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+    <% if issues.size > 6 %>
+      <div class="px-5 py-2 text-center font-mono text-2xs text-faint">+ <%= issues.size - 6 %> more</div>
+    <% end %>
+  <% end %>
+</div>

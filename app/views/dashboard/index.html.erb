@@ -52,144 +52,36 @@
   </div>
 </section>
 
-<section class="max-w-7xl mx-auto px-4 py-10 space-y-10">
+<section class="max-w-7xl mx-auto px-4 py-8 space-y-5">
+  <%# 1 — what needs a decision %>
+  <%= render "dashboard/triage", issues: @issues %>
 
-  <%# Issues Section - What needs attention %>
-  <% if @issues.any? %>
-    <div class="rounded-large border border-danger/30 bg-danger-tint p-6 shadow-soft">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="h-10 w-10 rounded-pill bg-danger/10 flex items-center justify-center">
-            <svg class="h-5 w-5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-          </div>
-          <div>
-            <h2 class="font-display text-xl text-danger-deep">Active incidents</h2>
-            <p class="text-sm text-danger"><%= pluralize(@issues.count, "incident") %> <%= @issues.one? ? "needs" : "need" %> an operator decision</p>
-          </div>
-        </div>
-      </div>
-      <div class="mt-4 space-y-2">
-        <% @issues.first(5).each do |issue| %>
-          <%# Some issues are about the FLEET, not one record (e.g. "3 apps have no backup"),
-              so resource may be nil — one row with one action beats twelve criticals. %>
-          <% resource_label = case issue[:type]
-                              when "deployment"       then "#{issue[:resource].app.name} deployment"
-                              when "backup"           then "#{issue[:resource].bucket_name} backup"
-                              when "backup_coverage"  then "Backups"
-                              when "capacity"         then issue[:resource].name
-                              else issue[:resource]&.name
-                              end %>
-          <div class="flex items-center justify-between rounded-card bg-surface px-4 py-3 border <%= issue[:severity] == 'critical' ? 'border-danger/30' : issue[:severity] == 'warning' ? 'border-warning/40' : 'border-border' %>" data-incident-resource="<%= resource_label %>">
-            <div class="flex items-center gap-3">
-              <% if issue[:severity] == "critical" %>
-                <span class="h-2 w-2 rounded-pill bg-danger-bright animate-pulse"></span>
-              <% elsif issue[:severity] == "warning" %>
-                <span class="h-2 w-2 rounded-pill bg-warning-bright"></span>
-              <% else %>
-                <span class="h-2 w-2 rounded-pill bg-faint"></span>
-              <% end %>
-              <div>
-                <span class="text-sm font-medium text-ink">
-                  <% if issue[:type] == "server" %>
-                    <%= issue[:resource].name %>
-                  <% elsif issue[:type] == "app" %>
-                    <%= issue[:resource].name %>
-                  <% elsif issue[:type] == "deployment" %>
-                    <%= issue[:resource].app.name %> deployment
-                  <% elsif issue[:type] == "backup" %>
-                    <%= issue[:resource].bucket_name %> backup
-                  <% elsif issue[:type] == "capacity" %>
-              <%# Transfer has no UI yet — it's invocable over MCP (conductor_app action=transfer).
-                  Link to the server rather than promise a screen that doesn't exist. %>
-              <%= link_to "View", server_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-            <% elsif issue[:type] == "backup_coverage" %>
-                    Backups
-                  <% elsif issue[:type] == "capacity" %>
-                    Capacity
-                  <% end %>
-                </span>
-                <span class="text-sm text-muted ml-2"><%= issue[:message] %></span>
-              </div>
-            </div>
-            <% if issue[:type] == "app" && issue[:action] == "sync" %>
-              <%= rui_button_to("Sync", sync_status_app_path(issue[:resource]), method: :post, variant: :ghost, size: :sm, color: :slate) %>
-            <% elsif issue[:type] == "app" && issue[:action] == "logs" %>
-              <%= rui_button("Logs", url: logs_app_path(issue[:resource]), variant: :ghost, size: :sm, color: :slate) %>
-            <% elsif issue[:type] == "server" %>
-              <%= link_to "View", server_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-            <% elsif issue[:type] == "app" %>
-              <%= link_to "View", app_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-            <% elsif issue[:type] == "deployment" %>
-              <%= link_to "View", deployment_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-            <% elsif issue[:type] == "backup" %>
-              <%= link_to "View", backup_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-            <% elsif issue[:type] == "capacity" %>
-              <%# Transfer has no UI yet — it's invocable over MCP (conductor_app action=transfer).
-                  Link to the server rather than promise a screen that doesn't exist. %>
-              <%= link_to "View", server_path(issue[:resource]), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
-            <% elsif issue[:type] == "backup_coverage" %>
-              <%# The whole point of the design: the nag carries the fix. %>
-              <%= rui_button_to("Protect all", protect_all_backups_path, method: :post, variant: :solid, size: :sm, color: :primary) %>
-            <% end %>
-          </div>
-        <% end %>
-        <% if @issues.count > 5 %>
-          <p class="text-sm text-danger text-center pt-2">+ <%= @issues.count - 5 %> more issues</p>
-        <% end %>
-      </div>
-    </div>
-  <% else %>
-    <div class="rounded-large border border-primary/30 bg-primary-tint p-6 shadow-soft">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-pill bg-primary/10 flex items-center justify-center">
-          <svg class="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        </div>
-        <div>
-          <h2 class="font-display text-xl text-primary">All Systems Operational</h2>
-          <p class="text-sm text-primary-strong">No issues detected across your servers and apps</p>
-        </div>
-      </div>
-    </div>
-  <% end %>
-
-  <%# Where it runs, then what's on it — capacity first, because the answer to "why is
-      this app struggling" is usually the box, and the fleet list is long. %>
-  <% if @apps.any? %>
-    <%= render "dashboard/kamal_overview" %>
-  <% end %>
-
-  <%# The apps table lived here. It has been folded INTO Fleet status above: two tables
-      answering overlapping questions is how a dashboard starts contradicting itself, and
-      the fleet panel already had per-server grouping and the actions. %>
-
+  <%# 2 — where it runs. Capacity before the app list: "why is this app struggling" is
+      usually answered by the box, and three cards side by side make an imbalance obvious. %>
   <% if @servers.any? %>
-    <div>
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="font-display text-xl text-ink">Server Fleet</h2>
-          <p class="text-sm text-muted">Health and resource usage across hosts.</p>
-        </div>
-        <%= link_to "View all", servers_path, class: "text-2xs font-semibold uppercase tracking-label text-faint hover:text-muted" %>
-      </div>
-      <div class="mt-4 grid gap-4 lg:grid-cols-3">
-        <% @servers.limit(3).each do |server| %>
-          <%= render "dashboard/server_card", server: server %>
-        <% end %>
-      </div>
+    <div class="grid gap-4 lg:grid-cols-3">
+      <% @servers.limit(3).each do |server| %>
+        <%= render "dashboard/server_card", server: server %>
+      <% end %>
     </div>
   <% end %>
 
-  <div class="grid gap-6 lg:grid-cols-2">
+  <%# 3 — what's on it: runtime and deploy state on one row %>
+  <% if @apps.any? %>
+    <%= render "dashboard/apps_table", apps: @apps, app_health: @app_health, stats: @kamal_stats %>
+  <% end %>
+
+  <%# 4 — the week, honestly %>
+  <div class="grid gap-4 lg:grid-cols-2">
+    <%= render "dashboard/deploy_health", days: @deploys_7d, total: @deploys_week_total,
+               failed: @deploys_week_failed, failing: @apps_failing.size %>
     <% if @backups.any? %>
-      <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="font-display text-xl text-ink">Recent Backups</h2>
-            <p class="text-sm text-muted">Latest backup activity.</p>
-          </div>
-          <%= link_to "View all", backups_path, class: "text-2xs font-semibold uppercase tracking-label text-faint hover:text-muted" %>
+      <div class="rounded-large border border-border bg-surface shadow-soft">
+        <div class="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+          <h2 class="text-sm font-semibold text-ink">Recent backups</h2>
+          <%= link_to "View all", backups_path, class: "font-mono text-2xs text-faint hover:text-ink" %>
         </div>
-        <div class="mt-4 space-y-3">
+        <div class="p-4 space-y-2">
           <% @backups.limit(4).each do |backup| %>
             <div class="flex items-center justify-between rounded-card border border-border bg-bg-alt px-4 py-3">
               <div>
@@ -206,31 +98,9 @@
       </div>
     <% end %>
 
-    <% if @apps.any? %>
-      <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="font-display text-xl text-ink">Deployed Apps</h2>
-            <p class="text-sm text-muted">Rails applications across your fleet.</p>
-          </div>
-          <%= link_to "View all", apps_path, class: "text-2xs font-semibold uppercase tracking-label text-faint hover:text-muted" %>
-        </div>
-        <div class="mt-4 space-y-3">
-          <% @apps.limit(4).each do |app| %>
-            <div class="rounded-card border border-border bg-bg-alt px-4 py-3">
-              <%= turbo_stream_from app %>
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-sm font-semibold text-ink"><%= app.name %></div>
-                  <div class="text-2xs text-muted"><%= app.server_name %> · <%= app.domain || "No domain" %></div>
-                </div>
-                <%= render "apps/status_badge", app: app %>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      </div>
-    <% end %>
+    <%# "Deployed Apps" lived here — the apps table above answers it, with runtime and
+        deploy state on one row. Two panels listing the same apps is how this page started
+        contradicting itself. %>
   </div>
 
   <% if @servers.empty? && @backups.empty? && @apps.empty? %>

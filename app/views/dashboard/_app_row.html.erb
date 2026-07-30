@@ -1,21 +1,51 @@
-<%# One app, its CURRENT deploy state. Broadcast on any deployment status change so
-    the fleet updates itself — an operator watching a deploy shouldn't have to reload
-    to learn it finished. dom_id must match Deployment#broadcast_dashboard_app_row. %>
-<tr id="<%= dom_id(app, :dashboard_row) %>" data-app-row="<%= app.slug %>">
-  <td class="py-2 text-sm font-medium text-ink">
-    <%= app.name %>
-    <span class="block font-mono text-2xs text-faint"><%= app.domain %></span>
+<%# One app: runtime state and current deploy state on a single row.
+    Broadcast on any deployment status change so the fleet updates itself — an operator
+    watching a deploy shouldn't have to reload to learn it finished. The id must match
+    Deployment#broadcast_dashboard_app_row.
+
+    The broadcast passes only `app`, so health is computed here when it isn't handed in.
+    That keeps a live-replaced row as truthful as a freshly rendered one instead of
+    silently dropping the monitoring columns. %>
+<% health = local_assigns.fetch(:health) { AppHealth.new(app) } %>
+<tr id="<%= dom_id(app, :dashboard_row) %>" class="border-t border-border hover:bg-bg-alt"
+    data-fleet-app="<%= app.name %>" data-app-row="<%= app.slug %>">
+  <td class="px-5 py-2.5">
+    <%= link_to app.name, app_path(app), class: "font-medium text-ink hover:underline" %>
+    <span class="block font-mono text-2xs text-faint"><%= app.domain.presence || app.slug %></span>
   </td>
-  <td class="py-2 font-mono text-xs text-muted"><%= app.server_name %></td>
-  <td class="py-2 font-mono text-xs text-muted"><%= app.deploy_method %></td>
-  <td class="py-2">
+  <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= app.server_name %></td>
+  <td class="px-5 py-2.5">
+    <%# Three dimensions, kept from the previous fleet panel because they answer different
+        questions: what we ASKED for, what the box REPORTS, and how much we trust the
+        report. Collapsing them would let "we can't tell" render as "it's down" — the exact
+        bug that separating them fixed. %>
+    <% observed = health.observed_state.presence %>
+    <div class="font-mono text-2xs">
+      <span data-health-dimension="observed" class="<%= observed.nil? ? "text-faint" : observed == "running" ? "text-primary" : "text-danger" %>">
+        <%= observed&.humanize || "Unknown" %>
+      </span>
+      <span class="text-faint">·</span>
+      <span data-health-dimension="desired" class="text-muted">wants <%= health.desired_state.humanize %></span>
+    </div>
+    <div data-health-dimension="monitoring" class="mt-0.5 font-mono text-2xs <%= health.monitoring_state == "fresh" ? "text-faint" : "text-warning" %>">
+      <%= health.monitoring_label %>
+    </div>
+  </td>
+  <td class="px-5 py-2.5">
     <%= deploy_health_badge(app) %>
     <% if app.intent_note.present? %>
       <span class="block font-mono text-2xs text-faint mt-0.5"><%= app.intent_note %></span>
     <% end %>
   </td>
-  <td class="py-2 font-mono text-xs text-muted"><%= app.last_deployment&.commit_sha&.first(7) || "—" %></td>
-  <td class="py-2 text-right">
-    <%= link_to "View", app_path(app), class: "text-2xs font-semibold uppercase tracking-label text-muted hover:text-ink" %>
+  <td class="px-5 py-2.5 font-mono text-2xs text-muted"><%= app.last_deployment&.commit_sha&.first(7) || "—" %></td>
+  <td class="whitespace-nowrap px-5 py-2.5 text-right">
+    <%= rui_button("Logs", url: logs_app_path(app), variant: :ghost, size: :sm, color: :slate) %>
+    <% if app.can_sync_status? %>
+      <%= rui_button_to("Sync", sync_status_app_path(app), method: :post, variant: :ghost, size: :sm, color: :slate) %>
+    <% end %>
+    <% if app.dashboard_restart_supported? %>
+      <%= rui_button_to("Restart", restart_app_path(app), method: :post, variant: :ghost, size: :sm, color: :slate,
+            data: { turbo_confirm: "Restart #{app.name}?" }) %>
+    <% end %>
   </td>
 </tr>

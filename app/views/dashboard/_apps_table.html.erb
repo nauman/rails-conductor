@@ -1,0 +1,47 @@
+<%# Apps — the design's table, and the one place that answers both questions a fleet page
+    is asked: is it running (runtime), and did the last ship work (deploy). Two panels used
+    to answer those separately and disagree; one row can't.
+
+    Replaces the old grouped "Fleet status" list. Server is a column rather than a grouping
+    header, because on a 12-app fleet you scan for the broken one, not for the box. %>
+<div class="rounded-large border border-border bg-surface shadow-soft overflow-hidden">
+  <div class="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+    <div>
+      <h2 class="text-sm font-semibold text-ink">Apps</h2>
+      <%# The runtime classification, above the rows it summarises. Every app lands in
+          exactly one of running/stopped/unknown — uncertainty gets its own bucket rather
+          than being folded into "stopped", so the totals never overstate what we know. %>
+      <p class="mt-0.5 font-mono text-2xs text-faint">
+        <% failing = apps.count(&:deploy_failing?) %>
+        <% never = apps.count { |a| a.deploy_health.nil? && a.naggable? } %>
+        <span data-container-stat="total"><%= stats[:total_apps] %></span> total ·
+        <span data-container-stat="running"><%= stats[:running_apps] %></span> running ·
+        <span data-container-stat="stopped"><%= stats[:stopped_apps] %></span> stopped ·
+        <span data-container-stat="unknown"><%= stats[:unknown_status] %></span> unknown<%= " · #{failing} failing now" if failing.positive? %><%= " · #{never} never deployed here" if never.positive? %>
+      </p>
+    </div>
+    <%= rui_button_to("Sync all", sync_all_apps_path, method: :post, variant: :outline, size: :sm, color: :slate) %>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="bg-fill font-mono text-2xs uppercase tracking-label text-muted">
+          <th class="px-5 py-2 text-left font-semibold">App</th>
+          <th class="px-5 py-2 text-left font-semibold">Server</th>
+          <th class="px-5 py-2 text-left font-semibold">Runtime</th>
+          <th class="px-5 py-2 text-left font-semibold">Last deploy</th>
+          <th class="px-5 py-2 text-left font-semibold">Release</th>
+          <th class="px-5 py-2 text-right font-semibold"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <%# The row is its own partial because a deployment broadcast replaces exactly
+            this markup in place — the table and the live update must not drift apart. %>
+        <% apps.each do |app| %>
+          <%= render "dashboard/app_row", app: app, health: app_health[app] || AppHealth.new(app) %>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -42,8 +42,12 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Status check failed"
     assert_no_match(/Stale app.*App is stopped/m, response.body)
     assert_no_match(/Failed check.*App is stopped/m, response.body)
-    assert_no_match(/incidents needs/, response.body)
-    assert_match(/incidents need an operator decision/, response.body)
+    # The page must say how many things want a decision, and say it grammatically —
+    # the header sentence and the triage count are both generated, so both can slip.
+    assert_select "h1", text: /\d+ things to look at/
+    assert_no_match(/\b1 things\b|things needs?\b.*needs/, response.body)
+    assert_select "h2", text: "Needs attention"
+    assert_match(/\d+ open/, response.body)
   end
 
   test "failed deployment remains separate from app runtime incident" do
@@ -87,12 +91,16 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
 
     get dashboard_path
 
-    assert_select "h2", text: "Active incidents"
-    assert_select "h2", text: "Fleet status"
+    # Triage first, then the app list. Both panels were renamed in the fleet redesign;
+    # what they must still do is unchanged.
+    assert_select "h2", text: "Needs attention"
+    assert_select "h2", text: "Apps"
     assert_select "[data-fleet-app='Action app']" do
       assert_select "[data-health-dimension='desired']", text: /Running/
       assert_select "[data-health-dimension='observed']", text: /Dead/
       assert_select "[data-health-dimension='monitoring']", text: /Sync failed/
+      # Distinct verbs on the row: read the logs, re-check state, or bounce it. Restart
+      # is the destructive one and stays behind a confirm.
       assert_select "a", text: "Logs"
       assert_select "button", text: "Sync"
       assert_select "button[data-turbo-confirm]", text: "Restart"
@@ -112,8 +120,12 @@ class DashboardHealthTest < ActionDispatch::IntegrationTest
     # Scrollable on mobile so no nav item is clipped/unreachable.
     assert_select "nav[data-primary-navigation].overflow-x-auto"
     assert_select "[data-account-controls].shrink-0"
-    assert_select ".grid.grid-cols-2.sm\\:grid-cols-4"
-    assert_select "[data-fleet-app='Responsive app'].flex-col.sm\\:flex-row"
+    # Counts are a wrapping strip now, not a 2/4-column tile grid: it reflows instead of
+    # squeezing four boxes onto a phone.
+    assert_select ".flex-wrap"
+    # The app list is a table, so containment moved to its own scroller — the row can be
+    # wider than the phone as long as the page body still isn't.
+    assert_select ".overflow-x-auto [data-fleet-app='Responsive app']"
   end
 
   private

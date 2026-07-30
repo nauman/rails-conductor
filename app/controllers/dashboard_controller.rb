@@ -20,6 +20,18 @@ class DashboardController < ApplicationController
 
     @app_health = @apps.index_with { |app| AppHealth.new(app) }
 
+    # Deploy health for the last week, per day: [date, total, failed]. The design shows
+    # attempts against failures because the ratio is the story — 29 deploys with 11
+    # failures is a different week from 29 clean ones.
+    week = Deployment.where(app: org.apps).where("created_at > ?", 7.days.ago)
+    by_day = week.group_by { |d| d.created_at.to_date }
+    @deploys_7d = (0..6).map { |i| i.days.ago.to_date }.reverse.map do |date|
+      day = by_day[date] || []
+      [ date, day.size, day.count { |d| d.status == "failed" } ]
+    end
+    @deploys_week_total = week.size
+    @deploys_week_failed = week.count { |d| d.status == "failed" }
+
     # Issues - what needs attention
     @issues = collect_issues(org, @app_health.values)
 
@@ -46,7 +58,6 @@ class DashboardController < ApplicationController
       stopped_apps: @app_health.values.count { |health| health.summary_state == "stopped" },
       unknown_status: @app_health.values.count { |health| health.summary_state == "unknown" }
     }
-    @apps_by_server = @apps.includes(:server).group_by(&:server)
   end
 
   private
