@@ -11,35 +11,35 @@
   <% end %>
 
   <div class="rounded-large border border-border bg-surface p-6 shadow-soft space-y-6">
-    <h3 class="text-sm font-semibold text-ink">Backup Source</h3>
+    <h2 class="text-sm font-semibold text-ink">Backup Source</h2>
     <p class="text-xs text-muted -mt-4">Choose what to backup - a server's database or an app's database.</p>
 
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
-        <%= f.label :server_id, "Server", class: "block text-sm font-medium text-body" %>
-        <%= f.collection_select :server_id, @servers, :id, :name, { include_blank: "Select server (optional)" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+        <%= f.label :server_id, "Server", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.collection_select :server_id, @servers, :id, :name, { include_blank: "Select server (optional)" }, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary" %>
       </div>
 
       <div>
-        <%= f.label :app_id, "App", class: "block text-sm font-medium text-body" %>
-        <%= f.collection_select :app_id, @apps, :id, :name, { include_blank: "Select app (optional)" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+        <%= f.label :app_id, "App", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.collection_select :app_id, @apps, :id, :name, { include_blank: "Select app (optional)" }, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary" %>
       </div>
     </div>
   </div>
 
   <div class="rounded-large border border-border bg-surface p-6 shadow-soft space-y-6">
-    <h3 class="text-sm font-semibold text-ink">Storage Destination</h3>
+    <h2 class="text-sm font-semibold text-ink">Storage Destination</h2>
 
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
-        <%= f.label :provider, class: "block text-sm font-medium text-body" %>
-        <%= f.select :provider, BackupVendors.all.map { |v| [v.label, v.key] }, {}, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+        <%= f.label :provider, class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.select :provider, BackupVendors.all.map { |v| [v.label, v.key] }, {}, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary" %>
       </div>
 
       <div>
-        <%= f.label :credential_id, "Credential", class: "block text-sm font-medium text-body" %>
+        <%= f.label :credential_id, "Credential", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
         <% if @credentials.any? %>
-          <%= f.collection_select :credential_id, @credentials, :id, :name, { include_blank: "Select credential" }, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+          <%= f.collection_select :credential_id, @credentials, :id, :name, { include_blank: "Select credential" }, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary" %>
         <% else %>
           <div class="mt-1 text-sm text-muted">
             No credentials available. <%= link_to "Add one first", new_credential_path, class: "text-ink hover:underline" %>.
@@ -50,19 +50,19 @@
 
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
-        <%= f.label :bucket_name, class: "block text-sm font-medium text-body" %>
-        <%= f.text_field :bucket_name, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm font-mono", placeholder: "my-backups-bucket" %>
+        <%= f.label :bucket_name, class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.text_field :bucket_name, class: "mt-1 block w-full rounded-control border-border-strong font-mono text-sm shadow-soft focus:border-primary focus:ring-primary", placeholder: "my-backups-bucket" %>
       </div>
 
       <div>
-        <%= f.label :retention_days, "Retention (days)", class: "block text-sm font-medium text-body" %>
-        <%= f.number_field :retention_days, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm", min: 1, max: 365, value: backup.retention_days || 7 %>
+        <%= f.label :retention_days, "Retention (days)", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.number_field :retention_days, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary", min: 1, max: 365, value: backup.retention_days || 7 %>
       </div>
     </div>
   </div>
 
   <div class="rounded-large border border-border bg-surface p-6 shadow-soft space-y-6">
-    <h3 class="text-sm font-semibold text-ink">Schedule</h3>
+    <h2 class="text-sm font-semibold text-ink">Schedule</h2>
 
     <div class="flex items-center gap-3">
       <%= f.check_box :enabled, class: "rounded border-border-strong text-ink focus:ring-primary" %>
@@ -71,8 +71,8 @@
 
     <div class="grid gap-6 sm:grid-cols-2">
       <div>
-        <%= f.label :schedule, "Frequency", class: "block text-sm font-medium text-body" %>
-        <%= f.select :schedule, Backup::SCHEDULES.map { |s| [s.titleize, s] }, {}, class: "mt-1 block w-full rounded-lg border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm" %>
+        <%= f.label :schedule, "Frequency", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.select :schedule, Backup::SCHEDULES.map { |s| [s.titleize, s] }, {}, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary" %>
       </div>
 
       <% if backup.persisted? && backup.next_run_at %>

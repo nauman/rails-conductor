@@ -1,10 +1,8 @@
 <% content_for :title, "New App · Conductor" %>
 
-<section class="max-w-2xl mx-auto px-4 py-10">
-  <div class="mb-8">
-    <h1 class="font-display text-2xl text-ink tracking-display">New App</h1>
-    <p class="mt-1 text-sm text-muted">Register a deployed Rails application.</p>
-  </div>
+<%= render partial: "shared/page_head", locals: { title: "Register an app.", lede: "Point Conductor at a repository and a server. It handles the deploy, the routing, and the backups from there." } %>
+
+<section class="max-w-3xl mx-auto px-4 py-8">
 
   <%= render "form", app: @app, servers: @servers %>
 </section>

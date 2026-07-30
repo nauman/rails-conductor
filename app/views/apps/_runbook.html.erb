@@ -44,7 +44,7 @@
     <%= form_with model: [app, DeployChecklistItem.new], class: "flex items-end gap-3" do |f| %>
       <div class="flex-1">
         <label class="block text-xs font-medium text-body dark:text-faint mb-1">Add a step</label>
-        <%= f.text_field :content, class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm", placeholder: "Restore prod DB into platepose-db" %>
+        <%= f.text_field :content, class: "block w-full rounded-lg border-border-strong dark:border-border-strong dark:bg-fill dark:text-white shadow-soft focus:border-primary focus:ring-primary text-sm", placeholder: "Restore prod DB into the staging cluster" %>
       </div>
       <%= f.rui_button("Add", color: :primary, size: :sm) %>
     <% end %>

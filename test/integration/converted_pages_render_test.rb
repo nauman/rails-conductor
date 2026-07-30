@@ -53,7 +53,16 @@ class ConvertedPagesRenderTest < ActionDispatch::IntegrationTest
       "app logs" => logs_app_path(@subject),
       "app jobs" => jobs_app_path(@subject),
       "mcp tokens" => mcp_tokens_path,
-      "integrations" => integrations_path
+      "integrations" => integrations_path,
+      "new app" => new_app_path,
+      "edit app" => edit_app_path(@subject),
+      "new server" => new_server_path,
+      "edit server" => edit_server_path(@server),
+      "new backup" => new_backup_path,
+      "edit backup" => edit_backup_path(@backup),
+      "new credential" => new_credential_path,
+      "edit credential" => edit_credential_path(@credential),
+      "new ssh key" => new_ssh_key_path
     }
 
     paths.each do |name, path|

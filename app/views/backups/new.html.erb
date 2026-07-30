@@ -1,10 +1,8 @@
 <% content_for :title, "New Backup · Conductor" %>
 
-<section class="max-w-3xl mx-auto px-4 py-10">
-  <div class="mb-6">
-    <h1 class="font-display text-2xl text-ink tracking-display">New Backup Configuration</h1>
-    <p class="mt-1 text-sm text-muted">Set up a database backup to cloud storage.</p>
-  </div>
+<%= render partial: "shared/page_head", locals: { title: "Back up a database.", lede: "Nightly to your connected storage, keeping 14 days, is a sane default. Everything here is changeable afterwards." } %>
+
+<section class="max-w-3xl mx-auto px-4 py-8">
 
   <%= render "form", backup: @backup %>
 </section>
