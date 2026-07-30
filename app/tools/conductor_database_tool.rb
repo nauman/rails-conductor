@@ -4,18 +4,21 @@ class ConductorDatabaseTool
 
   ACTIONS = {
     "register_cluster" => RegisterDatabaseClusterTool,
-    "provision"        => ProvisionDatabaseTool
+    "provision"        => ProvisionDatabaseTool,
+    "backup_now"       => RunBackupTool
   }.freeze
 
   DEFINITION = {
     name: "conductor_database",
     description: "Postgres databases. Set `action` to one of: " \
       "register_cluster (register a running postgres container apps can provision on — name, container_name, admin_username, admin_password; server via server_id/server_name; optional port), " \
-      "provision (create a role+database+password on a cluster and return its URL — name; cluster via cluster_id/cluster_name; optional username, app_id to link).",
+      "provision (create a role+database+password on a cluster and return its URL — name; cluster via cluster_id/cluster_name; optional username, app_id to link), " \
+      "backup_now (run an app's DB backup right now and report the real result — app_id/app_name; proves the dump+upload actually works instead of trusting the nightly schedule).",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[register_cluster provision], description: "Which database operation" },
+        action:            { type: "string", enum: %w[register_cluster provision backup_now], description: "Which database operation" },
+        app_name:          { type: "string",  description: "backup_now: target app by name (or app_id)" },
         name:              { type: "string",  description: "cluster name (register_cluster) or database name (provision)" },
         server_id:         { type: "integer", description: "register_cluster: host server by id (or server_name)" },
         server_name:       { type: "string",  description: "register_cluster: host server by name (or server_id)" },

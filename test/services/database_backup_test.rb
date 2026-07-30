@@ -54,4 +54,27 @@ class DatabaseBackupTest < ActiveSupport::TestCase
     b.update_column(:provider, "local")
     assert DatabaseBackup.new(b).send(:upload_to_storage, Object.new, "/tmp/x", "x")
   end
+
+  # The dump-source fix: kamal apps hold DATABASE_URL in the CONTAINER, so a host
+  # `pg_dump $DATABASE_URL` (host env is empty, verified on the fleet) backs up
+  # nothing. Dump from inside the running web container instead.
+  test "kamal app dumps from inside the running container, not the host shell" do
+    app = @org.apps.create!(name: "k", slug: "k", deploy_method: "kamal", repository_url: "https://x/y.git")
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz")
+
+    assert_includes cmd, "docker exec"
+    assert_includes cmd, "label=service="
+    assert_includes cmd, "role=web"
+    assert_includes cmd, %(pg_dump "$DATABASE_URL")
+    assert_includes cmd, "gzip > /tmp/x.sql.gz"
+  end
+
+  test "native app keeps the host-env DATABASE_URL dump" do
+    app = @org.apps.create!(name: "n", slug: "n", deploy_method: "native", repository_url: "https://x/y.git")
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    cmd = DatabaseBackup.new(b).send(:build_dump_command, "/tmp/x.sql.gz")
+
+    assert_equal "pg_dump $DATABASE_URL | gzip > /tmp/x.sql.gz", cmd
+  end
 end

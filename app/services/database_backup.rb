@@ -1,3 +1,5 @@
+require "shellwords"
+
 class DatabaseBackup
   attr_reader :backup, :error
 
@@ -68,10 +70,20 @@ class DatabaseBackup
     false
   end
 
+  # Kamal apps hold DATABASE_URL inside the CONTAINER, not the host shell — a host
+  # `pg_dump $DATABASE_URL` has no target and silently backs up nothing (verified:
+  # host DATABASE_URL is empty on the fleet). Dump from inside the running web
+  # container so pg_dump gets the real DSN, and the secret never hits the host
+  # process list. Native/docker apps keep the host-env assumption.
   def build_dump_command(output_path)
-    # This assumes DATABASE_URL env var is set on the server
-    # Extend this to detect database type and use appropriate dump command
-    "pg_dump $DATABASE_URL | gzip > #{output_path}"
+    app = backup.app
+    if app&.kamal?
+      svc = Shellwords.escape(app.kamal_service_candidates.first.to_s)
+      cid = "$(docker ps -q --filter label=service=#{svc} --filter label=role=web | head -1)"
+      %(docker exec #{cid} sh -c 'pg_dump "$DATABASE_URL"' | gzip > #{output_path})
+    else
+      "pg_dump $DATABASE_URL | gzip > #{output_path}"
+    end
   end
 
   def upload_to_storage(ssh, local_path, filename)
