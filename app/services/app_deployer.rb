@@ -223,8 +223,41 @@ class AppDeployer
     end
   end
 
+  # Zero-downtime needs two things: something that can redirect traffic, and a way
+  # for the candidate to run without contending for the old container's host port.
+  #
+  #   kamal_proxy — targets container:port over the docker network, so the
+  #                 candidate needs NO host port. Free.
+  #   caddy       — targets host:port, so the candidate takes a SECOND, ephemeral
+  #                 host port; Caddy is repointed at it, then the old one drains.
+  #   otherwise   — the fixed host port IS the service. Nothing to swap; downtime
+  #                 is a property of the app's shape, not a missing feature.
   def zero_downtime_cutover?
-    app.server&.edge_type == "kamal_proxy" && app.domain.present? && app.deploy_network.present?
+    return false if app.domain.blank?
+
+    case app.server&.edge_type
+    when "kamal_proxy" then app.deploy_network.present?
+    when "caddy"       then true
+    else false
+    end
+  end
+
+  def proxy_targets_container? = app.server&.edge_type == "kamal_proxy"
+
+  # A high, deterministic-ish port derived from the app id, so a candidate never
+  # collides with the live port or with another app's candidate. Probed for
+  # availability before use rather than assumed.
+  def candidate_host_port
+    @candidate_host_port ||= begin
+      base = 20_000 + (app.id % 20_000)
+      found = nil
+      5.times do |i|
+        port = base + i
+        run("ss -ltn 2>/dev/null | grep -q ':#{port} ' && echo BUSY || echo FREE")
+        (found = port) and break if ssh.output.to_s.include?("FREE")
+      end
+      found
+    end
   end
 
   # Boot the new release under its own release-scoped name, with NO host port
@@ -244,7 +277,7 @@ class AppDeployer
       "docker run -d",
       "--name #{Shellwords.escape(name)}",
       "--restart unless-stopped",
-      "--network #{Shellwords.escape(app.deploy_network)}",
+      *candidate_placement,
       "--label service=#{Shellwords.escape(app.resource_key)}",
       "--label role=web",
       "--label destination=production",
@@ -266,19 +299,29 @@ class AppDeployer
     true
   end
 
+  # Where the candidate is reachable while it proves itself.
+  def candidate_placement
+    if proxy_targets_container?
+      # No host port at all — the proxy reaches it over the docker network.
+      [ "--network #{Shellwords.escape(app.deploy_network)}" ]
+    else
+      port = candidate_host_port
+      raise "no free host port for the candidate (tried #{20_000 + (app.id % 20_000)}+)" if port.nil?
+
+      parts = [ "-p 127.0.0.1:#{port}:#{app.port || 3000}" ]
+      parts << "--network #{Shellwords.escape(app.deploy_network)}" if app.deploy_network.present?
+      parts
+    end
+  end
+
   # Health-check the candidate over the docker network, by its container IP —
   # it has no host port to probe. Failure removes the candidate and leaves the
   # old container serving, so a bad release is a failed deploy, not an outage.
   def health_check_candidate
     return true if app.health_check_path.blank?
 
-    port = app.port || 3000
-    ip_cmd = "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' #{Shellwords.escape(@candidate_name)}"
-    run(ip_cmd)
-    ip = ssh.output.to_s.split.first
-    return discard_candidate("could not resolve the candidate's container IP") if ip.blank?
-
-    url = "http://#{ip}:#{port}#{app.health_check_path}"
+    url = candidate_health_url
+    return discard_candidate("could not resolve the candidate's address") if url.nil?
     log "Health-checking candidate at #{url}"
 
     6.times do |i|
@@ -293,6 +336,17 @@ class AppDeployer
     end
 
     discard_candidate("candidate never became healthy")
+  end
+
+  def candidate_health_url
+    port = app.port || 3000
+    return "http://127.0.0.1:#{candidate_host_port}#{app.health_check_path}" unless proxy_targets_container?
+
+    run("docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' #{Shellwords.escape(@candidate_name)}")
+    ip = ssh.output.to_s.split.first
+    return nil if ip.blank?
+
+    "http://#{ip}:#{port}#{app.health_check_path}"
   end
 
   # The old container only goes once traffic is already on the candidate.
@@ -361,15 +415,34 @@ class AppDeployer
   # not a container id, so replacing the container is invisible to it.
   def republish_edge_route
     return true if app.domain.blank?
-    return true unless app.server&.edge_type == "kamal_proxy"
 
-    container = app.container_id.presence
-    return fail_step("no container id recorded — cannot repoint the edge") if container.blank?
+    case app.server&.edge_type
+    when "kamal_proxy"
+      # The proxy targets the container itself, so it MUST move on every
+      # replacement — this is the Starrrs failure.
+      container = app.container_id.presence
+      return fail_step("no container id recorded — cannot repoint the edge") if container.blank?
 
-    upstream = "#{container}:#{app.port || 3000}"
-    log "Republishing #{app.domain} on kamal-proxy -> #{upstream}"
-    result = Edge.for(app.server, ssh: ssh).publish(domain: app.domain, upstream: upstream)
-    log "Edge published (service=#{result[:service]})"
+      publish_edge("#{container}:#{app.port || 3000}")
+    when "caddy"
+      # Caddy targets a loopback host:port. On the zero-downtime path that is the
+      # candidate's ephemeral port; on the stop-first path the app's own port is
+      # unchanged, so there is nothing to repoint.
+      return true unless zero_downtime_cutover? && @candidate_host_port
+
+      publish_edge("127.0.0.1:#{@candidate_host_port}")
+    else
+      true
+    end
+  end
+
+  def publish_edge(upstream)
+    log "Republishing #{app.domain} (#{app.server.edge_type}) -> #{upstream}"
+    # Adapters take different collaborators: kamal-proxy runs over SSH, Caddy
+    # talks to its Admin API. Only pass what the chosen edge accepts.
+    edge = proxy_targets_container? ? Edge.for(app.server, ssh: ssh) : Edge.for(app.server)
+    result = edge.publish(domain: app.domain, upstream: upstream)
+    log "Edge published (#{result[:service] || result[:route_id]})"
     true
   rescue Edge::UnsupportedEdge, Edge::KamalProxyAdapter::Error => e
     fail_step("edge republish failed: #{e.message}")

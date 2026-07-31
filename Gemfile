@@ -43,7 +43,15 @@ gem "solid_cable"
 gem "bootsnap", require: false
 
 # Deploy this application anywhere as a Docker container [https://kamal-deploy.org]
-gem "kamal", require: false
+#
+# PINNED deliberately. Conductor deploys apps itself but keeps Kamal as an
+# artifact contract + ops CLI (ADR 0003): our containers carry Kamal's
+# service/role/destination labels so `kamal app logs/exec/console` and
+# `kamal rollback` work against a Conductor-performed deploy. Those labels are
+# NOT a documented public API, so a major bump could silently break the
+# contract — test/services/kamal_label_contract_test.rb asserts it against the
+# installed gem, and this pin keeps the upgrade a deliberate act.
+gem "kamal", "~> 2.10", require: false
 
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem "thruster", require: false

@@ -92,12 +92,17 @@ targets a stable **host:port** (Caddy) needs nothing.
 - **Conductor owns the release transaction.** This is the real price, and it is
   the objection that rejected ADR 0002. Candidate → health → swap → verify →
   drain must be built and trusted before any app depends on it.
-- **Kamal's labels are not a documented public API.** Depending on them is a
-  version-compatibility bet. Pin the Kamal version and test the contract against
-  the installed CLI; a label rename is a silent break.
-- **`kamal rollback` behaviour must be verified** — if it acquires the deploy
-  lock or mutates the proxy, rollback re-enters the failure mode this ADR
-  removes from the deploy path. Confirm before relying on it.
+- **Kamal's labels are not a documented public API.** ✅ *Resolved:* the gem is
+  pinned (`~> 2.10`) and `test/services/kamal_label_contract_test.rb` asserts
+  `service`/`role`/`destination` against the installed gem's
+  `Kamal::Configuration::Role#default_labels`, so an upgrade that renames a label
+  fails at CI instead of silently blinding the ops CLI.
+- **`kamal rollback` acquires the deploy lock.** ✅ *Verified* against kamal
+  2.12.0: `Kamal::Cli::Main#rollback` wraps its work in `modify(lock: true)`. So
+  rollback DOES re-enter lock territory. Mitigated: `run_kamal_rollback` reclaims
+  a stale lock only when `reclaimable_lock?` allows it — never for a self-managed
+  app, where CI may legitimately hold it. A self-managed rollback blocked by a
+  stale lock needs a manual release; that is the documented cost.
 - Until the contract lands, docker apps have **no rollback at all** — the image
   is pruned seconds after it is built.
 
@@ -111,7 +116,7 @@ targets a stable **host:port** (Caddy) needs nothing.
 | **Rollback for docker apps** | ✅ shipped | `DockerRollback` |
 | Edge republished on deploy | ✅ shipped | `AppDeployer#republish_edge_route` |
 | `deploy.yml` for all methods | ⚠️ Kamal apps only | `app/services/kamal_config.rb` |
-| Candidate → health → swap → drain | ✅ shipped for `kamal_proxy`; Caddy + unproxied still stop-first | `AppDeployer::ZERO_DOWNTIME_STEPS` |
+| Candidate → health → swap → drain | ✅ shipped for `kamal_proxy` **and** `caddy`; unproxied cannot have it | `AppDeployer::ZERO_DOWNTIME_STEPS` |
 | Conductor self-deploys via CI | ⚠️ CI runs, but still calls `bin/kamal` | `.github/workflows/deploy.yml` |
 
 ### What the contract unlocked
@@ -139,7 +144,7 @@ means the candidate must not take that binding.
 | Edge | Candidate can start alongside? | Cutover |
 |---|---|---|
 | `kamal_proxy` | **Yes, cleanly.** The proxy targets `container:3000` over the docker network, so the candidate needs *no host port at all* | Health-check over the docker network, then swap the proxy target. **Zero-downtime is free here.** |
-| `caddy` | Yes, with a port dance — the candidate binds a *second* host port | Health-check the new port, repoint Caddy's upstream, then drain. Needs port allocation + release. |
+| `caddy` | **Yes — shipped.** The candidate binds a second, probed-free loopback port | Health-check that port, repoint Caddy's upstream, then drain. |
 | `none` / direct | **No.** The fixed host port *is* the service; nothing exists to swap | Downtime is unavoidable without introducing a proxy. |
 
 This means the "close the outage window" work is really three pieces of differing

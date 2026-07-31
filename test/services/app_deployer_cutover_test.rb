@@ -30,6 +30,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
       @last_output =
         if cmd.include?("label=service=")     then "oldcid999"
         elsif cmd.include?("docker inspect")  then "172.18.0.5 "
+        elsif cmd.include?("ss -ltn")         then "FREE"
         elsif cmd.include?("curl -sf")        then (@healthy ? "healthy" : "")
         elsif cmd.include?("docker ps -q -f name=app-") then "newcid111"
         elsif cmd.include?("docker ps -q")    then "oldcid999"
@@ -72,8 +73,15 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     assert @deployer.send(:zero_downtime_cutover?)
   end
 
-  test "an unproxied or caddy app falls back to stop-first" do
+  test "a caddy app also gets zero-downtime, via a second host port" do
     @app.server.update!(edge_type: "caddy")
+    assert @deployer.send(:zero_downtime_cutover?)
+    assert_not @deployer.send(:proxy_targets_container?),
+               "caddy targets host:port, so the candidate needs its own port"
+  end
+
+  test "an unproxied app falls back to stop-first — its host port IS the service" do
+    @app.server.update!(edge_type: "none")
     assert_not @deployer.send(:zero_downtime_cutover?)
 
     @app.server.update!(edge_type: "kamal_proxy")
@@ -137,6 +145,43 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
                "traffic must never move to an unhealthy candidate"
     assert_not ssh.commands.any? { |c| c.match?(/docker stop oldcid999/) },
                "the previous release must be left serving"
+  end
+
+  # --- Caddy: same guarantees, different mechanism ---
+
+  test "a caddy candidate binds its OWN loopback port, not the live one" do
+    @app.server.update!(edge_type: "caddy")
+    ssh = FakeSsh.new
+    fake_edge = Object.new
+    def fake_edge.publish(**) = { route_id: "r1" }
+    Edge.stub(:for, ->(*, **) { fake_edge }) { cutover(ssh) }
+
+    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    assert_match(/-p 127\.0\.0\.1:\d+:3000/, run, "candidate needs its own host port")
+    assert_not_includes run, "-p 3000:3000", "must not contend for the live port"
+  end
+
+  test "a caddy candidate is probed on its own port, then Caddy is repointed at it" do
+    @app.server.update!(edge_type: "caddy")
+    ssh = FakeSsh.new
+    @deployer.stub(:ssh, ssh) do
+      @deployer.stub(:sleep, nil) do
+        @deployer.send(:start_candidate)
+        @deployer.send(:health_check_candidate)
+      end
+    end
+    port = @deployer.send(:candidate_host_port)
+
+    health = ssh.commands.find { |c| c.include?("curl -sf") }
+    assert_includes health, "127.0.0.1:#{port}", "probe the candidate's own port"
+  end
+
+  test "a free port is probed for, not assumed" do
+    @app.server.update!(edge_type: "caddy")
+    ssh = FakeSsh.new
+    @deployer.stub(:ssh, ssh) { @deployer.send(:candidate_host_port) }
+
+    assert ssh.commands.any? { |c| c.include?("ss -ltn") }, "must check the port is free"
   end
 
   test "the previous container is resolved by service label, not a fixed name" do
