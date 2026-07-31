@@ -1,3 +1,5 @@
+require "shellwords"
+
 class AppDeployer
   attr_reader :app, :deployment, :ssh, :error
 
@@ -134,13 +136,27 @@ class AppDeployer
     deployment.update!(commit_sha: sha) if sha
   end
 
+  # ADR 0003 — the artifact contract. Tag by commit SHA, not just :latest.
+  # An immutable tag is what makes a release a THING that can be rolled back to;
+  # `:latest` alone means every build destroys its predecessor's identity, which
+  # is the entire reason docker apps had no rollback. :latest is kept alongside
+  # as a convenience pointer for anything that still expects it.
   def build_image
     deployment.mark_deploying!
 
     dockerfile = app.dockerfile_path || "Dockerfile"
-    build_cmd = "cd #{app_dir} && docker build -t #{app.image_name}:latest -f #{dockerfile} ."
-    run(build_cmd)
+    tags = [ "-t #{image_ref(release_tag)}" ]
+    tags << "-t #{app.image_name}:latest"
+    run("cd #{app_dir} && docker build #{tags.join(' ')} -f #{dockerfile} .")
   end
+
+  # The immutable tag for this release. Falls back to the deployment id when no
+  # SHA is known, so an image is never left with only a mutable tag.
+  def release_tag
+    deployment.commit_sha.presence&.first(12) || "d#{deployment.id}"
+  end
+
+  def image_ref(tag) = "#{app.image_name}:#{tag}"
 
   def stop_old_container
     # Stop and remove old container if exists (don't fail if not found)
@@ -152,10 +168,19 @@ class AppDeployer
   def start_container
     port = app.port || 3000
 
+    # Kamal-compatible labels (ADR 0003): `kamal app logs/exec/console` locate a
+    # container by its `service` label, never by name — so labelling here is what
+    # hands docker apps the whole Kamal ops surface for free. The service value is
+    # the STABLE resource key (ADR 0004), not the slug, so a rename can't orphan it.
     prefix = [
       "docker run -d",
       "--name #{app.container_name}",
       "--restart unless-stopped",
+      "--label service=#{Shellwords.escape(app.resource_key)}",
+      "--label role=web",
+      "--label destination=production",
+      "--label conductor.infra_revision=#{app.infra_revision}",
+      "--label conductor.release=#{Shellwords.escape(release_tag)}",
       "-p #{port}:#{port}"
     ]
     # Join the shared docker network so a container-name DB host (conductor-postgres)
@@ -166,7 +191,7 @@ class AppDeployer
       "-e PORT=#{port}",
       "-e RAILS_ENV=production",
       "-e RAILS_LOG_TO_STDOUT=true",
-      "#{app.image_name}:latest"
+      image_ref(release_tag)
     ]
     docker_run = (prefix + [ app.env_variables.map(&:to_docker_env).join(" ") ] + suffix).join(" ")
     # Redact secret env values in the logged/broadcast copy.
@@ -240,8 +265,20 @@ class AppDeployer
     false
   end
 
+  # Retain prior releases so a rollback target exists (ADR 0003). The previous
+  # `docker image prune -f` deleted the very artifact that makes rollback
+  # possible — which is why docker apps appeared to "not support" it.
+  #
+  # Keeps the newest RETAINED_RELEASES tagged images for this app and removes
+  # older ones; dangling (untagged) layers are still pruned, since those are
+  # genuinely nobody's rollback target.
+  RETAINED_RELEASES = 5
+
   def cleanup
-    # Remove dangling images
+    run(%(docker images --format '{{.Tag}} {{.CreatedAt}}' #{Shellwords.escape(app.image_name)} ) +
+        %(| grep -v '^latest ' | sort -k2 -r | tail -n +#{RETAINED_RELEASES + 1} | awk '{print $1}' ) +
+        %(| xargs -r -I{} docker rmi #{Shellwords.escape(app.image_name)}:{} 2>/dev/null || true))
+    # Dangling layers only — never a tagged release.
     run("docker image prune -f 2>/dev/null || true")
     true
   end

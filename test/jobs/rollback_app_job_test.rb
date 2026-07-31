@@ -25,12 +25,28 @@ class RollbackAppJobTest < ActiveSupport::TestCase
     assert_equal "v-abc123", got
   end
 
-  test "non-kamal apps fail loud without building a deployer" do
+  # Docker rollback exists now (ADR 0003 — releases are SHA-tagged and retained),
+  # so only native still lacks one.
+  test "docker apps route to DockerRollback, not the Kamal deployer" do
+    deployment = rollback_deployment_for("docker")
+    got = nil
+    fake = Object.new
+    fake.define_singleton_method(:rollback!) { |version| got = version }
+
+    KamalDeployer.stub(:new, ->(*) { flunk "docker must not use the Kamal deployer" }) do
+      DockerRollback.stub(:new, ->(*, **) { fake }) do
+        RollbackAppJob.new.perform(deployment.id, "v-abc123")
+      end
+    end
+    assert_equal "v-abc123", got
+  end
+
+  test "native apps fail loud without building a deployer" do
     deployment = rollback_deployment_for("native")
     KamalDeployer.stub(:new, ->(*) { flunk "should not construct a deployer for a native app" }) do
       RollbackAppJob.new.perform(deployment.id, "v-abc123")
     end
     assert_equal "failed", deployment.reload.status
-    assert_includes deployment.log.to_s, "only supported for Kamal"
+    assert_includes deployment.log.to_s, "not supported for native"
   end
 end

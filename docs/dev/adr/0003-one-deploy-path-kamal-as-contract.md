@@ -105,13 +105,27 @@ targets a stable **host:port** (Caddy) needs nothing.
 
 | Requirement | Status | Location |
 |---|---|---|
-| SHA-tagged images | ❌ `:latest` only | `app/services/app_deployer.rb:141` |
-| Kamal container labels | ❌ none set | `app/services/app_deployer.rb:152` |
-| Retain prior images | ❌ `docker image prune -f` | `app/services/app_deployer.rb:245` |
+| SHA-tagged images | ✅ shipped | `AppDeployer#build_image` |
+| Kamal container labels | ✅ shipped — `service` is the stable resource key | `AppDeployer#start_container` |
+| Retain prior images | ✅ shipped — keeps `RETAINED_RELEASES` (5) | `AppDeployer#cleanup` |
+| **Rollback for docker apps** | ✅ shipped | `DockerRollback` |
+| Edge republished on deploy | ✅ shipped | `AppDeployer#republish_edge_route` |
 | `deploy.yml` for all methods | ⚠️ Kamal apps only | `app/services/kamal_config.rb` |
-| Edge republished on deploy | ✅ shipped | `app/services/app_deployer.rb` |
-| Candidate → health → swap → drain | ❌ still stop-before-start | `app/services/app_deployer.rb:144` |
+| Candidate → health → swap → drain | ❌ still stop-before-start | `AppDeployer` |
 | Conductor self-deploys via CI | ⚠️ CI runs, but still calls `bin/kamal` | `.github/workflows/deploy.yml` |
+
+### What the contract unlocked
+
+Rollback for docker apps was never hard — the release was simply being thrown
+away. `docker build -t <image>:latest` followed by `docker image prune -f` meant
+every build destroyed its predecessor's identity, so there was nothing to return
+to. Tagging by SHA and retaining five releases made `DockerRollback` a
+stop → run-the-older-tag → repoint-the-edge operation with no rebuild.
+
+The same change hands docker apps the Kamal ops CLI: `kamal app logs`, `exec`,
+and `console` locate containers by the `service` label, so labelling containers
+is all that was required. The label carries the **stable resource key** (ADR
+0004) rather than the slug, so a rename cannot orphan it.
 
 ## Related
 
