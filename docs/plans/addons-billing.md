@@ -1,26 +1,23 @@
 # Add-ons & Billing Plan
 
-## Goal
-Define tiers and add-ons for the Ops platform with clear boundaries.
+## Status
 
-## Scope
-- Free tier limits and paid add-ons.
-- Pro tier and provisioning services.
-- Billing workflow integration plan.
+Superseded by the approved numbered contract:
+[`01-client-access-managed-billing.md`](./01-client-access-managed-billing.md).
 
-## Non-goals
-- Full billing implementation in v1.
+## Direction
 
-## Milestones
-1. Finalize tier matrix and limits.
-2. Decide billing provider and data model.
-3. Wire billing status into UI guards.
+The first paid slice is not a public tier matrix. It combines:
 
-## Dependencies
-- Workspace/account model.
+- membership access to all or selected apps/servers
+- shared client accounts and Stripe-funded prepaid credit
+- client-specific managed-backup pricing
+- fixed shared-app and dedicated-server monthly pricing
+- one configurable hosted-platform fee per client account
+- platform-admin grace, rates, assignments, costs, margin, and adjustments
 
-## Risks
-- Feature creep before core ops is stable.
+Managed SES/SNS and bring-your-own provider credentials follow only after the
+backup/server-space ledger reconciles end to end.
 
-## Open Questions
-- Stripe vs Polar for billing?
+This pointer remains for older links. Do not add requirements here; update the
+numbered contract.

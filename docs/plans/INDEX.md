@@ -22,6 +22,7 @@
 5. `docs/plans/backups-r2.md` + `docs/plans/postgres-restore.md` + `docs/plans/data-layer.md` — complete restore, verification, and database operations
 6. `docs/plans/deploy-executor.md` — isolate the deploy executor from the web container (roadmap slot 23); foundation for robust self-hosted-Heroku deploys
 7. `docs/plans/deployment-kamal.md` — revisit richer Docker backend support after routing and provider automation are in place
+8. `docs/plans/01-client-access-managed-billing.md` — commercial program; resource access is first, storage charging waits for artifact accounting
 
 ## Implemented
 
@@ -53,6 +54,12 @@
 | `docs/plans/multi-tenancy.md` | Orgs, scoping, invitations, admin, billing | Invitations, admin, API scoping, billing remain | Cross-cutting (Tenancy) |
 | `docs/plans/onboarding.md` | First-run org naming + empty-state guidance | Building now | Cross-cutting (Tenancy) |
 
+## Approved / Planned
+
+| File | Covers | First dependency | Pillar |
+| --- | --- | --- | --- |
+| `docs/plans/01-client-access-managed-billing.md` | Hosted admission, resource-scoped memberships, client wallets, backups, and server-space resale | None for Plan A; artifact tracking only for storage billing | Cross-cutting (Tenancy + Commercial) |
+
 ## Stale or Deferred
 
 | File | Covers | Why Stale / Deferred | Pillar |
@@ -63,7 +70,7 @@
 | `docs/plans/active-storage.md` | Managed-app blob visibility and cleanup | Deferred until a justified, safe integration path exists | Data and backups |
 | `docs/plans/portainer-docker.md` | Docker inventory beyond managed app lifecycle | Deferred; core Docker operations already exist and Portainer is dropped | Fleet control |
 | `docs/plans/gpt-assistant.md` | AI ops helper | Deferred until core control plane is stable | Cross-cutting |
-| `docs/plans/addons-billing.md` | Tiers and billing | Deferred until core is stable | Cross-cutting |
+| `docs/plans/addons-billing.md` | Legacy billing pointer | Superseded by numbered plan 01 | Cross-cutting |
 | `docs/plans/workspaces.md` | Multi-tenant workspace model | Placeholder only | Cross-cutting |
 
 ## Still Current Reference

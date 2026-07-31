@@ -1,0 +1,48 @@
+.doc-shell {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 48px 20px;
+  font-family: var(--np-sans);
+  color: var(--np-text);
+}
+
+body {
+  margin: 0;
+  background: var(--np-wash);
+}
+
+section {
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--np-paper-edge);
+  border-radius: var(--rad-4);
+  background: var(--np-paper-runtime);
+}
+
+.lede {
+  max-width: 720px;
+  color: var(--np-muted);
+}
+
+.viz {
+  min-height: 320px;
+  border: 1px solid var(--np-paper-edge);
+  border-radius: var(--rad-4);
+  background: var(--np-paper);
+}
+
+.chart {
+  padding: 16px;
+}
+
+.graph {
+  height: 420px;
+}
+
+.mermaid {
+  padding: 16px;
+  overflow-x: auto;
+  border: 1px solid var(--np-paper-edge);
+  border-radius: var(--rad-4);
+  background: var(--np-paper);
+}

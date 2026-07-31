@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en" class="np-tokens np-wash" data-theme="light" data-density="comfortable" data-font-size="m">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>01 · Client Access and Managed Billing</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../design/tokens.css">
+  <link rel="stylesheet" href="../design/interactive-docs.css">
+  <style>
+    .doc-shell{max-width:1120px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{margin:0}.locks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.lock{padding:12px;border:1px solid var(--np-paper-edge);border-radius:var(--rad-3);background:var(--np-paper-runtime)}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--np-paper-edge);vertical-align:top}th{font:600 10px var(--np-mono);text-transform:uppercase;color:var(--np-muted)}code{font-family:var(--np-mono)}a{color:var(--np-queue)}
+    @media(max-width:760px){.cards,.locks{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main class="doc-shell">
+  <p><a href="./01-client-access-managed-billing.md">Authoritative Markdown</a></p>
+  <h1>01 · Client Access and Managed Billing</h1>
+  <p class="lede">One organization can host several clients. Membership grants limit operational visibility; one client wallet funds managed backups and fixed shared-app or dedicated-server capacity.</p>
+
+  <section>
+    <h2>Commercial vertical slice</h2>
+    <div class="cards">
+      <article class="card"><h3>Access</h3><p>Owners see all. Editors and members choose <code>all</code> or selected grants, bounded by any linked client account. Role still controls capability.</p></article>
+      <article class="card"><h3>Wallet</h3><p>Stripe Checkout funds an immutable Conductor ledger through verified, idempotent webhooks.</p></article>
+      <article class="card"><h3>Managed services</h3><p>Backups use operation/GB-month rates. Hosting uses fixed app-month or server-month rates.</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Entity relationship diagram</h2>
+    <pre class="mermaid">
+erDiagram
+  ORGANIZATION ||--o{ CLIENT_ACCOUNT : contains
+  ORGANIZATION ||--o{ MEMBERSHIP : contains
+  CLIENT_ACCOUNT ||--o{ MEMBERSHIP : groups
+  CLIENT_ACCOUNT ||--o{ APP : bills
+  MEMBERSHIP ||--o{ RESOURCE_GRANT : receives
+  APP ||--o{ RESOURCE_GRANT : app_target
+  SERVER ||--o{ RESOURCE_GRANT : server_target
+  SERVER ||--o{ SERVER_COST : costs
+  CLIENT_ACCOUNT ||--o{ MANAGED_SERVICE_ASSIGNMENT : subscribes
+  CLIENT_ACCOUNT ||--o{ PRICE_RATE : prices
+  CLIENT_ACCOUNT ||--o{ TOPUP_INTENT : funds
+  CLIENT_ACCOUNT ||--o{ USAGE_EVENT : consumes
+  CLIENT_ACCOUNT ||--o{ LEDGER_ENTRY : posts
+  CLIENT_ACCOUNT ||--o{ CREDIT_RESERVATION : reserves
+  CLIENT_ACCOUNT ||--o{ CLIENT_LIMIT : limits
+  MANAGED_SERVICE_ASSIGNMENT ||--o{ USAGE_EVENT : generates
+  USAGE_EVENT ||--o| LEDGER_ENTRY : charges
+    </pre>
+  </section>
+
+  <section>
+    <h2>Access evaluation</h2>
+    <pre class="mermaid">
+flowchart LR
+  A[Authenticated membership] --> C{Inside organization and client boundary?}
+  C -->|No| D[Deny]
+  C -->|Yes| R{Role capability allows action?}
+  R -->|No| D[Deny]
+  R -->|Yes| S{resource_scope}
+  S -->|all| O[Allow organization resource]
+  S -->|selected| G{Direct app grant or server inheritance?}
+  G -->|No| D
+  G -->|Yes| O
+    </pre>
+    <p>An app grant never reveals the whole server. Staff may receive shared-server grants; a client-linked server grant requires a same-client dedicated server.</p>
+  </section>
+
+  <section>
+    <h2>Billable services</h2>
+    <table>
+      <thead><tr><th>Service</th><th>Unit</th><th>Charge source</th><th>Lock</th></tr></thead>
+      <tbody>
+        <tr><td>Backup operation</td><td>Successful operation</td><td>Completed backup</td><td>First metered provider event</td></tr>
+        <tr><td>Backup storage</td><td>GB-month</td><td>Retained artifact inventory</td><td>Blocked until artifact accounting is trustworthy</td></tr>
+        <tr><td>Shared hosting</td><td>App-month</td><td>Active assignment anniversary</td><td>Fixed client price; no CPU/RAM metering</td></tr>
+        <tr><td>Dedicated hosting</td><td>Server-month</td><td>Active assignment anniversary</td><td>Fixed full-server client price</td></tr>
+        <tr><td>Hosted platform access</td><td>Client-account-month</td><td>Active hosted client</td><td>One configurable fee regardless of user count</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Money and failure flow</h2>
+    <pre class="mermaid">
+flowchart LR
+  C[Stripe Checkout] --> W[Verified webhook]
+  W --> T[Immutable top-up entry]
+  B[Successful backup] --> U[Pending usage fact + consumed reservation]
+  M[Monthly hosting event] --> P[Snapshot effective client rate]
+  P --> U2[Idempotent usage event]
+  U --> L[Retry-safe immutable debit + settled reservation]
+  U2 --> L
+  T --> X[Derived client balance]
+  L --> X
+  X --> G{Balance minus reservations within grace?}
+  G -->|Yes| RUN[Reserve and allow variable operation]
+  G -->|No| HOLD[Persist hold + alert client and admin]
+    </pre>
+    <p>Credit exhaustion never stops an existing app, destroys data, or revokes dashboard access. Service suspension is manual and deferred.</p>
+  </section>
+
+  <section>
+    <h2>Approved locks</h2>
+    <div class="locks">
+      <div class="lock"><strong>One shared-org client model</strong><br>No organization per client.</div>
+      <div class="lock"><strong>One client wallet</strong><br>Shared across client users and apps.</div>
+      <div class="lock"><strong>Managed first</strong><br>SES/SNS and BYO follow later.</div>
+      <div class="lock"><strong>Limited grace by default</strong><br>Admin config controls limit and hold behavior.</div>
+      <div class="lock"><strong>Versioned rates</strong><br>Every event snapshots its price.</div>
+      <div class="lock"><strong>Visible metrics, fixed hosting bill</strong><br>No CPU/RAM/disk metering in v1.</div>
+      <div class="lock"><strong>Hosted client-account fee</strong><br>Configurable monthly price; expiring internal/beta waivers.</div>
+      <div class="lock"><strong>Verified activation</strong><br>Pending becomes active only after posted credit or an effective waiver.</div>
+      <div class="lock"><strong>Explicit hosted limits</strong><br>Absolute counts, UTC windows, and expiring concurrency leases reject before dispatch.</div>
+      <div class="lock"><strong>Self-host stays open</strong><br>Commercial gates are disabled outside hosted mode.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Kuickr review surfaces</h2>
+    <ul>
+      <li><a href="https://kuickr.co/conductor/brainstorm/client-billing-architecture.html">Architecture</a></li>
+      <li><a href="https://kuickr.co/conductor/brainstorm/client-billing-ledger.html">Wallet and ledger</a></li>
+      <li><a href="https://kuickr.co/conductor/brainstorm/client-billing-dashboards.html">Client and admin dashboards</a></li>
+    </ul>
+  </section>
+</main>
+<script src="../design/interactive-docs.js"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.renderInteractiveDocs({ mermaid });
+</script>
+</body>
+</html>

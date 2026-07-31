@@ -4,11 +4,14 @@
 Cross-cutting (Tenancy & Accounts)
 
 ## Status
-Partial — org models, scoping, and switching shipped; onboarding, invitations, admin, and billing pending.
+Partial — org models, scoping, switching, onboarding, invitations, admin, API
+scoping, and three-tier roles shipped. Resource-scoped memberships and managed
+billing are approved but not implemented.
 
 ## Current Reality
 
-- `Organization` + `Membership` models exist; a user can belong to many orgs with a `member`/`owner` role.
+- `Organization` + `Membership` models exist; a user can belong to many orgs
+  with a `member`, `editor`, or `owner` role.
 - Every user has at least one org (`User#ensure_personal_organization!`); the first user bootstraps as the platform admin.
 - `Current.organization` is set per request; a nav switcher changes the active org.
 - `Server`, `App`, `Credential`, `Backup`, `SshKey` carry `organization_id` and are loaded/created strictly via `current_organization`. The dashboard is scoped too. Cross-org access returns 404.
@@ -26,13 +29,17 @@ Make Conductor a safe multi-tenant product: every tenant (organization) sees onl
 - Smooth first-run onboarding (see `docs/plans/onboarding.md`).
 - Invitations: owner invites by email → magic link → joins the org.
 - Platform admin (webmaster) section: manage users/orgs across the instance.
-- Paid hosted tier: plans, subscriptions, and usage limits for the cloud version.
+- Paid hosted services: client-specific prepaid credit for managed backups and
+  fixed shared-app/dedicated-server capacity, plus one configurable monthly
+  hosted-platform fee per client account. See
+  [`01-client-access-managed-billing.md`](./01-client-access-managed-billing.md).
 
 ## Non-goals
 
-- Per-resource ACLs finer than org + role (kept activity-based via `*Permission` classes).
+- Per-resource deny rules. V1 resource grants are additive (`all` or selected
+  app/server access) and still constrained by role capabilities.
 - SSO/SAML in the first pass.
-- Metered/usage-based billing beyond simple plan tiers initially.
+- CPU/RAM/disk metering, multi-currency wallets, and automated proration.
 
 ## Slices
 
@@ -43,7 +50,10 @@ Make Conductor a safe multi-tenant product: every tenant (organization) sees onl
 5. **Invitations** — invite by email, accept via tokened link, role on join. ✅ shipped
 6. **Admin / webmaster** — cross-org admin section (`/admin`) for orgs + users. ✅ shipped
 7. **API scoping** — `/api/v1/*` scoped to the token's org, membership-revoked, read/write scopes. ✅ shipped
-8. **Billing** — plans, Stripe subscriptions, plan-gated limits for the hosted tier.
+8. **Resource access** — owners remain organization-wide; editors/members gain
+   `all` or selected app/server access. ⚪ approved in plan 01
+9. **Managed billing** — client accounts, Stripe-funded credit ledger, backup
+   usage, and fixed server-space resale. ⚪ approved in plan 01
 
 ## Authorization
 

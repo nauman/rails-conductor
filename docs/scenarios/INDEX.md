@@ -23,5 +23,9 @@ See `AGENTS.md` → "Scenario Workflow" for the full authoring process and doc s
 | SC-007 | [Detect Drift Across the Fleet](./sc-007-detect-drift.md) | Indie Developer | Draft |
 | SC-008 | [Beta Access and Registration Intake](./sc-008-beta-access.md) | Platform Admin | Draft |
 | SC-009 | [Three-Tier Org Roles (Owner / Editor / Member)](./sc-009-editor-role.md) | Organization Owner | Draft |
+| SC-010 | [Client Access and Managed Billing](./sc-010-client-access-managed-billing.md) | Platform Admin / Client | Draft |
 
-The first seven scenarios cover the core product loops: monitor, publish, restore, create, connect, move, and detect. SC-008 covers hosted beta intake, and SC-009 the org permission model.
+The first seven scenarios cover the core product loops: monitor, publish,
+restore, create, connect, move, and detect. SC-008 covers hosted beta intake,
+SC-009 the org role model, and SC-010 resource-scoped client access plus managed
+backup/server-space billing.

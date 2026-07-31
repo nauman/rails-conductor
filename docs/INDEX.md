@@ -28,8 +28,11 @@
 | Development | `docs/dev/CONDUCTOR-DEV-LOOP-PROMPT.md` | Auditable loop prompt for completing one Conductor roadmap slice at a time |
 | Decisions (ADR) | `docs/dev/adr/` | Architecture Decision Records — cross-cutting decisions, one per file (e.g. 0001 self-describing Kamal deploys) |
 | Plans | `docs/plans/INDEX.md` | Master PRD map and capability plans by pillar |
+| Plan | `docs/plans/01-client-access-managed-billing.md` | Resource-scoped clients, prepaid managed backups, and server-space resale |
 | Scenarios | `docs/scenarios/INDEX.md` | User-driven use cases with actors and flows |
 | Scenario | `docs/scenarios/sc-008-beta-access.md` | Hosted beta intake: waitlist, manual approval, and free access guardrails |
+| Scenario | `docs/scenarios/sc-010-client-access-managed-billing.md` | Per-client resource access, wallet, backups, and server-space billing |
+| Approved specs | `docs/superpowers/specs/INDEX.md` | Reviewed design records linked to canonical numbered plans |
 | Status | `docs/STATUS.md` | Current shipped/partial/missing product reality |
 | Analysis | `docs/analysis/pillars-audit-2026-03-19.md` | Historical March 2026 baseline; not current status |
 | Sessions | `docs/sessions/INDEX.md` | Session-level implementation history and current handoff docs |

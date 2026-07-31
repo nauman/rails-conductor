@@ -21,7 +21,7 @@
 ## Goals
 
 1. Let people express interest without creating open self-serve signup.
-2. Admit approved beta users for free while billing is not ready.
+2. Admit approved beta users through an explicit, expiring free waiver.
 3. Protect app performance and worker capacity from unbounded usage.
 4. Preserve no-user-enumeration behavior on sign-in.
 5. Keep a clear path from waitlist request to approved organization access.
@@ -69,7 +69,8 @@
 6. Admin monitors usage, background jobs, MCP calls, and error rate.
 
 **Acceptance Criteria:**
-- [ ] Approved beta access is free and does not require billing setup.
+- [ ] Approved beta access creates/links a client account with an expiring
+      platform-access waiver; no card is required during the waiver.
 - [ ] Each beta user operates inside an organization-scoped workspace.
 - [ ] Per-user/API/MCP tokens are bound to the active organization.
 - [ ] Admin can disable access by removing the user, membership, or token.
@@ -121,14 +122,12 @@ User ── Membership ── Organization
 Organization ── Servers / Apps / Backups / ApiTokens
 ```
 
-Optional guardrail fields can live on `Organization` until billing exists:
+Hosted guardrails live on the approved client-account billing model:
 
 ```text
-beta_status
-server_limit
-app_limit
-backup_limit_gb
-concurrent_job_limit
+ClientAccount.status
+BillingWaiver.ends_at
+ClientLimit(apps | servers | concurrent_jobs | backups | MCP/API | log streams)
 ```
 
 ---
@@ -139,7 +138,8 @@ concurrent_job_limit
 - Production must not be left with an empty database on a public hostname, because the first sign-in bootstraps the platform admin.
 - Team invitations and public beta intake are different flows. Invitations add a person to an existing org; beta intake should let the platform admin approve a new external user deliberately.
 - Performance risk comes mainly from worker-backed actions: deploys, scripts, log tails, backups, and health checks. Passive sign-in and dashboard reads are lower risk.
-- Start with manual approval plus soft limits. Add billing only after usage patterns and cost drivers are known.
+- Keep manual approval. The approved billing contract (`SC-010`, plan 01) uses
+  expiring beta waivers and explicit client limits before paid activation.
 
 ---
 
@@ -147,7 +147,7 @@ concurrent_job_limit
 
 1. Should beta approval create a personal organization automatically, or should admins create a named organization first?
 2. What is the first beta batch size: 5, 10, or 20 organizations?
-3. What soft caps should apply before billing exists?
+3. What default client-limit values should the first beta batch receive?
 4. Should waitlist storage live in Conductor or an external form until the flow proves useful?
 5. What mechanism should disable first-user bootstrap after production setup?
 
