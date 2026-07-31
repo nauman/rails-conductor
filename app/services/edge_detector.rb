@@ -36,11 +36,37 @@ class EdgeDetector
     result = detect
     return false unless result
 
+    previous = server.edge_type
     server.update!(edge_type: result[:edge_type], edge_detail: result[:edge_detail], edge_checked_at: Time.current)
+    record_edge_change(previous, result[:edge_type]) if previous.present? && previous != result[:edge_type]
     true
   rescue => e
     failure("Update failed: #{e.message}")
     false
+  end
+
+  # An edge change is a FORM change for every app on the box (ADR 0004): what the
+  # edge targets changes, so what each app left behind on the old edge becomes
+  # residue. The edge lives on Server, not App, so it can't go through
+  # AppFormChange's attribute path — record a revision per affected app directly,
+  # rather than letting a fleet-wide shape change leave no trace at all.
+  def record_edge_change(from, to)
+    server.apps.find_each do |app|
+      next unless app.ever_deployed?
+
+      app.transaction do
+        app.update_column(:infra_revision, app.infra_revision + 1)
+        app.infra_revisions.create!(
+          revision: app.infra_revision,
+          changes_made: { "server_edge_type" => [ from, to ] },
+          reason: "edge on #{server.name} changed #{from} → #{to}"
+        )
+      end
+    end
+  rescue StandardError => e
+    # Never fail detection because history-writing failed — the detected edge is
+    # still the truth and callers depend on it.
+    Rails.logger.warn("[edge-detector] could not record edge-change revisions: #{e.message}")
   end
 
   def success?

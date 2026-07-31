@@ -402,6 +402,20 @@ class App < ApplicationRecord
   # `journalctl --user` can't reach the user journal without XDG_RUNTIME_DIR, and
   # stderr would otherwise be dropped — set the runtime dir and fold stderr in so
   # the UI shows the real tail (or the actual error) instead of a blank box.
+  # Shell that resolves the app's LIVE container id into $cid, by service label
+  # with the legacy fixed name as a fallback.
+  #
+  # A fixed name stopped being reliable for docker apps once a zero-downtime
+  # deploy started running them as app-<id>-r<rev>-<sha> (ADR 0003) — `docker
+  # logs conductor-<slug>` would simply find nothing. Every container Conductor
+  # starts carries service=<resource_key>, so one lookup covers every form.
+  def resolve_container_shell(status: "running")
+    cands = ([ resource_key ] + kamal_service_candidates).uniq.map { |c| Shellwords.escape(c) }.join(" ")
+    status_flag = status.present? ? %( -f status=#{status}) : ""
+    %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s"#{status_flag} | head -n1); [ -n "$cid" ] && break; done; ) +
+      %(if [ -z "$cid" ]; then cid=$(docker ps -q -f "name=^/#{container_name}$"#{status_flag} | head -n1); fi; )
+  end
+
   def log_tail_command(tail = 300)
     n = [ tail.to_i, 1 ].max
     if native?
@@ -409,7 +423,7 @@ class App < ApplicationRecord
     elsif kamal?
       kamal_log_command(n)
     else
-      "docker logs --tail #{n} #{container_name} 2>&1"
+      resolve_container_shell + %([ -n "$cid" ] && docker logs --tail #{n} "$cid" 2>&1 || echo "no running container")
     end
   end
 
@@ -438,7 +452,7 @@ class App < ApplicationRecord
       %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s" -f status=running | head -n1); [ -n "$cid" ] && break; done; ) \
         "[ -n \"$cid\" ] && docker exec \"$cid\" bin/rails #{task}"
     else
-      "docker exec #{container_name} bin/rails #{task}"
+      resolve_container_shell + %([ -n "$cid" ] && docker exec "$cid" bin/rails #{task})
     end
   end
 
@@ -449,7 +463,7 @@ class App < ApplicationRecord
     elsif kamal?
       "docker logs (service: #{kamal_service})"
     else
-      "docker logs #{container_name}"
+      "docker logs (service: #{resource_key})"
     end
   end
 

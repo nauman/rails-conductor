@@ -17,11 +17,13 @@ class RemoteRailsRunnerTest < ActiveSupport::TestCase
     assert_includes cmd, "NO_CONTAINER"
   end
 
-  test "a docker app resolves its container by conductor-<slug> name, not a service label" do
+  # Docker apps are label-resolved too now: a zero-downtime deploy names the
+  # container app-<id>-r<rev>-<sha>, which the fixed name never matches.
+  test "a docker app resolves its container by label, falling back to the fixed name" do
     docker_app = App.new(name: "Dock", slug: "dock", deploy_method: "docker")
     cmd = RemoteRailsRunner.new(docker_app, ssh: Object.new).command("puts 1")
+    assert_includes cmd, "label=service="
     assert_includes cmd, "name=^/conductor-dock$"
-    refute_includes cmd, "label=service="
     assert_includes cmd, "bin/rails runner -"
   end
 

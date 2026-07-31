@@ -10,7 +10,7 @@ class AppScheduledCommandTest < ActiveSupport::TestCase
 
   test "docker: execs the conductor-<slug> container" do
     assert_includes App.new(name: "A", slug: "a", deploy_method: "docker").scheduled_command("x:y"),
-                    "docker exec conductor-a bin/rails x:y"
+                    %(docker exec "$cid" bin/rails x:y)
   end
 end
 

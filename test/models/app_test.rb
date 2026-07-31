@@ -41,10 +41,16 @@ class AppTest < ActiveSupport::TestCase
     assert_includes cmd, "docker logs --tail 300"
   end
 
-  test "log_tail_command for a docker app uses the conductor-<slug> container name" do
+  # A zero-downtime deploy runs the app as app-<id>-r<rev>-<sha>, so the fixed
+  # name finds nothing; resolve by label with the legacy name as fallback.
+  test "log_tail_command for a docker app resolves the container by label" do
     docker = @org.apps.create!(name: "Dock", slug: "dock", server: @server, deploy_method: "docker",
                                repository_url: "https://github.com/x/y.git")
-    assert_equal "docker logs --tail 300 conductor-dock 2>&1", docker.log_tail_command(300)
+    cmd = docker.log_tail_command(300)
+
+    assert_includes cmd, "for s in app-#{docker.id}"
+    assert_includes cmd, %(docker logs --tail 300 "$cid")
+    assert_includes cmd, "name=^/conductor-dock$", "legacy containers stay reachable"
   end
 
   test "log_tail_command for a native app tails the user journal" do
@@ -136,7 +142,8 @@ class AppTest < ActiveSupport::TestCase
     @app.update!(deploy_method: "docker")
     cmd = @app.log_tail_command(50)
 
-    assert_includes cmd, "docker logs --tail 50 #{@app.container_name}"
+    assert_includes cmd, %(docker logs --tail 50 "$cid")
+    assert_includes cmd, "label=service="
     assert_includes cmd, "2>&1"
   end
 

@@ -82,7 +82,9 @@ class RemoteRailsRunner
       cands = @app.kamal_service_candidates.map { |c| Shellwords.escape(c) }.join(" ")
       %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s" -f status=running | head -n1); [ -n "$cid" ] && break; done)
     else
-      %(cid=$(docker ps -q -f "name=^/#{@app.container_name}$" -f status=running | head -n1))
+      # Label first, legacy fixed name as fallback — a zero-downtime deploy runs
+      # the app as app-<id>-r<rev>-<sha>, which the fixed name never matches.
+      @app.resolve_container_shell.chomp("; ") + %(; true)
     end
   end
 

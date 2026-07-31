@@ -4,7 +4,7 @@ Date: 2026-07-31
 
 ## Status
 
-**Proposed (2026-07-31).** Companion to ADR 0003. Where 0003 decides *how* we
+**Accepted (2026-07-31).** Implemented; see status below. Companion to ADR 0003. Where 0003 decides *how* we
 deploy, this decides *how deployed things are named and versioned*.
 
 ## Context
@@ -138,6 +138,23 @@ what makes residue **mechanically detectable**.
    surfaces mismatches in preflight / `situation`.
 7. Alias period: resolve legacy names from live state, record migration, drop the
    fallback once the fleet has converged.
+
+## Implementation status
+
+| Piece | Status |
+|---|---|
+| `App#resource_key` (`app-<id>`) | ✅ used for container labels, edge lookup, log/exec/stop/restart resolution |
+| `App#infra_revision` + `InfraRevision` history | ✅ with a baseline revision-1 backfill for existing apps |
+| `AppFormChange` choke point | ✅ transfer, DB conversion, UI, and MCP all route through it |
+| Guard against bypass | ✅ `App` refuses a form-field change outside it, once the app has ever deployed |
+| Durable "ever deployed" | ✅ consults deployment history, not just clearable columns |
+| Server edge change → revision | ✅ `EdgeDetector` records one per affected app |
+| Container names carry the revision | ✅ `app-<id>-r<rev>-<sha>` on the zero-downtime path |
+| Stable key for native units, DB containers, volumes | ❌ still slug-derived |
+| Automatic residue detection | ❌ the artifacts are now identifiable; nothing compares them yet |
+
+The remaining two are what turn this from "identity exists" into "residue is
+caught automatically". Everything above them is what makes that possible.
 
 ## Related
 

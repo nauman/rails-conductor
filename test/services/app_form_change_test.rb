@@ -106,6 +106,30 @@ class AppFormChangeTest < ActiveSupport::TestCase
     assert_not @app.update(server_id: @b.id), "the guard must still bite"
   end
 
+  # The edge lives on Server, so a fleet-wide edge switch would otherwise leave
+  # no trace on any app — despite changing what every app's edge targets.
+  test "an edge change on the server records a revision on each deployed app" do
+    @app.update_columns(deployed_at: Time.current)
+    @a.update!(edge_type: "kamal_proxy")
+    detector = EdgeDetector.new(@a)
+    detector.stub(:detect, { edge_type: "caddy", edge_detail: "caddy 2.7" }) do
+      detector.detect_and_update!
+    end
+
+    assert_equal 2, @app.reload.infra_revision
+    rev = @app.infra_revisions.recent.first
+    assert_equal [ "kamal_proxy", "caddy" ], rev.changes_made["server_edge_type"]
+    assert_match(/edge on/, rev.reason)
+  end
+
+  test "an app that never deployed gets no revision from an edge change" do
+    @a.update!(edge_type: "kamal_proxy")
+    detector = EdgeDetector.new(@a)
+    detector.stub(:detect, { edge_type: "caddy", edge_detail: "caddy" }) { detector.detect_and_update! }
+
+    assert_equal 1, @app.reload.infra_revision
+  end
+
   test "a failed form change leaves the revision untouched" do
     assert_raises(ActiveRecord::RecordInvalid) do
       AppFormChange.new(@app).apply!(deploy_method: "nonsense")
