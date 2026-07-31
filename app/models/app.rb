@@ -395,6 +395,19 @@ class App < ApplicationRecord
   # form-derived name this replaces.
   def resource_key = "app-#{id}"
 
+  # Residue from a previous form, read from the STORED rollup (ResidueCheckJob).
+  # Never probes — callers on a request path must stay fast.
+  def residue
+    (residue_findings || []).map(&:symbolize_keys)
+  end
+
+  def residue? = residue.any?
+
+  # A result nobody has refreshed in a while should not be presented as current.
+  def residue_stale?
+    residue_checked_at.nil? || residue_checked_at < ResidueCheckJob::STALE_AFTER.ago
+  end
+
   # Has this app ever put anything on a box? Until it has, changing its shape
   # strands nothing.
   #

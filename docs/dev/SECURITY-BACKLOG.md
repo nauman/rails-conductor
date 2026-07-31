@@ -10,7 +10,7 @@ the vulnerable line is invisible to everyone not already reading that file.
 
 ## SB-001 · DatabasePull: shell interpolation + unrestricted restore target
 
-**Status:** open · **Severity:** critical · **Found:** 2026-07-31 (audit during SC-009)
+**Status:** FIXED 2026-08-01 · **Severity:** was critical · **Found:** 2026-07-31 (audit during SC-009)
 
 ### Exposure
 
@@ -28,14 +28,33 @@ values that are never validated as identifiers:
 Both values are accepted straight from request params
 (`app/controllers/database_pulls_controller.rb:48`).
 
-### Interim mitigation (in place)
+### Fixed (2026-08-01)
 
-Database pulls are **owner-only** (`owner_only :execute, :new, :create` in
-`DatabasePullsController`). This does not fix the bug — any org owner can still
-reach it — but it keeps the vulnerable path off the editor role introduced in
-SC-009, rather than widening who can reach it.
+All six steps below are implemented:
 
-### What a real fix requires
+1. `source_database_url_var` is validated against `/\A[A-Z][A-Z0-9_]*\z/`, and
+   **re-validated in `DatabasePullService#remote_dump_command`** so a row written
+   by raw SQL or a console cannot reach the remote shell.
+2. `restore_target` must appear in `DATABASE_PULL_RESTORE_TARGETS`, an explicit
+   deployment-configured allowlist.
+3. `postgres`, `template0`, `template1` and **every database in Conductor's own
+   configuration** (primary, queue, cache, cable) are subtracted from that list,
+   so the control plane cannot be dropped by a pull.
+4. The allowlist is re-checked in `restore_local` immediately before `dropdb`.
+5. The UI field is a **select over the allowlist**, not free text.
+6. Destructive local commands already used argument-array execution; the remote
+   command still transmits a string (SSH always does), which is why strict
+   identifier validation is the boundary there.
+
+The owner-only quarantine has been removed — it was standing in for a fix, not
+providing one. Pulls remain an operator action because they are destructive to
+the target.
+
+Regression coverage: `test/models/database_pull_safety_test.rb`, including two
+cases that bypass validation with `update_column` and assert the execution-time
+gates still refuse.
+
+### What the fix required
 
 1. Validate `source_database_url_var` against a strict environment-identifier
    regex (`/\A[A-Z][A-Z0-9_]*\z/`) and reject anything else.

@@ -47,9 +47,23 @@
 
     <div>
       <%= f.label :restore_target, "Restore into local database (optional)", class: "block text-sm font-medium text-body mb-1" %>
-      <%= f.text_field :restore_target, placeholder: "int_app-two_development",
-            class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
-      <p class="text-xs text-danger-deep mt-1">⚠ If set, this <strong>drops and recreates</strong> that local database on the Conductor host before restoring. Leave blank to only download the dump.</p>
+      <%# A SELECT, not free text: this names a database that gets DROPPED, so the
+          set of acceptable answers is configured (DATABASE_PULL_RESTORE_TARGETS)
+          rather than typed. Server-side validation enforces the same list. %>
+      <% targets = DatabasePull.allowed_restore_targets %>
+      <% if targets.any? %>
+        <%= f.select :restore_target, targets, { include_blank: "Don't restore — just download the dump" },
+              class: "w-full text-sm font-mono border border-border-strong rounded-md px-3 py-2" %>
+        <p class="text-xs text-danger-deep mt-1">⚠ If set, this <strong>drops and recreates</strong> that local database on the Conductor host before restoring. Leave blank to only download the dump.</p>
+      <% else %>
+        <p class="text-xs text-muted mt-1">
+          No restore targets are configured, so this pull will only download the dump.
+          Set <code class="font-mono">DATABASE_PULL_RESTORE_TARGETS</code> to a comma-separated list of
+          databases a restore may overwrite. Conductor's own databases and
+          <code class="font-mono">postgres</code>/<code class="font-mono">template0</code>/<code class="font-mono">template1</code>
+          can never be targets.
+        </p>
+      <% end %>
     </div>
 
     <div class="flex items-center justify-between">

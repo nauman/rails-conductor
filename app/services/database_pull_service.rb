@@ -61,6 +61,14 @@ class DatabasePullService
   # $DATABASE_URL is populated, then dump in custom format without owner/acl.
   def remote_dump_command(remote_path)
     var = @pull.source_database_url_var.presence || "DATABASE_URL"
+    # Re-validated HERE, not just at the model: a row written by raw SQL, a
+    # console, or a code path predating the validation would otherwise
+    # interpolate straight into the remote shell (SB-001).
+    unless var.match?(DatabasePull::ENV_VAR_NAME)
+      raise ArgumentError, "refusing to build a remote command from #{var.inspect} — " \
+                           "not an environment variable name"
+    end
+
     prefix =
       if @pull.source_env_file.present?
         "set -a; . #{shellesc(@pull.source_env_file)}; set +a; "
@@ -72,6 +80,14 @@ class DatabasePullService
 
   def restore_local(local_path)
     target = @pull.restore_target
+    # The last gate before dropdb. Model validation can be bypassed; this cannot,
+    # and it is the difference between a restore and destroying a database
+    # nobody meant to touch (SB-001).
+    unless @pull.restore_target_allowed?
+      raise ArgumentError, "refusing to drop #{target.inspect} — not an allowed restore target " \
+                           "(see DATABASE_PULL_RESTORE_TARGETS)"
+    end
+
     # dropdb/createdb must succeed; pg_restore may exit non-zero on benign
     # warnings (e.g. missing roles) so its status is logged but not fatal.
     [

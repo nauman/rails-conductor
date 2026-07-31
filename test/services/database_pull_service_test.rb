@@ -1,6 +1,10 @@
 require "test_helper"
 
 class DatabasePullServiceTest < ActiveSupport::TestCase
+  # restore_target must be on the configured allowlist (SB-001).
+  setup { ENV["DATABASE_PULL_RESTORE_TARGETS"] = %(int_app_development) }
+  teardown { ENV.delete("DATABASE_PULL_RESTORE_TARGETS") }
+
   # SSH stub matching the slice of SshConnection that DatabasePullService uses.
   class FakeSsh
     attr_reader :commands, :downloads, :error

@@ -27,10 +27,35 @@ class DeployPreflight
   def initialize(app) = @app = app
 
   def check
-    Result.new(checks: [ migrations_check, seeds_check, audit_check, threads_check ])
+    Result.new(checks: [ migrations_check, seeds_check, audit_check, threads_check, residue_check ])
   end
 
   private
+
+  # Reads the STORED rollup — no SSH, so this is safe on a page render and in a
+  # deploy. WARNs rather than fails: residue is usually harmless right until a
+  # deploy trips over it, and blocking every deploy on a leftover container
+  # would be worse than the problem.
+  def residue_check
+    # An app that has never deployed cannot have left anything on a box, so
+    # "not yet checked" is not worth a warning — it would fire on every new app.
+    return ok(:residue, "Form residue", "nothing deployed yet") unless @app.ever_deployed?
+
+    if @app.residue_checked_at.nil?
+      return warn(:residue, "Form residue", "never checked — run a residue check to know")
+    end
+
+    findings = @app.residue
+    # No view helpers in a service object; and a stale result must say so rather
+    # than pass as current.
+    label = @app.residue_stale? ? " (stale — last checked #{@app.residue_checked_at.to_fs(:short)})" : ""
+
+    return ok(:residue, "Form residue", "no leftovers from a previous shape#{label}") if findings.empty?
+
+    warn(:residue, "Form residue",
+         findings.map { |f| "#{f[:kind]}: #{f[:detail]}" }.join(" · ") + label)
+  end
+
 
 
 
