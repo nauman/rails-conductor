@@ -53,7 +53,11 @@ class UpdateAppTool
       return Result.fail("Invalid deploy_method: #{attrs['deploy_method']} (use docker, native, or kamal)")
     end
 
-    return Result.fail(app.errors.full_messages.join(', ')) unless app.update(attrs)
+    # Form fields route through the choke point (ADR 0004) so a box move or a
+    # deploy-method switch records a revision instead of being refused.
+    unless AppFormChange.update(app, attrs, user: @user, reason: "updated via MCP")
+      return Result.fail(app.errors.full_messages.join(', '))
+    end
 
     Result.ok({
       id:            app.id,

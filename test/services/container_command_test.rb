@@ -11,9 +11,23 @@ class ContainerCommandTest < ActiveSupport::TestCase
                              deploy_method: "docker", repository_url: "https://github.com/x/y.git")
   end
 
-  test "a docker app is addressed by its fixed container name" do
-    assert_equal "docker stop conductor-shop", ContainerCommand.stop(@app)
-    assert_equal "docker restart conductor-shop", ContainerCommand.restart(@app)
+  # A zero-downtime deploy runs the app as app-<id>-r<rev>-<sha>, so a fixed name
+  # matches nothing and "succeeds" against no container.
+  test "a docker app is found by its service label, with the fixed name as fallback" do
+    cmd = ContainerCommand.stop(@app)
+
+    assert_includes cmd, "for s in app-#{@app.id}", "the stable key must be the first candidate"
+    assert_includes cmd, 'label=service=$s'
+    assert_includes cmd, "name=^conductor-shop$", "legacy containers must still be reachable"
+    assert_includes cmd, 'docker stop "$cid"'
+    assert cmd.index("label=service=$s") < cmd.index("name=^conductor-shop$"),
+           "the label must be tried before the legacy name"
+  end
+
+  test "the stable resource key is tried before any kamal service variant" do
+    keys = ContainerCommand.stop(@app)[/for s in (.*?); do/, 1].split
+
+    assert_equal "app-#{@app.id}", keys.first
   end
 
   test "a kamal app is located by its service label, never a fixed name" do

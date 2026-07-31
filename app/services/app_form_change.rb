@@ -27,6 +27,27 @@ class AppFormChange
 
   attr_reader :app, :revision
 
+  # Apply a mixed attribute hash: ordinary config through a normal update, form
+  # fields through the choke point. Every write path that accepts user input
+  # should use this rather than deciding for itself — otherwise a perfectly valid
+  # "move this app to another box" is refused by App's guard.
+  #
+  # Returns true on success; on failure the app carries the errors.
+  def self.update(app, attributes, user: nil, reason: nil)
+    attrs = attributes.to_h.transform_keys(&:to_s)
+    form, ordinary = attrs.partition { |k, _| FORM_FIELDS.include?(k) }.map(&:to_h)
+
+    app.transaction do
+      raise ActiveRecord::Rollback unless ordinary.empty? || app.update(ordinary)
+      next if form.empty?
+
+      new(app, user: user).apply!(reason: reason, **form.symbolize_keys)
+    end
+    app.errors.empty?
+  rescue ActiveRecord::RecordInvalid
+    false
+  end
+
   def initialize(app, user: nil)
     @app = app
     @user = user

@@ -249,12 +249,20 @@ class AppDeployer
   # availability before use rather than assumed.
   def candidate_host_port
     @candidate_host_port ||= begin
-      base = 20_000 + (app.id % 20_000)
+      # 10-wide, non-overlapping windows. The previous `app.id % 20_000` gave
+      # adjacent ids overlapping ranges (app 1 → 20001..20005, app 2 → 20002..).
+      base = 20_000 + ((app.id % 4_000) * 10)
       found = nil
-      5.times do |i|
+      10.times do |i|
         port = base + i
-        run("ss -ltn 2>/dev/null | grep -q ':#{port} ' && echo BUSY || echo FREE")
-        (found = port) and break if ssh.output.to_s.include?("FREE")
+        # Ask docker rather than `ss`: it is certainly present where we are about
+        # to run a container, and `ss ... || echo FREE` reported a MISSING ss as
+        # "free" — exactly backwards, and it would then fail to bind.
+        run("docker ps --format '{{.Ports}}' | grep -q ':#{port}->' && echo BUSY || echo MAYBE_FREE")
+        next unless ssh.output.to_s.include?("MAYBE_FREE")
+
+        found = port
+        break
       end
       found
     end
@@ -270,7 +278,16 @@ class AppDeployer
     port = app.port || 3000
     name = app.release_container_name(deployment.commit_sha)
 
-    # A retry of a failed deploy can leave a same-named candidate behind.
+    # A retry can find a same-named candidate from a previous attempt. Removing it
+    # blindly is an outage: if that attempt died between publishing the edge and
+    # draining, the "leftover" candidate is what is SERVING. Only reclaim a
+    # candidate the edge is not pointing at.
+    if @previous_container.present? && @previous_container == container_id_of(name)
+      log "Candidate #{name} is the current serving container — reusing it rather than replacing"
+      @candidate_name = name
+      @candidate_container = @previous_container
+      return true
+    end
     run("docker rm -f #{Shellwords.escape(name)} 2>/dev/null || true")
 
     prefix = [
@@ -291,12 +308,20 @@ class AppDeployer
 
     return false unless run(cmd, display: display)
 
-    run("docker ps -q -f name=#{Shellwords.escape(name)}")
-    @candidate_container = ssh.output.to_s.strip
-    return fail_step("candidate did not start") if @candidate_container.blank?
+    @candidate_name = name # set BEFORE the probe so any later failure can clean up
+    @candidate_container = container_id_of(name)
+    return discard_candidate("candidate did not start") if @candidate_container.blank?
 
-    @candidate_name = name
     true
+  end
+
+  def container_id_of(name)
+    run("docker ps -q -f name=#{Shellwords.escape(name)} | head -n1")
+    ssh.output.to_s.strip
+  end
+
+  def candidate_running?
+    @candidate_container.present? && container_id_of(@candidate_name).present?
   end
 
   # Where the candidate is reachable while it proves itself.
@@ -306,7 +331,7 @@ class AppDeployer
       [ "--network #{Shellwords.escape(app.deploy_network)}" ]
     else
       port = candidate_host_port
-      raise "no free host port for the candidate (tried #{20_000 + (app.id % 20_000)}+)" if port.nil?
+      raise "no free host port in this app's candidate window" if port.nil?
 
       parts = [ "-p 127.0.0.1:#{port}:#{app.port || 3000}" ]
       parts << "--network #{Shellwords.escape(app.deploy_network)}" if app.deploy_network.present?
@@ -318,7 +343,18 @@ class AppDeployer
   # it has no host port to probe. Failure removes the candidate and leaves the
   # old container serving, so a bad release is a failed deploy, not an outage.
   def health_check_candidate
-    return true if app.health_check_path.blank?
+    # Whatever else happens, the candidate must be recorded as the thing the edge
+    # will point at BEFORE the edge moves. Returning early without doing so
+    # republished the OLD container id and then drained that container — a
+    # deploy that reports success with nothing serving.
+    return discard_candidate("candidate is not running") unless candidate_running?
+
+    app.update!(container_id: @candidate_container)
+
+    if app.health_check_path.blank?
+      log "No health_check_path set — cutting over on running-state alone (configure one to gate this properly)"
+      return true
+    end
 
     url = candidate_health_url
     return discard_candidate("could not resolve the candidate's address") if url.nil?
@@ -329,7 +365,6 @@ class AppDeployer
       if run("curl -sf --max-time 5 #{Shellwords.escape(url)} > /dev/null && echo healthy") &&
          ssh.output.to_s.include?("healthy")
         log "Candidate healthy — safe to cut over"
-        app.update!(container_id: @candidate_container)
         return true
       end
       log "Candidate health attempt #{i + 1}/6 failed, retrying..."
@@ -355,12 +390,18 @@ class AppDeployer
     return true if @previous_container == @candidate_container
 
     log "Draining previous container #{@previous_container}"
-    run("docker stop #{Shellwords.escape(@previous_container)} 2>/dev/null || true")
-    run("docker rm #{Shellwords.escape(@previous_container)} 2>/dev/null || true")
+    stopped = run("docker stop #{Shellwords.escape(@previous_container)} 2>/dev/null || true")
+    removed = run("docker rm #{Shellwords.escape(@previous_container)} 2>/dev/null || true")
     # The fixed legacy name must be free for the next stop-first deploy, and a
     # dead container holding it would also confuse the ops CLI.
     run("docker rm -f #{Shellwords.escape(app.container_name)} 2>/dev/null || true")
-    true
+
+    # Traffic is already on the candidate, so a failed drain is not an outage —
+    # but it leaves two containers running, which must not pass as success.
+    return true if stopped && removed
+
+    fail_step("traffic moved to the new release, but draining #{@previous_container} failed — " \
+              "both containers may still be running; remove the old one by hand")
   end
 
   # Whatever is serving right now: the labelled container if there is one,
@@ -444,8 +485,22 @@ class AppDeployer
     result = edge.publish(domain: app.domain, upstream: upstream)
     log "Edge published (#{result[:service] || result[:route_id]})"
     true
-  rescue Edge::UnsupportedEdge, Edge::KamalProxyAdapter::Error => e
+  # Any edge failure, not just the two typed ones — reaching the outer rescue
+  # would skip compensation and strand both the candidate and a database row
+  # pointing at a container that never took traffic.
+  rescue StandardError => e
+    compensate_failed_cutover
     fail_step("edge republish failed: #{e.message}")
+  end
+
+  # Undo what a half-finished cutover changed. The old container is still serving
+  # and the edge still points at it, so the candidate must go and the recorded
+  # container id must go back.
+  def compensate_failed_cutover
+    return if @candidate_name.blank?
+
+    app.update!(container_id: @previous_container.presence) if @previous_container != @candidate_container
+    discard_candidate("cutover failed after the candidate started")
   end
 
   def fail_step(message)

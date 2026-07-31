@@ -33,16 +33,25 @@ class RestartAppJobTest < ActiveSupport::TestCase
     cmd = cmds.first
     assert_includes cmd, "label=service=", "Kamal restart must locate the container by service label"
     assert_includes cmd, 'docker restart "$cid"'
-    refute_includes cmd, "conductor-web-kamal", "must NOT target the non-existent conductor-<slug> name"
+    # The fixed name may now appear as a FALLBACK for pre-ADR-0003 containers,
+    # but it must never be what the command actually acts on.
+    refute_includes cmd, "docker restart conductor-web-kamal",
+                    "must not act on the conductor-<slug> name directly"
+    assert cmd.index("label=service=$s") < cmd.index("name=^conductor-web-kamal$"),
+           "the label lookup must be tried first"
   end
 
-  test "a plain docker app is restarted by its conductor-<slug> container name" do
+  # A zero-downtime deploy runs the app as app-<id>-r<rev>-<sha>, so a docker app
+  # is no longer reliably reachable by its fixed name either.
+  test "a docker app is restarted via its service label, falling back to the fixed name" do
     a = app(method: "docker")
     cmds = []
     SshConnection.stub(:new, ->(*) { capturing_ssh(cmds) }) do
       RestartAppJob.new.perform(a.id)
     end
-    assert_includes cmds.first, "docker restart conductor-web-docker"
+    assert_includes cmds.first, "for s in app-#{a.id}"
+    assert_includes cmds.first, "name=^conductor-web-docker$"
+    assert_includes cmds.first, 'docker restart "$cid"'
   end
 
   test "NO_CONTAINER output is treated as a failed restart, not a success" do

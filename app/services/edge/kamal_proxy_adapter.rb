@@ -46,7 +46,21 @@ class Edge
     # one hostname instead of replacing the stale one — which is how you turn a
     # 502 into an intermittent 502.
     def service_for(domain)
-      @service.presence || live_service_for(domain) || derived_service(domain)
+      return @service if @service.present?
+
+      existing, reachable = live_service_for(domain)
+      return existing if existing.present?
+
+      # FAIL CLOSED. If the proxy could not be queried we do NOT know whether a
+      # route already owns this host, and publishing under a derived key would
+      # create a SECOND service claiming it — split, intermittent traffic, which
+      # is harder to diagnose than a clean failure.
+      unless reachable
+        raise Error, "could not read the current routes from kamal-proxy, so the service key for " \
+                     "#{domain} is unknown; refusing to publish and risk a duplicate route"
+      end
+
+      derived_service(domain) # proxy answered and no route owns this host yet
     end
 
     def derived_service(domain)
@@ -59,9 +73,10 @@ class Edge
     # Its output carries ANSI colour and a "Service / Host / Target ..." header
     # row, both of which must be stripped or the header parses as a route.
     # Best-effort: any failure falls back to the derived key.
+    # Returns [service_or_nil, proxy_was_reachable].
     def live_service_for(domain)
       res = @ssh.execute_with_status("docker exec #{PROXY_CONTAINER} kamal-proxy ls 2>/dev/null")
-      return nil unless res[:success]
+      return [ nil, false ] unless res[:success]
 
       wanted = domain.to_s.downcase
       res[:output].to_s.gsub(/\e\[[0-9;]*m/, "").lines.each do |line|
@@ -69,11 +84,11 @@ class Edge
 
         service, host = line.strip.split(/\s+/).first(2)
         next if service.blank? || host.blank?
-        return service if host.downcase == wanted
+        return [ service, true ] if host.downcase == wanted
       end
-      nil
+      [ nil, true ]
     rescue StandardError
-      nil
+      [ nil, false ]
     end
 
     def esc(str) = Shellwords.escape(str.to_s)

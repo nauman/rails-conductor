@@ -30,7 +30,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
       @last_output =
         if cmd.include?("label=service=")     then "oldcid999"
         elsif cmd.include?("docker inspect")  then "172.18.0.5 "
-        elsif cmd.include?("ss -ltn")         then "FREE"
+        elsif cmd.include?("{{.Ports}}")      then "MAYBE_FREE"
         elsif cmd.include?("curl -sf")        then (@healthy ? "healthy" : "")
         elsif cmd.include?("docker ps -q -f name=app-") then "newcid111"
         elsif cmd.include?("docker ps -q")    then "oldcid999"
@@ -181,7 +181,10 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     ssh = FakeSsh.new
     @deployer.stub(:ssh, ssh) { @deployer.send(:candidate_host_port) }
 
-    assert ssh.commands.any? { |c| c.include?("ss -ltn") }, "must check the port is free"
+    assert ssh.commands.any? { |c| c.include?("{{.Ports}}") },
+           "must ask docker whether the port is taken"
+    assert_not ssh.commands.any? { |c| c.include?("ss -ltn") },
+               "`ss ... || echo FREE` reported a MISSING ss as free — exactly backwards"
   end
 
   test "the previous container is resolved by service label, not a fixed name" do

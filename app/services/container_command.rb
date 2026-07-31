@@ -23,13 +23,21 @@ class ContainerCommand
     @app = app
   end
 
-  # `docker <action>` against the app's container, resolved by form.
+  # `docker <action>` against the app's container, resolved by LABEL for every
+  # container form.
+  #
+  # A fixed name is no longer reliable for docker apps either: a zero-downtime
+  # deploy runs the app as `app-<id>-r<rev>-<sha>`, so `docker stop
+  # conductor-<slug>` matches nothing and "succeeds" against no container. Every
+  # container Conductor starts now carries `service=<resource_key>` (ADR 0003),
+  # so one label lookup covers docker, kamal, and anything renamed — with the
+  # legacy fixed name kept as a fallback for containers deployed before this.
   def build(action)
     return native(action) if @app.native?
-    return %(docker #{action} #{esc(@app.container_name)}) unless @app.kamal?
 
     # `ps -a` so a stopped container is still found (restart must reach it).
     %(cid=""; for s in #{candidates}; do cid=$(docker ps -aq -f "label=service=$s" | head -n1); [ -n "$cid" ] && break; done; ) +
+      %(if [ -z "$cid" ]; then cid=$(docker ps -aq -f "name=^#{esc_name(@app.container_name)}$" | head -n1); fi; ) +
       %(if [ -n "$cid" ]; then docker #{action} "$cid"; else echo #{NO_CONTAINER}; fi)
   end
 
@@ -37,7 +45,13 @@ class ContainerCommand
 
   def native(action) = %(systemctl --user #{action} #{esc(@app.service_name)})
 
-  def candidates = @app.kamal_service_candidates.map { |c| esc(c) }.join(" ")
+  # The stable resource key first (what Conductor labels with), then the Kamal
+  # service variants, for containers Kamal itself created.
+  def candidates
+    ([ @app.resource_key ] + @app.kamal_service_candidates).uniq.map { |c| esc(c) }.join(" ")
+  end
+
+  def esc_name(name) = name.to_s.gsub(/[^a-zA-Z0-9_.-]/, "")
 
   def esc(str) = Shellwords.escape(str.to_s)
 end

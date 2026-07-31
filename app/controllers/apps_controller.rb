@@ -42,7 +42,11 @@ class AppsController < ApplicationController
   end
 
   def update
-    if @app.update(app_params)
+    # Splits form fields (server, deploy method, DB shape) from ordinary config:
+    # the former must bump infra_revision and record history (ADR 0004), and
+    # App's guard refuses them otherwise — so a bare update would reject a
+    # perfectly valid "move this app to another box".
+    if AppFormChange.update(@app, app_params, user: current_user)
       redirect_to @app, notice: "App updated successfully."
     else
       @servers = current_organization.servers.with_ssh.order(:name)
