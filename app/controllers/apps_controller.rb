@@ -181,14 +181,18 @@ class AppsController < ApplicationController
       return redirect_to @app, alert: "No server configured or SSH not available."
     end
 
-    ssh = SshConnection.new(@app.server)
-    command = @app.native? ? "systemctl --user stop #{@app.service_name}" : "docker stop #{@app.container_name}"
+    # execute_with_status, not execute: the latter doesn't inspect the remote
+    # exit status, so a command that failed and printed to stderr still read as
+    # success and the app was marked "stopped" while it kept running.
+    result = SshConnection.new(@app.server).execute_with_status(ContainerCommand.stop(@app))
 
-    if ssh.execute(command)
+    if result[:output].to_s.include?(ContainerCommand::NO_CONTAINER)
+      redirect_to @app, alert: "No running container found for this app — nothing to stop."
+    elsif result[:success]
       @app.update!(status: "stopped")
       redirect_to @app, notice: "App stopped."
     else
-      redirect_to @app, alert: "Failed to stop app: #{ssh.error}"
+      redirect_to @app, alert: "Failed to stop app: #{result[:stderr].presence || result[:output]}"
     end
   end
 

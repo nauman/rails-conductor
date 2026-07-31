@@ -39,17 +39,10 @@ class RestartAppJob < ApplicationJob
     SyncContainerStatusJob.perform_later(app.id)
   end
 
-  # A plain docker app runs as conductor-<slug>. A Kamal app does NOT — its
-  # container is <service>-<role>-<version> and is located by the `service` label
-  # (the same lookup logs/status use), so restart by resolving the live container
-  # id (including a stopped one, hence `ps -a`) rather than a fixed name that
-  # would never match. Emits NO_CONTAINER when nothing matches.
+  # Shared with the UI's Stop button — see ContainerCommand for why a Kamal
+  # app cannot be reached by a fixed container name.
   def restart_command(app)
-    return "docker restart #{Shellwords.escape(app.container_name)}" unless app.kamal?
-
-    cands = app.kamal_service_candidates.map { |c| Shellwords.escape(c) }.join(" ")
-    %(cid=""; for s in #{cands}; do cid=$(docker ps -aq -f "label=service=$s" | head -n1); [ -n "$cid" ] && break; done; ) +
-      %(if [ -n "$cid" ]; then docker restart "$cid"; else echo NO_CONTAINER; fi)
+    ContainerCommand.restart(app)
   end
 
   def restart_native(app, ssh)

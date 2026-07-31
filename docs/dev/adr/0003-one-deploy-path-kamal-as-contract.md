@@ -1,0 +1,122 @@
+# 0003. One deploy path; Kamal as artifact contract and ops CLI, not deploy driver
+
+Date: 2026-07-31
+
+## Status
+
+**Accepted (2026-07-31).** Supersedes the framing of ADR 0001 (which assumed
+Kamal apps are a distinct class) and settles the question ADR 0002 left open
+after its rejection: how the fleet gets one deploy story without rebuilding
+kamal-proxy's handoff.
+
+## Context
+
+Conductor has three deploy methods (`kamal`, `docker`, `native`) and two edges
+(`kamal_proxy`, `caddy`), modelled as if deploy method implied edge. It does not.
+Every combination is real, and the mismatch produced two production incidents in
+one day:
+
+- A **stranded kamal deploy lock** blocked three consecutive CI deploys.
+  Conductor was deploying itself with Kamal from inside the container Kamal was
+  replacing; the process died before releasing the lock
+  (`docs/learnings/deploy-lock-stranded-by-self-deploy.md`).
+- A **502 on Starrrs**, a *docker*-deployed app behind *kamal-proxy*, because the
+  docker path never repointed the proxy at the new container — under a green
+  "succeeded" (`docs/learnings/form-changes-leave-residue.md`).
+
+Both are the same root problem: **Kamal was treated as a deploy *mode* rather
+than as a set of conventions**, so Kamal assumptions leaked into non-Kamal paths
+(45 files under `app/`, 51 production Ruby files) while non-Kamal paths lacked
+the lifecycle Kamal provides.
+
+The obvious responses were both wrong:
+
+- *Remove Kamal* — loses the release transaction (candidate → health → swap →
+  verify → drain), rollback artifacts, and the developer's ability to reach a
+  container, its logs, and a console. ADR 0002 was rejected for exactly this.
+- *Keep Kamal as the capable path* — leaves two deploy engines, two edges, and a
+  permanent "which form is this app in?" question on every feature.
+
+## Decision
+
+**One deploy path. Kamal is retained as an artifact contract and an operations
+CLI — not as the thing that performs deploys.**
+
+Kamal is two separable things, and only the first is fragile:
+
+| | What it is | Decision |
+|---|---|---|
+| Deploy driver | build → push → SSH → cutover → **global lock** | **Not used by Conductor.** Source of both incidents. |
+| Artifact convention + ops CLI | SHA-tagged images, container labels, `rollback` / `logs` / `exec` / `console` | **Retained.** This is the value. |
+
+`kamal rollback <version>` boots the image tagged `<version>` on the host.
+`kamal app logs` / `exec` / `console` locate containers by their `service`
+label. **None of these ask who performed the deploy** — they act on artifacts.
+So Conductor can own one deploy path and still hand developers the whole Kamal
+ops surface, provided the artifacts follow the conventions.
+
+### The artifact contract
+
+Conductor's deploy path MUST produce:
+
+1. **Immutable, SHA-tagged images** — `<registry>/<image>:<sha>`, not `:latest`.
+2. **Kamal-compatible container labels** — `service`, `role`, `destination`.
+3. **Retained prior images**, so a rollback target exists. No blanket prune.
+4. **A real `config/deploy.yml`** in the repo, for every deploy method — so the
+   Kamal CLI can resolve host/service/registry. This is ADR 0001, widened from
+   "Kamal apps" to "all apps".
+
+### The edge is an independent axis
+
+Proxy choice is **configuration, not a consequence of deploy method**. A server
+is fronted by kamal-proxy or Caddy; the deploy path publishes through the
+`Edge.for(server)` abstraction either way. An edge that targets a **container
+id** (kamal-proxy) must be republished on every container replacement; one that
+targets a stable **host:port** (Caddy) needs nothing.
+
+## Consequences
+
+### Gained
+
+- One deploy path to reason about, test, and harden — instead of three with
+  uneven capability.
+- Rollback, logs, exec and console become available to **every** app, including
+  docker and native ones, without Conductor implementing them.
+- The self-deploy inversion disappears: Conductor ships from CI with the same
+  path and no global lock to strand.
+- ADR 0001 becomes more valuable, not less — the self-describing repo is what
+  makes the ops CLI work against a Conductor-performed deploy.
+
+### Costs and risks
+
+- **Conductor owns the release transaction.** This is the real price, and it is
+  the objection that rejected ADR 0002. Candidate → health → swap → verify →
+  drain must be built and trusted before any app depends on it.
+- **Kamal's labels are not a documented public API.** Depending on them is a
+  version-compatibility bet. Pin the Kamal version and test the contract against
+  the installed CLI; a label rename is a silent break.
+- **`kamal rollback` behaviour must be verified** — if it acquires the deploy
+  lock or mutates the proxy, rollback re-enters the failure mode this ADR
+  removes from the deploy path. Confirm before relying on it.
+- Until the contract lands, docker apps have **no rollback at all** — the image
+  is pruned seconds after it is built.
+
+## Implementation status
+
+| Requirement | Status | Location |
+|---|---|---|
+| SHA-tagged images | ❌ `:latest` only | `app/services/app_deployer.rb:141` |
+| Kamal container labels | ❌ none set | `app/services/app_deployer.rb:152` |
+| Retain prior images | ❌ `docker image prune -f` | `app/services/app_deployer.rb:245` |
+| `deploy.yml` for all methods | ⚠️ Kamal apps only | `app/services/kamal_config.rb` |
+| Edge republished on deploy | ✅ shipped | `app/services/app_deployer.rb` |
+| Candidate → health → swap → drain | ❌ still stop-before-start | `app/services/app_deployer.rb:144` |
+| Conductor self-deploys via CI | ⚠️ CI runs, but still calls `bin/kamal` | `.github/workflows/deploy.yml` |
+
+## Related
+
+- ADR 0001 — self-describing Kamal deploys (widened by this decision)
+- ADR 0002 — Caddy as standard edge (**Rejected**; kamal-proxy stays an edge option)
+- `docs/learnings/form-changes-leave-residue.md`
+- `docs/learnings/deploy-lock-stranded-by-self-deploy.md`
+- `docs/infra/edge-and-deploy-forms.md`

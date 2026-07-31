@@ -86,6 +86,15 @@ changes. The old form leaves residue that works until something touches it.
 - [ ] **Deploy once, verify publicly** — not just the container. A host-header
       HTTPS probe is the only check that proves the edge agrees with the app.
 
+## Where this is heading
+
+The manual checklist above exists because identity is currently *derived* from
+form (a kamal route is keyed `<service>-<role>`, a docker container by slug), so
+a form change strands the name. ADR 0004 replaces that with an assigned, stable
+`app-<id>` key plus an `infra_revision`, at which point most of this checklist
+becomes an automatic comparison: any artifact whose revision isn't current is
+residue. Until then, run the checklist by hand.
+
 ## Known gap
 
 Conductor does **not** detect residue. Nothing compares an app's declared form

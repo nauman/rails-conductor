@@ -93,8 +93,23 @@ Proposed, in order:
    A host-header HTTPS probe against the origin would have caught this at
    deploy time instead of in production.
 
+## The direction this produced
+
+The deeper cause is that **identity was derived from form**: `starrrs-web` encodes
+"kamal service + role", so changing form stranded the name. Two ADRs came out of
+this incident:
+
+- **ADR 0003** — one deploy path; Kamal retained as an artifact contract and ops
+  CLI rather than the deploy driver.
+- **ADR 0004** — identity is *assigned, never derived*: a stable `app-<id>`
+  resource key plus an `infra_revision` versioning infrastructure shape
+  separately from code. Residue then becomes detectable by arithmetic rather
+  than by guesswork.
+
 ## Related
 
+- `docs/dev/adr/0003-one-deploy-path-kamal-as-contract.md`
+- `docs/dev/adr/0004-stable-resource-ids-and-infra-revisions.md`
 - `docs/learnings/deploy-lock-stranded-by-self-deploy.md` — the other kamal-form
   failure found the same day
 - `docs/dev/adr/0002-caddy-standard-edge.md` — the standing decision to move the
