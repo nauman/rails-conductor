@@ -44,13 +44,25 @@ class Deployment < ApplicationRecord
     release_version.presence || commit_sha.presence
   end
 
-  # Can the app be rolled back TO this deployment's release? It must have shipped
-  # a version and not be the release currently running (the latest success).
-  # Backend support (Kamal-only for now) is gated by the caller.
+  # THE authoritative rollback predicate. Every surface must use this — UI,
+  # controller, MCP tool, retention — because scattering the rule is how the
+  # runtime check ended up applied in one place and skipped in three.
+  #
+  # A release is a valid target when it shipped a version, is not the release
+  # currently running, AND was shipped under the app's current form. That last
+  # part is not pedantry: a Kamal-era version names no local docker image, so
+  # offering it produces a rollback that cannot succeed. A nil deploy_method
+  # means "unknown runtime" and is excluded — a smaller honest set beats a
+  # larger wrong one.
   def rollback_target?
     return false unless succeeded? && target_version.present?
+    return false unless compatible_runtime?
 
     app.deployments.successful.order(:created_at).last&.id != id
+  end
+
+  def compatible_runtime?
+    deploy_method.present? && deploy_method == app.deploy_method
   end
 
   # The parsed preflight blockers captured when this deploy was blocked or forced.

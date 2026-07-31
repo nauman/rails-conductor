@@ -12,16 +12,33 @@ class AddRuntimeToDeployments < ActiveRecord::Migration[8.0]
     add_column :deployments, :deploy_method, :string
     add_column :deployments, :infra_revision, :integer
 
-    # Backfill from the app's CURRENT form. Imperfect for apps that have changed
-    # form — but strictly better than nil, which no scope can reason about, and
-    # the alternative is inventing history we do not have.
-    execute(<<~SQL)
-      UPDATE deployments d
-      SET deploy_method = a.deploy_method,
-          infra_revision = a.infra_revision
-      FROM apps a
-      WHERE d.app_id = a.id AND d.deploy_method IS NULL
-    SQL
+    # DELIBERATELY NOT BACKFILLED from the app's current form.
+    #
+    # Stamping every historical row with the app's CURRENT runtime destroys
+    # exactly the distinction this column exists to make: for an app moved
+    # kamal → docker, every Kamal-era release would be labelled "docker" and
+    # would still be offered as a rollback target naming an image that does not
+    # exist locally. NULL means "unknown runtime", and rollbackable_for excludes
+    # it — a smaller, honest set beats a larger, wrong one.
+    #
+    # Reconstruct only where the evidence is unambiguous: an app that has never
+    # changed form (single infra revision, no recorded deploy_method change) has
+    # always been in its current form, so those rows can be stamped safely.
+    say_with_time "stamping deployments for apps that have never changed form" do
+      execute(<<~SQL)
+        UPDATE deployments d
+        SET deploy_method = a.deploy_method,
+            infra_revision = a.infra_revision
+        FROM apps a
+        WHERE d.app_id = a.id
+          AND d.deploy_method IS NULL
+          AND a.infra_revision = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM infra_revisions r
+            WHERE r.app_id = a.id AND r.changes_made ? 'deploy_method'
+          )
+      SQL
+    end
 
     add_index :deployments, [ :app_id, :deploy_method, :status ]
   end

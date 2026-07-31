@@ -1,3 +1,5 @@
+require "shellwords"
+
 class NativeDeployer
   attr_reader :app, :deployment, :ssh, :error
 
@@ -72,7 +74,8 @@ class NativeDeployer
 
     6.times do |i|
       sleep 10
-      result = ssh.execute("curl -sf #{url} > /dev/null && echo 'healthy'")
+      # health_check_path is operator-editable and lands in a remote shell.
+      result = ssh.execute("curl -sf #{Shellwords.escape(url)} > /dev/null && echo 'healthy'")
       if ssh.success? && ssh.output&.include?("healthy")
         log "Health check passed!"
         return true

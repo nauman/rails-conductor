@@ -27,7 +27,7 @@ class DeploymentsController < ApplicationController
     version = @deployment.target_version
     rollback = app.deployments.create!(
       user: current_user, server: app.server,
-      kind: "rollback", commit_sha: version, release_version: version
+      kind: "rollback", deploy_method: app.deploy_method, infra_revision: app.infra_revision, commit_sha: version, release_version: version
     )
     RollbackAppJob.perform_later(rollback.id, version)
     redirect_to app, notice: "Rolling back #{app.name} to #{version.first(12)} — watch the deploy log."

@@ -36,7 +36,7 @@ class RollbackAppTool
     version = target.target_version
     rollback = app.deployments.create!(
       user: @user, server: app.server,
-      kind: "rollback", commit_sha: version, release_version: version
+      kind: "rollback", deploy_method: app.deploy_method, infra_revision: app.infra_revision, commit_sha: version, release_version: version
     )
     RollbackAppJob.perform_later(rollback.id, version)
 

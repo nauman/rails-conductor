@@ -58,6 +58,9 @@ class WebhooksController < ActionController::Base
 
     deployment = app.deployments.create!(
       status: status, kind: "ci",
+      # Stamp the form this shipped under, or the row is born "unknown runtime"
+      # and can never be a rollback target.
+      deploy_method: app.deploy_method, infra_revision: app.infra_revision,
       commit_sha: params[:commit_sha].presence,
       release_version: params[:release_version].presence,
       server: app.server, completed_at: Time.current,

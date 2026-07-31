@@ -138,6 +138,21 @@ class App < ApplicationRecord
                       message: "may contain only lowercase letters, digits, dots, dashes and underscores" }
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
+
+  # These all reach REMOTE SHELL COMMANDS on fleet servers (git clone, docker
+  # build, curl). Deploy-path interpolation escapes them, but validating the
+  # shape here means a hostile value never reaches storage in the first place —
+  # and escaping alone is one forgotten interpolation away from failing.
+  validates :branch, format: { with: /\A[\w.\-\/]+\z/, message: "may contain only letters, digits, dot, dash, underscore and slash" },
+            allow_blank: true
+  validates :repository_url, format: { with: %r{\A(https://|git@)[\w.@:/~\-]+\z}, message: "must be an https:// or git@ URL" },
+            allow_blank: true
+  validates :dockerfile_path, format: { with: %r{\A[\w.\-/]+\z}, message: "may contain only letters, digits, dot, dash, underscore and slash" },
+            allow_blank: true
+  validates :image_name, format: { with: %r{\A[a-z0-9][a-z0-9._\-/]*\z}, message: "may contain only lowercase letters, digits, dot, dash, underscore and slash" },
+            allow_blank: true
+  validates :health_check_path, format: { with: %r{\A/[\w.\-/]*\z}, message: "must be a path starting with /" },
+            allow_blank: true
   validates :database_mode, inclusion: { in: DATABASE_MODES }
   validates :database_placement, inclusion: { in: DATABASE_PLACEMENTS }
   validates :intent, inclusion: { in: INTENTS }

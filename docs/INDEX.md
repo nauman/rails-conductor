@@ -22,6 +22,7 @@
 | Agents | `docs/agents/deploy.agent.md` | Deploy agent: GHCR CI backbone, kamal-proxy edge, `localvault` secrets, `/version` verify |
 | Threads | `docs/threads/` | Living agent↔agent conversations (`<topic>.thread.md`); convention in `docs/dev/THREADS.md` |
 | Learnings | `docs/learnings/` | Hard-won manual-ops learnings → Conductor feature blueprints (e.g. multi-app-hosting) |
+| Code learnings | `docs/code_learnings/INDEX.md` | Durable project operating rules, including Kuickr-first visual review |
 | Infrastructure | `docs/infra/INDEX.md` | VM/Kamal/Caddy/R2/Active Storage ops docs |
 | Development | `docs/dev/INDEX.md` | Roadmap, changelog, features, and spec method |
 | Development | `docs/dev/CONDUCTOR-DEV-LOOP-PROMPT.md` | Auditable loop prompt for completing one Conductor roadmap slice at a time |

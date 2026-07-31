@@ -119,7 +119,7 @@ class AppDeployer
   end
 
   def clone_or_pull_repo
-    return false unless run("mkdir -p #{app_dir}")
+    return false unless run("mkdir -p #{esc(app_dir)}")
 
     # Deploy the exact commit recorded on the deployment when one was given (e.g.
     # a webhook's `after` sha) so the audit trail matches what actually shipped —
@@ -128,16 +128,16 @@ class AppDeployer
 
     # Probe existence with a command that always exits 0 (a missing checkout is
     # not a failure), then branch on the output.
-    run("test -d #{app_dir}/.git && echo exists || echo missing")
+    run("test -d #{esc(app_dir)}/.git && echo exists || echo missing")
     ok =
       if ssh.output.to_s.include?("exists")
-        run("cd #{app_dir} && git fetch origin && git reset --hard #{target}")
+        run("cd #{esc(app_dir)} && git fetch origin && git reset --hard #{esc(target)}")
       else
         # Return the CLONE's real result — never leak the `nil` from a trailing
         # `... if commit_sha.present?` on a first deploy (commit_sha is null then),
         # which is what falsely failed the step even though the clone succeeded.
-        run("rm -rf #{app_dir} && git clone --branch #{app.branch} #{app.repository_url} #{app_dir}") &&
-          (deployment.commit_sha.present? ? run("cd #{app_dir} && git reset --hard #{target}") : true)
+        run("rm -rf #{esc(app_dir)} && git clone --branch #{esc(app.branch)} #{esc(app.repository_url)} #{esc(app_dir)}") &&
+          (deployment.commit_sha.present? ? run("cd #{esc(app_dir)} && git reset --hard #{esc(target)}") : true)
       end
 
     record_shipped_sha if ok
@@ -149,7 +149,7 @@ class AppDeployer
   def record_shipped_sha
     return if deployment.commit_sha.present?
 
-    run("cd #{app_dir} && git rev-parse HEAD")
+    run("cd #{esc(app_dir)} && git rev-parse HEAD")
     sha = ssh.output.to_s[/\b[0-9a-f]{40}\b/]
     deployment.update!(commit_sha: sha) if sha
   end
@@ -163,9 +163,9 @@ class AppDeployer
     deployment.mark_deploying!
 
     dockerfile = app.dockerfile_path || "Dockerfile"
-    tags = [ "-t #{image_ref(release_tag)}" ]
-    tags << "-t #{app.image_name}:latest"
-    run("cd #{app_dir} && docker build #{tags.join(' ')} -f #{dockerfile} .")
+    tags = [ "-t #{esc(image_ref(release_tag))}" ]
+    tags << "-t #{esc("#{app.image_name}:latest")}"
+    run("cd #{esc(app_dir)} && docker build #{tags.join(' ')} -f #{esc(dockerfile)} .")
   end
 
   # The immutable tag for this release. Falls back to the deployment id when no
@@ -175,6 +175,12 @@ class AppDeployer
   end
 
   def image_ref(tag) = "#{app.image_name}:#{tag}"
+
+  # Every value below is operator-editable and reaches a REMOTE SHELL. slug is
+  # format-validated at the model, but repository_url, branch, dockerfile_path,
+  # image_name, health_check_path and the docker network are not — so escaping
+  # here is the boundary, not a nicety.
+  def esc(value) = Shellwords.escape(value.to_s)
 
   # Stop whatever is actually serving, resolved by label — not just the fixed
   # name. An app that previously deployed zero-downtime runs as
@@ -211,12 +217,12 @@ class AppDeployer
     # Join the shared docker network so a container-name DB host (conductor-postgres)
     # resolves — without it the app lands on the default bridge and crash-loops on
     # `could not translate host name`.
-    prefix << "--network #{app.deploy_network}" if app.deploy_network.present?
+    prefix << "--network #{esc(app.deploy_network)}" if app.deploy_network.present?
     suffix = [
       "-e PORT=#{port}",
       "-e RAILS_ENV=production",
       "-e RAILS_LOG_TO_STDOUT=true",
-      image_ref(release_tag)
+      esc(image_ref(release_tag))
     ]
     docker_run = (prefix + [ app.env_variables.map(&:to_docker_env).join(" ") ] + suffix).join(" ")
     # Redact secret env values in the logged/broadcast copy.
@@ -445,7 +451,7 @@ class AppDeployer
 
     6.times do |i|
       sleep 10
-      if run("curl -sf #{url} > /dev/null && echo 'healthy'") && ssh.output&.include?("healthy")
+      if run("curl -sf #{esc(url)} > /dev/null && echo 'healthy'") && ssh.output&.include?("healthy")
         log "Health check passed!"
         return true
       end
