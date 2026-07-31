@@ -82,13 +82,18 @@ class DockerArtifactContractTest < ActiveSupport::TestCase
   # candidate build also produces a tag, and counting those would evict the
   # known-good rollback targets the retention number promises.
   test "cleanup keeps the tags of recent SUCCESSFUL releases" do
-    older = @app.deployments.create!(status: "succeeded", release_version: "aaa111aaa111")
-    @app.deployments.create!(status: "failed", release_version: "bbb222bbb222")
+    older = @app.deployments.create!(status: "succeeded", release_version: "aaa111aaa111",
+                                     deploy_method: "docker")
+    @app.deployments.create!(status: "failed", release_version: "bbb222bbb222", deploy_method: "docker")
+    # A release from a previous runtime names no local docker image, so it must
+    # not consume a retention slot the docker app needs.
+    @app.deployments.create!(status: "succeeded", release_version: "ccc333ccc333", deploy_method: "kamal")
 
     cleanup = commands_from(:cleanup).join(" | ")
 
     assert_includes cleanup, "'^#{older.release_version}$'", "a successful release must be kept"
     assert_not_includes cleanup, "bbb222bbb222", "a failed build is not a rollback target"
+    assert_not_includes cleanup, "ccc333ccc333", "a Kamal-era release is not a docker rollback target"
     assert_includes cleanup, "'^abc1234def56$'", "the release being deployed must be kept"
     assert_includes cleanup, "grep -v '^latest$'", "never removes the :latest pointer"
   end

@@ -60,7 +60,9 @@ class RollbackAppTool
     if deployment_id.present?
       app.deployments.find_by(id: deployment_id)
     else
-      app.deployments.rollbackable.offset(1).first
+      # Scoped to the app's current runtime — a release from a previous form
+      # names an artifact that no longer exists.
+      app.deployments.rollbackable_for(app).offset(1).first
     end
   end
 end

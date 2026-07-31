@@ -54,10 +54,15 @@ class EdgeDetector
     server.apps.find_each do |app|
       next unless app.ever_deployed?
 
-      app.transaction do
-        app.update_column(:infra_revision, app.infra_revision + 1)
+      # Lock the row: a concurrent AppFormChange or a second detection run would
+      # otherwise compute the same next revision, and the unique index would
+      # roll one of them back — losing that history silently.
+      app.with_lock do
+        app.reload
+        next_revision = app.infra_revision + 1
+        app.update_column(:infra_revision, next_revision)
         app.infra_revisions.create!(
-          revision: app.infra_revision,
+          revision: next_revision,
           changes_made: { "server_edge_type" => [ from, to ] },
           reason: "edge on #{server.name} changed #{from} → #{to}"
         )

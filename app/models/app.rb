@@ -321,12 +321,16 @@ class App < ApplicationRecord
       # Persist the refused attempt (esp. a webhook auto-deploy) so the intent is
       # durable + auditable instead of silently dropped. Not an in_progress state.
       blocked = deployments.create!(user: user, commit_sha: commit_sha,
+                                    deploy_method: deploy_method, infra_revision: infra_revision,
                                     status: "blocked", preflight_snapshot: blockers_json)
       return [ blocked, :blocked, preflight ]
     end
 
     # Record a forced override (which blockers it overrode) for the audit trail.
+    # Stamp the FORM this ships under, so a later rollback can tell whether the
+    # release is still a valid target for the app as it is now.
     deployment = deployments.create!(user: user, commit_sha: commit_sha,
+                                     deploy_method: deploy_method, infra_revision: infra_revision,
                                      forced: force && preflight.blocked?,
                                      preflight_snapshot: force ? blockers_json : nil)
     DeployAppJob.perform_later(deployment.id)
@@ -415,8 +419,18 @@ class App < ApplicationRecord
   # deploy started running them as app-<id>-r<rev>-<sha> (ADR 0003) — `docker
   # logs conductor-<slug>` would simply find nothing. Every container Conductor
   # starts carries service=<resource_key>, so one lookup covers every form.
-  def resolve_container_shell(status: "running")
-    cands = ([ resource_key ] + kamal_service_candidates).uniq.map { |c| Shellwords.escape(c) }.join(" ")
+  # `strict:` decides whether PREVIOUS-FORM containers are acceptable answers.
+  #
+  #   strict: true  (default) — only this app's CURRENT form. Used where the
+  #     command runs INSIDE the container: logs, exec, cron, the runner. Falling
+  #     through to a Kamal-era container there means executing against the
+  #     previous release — the wrong code, silently, with the right exit status.
+  #   strict: false — anything wearing this app's identity, current or not. Used
+  #     where the goal is to ACT ON whatever is there: stop, restart, cleanup.
+  def resolve_container_shell(status: "running", strict: true)
+    keys = [ resource_key ]
+    keys += kamal_service_candidates if kamal? || !strict
+    cands = keys.uniq.map { |c| Shellwords.escape(c) }.join(" ")
     status_flag = status.present? ? %( -f status=#{status}) : ""
     %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s"#{status_flag} | head -n1); [ -n "$cid" ] && break; done; ) +
       %(if [ -z "$cid" ]; then cid=$(docker ps -q -f "name=^/#{Shellwords.escape(container_name)}$"#{status_flag} | head -n1); fi; )

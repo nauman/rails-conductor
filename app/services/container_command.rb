@@ -47,6 +47,9 @@ class ContainerCommand
 
   # The stable resource key first (what Conductor labels with), then the Kamal
   # service variants, for containers Kamal itself created.
+  # Deliberately BROAD (strict: false in App's terms): stopping or restarting
+  # should reach a container left over from a previous form too — that is often
+  # exactly what an operator is trying to do.
   def candidates
     ([ @app.resource_key ] + @app.kamal_service_candidates).uniq.map { |c| esc(c) }.join(" ")
   end

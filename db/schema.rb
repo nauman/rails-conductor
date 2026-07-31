@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_31_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_31_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -275,7 +275,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_000002) do
     t.string "commit_sha"
     t.datetime "completed_at"
     t.datetime "created_at", null: false
+    t.string "deploy_method"
     t.boolean "forced", default: false, null: false
+    t.integer "infra_revision"
     t.string "kind", default: "deploy", null: false
     t.text "log"
     t.text "preflight_snapshot"
@@ -286,6 +288,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_000002) do
     t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.index ["app_id", "deploy_method", "status"], name: "index_deployments_on_app_id_and_deploy_method_and_status"
     t.index ["app_id"], name: "idx_one_active_deploy_per_app", unique: true, where: "((status)::text = ANY ((ARRAY['pending'::character varying, 'building'::character varying, 'deploying'::character varying])::text[]))"
     t.index ["app_id"], name: "index_deployments_on_app_id"
     t.index ["script_id"], name: "index_deployments_on_script_id"

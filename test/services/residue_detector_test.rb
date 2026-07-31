@@ -96,6 +96,29 @@ class ResidueDetectorTest < ActiveSupport::TestCase
     assert_empty found.select { |f| f.kind == "stale_revision_container" }
   end
 
+  # kamal-proxy supports path routing, so several services can legitimately serve
+  # one host at different prefixes.
+  test "path-routed services on one host are not duplicates" do
+    found = findings(
+      "kamal-proxy ls" => "Service   Host         Path      Target\n" \
+                          "api-web   starrrs.com  /api      aaa:3000\n" \
+                          "site-web  starrrs.com  /         bbb:3000\n"
+    )
+
+    assert_empty found.select { |f| f.kind == "duplicate_edge_route" },
+                 "different paths are not a conflict"
+  end
+
+  test "two services on the SAME host and path are still flagged" do
+    found = findings(
+      "kamal-proxy ls" => "Service   Host         Path  Target\n" \
+                          "old-web   starrrs.com  /     aaa:3000\n" \
+                          "new-web   starrrs.com  /     bbb:3000\n"
+    )
+
+    assert found.find { |f| f.kind == "duplicate_edge_route" }
+  end
+
   # kamal → docker leaves <service>-web-<version> behind.
   test "flags Kamal-era containers on an app that no longer deploys via Kamal" do
     found = findings("label=service=starrrs\" --format" => "starrrs-web-abc123|running")

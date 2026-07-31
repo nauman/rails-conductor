@@ -26,6 +26,13 @@ class Deployment < ApplicationRecord
   # can boot again on the host), newest first.
   scope :rollbackable, -> { successful.where.not(release_version: [ nil, "" ]).recent }
 
+  # Rollback targets valid for the app AS IT IS NOW. A release shipped under a
+  # different runtime is not a target: a Kamal-era version names no local docker
+  # image, and offering it would fail at best and mislead at worst. Rows from
+  # before this column existed are backfilled, so nil means "unknown" and is
+  # excluded rather than assumed compatible.
+  scope :rollbackable_for, ->(app) { rollbackable.where(deploy_method: app.deploy_method) }
+
   def rollback?
     kind == "rollback"
   end

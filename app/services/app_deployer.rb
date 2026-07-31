@@ -182,7 +182,7 @@ class AppDeployer
   # domain, edge or network. Stopping only conductor-<slug> would then leave the
   # old release running: two releases at once, or a port conflict on start.
   def stop_old_container
-    run(app.resolve_container_shell(status: nil) +
+    run(app.resolve_container_shell(status: nil, strict: false) +
         %([ -n "$cid" ] && docker stop "$cid" 2>/dev/null; [ -n "$cid" ] && docker rm "$cid" 2>/dev/null; true))
     # And the fixed name, for anything the label lookup could not see.
     run("docker stop #{Shellwords.escape(app.container_name)} 2>/dev/null || true")
@@ -535,7 +535,9 @@ class AppDeployer
     # the newest images: every failed candidate build also produces a tag, so a
     # run of failures would otherwise evict the known-good rollback targets the
     # retention count promises.
-    keep = app.deployments.rollbackable.limit(RETAINED_RELEASES).filter_map(&:release_version)
+    # Scoped to this runtime: a Kamal-era release consuming a docker app's slots
+    # would evict genuinely usable rollback targets.
+    keep = app.deployments.rollbackable_for(app).limit(RETAINED_RELEASES).filter_map(&:release_version)
     keep = (keep + [ release_tag ]).uniq.map { |t| Shellwords.escape(t) }
     keep_pattern = keep.map { |t| "-e '^#{t}$'" }.join(" ")
 
