@@ -17,7 +17,7 @@ class ContainerCommandTest < ActiveSupport::TestCase
     cmd = ContainerCommand.stop(@app)
 
     assert_includes cmd, "for s in app-#{@app.id}", "the stable key must be the first candidate"
-    assert_includes cmd, 'label=service=$s'
+    assert_includes cmd, "label=service=\$s"
     assert_includes cmd, "name=^conductor-shop$", "legacy containers must still be reachable"
     assert_includes cmd, 'docker stop "$cid"'
     assert cmd.index("label=service=$s") < cmd.index("name=^conductor-shop$"),
