@@ -107,13 +107,13 @@ class DecommissionPlanTest < ActiveSupport::TestCase
 
   test "discovers the dedicated DB container + volume on the box" do
     ssh = FakeSsh.new(
-      "--filter name=appone-db"          => "appone-db\tUp 2 hours\n",
-      "--filter name=appone-db-data"     => "appone-db-data\n"
+      "--filter name=#{@app.dedicated_db_container_name}"          => "#{@app.dedicated_db_container_name}\tUp 2 hours\n",
+      "--filter name=#{@app.dedicated_db_container_name}-data"     => "#{@app.dedicated_db_container_name}-data\n"
     )
     dedicated = plan(ssh: ssh).dedicated_db
 
     assert dedicated[:present]
-    assert_equal "appone-db", dedicated[:container_name]
+    assert_equal "#{@app.dedicated_db_container_name}", dedicated[:container_name]
     assert dedicated[:volume_present]
   end
 

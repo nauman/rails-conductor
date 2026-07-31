@@ -34,7 +34,7 @@ class AppTransferPlanTest < ActiveSupport::TestCase
   test "a dedicated app plans a container provision + cold replicate" do
     detail = plan.steps.find { |s| s[:phase] == "database" }[:detail]
     assert_match(/dedicated/i, detail)
-    assert_match(/appone-db/, detail)
+    assert_match(/#{@app.dedicated_db_container_name}/, detail)
     assert_match(/backup|restore|cold/i, detail)
   end
 

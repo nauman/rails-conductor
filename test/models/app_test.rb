@@ -76,7 +76,7 @@ class AppTest < ActiveSupport::TestCase
   test "log_tail_command for a native app tails the user journal" do
     native = @org.apps.create!(name: "Nat", slug: "nat", server: @server, deploy_method: "native",
                                repository_url: "https://github.com/x/z.git")
-    assert_includes native.log_tail_command(300), "journalctl --user -u nat-server"
+    assert_includes native.log_tail_command(300), "journalctl --user -u #{native.service_name}"
   end
 
   test "start_deployment! creates a deployment and enqueues the job when none is in flight" do

@@ -101,8 +101,8 @@ class DecommissionRunnerTest < ActiveSupport::TestCase
     DecommissionRunner::FleetDeps.new(decommission, ssh: ssh).remove_dedicated_db
 
     joined = ssh.commands.join("\n")
-    assert_match(/docker rm -f .*appone-db/, joined)
-    assert_match(/docker volume rm .*appone-db-data/, joined)
+    assert_match(/docker rm -f .*#{@app.dedicated_db_container_name}/, joined)
+    assert_match(/docker volume rm .*#{@app.dedicated_db_volume}/, joined)
   end
 
   test "FleetDeps never drops a shared-cluster DB" do

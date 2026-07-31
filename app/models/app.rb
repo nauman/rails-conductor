@@ -62,8 +62,24 @@ class App < ApplicationRecord
   # network. Single source of truth so the provisioner (Slice 2) and deploy-time
   # DATABASE_URL injection (Slice 3) agree. Reached by container DNS at
   # `<container>:5432`, so the app and its DB share the network below.
-  def dedicated_db_container_name = "#{slug}-db"
-  def dedicated_db_volume = "#{slug}-db-data"
+  # --- resource names, during ADR 0004's alias period --------------------
+  #
+  # `uses_stable_names` decides what NEW resources are called. It is per-app and
+  # never flipped automatically, because these name LIVE infrastructure: a
+  # systemd unit that is running, a DB container holding data, a volume. Changing
+  # the derivation under a running app orphans all of it — the exact residue
+  # problem the stable key exists to end.
+  #
+  # Lookups use the *_candidates methods, which accept both names, so Conductor
+  # finds a resource whichever era it was created in.
+  def dedicated_db_container_name = uses_stable_names? ? "#{resource_key}-db" : "#{slug}-db"
+  def dedicated_db_volume         = uses_stable_names? ? "#{resource_key}-db-data" : "#{slug}-db-data"
+
+  # Both spellings, stable first. Use these to FIND things; use the singular
+  # methods to NAME new things.
+  def dedicated_db_container_candidates = [ "#{resource_key}-db", "#{slug}-db" ].uniq
+  def dedicated_db_volume_candidates    = [ "#{resource_key}-db-data", "#{slug}-db-data" ].uniq
+  def service_name_candidates           = [ "#{resource_key}-server", "#{slug}-server" ].uniq
 
   # The Docker network the app's OWN container runs on. A colocated dedicated DB
   # must join this so the app resolves `<app>-db:5432` by container DNS. Kamal 2
@@ -89,7 +105,7 @@ class App < ApplicationRecord
     return nil unless dedicated_db?
 
     databases.joins(:database_cluster)
-             .where(database_clusters: { container_name: dedicated_db_container_name, server_id: server&.id },
+             .where(database_clusters: { container_name: dedicated_db_container_candidates, server_id: server&.id },
                     status: "active")
              .first
   end
@@ -219,6 +235,7 @@ class App < ApplicationRecord
   }
   scope :with_server_ssh, -> { joins(:server).merge(Server.with_ssh) }
 
+  before_validation :adopt_stable_names, on: :create
   before_validation :generate_slug, on: :create
   before_validation :generate_image_name, on: :create
   before_validation :generate_webhook_secret, on: :create
@@ -379,7 +396,7 @@ class App < ApplicationRecord
   end
 
   def service_name
-    "#{slug}-server"
+    uses_stable_names? ? "#{resource_key}-server" : "#{slug}-server"
   end
 
   def app_dir
@@ -620,6 +637,13 @@ class App < ApplicationRecord
       "so the revision and its history stay truthful (ADR 0004)")
   end
 
+
+  # An app created from now on has no live infrastructure, so it can use the
+  # stable key from the start. Existing apps keep their legacy names until an
+  # operator migrates them deliberately.
+  def adopt_stable_names
+    self.uses_stable_names = true if new_record?
+  end
 
   def generate_slug
     return if slug.present?

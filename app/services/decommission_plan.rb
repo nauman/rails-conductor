@@ -162,7 +162,12 @@ class DecommissionPlan
   def discover_dedicated_db
     return { present: false } unless app.dedicated_db?
 
-    container = run(%(docker ps -a --format '{{.Names}}\\t{{.Status}}' --filter name=#{Shellwords.escape(app.dedicated_db_container_name)}))
+    # Both eras' names (ADR 0004 alias period): a DB container created before
+    # stable naming is still <slug>-db, and missing it means reporting "nothing
+    # to decommission" while the data container keeps running.
+    container = app.dedicated_db_container_candidates
+                   .filter_map { |name| run(%(docker ps -a --format '{{.Names}}\\t{{.Status}}' --filter name=#{Shellwords.escape(name)})).presence }
+                   .join("\\n")
     row = parse_container_lines(container).first
     volume = run(%(docker volume ls --format '{{.Name}}' --filter name=#{Shellwords.escape(app.dedicated_db_volume)}))
 
@@ -187,7 +192,7 @@ class DecommissionPlan
 
   def db_record_summary(db)
     cluster = db.database_cluster
-    dedicated = cluster.container_name == app.dedicated_db_container_name
+    dedicated = app.dedicated_db_container_candidates.include?(cluster.container_name)
     { id: db.id, name: db.name, cluster: cluster.container_name, shared_cluster: !dedicated }
   end
 

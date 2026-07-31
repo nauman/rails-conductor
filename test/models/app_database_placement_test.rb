@@ -65,6 +65,6 @@ class AppDatabasePlacementTest < ActiveSupport::TestCase
     assert_equal "u_a", app.dedicated_database(server: src).username
     assert_equal "u_b", app.dedicated_database(server: dst).username
     # The deploy env injects the DB on the box being deployed to.
-    assert_includes app.deploy_env_pairs(server: dst).to_h["DATABASE_URL"], "u_b:pw@appone-db"
+    assert_includes app.deploy_env_pairs(server: dst).to_h["DATABASE_URL"], "u_b:pw@#{app.dedicated_db_container_name}"
   end
 end

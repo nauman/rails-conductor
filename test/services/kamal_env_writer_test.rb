@@ -43,7 +43,7 @@ class KamalEnvWriterTest < ActiveSupport::TestCase
 
     content = KamalEnvWriter.secrets_content(@app)
 
-    assert_includes content, "DATABASE_URL=postgres://appone:pw@appone-db:5432/appone\n"
+    assert_includes content, "DATABASE_URL=postgres://appone:pw@#{@app.dedicated_db_container_name}:5432/appone\n"
     assert_includes KamalEnvWriter.managed_keys(@app), "DATABASE_URL"
   end
 
