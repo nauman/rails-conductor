@@ -32,6 +32,8 @@ class DeployPreflight
 
   private
 
+
+
   # NOTE: this is a *capability* check, not a live migration probe. It reports
   # whether the deploy method has a post-deploy migrate+abort_if_pending gate — it
   # does NOT inspect pending migrations or drift (the real migrate runs after the
