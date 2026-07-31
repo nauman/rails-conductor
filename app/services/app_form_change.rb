@@ -65,16 +65,26 @@ class AppFormChange
       raise NotAFormChange, "#{unknown.join(', ')} are not form fields — use a normal update"
     end
 
-    app.assign_attributes(attributes)
+    # Cheap pre-check WITHOUT dirtying the record — with_lock refuses one with
+    # unpersisted changes, and re-applying identical values must not take a lock
+    # or inflate the revision. The authoritative diff is recomputed under the
+    # lock, against freshly-read values.
+    return true if no_change?(attributes)
 
-    # No-op guard, deliberately BEFORE the transaction: re-applying the same
-    # values must not inflate the revision, or the history fills with changes
-    # that never happened — and a history that records non-events is as
-    # misleading as one that misses events.
-    changed = app.changes.slice(*FORM_FIELDS)
-    return true if changed.empty?
+    changed = nil
 
-    app.transaction do
+    # Same lock protocol as EdgeDetector: both compute "current + 1", so without
+    # a shared lock they can pick the same revision and one loses to the unique
+    # index — silently dropping that history.
+    app.with_lock do
+      app.reload
+      app.assign_attributes(attributes)
+
+      # Re-checked under the lock: a concurrent writer may have already applied
+      # exactly this change while we waited for it.
+      changed = app.changes.slice(*FORM_FIELDS)
+      next if changed.empty?
+
       app.infra_revision += 1
       app.save!(context: :form_change)
 
@@ -90,6 +100,11 @@ class AppFormChange
   end
 
   private
+
+  # True when every requested value already matches what is stored.
+  def no_change?(attributes)
+    attributes.all? { |key, value| app.public_send(key).to_s == value.to_s }
+  end
 
   def log_change(changed)
     Rails.logger.info(

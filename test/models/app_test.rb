@@ -43,6 +43,26 @@ class AppTest < ActiveSupport::TestCase
 
   # A zero-downtime deploy runs the app as app-<id>-r<rev>-<sha>, so the fixed
   # name finds nothing; resolve by label with the legacy name as fallback.
+  # The stable key is shared by every revision, so matching it alone can select a
+  # container from a previous shape — a console or cron task in a stale release.
+  test "strict resolution narrows to the CURRENT infra revision first" do
+    docker = @org.apps.create!(name: "Rev", slug: "rev", server: @server, deploy_method: "docker",
+                               repository_url: "https://github.com/x/y.git")
+    docker.update_columns(infra_revision: 4)
+    shell = docker.reload.resolve_container_shell
+
+    assert_includes shell, "label=conductor.infra_revision=4"
+    assert shell.index("infra_revision=4") < shell.index("for s in"),
+           "the revision-narrowed lookup must be tried before the broad one"
+  end
+
+  test "broad resolution does NOT narrow by revision — it is for acting on leftovers" do
+    docker = @org.apps.create!(name: "Broad", slug: "broad", server: @server, deploy_method: "docker",
+                               repository_url: "https://github.com/x/y.git")
+
+    assert_not_includes docker.resolve_container_shell(strict: false), "conductor.infra_revision"
+  end
+
   test "log_tail_command for a docker app resolves the container by label" do
     docker = @org.apps.create!(name: "Dock", slug: "dock", server: @server, deploy_method: "docker",
                                repository_url: "https://github.com/x/y.git")

@@ -188,8 +188,13 @@ class AppDeployer
   # domain, edge or network. Stopping only conductor-<slug> would then leave the
   # old release running: two releases at once, or a port conflict on start.
   def stop_old_container
-    run(app.resolve_container_shell(status: nil, strict: false) +
-        %([ -n "$cid" ] && docker stop "$cid" 2>/dev/null; [ -n "$cid" ] && docker rm "$cid" 2>/dev/null; true))
+    # ALL of them, not the first. The shared resolver returns one id (head -n1),
+    # which left a second leftover running — exactly the split-container/port
+    # conflict this step exists to prevent.
+    keys = ([ app.resource_key ] + app.kamal_service_candidates).uniq.map { |k| esc(k) }.join(" ")
+    run(%(for s in #{keys}; do ) +
+        %(for cid in $(docker ps -aq -f "label=service=$s"); do ) +
+        %(docker stop "$cid" >/dev/null 2>&1; docker rm "$cid" >/dev/null 2>&1; done; done; true))
     # And the fixed name, for anything the label lookup could not see.
     run("docker stop #{Shellwords.escape(app.container_name)} 2>/dev/null || true")
     run("docker rm #{Shellwords.escape(app.container_name)} 2>/dev/null || true")

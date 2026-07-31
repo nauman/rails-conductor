@@ -8,6 +8,9 @@
 # Recording the runtime and infra revision each deployment shipped under makes
 # "valid target for the app as it is now" answerable.
 class AddRuntimeToDeployments < ActiveRecord::Migration[8.0]
+  # CONCURRENTLY cannot run inside a transaction.
+  disable_ddl_transaction!
+
   def up
     add_column :deployments, :deploy_method, :string
     add_column :deployments, :infra_revision, :integer
@@ -24,27 +27,40 @@ class AddRuntimeToDeployments < ActiveRecord::Migration[8.0]
     # Reconstruct only where the evidence is unambiguous: an app that has never
     # changed form (single infra revision, no recorded deploy_method change) has
     # always been in its current form, so those rows can be stamped safely.
+    # Batched: one full-table UPDATE inside the migration transaction locks every
+    # matching row and grows WAL proportionally. Fine at today's scale, not on a
+    # large deployments table — and a migration that is only safe at small scale
+    # is a trap for whoever runs it later.
     say_with_time "stamping deployments for apps that have never changed form" do
-      execute(<<~SQL)
-        UPDATE deployments d
-        SET deploy_method = a.deploy_method,
-            infra_revision = a.infra_revision
-        FROM apps a
-        WHERE d.app_id = a.id
-          AND d.deploy_method IS NULL
-          AND a.infra_revision = 1
-          AND NOT EXISTS (
-            SELECT 1 FROM infra_revisions r
-            WHERE r.app_id = a.id AND r.changes_made ? 'deploy_method'
+      loop do
+        updated = execute(<<~SQL).cmd_tuples
+          UPDATE deployments d
+          SET deploy_method = a.deploy_method,
+              infra_revision = a.infra_revision
+          FROM apps a
+          WHERE d.id IN (
+            SELECT d2.id
+            FROM deployments d2
+            JOIN apps a2 ON a2.id = d2.app_id
+            WHERE d2.deploy_method IS NULL
+              AND a2.infra_revision = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM infra_revisions r
+                WHERE r.app_id = a2.id AND r.changes_made ? 'deploy_method'
+              )
+            LIMIT 5000
           )
-      SQL
+          AND a.id = d.app_id
+        SQL
+        break if updated.to_i.zero?
+      end
     end
 
-    add_index :deployments, [ :app_id, :deploy_method, :status ]
+    add_index :deployments, [ :app_id, :deploy_method, :status ], algorithm: :concurrently
   end
 
   def down
-    remove_index :deployments, [ :app_id, :deploy_method, :status ]
+    remove_index :deployments, [ :app_id, :deploy_method, :status ], algorithm: :concurrently
     remove_column :deployments, :deploy_method
     remove_column :deployments, :infra_revision
   end

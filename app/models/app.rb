@@ -447,7 +447,23 @@ class App < ApplicationRecord
     keys += kamal_service_candidates if kamal? || !strict
     cands = keys.uniq.map { |c| Shellwords.escape(c) }.join(" ")
     status_flag = status.present? ? %( -f status=#{status}) : ""
-    %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s"#{status_flag} | head -n1); [ -n "$cid" ] && break; done; ) +
+
+    # The stable key is shared by EVERY revision of this app, so matching it
+    # alone can still select a container from a previous shape. Under strict,
+    # narrow to the current revision first — that is the difference between
+    # "this app" and "this app as it is now", and running a console or a cron
+    # task inside a stale release is the failure this exists to prevent.
+    revision_first =
+      if strict
+        current = %(-f "label=service=#{Shellwords.escape(resource_key)}" ) +
+                  %(-f "label=conductor.infra_revision=#{infra_revision}")
+        %(cid=$(docker ps -q #{current}#{status_flag} | head -n1); )
+      else
+        %(cid=""; )
+      end
+
+    revision_first +
+      %(if [ -z "$cid" ]; then for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s"#{status_flag} | head -n1); [ -n "$cid" ] && break; done; fi; ) +
       %(if [ -z "$cid" ]; then cid=$(docker ps -q -f "name=^/#{Shellwords.escape(container_name)}$"#{status_flag} | head -n1); fi; )
   end
 

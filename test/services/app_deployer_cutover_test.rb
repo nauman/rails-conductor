@@ -187,6 +187,18 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
                "`ss ... || echo FREE` reported a MISSING ss as free — exactly backwards"
   end
 
+  # head -n1 returned ONE id, so a second leftover survived — reintroducing the
+  # split-container condition this step exists to prevent.
+  test "stop-first removes EVERY container wearing the app's identity" do
+    @app.server.update!(edge_type: "none")
+    ssh = FakeSsh.new
+    @deployer.stub(:ssh, ssh) { @deployer.send(:stop_old_container) }
+
+    cmd = ssh.commands.join(" ")
+    assert_includes cmd, "for cid in $(docker ps -aq", "must iterate every match, not take the first"
+    assert_includes cmd, "for s in app-#{@app.id}"
+  end
+
   test "the previous container is resolved by service label, not a fixed name" do
     ssh = FakeSsh.new
     cutover(ssh)
