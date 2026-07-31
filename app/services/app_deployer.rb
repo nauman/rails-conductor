@@ -176,10 +176,17 @@ class AppDeployer
 
   def image_ref(tag) = "#{app.image_name}:#{tag}"
 
+  # Stop whatever is actually serving, resolved by label — not just the fixed
+  # name. An app that previously deployed zero-downtime runs as
+  # app-<id>-r<rev>-<sha>, and it can fall back to this path by losing its
+  # domain, edge or network. Stopping only conductor-<slug> would then leave the
+  # old release running: two releases at once, or a port conflict on start.
   def stop_old_container
-    # Stop and remove old container if exists (don't fail if not found)
-    run("docker stop #{app.container_name} 2>/dev/null || true")
-    run("docker rm #{app.container_name} 2>/dev/null || true")
+    run(app.resolve_container_shell(status: nil) +
+        %([ -n "$cid" ] && docker stop "$cid" 2>/dev/null; [ -n "$cid" ] && docker rm "$cid" 2>/dev/null; true))
+    # And the fixed name, for anything the label lookup could not see.
+    run("docker stop #{Shellwords.escape(app.container_name)} 2>/dev/null || true")
+    run("docker rm #{Shellwords.escape(app.container_name)} 2>/dev/null || true")
     true
   end
 

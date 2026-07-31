@@ -32,8 +32,19 @@ class DockerRollback
     deployment.update!(release_version: version)
 
     return false unless image_present?(version)
+
+    @previous_edge_upstream = current_edge_upstream
     return false unless swap_to(version)
-    return false unless republish_edge
+
+    unless republish_edge
+      # The old container is already gone, so there is nothing to restore it to —
+      # but leaving the edge pointing at a dead target is a silent outage. Say so
+      # loudly rather than reporting a completed rollback.
+      log "ERROR: the rolled-back container is running but the edge was NOT repointed. " \
+          "Public traffic is DOWN until the route is fixed by hand " \
+          "(previous upstream: #{@previous_edge_upstream || 'unknown'})."
+      return false
+    end
 
     deployment.succeed!
     log "Rollback to #{version} completed"
@@ -126,6 +137,15 @@ class DockerRollback
   rescue StandardError => e
     fail_with("Edge republish failed after rollback: #{e.message}")
     false
+  end
+
+  # Recorded before the swap so a failed repoint can name what the edge used to
+  # point at — the operator needs that to fix it by hand.
+  def current_edge_upstream
+    return nil unless app.server.edge_type == "kamal_proxy"
+
+    res = @ssh.execute_with_status("docker exec kamal-proxy kamal-proxy ls 2>/dev/null")
+    res[:output].to_s.lines.find { |l| l.include?(app.domain.to_s) }&.strip
   end
 
   # What is serving now, by the stable service label (ADR 0003/0004).

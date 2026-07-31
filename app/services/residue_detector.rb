@@ -39,10 +39,17 @@ class ResidueDetector
     return [] if @app.native? # native residue is systemd + release dirs; not modelled yet
 
     @findings = []
+    @blind = []
     check_stale_revision_containers
     check_duplicate_legacy_container
     check_foreign_method_containers
     check_edge_routes
+
+    # Say so when we could not look, rather than implying a clean box.
+    @blind.each do |why|
+      @findings << Finding.new(kind: "unknown", detail: "could not inspect: #{why}",
+                               remedy: "fix access to the box, then re-check — this is NOT a clean result")
+    end
     @findings
   rescue StandardError => e
     # A detector that fails a deploy because it could not look is worse than no
@@ -59,11 +66,15 @@ class ResidueDetector
   def check_stale_revision_containers
     out = capture(
       %(docker ps -a --filter "label=service=#{esc(@app.resource_key)}" ) +
-      %(--format '{{.ID}} {{.Names}} {{.Label "conductor.infra_revision"}} {{.State}}')
+      # Pipe-delimited: with whitespace, an EMPTY revision label collapses the
+      # field and `state` is read as the revision — a false "stale" finding.
+      %(--format '{{.ID}}|{{.Names}}|{{.Label "conductor.infra_revision"}}|{{.State}}')
     )
 
+    return if out.nil?
+
     out.lines.map(&:strip).reject(&:empty?).each do |line|
-      id, name, revision, state = line.split(/\s+/)
+      id, name, revision, state = line.split("|")
       next if revision.blank? || revision == @app.infra_revision.to_s
 
       @findings << Finding.new(
@@ -77,20 +88,21 @@ class ResidueDetector
   # Both a release container and the legacy fixed name running at once — the app
   # is being served twice, and which one the edge points at is a coin flip.
   def check_duplicate_legacy_container
-    labelled = capture(%(docker ps -q --filter "label=service=#{esc(@app.resource_key)}")).split.size
-    legacy   = capture(%(docker ps -q --filter "name=^/#{esc_name(@app.container_name)}$")).split.size
-    return unless labelled.positive? && legacy.positive?
+    labelled = capture(%(docker ps -q --filter "label=service=#{esc(@app.resource_key)}"))
+    legacy   = capture(%(docker ps -q --filter "name=^/#{esc_name(@app.container_name)}$"))
+    return if labelled.nil? || legacy.nil?
 
-    # A labelled container that IS the legacy one is fine — that's a stop-first deploy.
-    both = capture(
-      %(docker ps -q --filter "label=service=#{esc(@app.resource_key)}" ) +
-      %(--filter "name=^/#{esc_name(@app.container_name)}$")
-    ).split.size
-    return if both.positive?
+    # Compare ID SETS, not counts. A boolean "do they overlap?" suppressed the
+    # finding whenever the legacy container also carried the stable label, even
+    # with a second labelled release running alongside it.
+    labelled_ids = labelled.split
+    legacy_ids   = legacy.split
+    distinct = (labelled_ids | legacy_ids)
+    return if distinct.size <= 1
 
     @findings << Finding.new(
       kind: "duplicate_container",
-      detail: "#{labelled} labelled container(s) AND the legacy #{@app.container_name} are both running",
+      detail: "#{distinct.size} containers are serving this app at once: #{distinct.join(', ')}",
       remedy: "confirm which one the edge targets, then remove the other"
     )
   end
@@ -101,7 +113,9 @@ class ResidueDetector
     return if @app.kamal? # these ARE its containers
 
     @app.kamal_service_candidates.each do |service|
-      out = capture(%(docker ps -a --filter "label=service=#{esc(service)}" --format '{{.Names}} {{.State}}'))
+      out = capture(%(docker ps -a --filter "label=service=#{esc(service)}" --format '{{.Names}}|{{.State}}'))
+      next if out.nil?
+
       out.lines.map(&:strip).reject(&:empty?).each do |line|
         next if line.start_with?(@app.resource_key) # our own, already checked
 
@@ -122,6 +136,8 @@ class ResidueDetector
     return unless @app.server.edge_type == "kamal_proxy"
 
     out = capture("docker exec kamal-proxy kamal-proxy ls 2>/dev/null")
+    return if out.nil?
+
     rows = out.gsub(/\e\[[0-9;]*m/, "").lines.map(&:strip).reject do |l|
       l.empty? || (l.match?(/\bService\b/i) && l.match?(/\bTarget\b/i))
     end
@@ -137,9 +153,16 @@ class ResidueDetector
     )
   end
 
+  # A failed command is NOT an empty result. Treating it as one made a broken
+  # docker daemon, a permission error, or a missing kamal-proxy look like a clean
+  # box — fail-open, which is the worst possible default for a detector whose
+  # whole job is noticing things.
   def capture(command)
     res = @ssh.execute_with_status(command)
-    res[:success] ? res[:output].to_s : ""
+    return res[:output].to_s if res[:success]
+
+    @blind << "#{command[0, 60]}: #{(res[:stderr].presence || res[:output]).to_s.strip[0, 120]}"
+    nil
   end
 
   def esc(str) = Shellwords.escape(str.to_s)

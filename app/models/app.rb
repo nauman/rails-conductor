@@ -129,7 +129,13 @@ class App < ApplicationRecord
   end
 
   validates :name, presence: true
-  validates :slug, presence: true, uniqueness: true
+  # The slug reaches SHELL COMMANDS on fleet servers (container names, systemd
+  # units, directory paths), so its character set is a security boundary, not a
+  # cosmetic rule. Interpolation sites escape as well — this is the first of two
+  # defences, not the only one.
+  validates :slug, presence: true, uniqueness: true,
+            format: { with: /\A[a-z0-9][a-z0-9._-]*\z/,
+                      message: "may contain only lowercase letters, digits, dots, dashes and underscores" }
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
   validates :database_mode, inclusion: { in: DATABASE_MODES }
@@ -413,7 +419,7 @@ class App < ApplicationRecord
     cands = ([ resource_key ] + kamal_service_candidates).uniq.map { |c| Shellwords.escape(c) }.join(" ")
     status_flag = status.present? ? %( -f status=#{status}) : ""
     %(cid=""; for s in #{cands}; do cid=$(docker ps -q -f "label=service=$s"#{status_flag} | head -n1); [ -n "$cid" ] && break; done; ) +
-      %(if [ -z "$cid" ]; then cid=$(docker ps -q -f "name=^/#{container_name}$"#{status_flag} | head -n1); fi; )
+      %(if [ -z "$cid" ]; then cid=$(docker ps -q -f "name=^/#{Shellwords.escape(container_name)}$"#{status_flag} | head -n1); fi; )
   end
 
   def log_tail_command(tail = 300)

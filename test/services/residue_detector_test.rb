@@ -4,13 +4,17 @@ require "test_helper"
 # infra revision, "is this artifact current?" is arithmetic rather than judgement.
 class ResidueDetectorTest < ActiveSupport::TestCase
   class FakeSsh
+    # A value of :fail makes that command fail, so fail-open is testable.
     def initialize(responses = {}) = @responses = responses
 
     # Longest match wins: the "is it BOTH?" query contains the same filters as
     # the individual ones, so a first-match fake would answer it wrongly.
     def execute_with_status(cmd)
       key = @responses.keys.select { |k| cmd.include?(k.to_s) }.max_by { |k| k.to_s.length }
-      { success: true, output: key ? @responses[key] : "", stderr: "" }
+      value = key ? @responses[key] : ""
+      return { success: false, output: "", stderr: "permission denied" } if value == :fail
+
+      { success: true, output: value, stderr: "" }
     end
   end
 
@@ -27,7 +31,7 @@ class ResidueDetectorTest < ActiveSupport::TestCase
   def findings(responses) = ResidueDetector.new(@app, ssh: FakeSsh.new(responses)).findings
 
   test "a clean box reports nothing" do
-    found = findings("conductor.infra_revision" => "abc app-#{@app.id}-r3-sha 3 running")
+    found = findings("conductor.infra_revision" => "abc|app-#{@app.id}-r3-sha|3|running")
 
     assert_empty found
   end
@@ -36,7 +40,7 @@ class ResidueDetectorTest < ActiveSupport::TestCase
   # because nothing compared it to the app's current revision.
   test "flags a container left over from an older revision" do
     found = findings(
-      "conductor.infra_revision" => "old1 app-#{@app.id}-r2-oldsha 2 running\nnew1 app-#{@app.id}-r3-sha 3 running"
+      "conductor.infra_revision" => "old1|app-#{@app.id}-r2-oldsha|2|running\nnew1|app-#{@app.id}-r3-sha|3|running"
     )
 
     assert_equal 1, found.size
@@ -46,26 +50,55 @@ class ResidueDetectorTest < ActiveSupport::TestCase
   end
 
   test "does not flag containers at the current revision" do
-    found = findings("conductor.infra_revision" => "a app-#{@app.id}-r3-x 3 running\nb app-#{@app.id}-r3-y 3 exited")
+    found = findings("conductor.infra_revision" => "a|app-#{@app.id}-r3-x|3|running\nb|app-#{@app.id}-r3-y|3|exited")
 
     assert_empty found.select { |f| f.kind == "stale_revision_container" }
   end
 
   test "flags a labelled container and the legacy name both serving" do
     found = findings(
-      %(--filter "label=service=app-#{@app.id}" --filter "name=^/conductor-starrrs$") => "", # neither is both
       %(--filter "label=service=app-#{@app.id}") => "cid1",
       %(--filter "name=^/conductor-starrrs$") => "cid2"
     )
 
     dup = found.find { |f| f.kind == "duplicate_container" }
     assert dup, "two containers serving one app must be flagged"
-    assert_includes dup.remedy, "which one the edge targets"
+    assert_includes dup.detail, "cid1"
+    assert_includes dup.detail, "cid2"
+  end
+
+  # A boolean "do they overlap?" test suppressed this: the legacy container also
+  # carries the stable label, so the old check saw an overlap and said nothing
+  # even though a second release was running.
+  test "flags two containers even when the legacy one also carries the label" do
+    found = findings(
+      %(--filter "label=service=app-#{@app.id}") => "cid1 cid2",
+      %(--filter "name=^/conductor-starrrs$") => "cid2"
+    )
+
+    assert found.find { |f| f.kind == "duplicate_container" }, "overlap is not the same as one container"
+  end
+
+  test "a single container carrying both the label and the legacy name is fine" do
+    found = findings(
+      %(--filter "label=service=app-#{@app.id}") => "cid2",
+      %(--filter "name=^/conductor-starrrs$") => "cid2"
+    )
+
+    assert_nil found.find { |f| f.kind == "duplicate_container" }
+  end
+
+  # An EMPTY revision label collapsed the whitespace field, so `state` was read
+  # as the revision and every unlabelled container looked stale.
+  test "an unlabelled container is not misread as stale" do
+    found = findings("conductor.infra_revision" => "abc|some-other-container||running")
+
+    assert_empty found.select { |f| f.kind == "stale_revision_container" }
   end
 
   # kamal → docker leaves <service>-web-<version> behind.
   test "flags Kamal-era containers on an app that no longer deploys via Kamal" do
-    found = findings("label=service=starrrs\" --format" => "starrrs-web-abc123 running")
+    found = findings("label=service=starrrs\" --format" => "starrrs-web-abc123|running")
 
     foreign = found.find { |f| f.kind == "foreign_method_container" }
     assert foreign
@@ -92,6 +125,16 @@ class ResidueDetectorTest < ActiveSupport::TestCase
     assert_empty found.select { |f| f.kind == "duplicate_edge_route" }
   end
 
+  # Fail-open is the worst default for a detector: a broken docker daemon or a
+  # permission error must not read as "clean box".
+  test "a failed command reports blindness, not a clean box" do
+    found = findings("conductor.infra_revision" => :fail)
+
+    blind = found.find { |f| f.kind == "unknown" }
+    assert blind, "a command that failed is not an empty result"
+    assert_includes blind.remedy, "NOT a clean result"
+  end
+
   # A detector that fails the deploy because it could not look is worse than none.
   test "reports blindness rather than raising when the box is unreachable" do
     broken = Object.new
@@ -107,6 +150,6 @@ class ResidueDetectorTest < ActiveSupport::TestCase
   test "native apps are skipped — their residue is not modelled yet" do
     @app.update_columns(deploy_method: "native")
 
-    assert_empty findings("conductor.infra_revision" => "x y 1 running")
+    assert_empty findings("conductor.infra_revision" => "x|y|1|running")
   end
 end

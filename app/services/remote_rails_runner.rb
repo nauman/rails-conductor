@@ -88,7 +88,15 @@ class RemoteRailsRunner
     end
   end
 
+  # Interpolated into a shell `echo`, so it must not carry shell metacharacters —
+  # a slug is now format-constrained, but this is the second line of defence and
+  # costs nothing.
   def container_hint
-    @app.kamal? ? "service: #{@app.kamal_service_candidates.join(', ')}" : "container: #{@app.container_name}"
+    raw = if @app.kamal?
+            "service: #{@app.kamal_service_candidates.join(', ')}"
+    else
+            "container: #{@app.container_name}"
+    end
+    raw.gsub(/[^a-zA-Z0-9 ,.:_-]/, "")
   end
 end
