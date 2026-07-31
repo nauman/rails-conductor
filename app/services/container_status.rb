@@ -32,10 +32,21 @@ class ContainerStatus
   # error", never a clean "stopped".
   DOCKER_UNAVAILABLE = /cannot connect to the docker daemon|permission denied.*docker\.sock|docker: (command )?not found|is the docker daemon running/i
 
-  # Docker/native apps: inspect the conductor-<slug> container directly.
+  # Docker/native apps: inspect the app's live container.
+  #
+  # Resolved by service label rather than the fixed conductor-<slug> name — after
+  # a zero-downtime deploy the container is app-<id>-r<rev>-<sha>, and inspecting
+  # the fixed name would report a healthy app as absent. `strict: false` so a
+  # container left from a previous form is still reported rather than vanishing
+  # from status entirely.
+  #
+  # The name is also escaped: it derives from `slug`, which reaches the shell.
   def sync_docker
     ssh = SshConnection.new(app.server)
-    raw = ssh.execute(%(docker inspect --format '{{json .State}}' #{app.container_name} 2>&1; echo "__RC__:$?"))
+    raw = ssh.execute(
+      app.resolve_container_shell(status: nil, strict: false) +
+      %([ -n "$cid" ] && docker inspect --format '{{json .State}}' "$cid" 2>&1; echo "__RC__:$?")
+    )
     return ssh_failure(ssh) unless ssh.success?
 
     body, rc = split_rc(raw)
