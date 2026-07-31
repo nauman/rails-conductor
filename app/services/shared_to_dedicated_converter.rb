@@ -48,7 +48,10 @@ class SharedToDedicatedConverter
     prior_mode = @app.database_mode
     prior_placement = @app.database_placement
 
-    @app.update!(database_mode: "dedicated", database_placement: "colocated")
+    # Converting the database shape is a form change (ADR 0004) — the shared
+    # DB it leaves behind is residue from the previous revision.
+    AppFormChange.new(@app).apply!(database_mode: "dedicated", database_placement: "colocated",
+                                   reason: "converted shared → dedicated colocated database")
     database = @provisioner_for.call(@app).provision!
     target_url = database.database_url
 
@@ -71,7 +74,12 @@ class SharedToDedicatedConverter
     # Roll the mode back so we never leave a half-converted app the executor would
     # then try to transfer. The dedicated container/data (if created) is harmless
     # and idempotently reused on a retry; the shared DB was never touched.
-    @app.update!(database_mode: prior_mode, database_placement: prior_placement) if prior_mode
+    # Rolling back the conversion is itself a form change — it becomes the next
+    # revision rather than pretending the previous one never happened.
+    if prior_mode
+      AppFormChange.new(@app).apply!(database_mode: prior_mode, database_placement: prior_placement,
+                                     reason: "rolled back database conversion")
+    end
     # If the live DSN was already removed when we failed, restore it from the
     # captured value so the app is never left with no database URL (finding 3).
     if source_url.present? && @app.env_variables.where(key: "DATABASE_URL").none?

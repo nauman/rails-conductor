@@ -153,6 +153,15 @@ class App < ApplicationRecord
   # The app(s) representing Conductor itself — deploys are reconciled on boot
   # rather than observed inline (see SelfDeployReconciler).
   scope :self_managed, -> { where(self_managed: true) }
+
+  has_many :infra_revisions, dependent: :destroy
+
+  # The choke point is only worth having if it cannot be bypassed. A form field
+  # changed outside AppFormChange would leave infra_revision stale — and a
+  # revision that lies is worse than none, because residue detection then
+  # silently passes. Refuse the save instead.
+  validate :form_fields_change_only_through_form_change
+
   # The only apps a checklist, backup nag or adoption prompt may talk about.
   scope :naggable, -> { where(intent: %w[managed unmanaged]) }
 
@@ -352,6 +361,32 @@ class App < ApplicationRecord
     "/home/#{server&.ssh_user_or_default || 'deploy'}/apps/#{slug}"
   end
 
+  # ---- ADR 0004: identity is assigned, never derived -------------------
+  #
+  # The stable key for every infrastructure artifact this app owns — edge route,
+  # container, service label, volume prefix. Derived from the immutable id, NOT
+  # from name/slug/deploy_method/role, so it survives a rename, a box move, and
+  # a deploy-method switch. `starrrs-web` (kamal service + role) is exactly the
+  # form-derived name this replaces.
+  def resource_key = "app-#{id}"
+
+  # Has this app ever put anything on a box? Until it has, changing its shape
+  # strands nothing.
+  def ever_deployed? = deployed_at.present? || container_id.present?
+
+  # `<app_id>.<infra_revision>` — which infrastructure shape this app is in.
+  # Not a git tag and unrelated to the commit being deployed.
+  def infra_identity = "#{id}.#{infra_revision}"
+
+  # Container name for a given release. Carries the revision so residue is
+  # detectable by arithmetic: any container whose revision isn't current is
+  # stale by definition.
+  def release_container_name(sha = nil)
+    [ resource_key, "r#{infra_revision}", sha.presence&.first(7) ].compact.join("-")
+  end
+
+  # LEGACY name, still live on every box deployed before ADR 0004. Kept for the
+  # alias period: Conductor must recognise both until the fleet converges.
   def container_name
     "conductor-#{slug}"
   end
@@ -483,6 +518,24 @@ class App < ApplicationRecord
   end
 
   private
+
+  def form_fields_change_only_through_form_change
+    return if validation_context == :form_change
+
+    changed = changes.keys & AppFormChange::FORM_FIELDS
+    return if changed.empty?
+    # The invariant exists to stop a form change stranding residue on a box. An
+    # app that has never been deployed has nothing out there to strand, so
+    # shaping it before its first deploy is ordinary configuration — not a form
+    # change with a history worth recording.
+    return if new_record? # creating an app sets these for the first time
+    return unless ever_deployed?
+
+    errors.add(:base,
+      "#{changed.join(', ')} change an app's infrastructure form — use AppFormChange " \
+      "so the revision and its history stay truthful (ADR 0004)")
+  end
+
 
   def generate_slug
     return if slug.present?

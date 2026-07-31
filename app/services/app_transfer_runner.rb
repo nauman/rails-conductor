@@ -45,7 +45,17 @@ class AppTransferRunner
     # control-plane record must follow the traffic, or subsequent deploys, status
     # syncs, and DB resolution keep operating against the drained source server.
     # Clone keeps the source live, so its app stays put.
-    @transfer.app.update!(server: @transfer.target_server) if @transfer.transfer?
+    #
+    # Through AppFormChange, not a bare update: moving box is the archetypal
+    # form change (ADR 0004). It bumps infra_revision and records the history,
+    # so whatever the app left behind on the source box is afterwards
+    # identifiable as residue rather than indistinguishable from live state.
+    if @transfer.transfer?
+      AppFormChange.new(@transfer.app).apply!(
+        server_id: @transfer.target_server_id,
+        reason: "transfer ##{@transfer.id}: #{@transfer.source_server&.name} → #{@transfer.target_server.name}"
+      )
+    end
 
     @transfer.update!(status: "succeeded", finished_at: Time.current)
     true

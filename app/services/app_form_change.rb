@@ -1,0 +1,79 @@
+# The ONE place an app's infrastructure form may change (ADR 0004).
+#
+# A form change is server, deploy method, edge, or database shape — the things
+# that leave residue behind on the old shape. Ordinary config edits (name, port,
+# notes, branch) are not form changes and don't come through here.
+#
+# Why a choke point at all: `infra_revision` is only worth having if it is
+# always right. If a form can change without incrementing it, the revision lies
+# — and a lying version is worse than no version, because residue detection then
+# silently passes. So every path that changes one of these fields must call
+# this, and `App` refuses the change otherwise.
+#
+#   AppFormChange.new(app, user: current_user).apply!(
+#     deploy_method: "docker", reason: "moved off kamal"
+#   )
+class AppFormChange
+  # Changing any of these changes the app's shape, and therefore what its old
+  # shape left lying around on a box.
+  #
+  # These are the form-bearing columns on `apps`. The app's EDGE lives on its
+  # server (`Server#edge_type`), so moving `server_id` is what changes an app's
+  # edge — a server changing its own edge affects every app on it and needs its
+  # own handling, which this deliberately does not pretend to cover.
+  FORM_FIELDS = %w[server_id deploy_method database_mode database_placement].freeze
+
+  class NotAFormChange < StandardError; end
+
+  attr_reader :app, :revision
+
+  def initialize(app, user: nil)
+    @app = app
+    @user = user
+  end
+
+  # Apply the change and bump the revision, atomically. Raises
+  # ActiveRecord::RecordInvalid if the app rejects the new values, so a failed
+  # form change never leaves a revision behind.
+  #
+  # NB: this saves the app, so any unrelated attribute the caller has already
+  # assigned in memory is persisted too. Pass a clean record.
+  def apply!(reason: nil, **attributes)
+    unknown = attributes.keys.map(&:to_s) - FORM_FIELDS
+    if unknown.any?
+      raise NotAFormChange, "#{unknown.join(', ')} are not form fields — use a normal update"
+    end
+
+    app.assign_attributes(attributes)
+
+    # No-op guard, deliberately BEFORE the transaction: re-applying the same
+    # values must not inflate the revision, or the history fills with changes
+    # that never happened — and a history that records non-events is as
+    # misleading as one that misses events.
+    changed = app.changes.slice(*FORM_FIELDS)
+    return true if changed.empty?
+
+    app.transaction do
+      app.infra_revision += 1
+      app.save!(context: :form_change)
+
+      @revision = app.infra_revisions.create!(
+        revision: app.infra_revision,
+        changes_made: changed,
+        reason: reason,
+        user: @user
+      )
+      log_change(changed)
+    end
+    true
+  end
+
+  private
+
+  def log_change(changed)
+    Rails.logger.info(
+      "[form-change] app=#{app.id} (#{app.name}) -> revision #{app.infra_revision}: " \
+      "#{changed.map { |f, (a, b)| "#{f} #{a.inspect}->#{b.inspect}" }.join(', ')}"
+    )
+  end
+end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_31_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -68,6 +68,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
     t.string "domain"
     t.string "health_check_path", default: "/up"
     t.string "image_name"
+    t.integer "infra_revision", default: 1, null: false
     t.string "intent", default: "managed", null: false
     t.string "intent_note"
     t.datetime "last_status_check_at"
@@ -302,6 +303,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
     t.text "value"
     t.index ["app_id", "key"], name: "index_env_variables_on_app_id_and_key", unique: true
     t.index ["app_id"], name: "index_env_variables_on_app_id"
+  end
+
+  create_table "infra_revisions", force: :cascade do |t|
+    t.bigint "app_id", null: false
+    t.jsonb "changes_made", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.string "reason"
+    t.integer "revision", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["app_id", "revision"], name: "index_infra_revisions_on_app_id_and_revision", unique: true
+    t.index ["app_id"], name: "index_infra_revisions_on_app_id"
+    t.index ["user_id"], name: "index_infra_revisions_on_user_id"
   end
 
   create_table "invitations", force: :cascade do |t|
@@ -622,6 +636,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_000001) do
   add_foreign_key "deployments", "servers"
   add_foreign_key "deployments", "users"
   add_foreign_key "env_variables", "apps"
+  add_foreign_key "infra_revisions", "apps"
+  add_foreign_key "infra_revisions", "users"
   add_foreign_key "invitations", "organizations"
   add_foreign_key "invitations", "users", column: "invited_by_id"
   add_foreign_key "mcp_calls", "organizations"
