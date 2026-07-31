@@ -111,7 +111,7 @@ targets a stable **host:port** (Caddy) needs nothing.
 | **Rollback for docker apps** | ✅ shipped | `DockerRollback` |
 | Edge republished on deploy | ✅ shipped | `AppDeployer#republish_edge_route` |
 | `deploy.yml` for all methods | ⚠️ Kamal apps only | `app/services/kamal_config.rb` |
-| Candidate → health → swap → drain | ❌ still stop-before-start | `AppDeployer` |
+| Candidate → health → swap → drain | ✅ shipped for `kamal_proxy`; Caddy + unproxied still stop-first | `AppDeployer::ZERO_DOWNTIME_STEPS` |
 | Conductor self-deploys via CI | ⚠️ CI runs, but still calls `bin/kamal` | `.github/workflows/deploy.yml` |
 
 ### What the contract unlocked

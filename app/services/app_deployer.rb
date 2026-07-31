@@ -9,6 +9,25 @@ class AppDeployer
     @ssh = SshConnection.new(app.server)
   end
 
+  # Start the candidate alongside the old container, prove it healthy, swap the
+  # edge, and only then drain. Possible ONLY when something can redirect traffic
+  # AND the candidate can run without contending for the old container's host
+  # port — which is exactly the kamal-proxy case: the proxy targets
+  # container:port over the docker network, so the candidate needs no host port
+  # at all. See ADR 0003 for why Caddy needs a port dance and an unproxied app
+  # cannot have this at all.
+  ZERO_DOWNTIME_STEPS = %i[
+    ensure_docker clone_or_pull_repo build_image
+    start_candidate health_check_candidate republish_edge_route drain_previous_container cleanup
+  ].freeze
+
+  # The original order. Traffic is down from stop_old_container until the edge is
+  # republished — unavoidable when the fixed host port IS the service.
+  STOP_FIRST_STEPS = %i[
+    ensure_docker clone_or_pull_repo build_image
+    stop_old_container start_container health_check republish_edge_route cleanup
+  ].freeze
+
   def deploy!
     deployment.start!
     log "Starting deployment for #{app.name}"
@@ -17,16 +36,9 @@ class AppDeployer
       return fail_with("Server SSH not configured")
     end
 
-    steps = [
-      :ensure_docker,
-      :clone_or_pull_repo,
-      :build_image,
-      :stop_old_container,
-      :start_container,
-      :health_check,
-      :republish_edge_route,
-      :cleanup
-    ]
+    steps = zero_downtime_cutover? ? ZERO_DOWNTIME_STEPS : STOP_FIRST_STEPS
+    log(zero_downtime_cutover? ? "Cutover: candidate → health → swap → drain (no downtime)"
+                               : "Cutover: stop-first (this app's shape cannot avoid a brief outage)")
 
     steps.each do |step|
       log "Running: #{step.to_s.humanize}"
@@ -209,6 +221,109 @@ class AppDeployer
     else
       false
     end
+  end
+
+  def zero_downtime_cutover?
+    app.server&.edge_type == "kamal_proxy" && app.domain.present? && app.deploy_network.present?
+  end
+
+  # Boot the new release under its own release-scoped name, with NO host port
+  # binding — the proxy reaches it over the docker network, so it can run
+  # alongside the container currently serving.
+  def start_candidate
+    @previous_container = resolve_serving_container
+    log "Previous container: #{@previous_container.presence || '(none)'}"
+
+    port = app.port || 3000
+    name = app.release_container_name(deployment.commit_sha)
+
+    # A retry of a failed deploy can leave a same-named candidate behind.
+    run("docker rm -f #{Shellwords.escape(name)} 2>/dev/null || true")
+
+    prefix = [
+      "docker run -d",
+      "--name #{Shellwords.escape(name)}",
+      "--restart unless-stopped",
+      "--network #{Shellwords.escape(app.deploy_network)}",
+      "--label service=#{Shellwords.escape(app.resource_key)}",
+      "--label role=web",
+      "--label destination=production",
+      "--label conductor.infra_revision=#{app.infra_revision}",
+      "--label conductor.release=#{Shellwords.escape(release_tag)}",
+      "--label conductor.candidate=true"
+    ]
+    suffix = [ "-e PORT=#{port}", "-e RAILS_ENV=production", "-e RAILS_LOG_TO_STDOUT=true", image_ref(release_tag) ]
+    cmd = (prefix + [ app.env_variables.map(&:to_docker_env).join(" ") ] + suffix).join(" ")
+    display = (prefix + [ app.env_variables.map(&:to_docker_env_redacted).join(" ") ] + suffix).join(" ")
+
+    return false unless run(cmd, display: display)
+
+    run("docker ps -q -f name=#{Shellwords.escape(name)}")
+    @candidate_container = ssh.output.to_s.strip
+    return fail_step("candidate did not start") if @candidate_container.blank?
+
+    @candidate_name = name
+    true
+  end
+
+  # Health-check the candidate over the docker network, by its container IP —
+  # it has no host port to probe. Failure removes the candidate and leaves the
+  # old container serving, so a bad release is a failed deploy, not an outage.
+  def health_check_candidate
+    return true if app.health_check_path.blank?
+
+    port = app.port || 3000
+    ip_cmd = "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' #{Shellwords.escape(@candidate_name)}"
+    run(ip_cmd)
+    ip = ssh.output.to_s.split.first
+    return discard_candidate("could not resolve the candidate's container IP") if ip.blank?
+
+    url = "http://#{ip}:#{port}#{app.health_check_path}"
+    log "Health-checking candidate at #{url}"
+
+    6.times do |i|
+      sleep 5
+      if run("curl -sf --max-time 5 #{Shellwords.escape(url)} > /dev/null && echo healthy") &&
+         ssh.output.to_s.include?("healthy")
+        log "Candidate healthy — safe to cut over"
+        app.update!(container_id: @candidate_container)
+        return true
+      end
+      log "Candidate health attempt #{i + 1}/6 failed, retrying..."
+    end
+
+    discard_candidate("candidate never became healthy")
+  end
+
+  # The old container only goes once traffic is already on the candidate.
+  def drain_previous_container
+    return true if @previous_container.blank?
+    return true if @previous_container == @candidate_container
+
+    log "Draining previous container #{@previous_container}"
+    run("docker stop #{Shellwords.escape(@previous_container)} 2>/dev/null || true")
+    run("docker rm #{Shellwords.escape(@previous_container)} 2>/dev/null || true")
+    # The fixed legacy name must be free for the next stop-first deploy, and a
+    # dead container holding it would also confuse the ops CLI.
+    run("docker rm -f #{Shellwords.escape(app.container_name)} 2>/dev/null || true")
+    true
+  end
+
+  # Whatever is serving right now: the labelled container if there is one,
+  # otherwise the legacy fixed name (apps deployed before ADR 0003/0004).
+  def resolve_serving_container
+    run("docker ps -q -f label=service=#{Shellwords.escape(app.resource_key)} | head -n1")
+    found = ssh.output.to_s.strip
+    return found if found.present?
+
+    run("docker ps -q -f name=#{Shellwords.escape(app.container_name)} | head -n1")
+    ssh.output.to_s.strip
+  end
+
+  def discard_candidate(reason)
+    log "ERROR: #{reason} — removing the candidate; the previous release keeps serving"
+    run("docker rm -f #{Shellwords.escape(@candidate_name)} 2>/dev/null || true") if @candidate_name.present?
+    false
   end
 
   def health_check

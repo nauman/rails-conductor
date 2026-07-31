@@ -86,6 +86,22 @@ changes. The old form leaves residue that works until something touches it.
 - [ ] **Deploy once, verify publicly** — not just the container. A host-header
       HTTPS probe is the only check that proves the edge agrees with the app.
 
+## Which apps get a zero-downtime deploy
+
+Conductor picks the cutover from the app's shape, and logs which one it used:
+
+| Edge | Cutover | Downtime |
+| --- | --- | --- |
+| `kamal_proxy` + a domain | candidate → health → swap → drain | **None** |
+| `caddy` | stop-first (a port dance is needed; not built) | Brief |
+| none / direct port | stop-first — the host port *is* the service | Brief, unavoidable |
+
+For the zero-downtime path the candidate runs under its release name
+(`app-<id>-r<rev>-<sha>`) with **no host port binding**, is health-checked over
+the docker network by container IP, and only then does the proxy target move.
+A candidate that never becomes healthy is removed and the previous release keeps
+serving — a bad release is a failed deploy, not an outage.
+
 ## Where this is heading
 
 The manual checklist above exists because identity is currently *derived* from
