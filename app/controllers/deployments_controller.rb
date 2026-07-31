@@ -11,8 +11,11 @@ class DeploymentsController < ApplicationController
   def rollback
     app = @deployment.app
 
-    unless app.kamal?
-      return redirect_to app, alert: "Rollback is only supported for Kamal apps for now (this app uses #{app.deploy_method})."
+    # Docker apps are rollback-able now: releases are SHA-tagged and retained
+    # (ADR 0003). Native still has no rollback action — it keeps release
+    # directories, but relinking and verifying is not built.
+    if app.native?
+      return redirect_to app, alert: "Rollback isn't available for native apps yet (no release-dir rollback)."
     end
     unless @deployment.rollback_target?
       return redirect_to app, alert: "That release can't be rolled back to — it's the current release, or has no recorded version."

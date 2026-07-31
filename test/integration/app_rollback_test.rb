@@ -47,12 +47,20 @@ class AppRollbackTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "already in progress"
   end
 
-  test "non-kamal apps refuse rollback" do
-    @app_rec.update!(deploy_method: "docker")
+  # Docker apps roll back now (ADR 0003 — releases are SHA-tagged and retained).
+  test "docker apps can roll back" do
+    AppFormChange.new(@app_rec).apply!(deploy_method: "docker")
+    assert_enqueued_with(job: RollbackAppJob) do
+      post rollback_deployment_path(@prior)
+    end
+  end
+
+  test "native apps still refuse rollback — no release-dir rollback yet" do
+    AppFormChange.new(@app_rec).apply!(deploy_method: "native")
     assert_no_enqueued_jobs do
       post rollback_deployment_path(@prior)
     end
     follow_redirect!
-    assert_includes response.body, "only supported for Kamal"
+    assert_includes response.body, "native apps"
   end
 end

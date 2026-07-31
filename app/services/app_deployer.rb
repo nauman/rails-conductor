@@ -47,8 +47,14 @@ class AppDeployer
       end
     end
 
+    # Record the EXACT tag that shipped. Deployment.rollbackable requires it, so
+    # without this a docker deploy could never appear as a rollback target — the
+    # rollback engine existed but nothing could reach it. It must be the tag we
+    # actually built, not the full SHA, or the rollback inspects an image that
+    # does not exist.
+    deployment.update!(release_version: release_tag)
     deployment.succeed!
-    log "Deployment completed successfully!"
+    log "Deployment completed successfully (release #{release_tag})"
     broadcast_status("succeeded")
     true
   rescue => e
@@ -518,10 +524,18 @@ class AppDeployer
   RETAINED_RELEASES = 5
 
   def cleanup
-    run(%(docker images --format '{{.Tag}} {{.CreatedAt}}' #{Shellwords.escape(app.image_name)} ) +
-        %(| grep -v '^latest ' | sort -k2 -r | tail -n +#{RETAINED_RELEASES + 1} | awk '{print $1}' ) +
+    # Keep the tags of the last RETAINED_RELEASES SUCCESSFUL deploys, not merely
+    # the newest images: every failed candidate build also produces a tag, so a
+    # run of failures would otherwise evict the known-good rollback targets the
+    # retention count promises.
+    keep = app.deployments.rollbackable.limit(RETAINED_RELEASES).filter_map(&:release_version)
+    keep = (keep + [ release_tag ]).uniq.map { |t| Shellwords.escape(t) }
+    keep_pattern = keep.map { |t| "-e '^#{t}$'" }.join(" ")
+
+    run(%(docker images --format '{{.Tag}}' #{Shellwords.escape(app.image_name)} ) +
+        %(| grep -v '^latest$' | grep -v #{keep_pattern} ) +
         %(| xargs -r -I{} docker rmi #{Shellwords.escape(app.image_name)}:{} 2>/dev/null || true))
-    # Dangling layers only — never a tagged release.
+    # Dangling layers only — never a tagged release we intend to keep.
     run("docker image prune -f 2>/dev/null || true")
     true
   end

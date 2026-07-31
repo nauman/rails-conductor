@@ -17,6 +17,7 @@ class DockerRollbackTest < ActiveSupport::TestCase
     def execute_with_status(cmd)
       @commands << cmd
       return { success: true, output: (@present ? "PRESENT" : ""), stderr: "" } if cmd.include?("image inspect")
+      return { success: true, output: "livecid777", stderr: "" } if cmd.include?("label=service=")
       return { success: @boot, output: @boot ? "" : "", stderr: @boot ? "" : "boom" } if cmd.start_with?("docker run")
       return { success: true, output: @container, stderr: "" } if cmd.include?("docker ps -q")
 
@@ -83,6 +84,39 @@ class DockerRollbackTest < ActiveSupport::TestCase
     run = ssh.commands.find { |c| c.start_with?("docker run") }
     assert_includes run, "--label service=app-#{@app.id}"
     assert_includes run, "--label conductor.release=abc1234"
+  end
+
+  # After a zero-downtime deploy the live container is app-<id>-r<rev>-<sha>;
+  # stopping only the legacy name would leave it running alongside the rollback.
+  test "stops the container that is ACTUALLY serving, resolved by label" do
+    ssh = FakeSsh.new
+    DockerRollback.new(@app, @deployment, ssh: ssh).rollback!("abc1234")
+
+    assert ssh.commands.any? { |c| c.include?("label=service=app-#{@app.id}") },
+           "must resolve the live container by label"
+    assert ssh.commands.any? { |c| c.include?("docker stop livecid777") },
+           "must stop the live release container, not just the legacy name"
+  end
+
+  test "a caddy edge is repointed too — it pointed at the container we removed" do
+    @app.server.update!(edge_type: "caddy")
+    published = []
+    fake_edge = Object.new
+    fake_edge.define_singleton_method(:publish) { |**kw| published << kw; { route_id: "r1" } }
+
+    Edge.stub(:for, ->(*, **) { fake_edge }) do
+      DockerRollback.new(@app, @deployment, ssh: FakeSsh.new).rollback!("abc1234")
+    end
+
+    assert_equal 1, published.size, "a caddy edge must follow the rollback"
+    assert_equal "127.0.0.1:3000", published.first[:upstream]
+  end
+
+  test "a container that exits immediately fails the rollback" do
+    ssh = FakeSsh.new(container: "")
+
+    assert_not DockerRollback.new(@app, @deployment, ssh: ssh).rollback!("abc1234")
+    assert_match(/exited immediately|did not start/i, @deployment.reload.log.to_s)
   end
 
   test "a blank version fails rather than booting something arbitrary" do

@@ -78,11 +78,18 @@ class DockerArtifactContractTest < ActiveSupport::TestCase
   end
 
   # The old `docker image prune -f` deleted the very artifact rollback needs.
-  test "cleanup retains prior releases instead of pruning them away" do
+  # Retention counts SUCCESSFUL releases, not the newest builds: every failed
+  # candidate build also produces a tag, and counting those would evict the
+  # known-good rollback targets the retention number promises.
+  test "cleanup keeps the tags of recent SUCCESSFUL releases" do
+    older = @app.deployments.create!(status: "succeeded", release_version: "aaa111aaa111")
+    @app.deployments.create!(status: "failed", release_version: "bbb222bbb222")
+
     cleanup = commands_from(:cleanup).join(" | ")
 
-    assert_includes cleanup, "tail -n +#{AppDeployer::RETAINED_RELEASES + 1}",
-                    "keeps the newest N releases"
-    assert_includes cleanup, "grep -v '^latest '", "never removes the :latest pointer"
+    assert_includes cleanup, "'^#{older.release_version}$'", "a successful release must be kept"
+    assert_not_includes cleanup, "bbb222bbb222", "a failed build is not a rollback target"
+    assert_includes cleanup, "'^abc1234def56$'", "the release being deployed must be kept"
+    assert_includes cleanup, "grep -v '^latest$'", "never removes the :latest pointer"
   end
 end

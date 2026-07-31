@@ -24,7 +24,9 @@ class RollbackAppTool
   def call(input)
     app = find_app(input)
     return Result.fail("App not found. Provide app_id or app_name.") unless app
-    return Result.fail("Rollback is only supported for Kamal apps (this app uses #{app.deploy_method}).") unless app.kamal?
+    if app.native?
+      return Result.fail("Rollback isn't available for native apps yet (no release-dir rollback).")
+    end
 
     target = target_deployment(app, input["deployment_id"] || input[:deployment_id])
     return Result.fail("No prior release to roll back to for #{app.name}.") unless target

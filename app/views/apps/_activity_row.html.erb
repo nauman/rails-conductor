@@ -52,7 +52,7 @@
     </div>
     <div class="font-mono text-2xs text-faint"><%= deployment.user&.email || "system" %></div>
     <div class="mt-1 flex items-center justify-end gap-2">
-      <% if app.kamal? && deployment.rollback_target? %>
+      <% if !app.native? && deployment.rollback_target? %>
         <%= rui_button_to("Rollback", rollback_deployment_path(deployment), method: :post, variant: :link, size: :sm, color: :warning,
               data: { turbo_confirm: "Roll #{app.name} back to release #{deployment.target_version&.first(12)}? This boots the previous image on the host (no rebuild)." }) %>
       <% end %>

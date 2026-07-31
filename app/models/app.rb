@@ -372,7 +372,13 @@ class App < ApplicationRecord
 
   # Has this app ever put anything on a box? Until it has, changing its shape
   # strands nothing.
-  def ever_deployed? = deployed_at.present? || container_id.present?
+  #
+  # Deployment HISTORY is the durable signal: deployed_at and container_id are
+  # both mutable and can be cleared, which would silently reopen the form-change
+  # guard on an app that really does have residue out there.
+  def ever_deployed?
+    deployed_at.present? || container_id.present? || deployments.successful.exists?
+  end
 
   # `<app_id>.<infra_revision>` — which infrastructure shape this app is in.
   # Not a git tag and unrelated to the commit being deployed.

@@ -57,11 +57,28 @@ class DockerRollback
   end
 
   def swap_to(version)
+    # Stop whatever is ACTUALLY serving, resolved by label — after a
+    # zero-downtime deploy the live container is app-<id>-r<rev>-<sha>, so
+    # stopping the legacy fixed name would leave it running and roll back into a
+    # split-traffic state.
+    live = live_container
+    if live.present?
+      @ssh.execute_with_status("docker stop #{esc(live)} 2>/dev/null || true")
+      @ssh.execute_with_status("docker rm #{esc(live)} 2>/dev/null || true")
+    end
     @ssh.execute_with_status("docker stop #{esc(app.container_name)} 2>/dev/null || true")
     @ssh.execute_with_status("docker rm #{esc(app.container_name)} 2>/dev/null || true")
 
     res = @ssh.execute_with_status(run_command(version))
-    return true if res[:success]
+    if res[:success]
+      # `docker run -d` succeeding means the daemon accepted it, not that the
+      # process stayed up. Confirm before calling the rollback done.
+      check = @ssh.execute_with_status("docker ps -q -f name=#{esc(app.container_name)} | head -n1")
+      return true if check[:output].to_s.strip.present?
+
+      fail_with("Rolled-back container #{ref(version)} exited immediately")
+      return false
+    end
 
     fail_with("Failed to boot #{ref(version)}: #{res[:stderr].presence || res[:output]}")
     false
@@ -85,22 +102,36 @@ class DockerRollback
     (parts + [ app.env_variables.map(&:to_docker_env).join(" "), esc(ref(version)) ]).join(" ")
   end
 
-  # A rollback replaces the container, so a container-targeting edge points at a
-  # dead one exactly as it does after a deploy.
+  # A rollback replaces the container, so ANY edge that points at the old one
+  # must follow — kamal-proxy by container id, Caddy by host:port. Skipping the
+  # Caddy case left the edge on the container we just removed.
   def republish_edge
     return true if app.domain.blank?
-    return true unless app.server.edge_type == "kamal_proxy"
+    return true if app.server.edge_type.blank? || app.server.edge_type == "none"
 
-    res = @ssh.execute_with_status("docker ps -q -f name=#{esc(app.container_name)}")
+    res = @ssh.execute_with_status("docker ps -q -f name=#{esc(app.container_name)} | head -n1")
     container = res[:output].to_s.strip
     return fail_with("Rolled back container did not start — edge not repointed") if container.blank?
 
     app.update!(container_id: container)
-    Edge.for(app.server, ssh: @ssh).publish(domain: app.domain, upstream: "#{container}:#{app.port || 3000}")
+
+    if app.server.edge_type == "kamal_proxy"
+      Edge.for(app.server, ssh: @ssh).publish(domain: app.domain, upstream: "#{container}:#{app.port || 3000}")
+    else
+      # The rolled-back container binds the app's own port again, so Caddy points
+      # back at the stable loopback address.
+      Edge.for(app.server).publish(domain: app.domain, upstream: "127.0.0.1:#{app.port || 3000}")
+    end
     true
-  rescue Edge::UnsupportedEdge, Edge::KamalProxyAdapter::Error => e
+  rescue StandardError => e
     fail_with("Edge republish failed after rollback: #{e.message}")
     false
+  end
+
+  # What is serving now, by the stable service label (ADR 0003/0004).
+  def live_container
+    res = @ssh.execute_with_status(%(docker ps -q -f "label=service=#{esc(app.resource_key)}" | head -n1))
+    res[:output].to_s.strip
   end
 
   def ref(version) = "#{app.image_name}:#{version}"

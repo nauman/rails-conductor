@@ -97,6 +97,15 @@ class AppFormChangeTest < ActiveSupport::TestCase
                  "a container from r1 is now recognisably stale"
   end
 
+  # deployed_at and container_id are both clearable; deployment history is not.
+  test "ever_deployed? survives deployed_at and container_id being cleared" do
+    @app.deployments.create!(status: "succeeded")
+    @app.update_columns(deployed_at: nil, container_id: nil)
+
+    assert @app.reload.ever_deployed?, "successful deploy history is the durable signal"
+    assert_not @app.update(server_id: @b.id), "the guard must still bite"
+  end
+
   test "a failed form change leaves the revision untouched" do
     assert_raises(ActiveRecord::RecordInvalid) do
       AppFormChange.new(@app).apply!(deploy_method: "nonsense")
