@@ -53,15 +53,21 @@ class Edge
       domain.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
     end
 
-    # Parse `kamal-proxy list` and return the service currently serving `domain`.
+    # Return the service currently serving `domain`, read from the live proxy.
+    #
+    # The command is `ls`, NOT `list` — same spelling StrayProxyCleaner uses.
+    # Its output carries ANSI colour and a "Service / Host / Target ..." header
+    # row, both of which must be stripped or the header parses as a route.
     # Best-effort: any failure falls back to the derived key.
     def live_service_for(domain)
-      res = @ssh.execute_with_status("docker exec #{PROXY_CONTAINER} kamal-proxy list")
+      res = @ssh.execute_with_status("docker exec #{PROXY_CONTAINER} kamal-proxy ls 2>/dev/null")
       return nil unless res[:success]
 
       wanted = domain.to_s.downcase
-      res[:output].to_s.each_line do |line|
-        service, host = line.split(/\s+/).first(2)
+      res[:output].to_s.gsub(/\e\[[0-9;]*m/, "").lines.each do |line|
+        next if line.match?(/\bService\b/i) && line.match?(/\bTarget\b/i) # header
+
+        service, host = line.strip.split(/\s+/).first(2)
         next if service.blank? || host.blank?
         return service if host.downcase == wanted
       end

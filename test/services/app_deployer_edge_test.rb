@@ -8,14 +8,20 @@ class AppDeployerEdgeTest < ActiveSupport::TestCase
   class FakeSsh
     attr_reader :commands
 
-    def initialize(list_output: "starrrs-web  starrrs.com  15c72f2e2f9e:3000  running  tls=yes\n")
+    # Real `kamal-proxy ls` output: ANSI colour + a header row.
+    DEFAULT_LS = "\e[1mService      Host          Target             State    TLS\e[0m\n" \
+                 "starrrs-web  starrrs.com   15c72f2e2f9e:3000  running  yes\n".freeze
+
+    def initialize(list_output: DEFAULT_LS)
       @commands = []
       @list_output = list_output
     end
 
     def execute_with_status(cmd)
       @commands << cmd
-      return { success: true, output: @list_output, stderr: "" } if cmd.include?("kamal-proxy list")
+      # Only answers the REAL spelling — a wrong command gets empty output, so a
+      # regression to `kamal-proxy list` fails these tests instead of passing.
+      return { success: true, output: @list_output, stderr: "" } if cmd.include?("kamal-proxy ls")
 
       { success: true, output: "", stderr: "" }
     end
@@ -61,8 +67,29 @@ class AppDeployerEdgeTest < ActiveSupport::TestCase
     assert_not_includes publish, "starrrs-com"
   end
 
+  # The proxy CLI is `ls`; StrayProxyCleaner uses the same. `list` silently
+  # returns nothing, which would fall back to a derived key and create a SECOND
+  # service for the host — the intermittent-502 failure this fix exists to avoid.
+  test "queries the proxy with the real CLI spelling (ls, not list)" do
+    ssh = FakeSsh.new
+    republish(ssh)
+
+    assert ssh.commands.any? { |c| c.include?("kamal-proxy ls") }, "must use `ls`"
+    assert_not ssh.commands.any? { |c| c.match?(/kamal-proxy list\b/) }, "`list` is not a kamal-proxy command"
+  end
+
+  # The header row must not be mistaken for a route.
+  test "ignores the header row and ANSI colour when resolving the service" do
+    ssh = FakeSsh.new
+    republish(ssh)
+
+    publish = ssh.commands.find { |c| c.include?("kamal-proxy deploy") }
+    assert_includes publish, "starrrs-web"
+    assert_not_includes publish, "Service"
+  end
+
   test "falls back to a derived key when the host has no existing route" do
-    ssh = FakeSsh.new(list_output: "other-web  other.com  abc:3000  running\n")
+    ssh = FakeSsh.new(list_output: "Service    Host       Target    State\nother-web  other.com  abc:3000  running\n")
 
     republish(ssh)
 
