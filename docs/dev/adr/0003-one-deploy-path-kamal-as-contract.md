@@ -127,6 +127,27 @@ and `console` locate containers by the `service` label, so labelling containers
 is all that was required. The label carries the **stable resource key** (ADR
 0004) rather than the slug, so a rename cannot orphan it.
 
+## The cutover constraint (found while implementing)
+
+Zero-downtime is not uniformly achievable, because it depends on what the edge
+targets — and one case is impossible rather than merely unbuilt.
+
+The docker path publishes a fixed host port (`-p 3000:3000`). Two containers
+cannot bind the same host port, so "start the candidate alongside the old one"
+means the candidate must not take that binding.
+
+| Edge | Candidate can start alongside? | Cutover |
+|---|---|---|
+| `kamal_proxy` | **Yes, cleanly.** The proxy targets `container:3000` over the docker network, so the candidate needs *no host port at all* | Health-check over the docker network, then swap the proxy target. **Zero-downtime is free here.** |
+| `caddy` | Yes, with a port dance — the candidate binds a *second* host port | Health-check the new port, repoint Caddy's upstream, then drain. Needs port allocation + release. |
+| `none` / direct | **No.** The fixed host port *is* the service; nothing exists to swap | Downtime is unavoidable without introducing a proxy. |
+
+This means the "close the outage window" work is really three pieces of differing
+value, and the first is both the cheapest and covers the case that actually bit
+us (Starrrs is kamal-proxy). Build in that order, and be explicit that an
+unproxied app cannot have a zero-downtime deploy — that is a property of its
+shape, not a missing feature.
+
 ## Related
 
 - ADR 0001 — self-describing Kamal deploys (widened by this decision)
