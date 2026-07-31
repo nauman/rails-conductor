@@ -31,7 +31,11 @@ on:
       - '**.md'
   workflow_dispatch:
 
-# Never run two production deploys at once (this is what prevents lock contention).
+# Serializes GitHub Actions runs only. It does NOT prevent Conductor's in-product
+# deploy path (webhook -> auto_deploy -> KamalDeployer) from deploying the same
+# app concurrently — that race is what strands the kamal deploy lock. The fix for
+# that lives in the app (self-deploy is refused), not here.
+# See docs/learnings/deploy-lock-stranded-by-self-deploy.md
 concurrency:
   group: deploy-conductor-production
   cancel-in-progress: false
@@ -123,7 +127,12 @@ jobs:
             if [ -n "$v" ]; then echo "✅ /version reports $v — deploy live"; exit 0; fi
             sleep 10
           done
-          echo "::warning::/version did not report ${GITHUB_SHA:0:7} within ~3.5min"
+          # FAIL, don't warn. Exiting 0 here made the job green and reported the
+          # deploy as "succeeded" while the OLD code was still live — a silent
+          # not-deployed. A transient propagation delay surfacing as a visible
+          # failure is strictly better than a false success.
+          echo "::error::/version did not report ${GITHUB_SHA:0:7} within ~3.5min — the intended release is NOT live."
+          exit 1
 
       # Report THIS deploy back to Conductor so it becomes a real Deployment row
       # (Q-07-1). A CI deploy is otherwise invisible to the control plane, and
@@ -151,7 +160,9 @@ jobs:
                    "$status" "$GITHUB_SHA" "${GITHUB_SHA:0:7}")
           # HMAC-SHA256 over the RAW body, same scheme as the push webhook.
           sig="sha256=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$CONDUCTOR_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}')"
-          curl -sS --max-time 15 -X POST "https://$APP_HOST/webhooks/$CONDUCTOR_APP_ID/deployment" \
+          # --fail-with-body: without it, a 4xx/5xx still exits 0 and we print
+          # "Reported deploy" for a report the control plane never accepted.
+          curl --fail-with-body -sS --max-time 15 -X POST "https://$APP_HOST/webhooks/$CONDUCTOR_APP_ID/deployment" \
             -H "Content-Type: application/json" -H "X-Hub-Signature-256: $sig" \
             --data "$body" && echo "Reported deploy ($status) to Conductor." || \
             echo "::warning::Could not report deploy to Conductor (non-fatal)."

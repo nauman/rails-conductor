@@ -22,6 +22,7 @@ class AppDeployer
       :stop_old_container,
       :start_container,
       :health_check,
+      :republish_edge_route,
       :cleanup
     ]
 
@@ -204,6 +205,38 @@ class AppDeployer
     end
 
     log "Health check failed after 60 seconds"
+    false
+  end
+
+  # A docker deploy replaces the container, which changes the container id the
+  # edge must point at. kamal-proxy routes to a specific container, so unless the
+  # route is republished it keeps targeting the REMOVED container and every
+  # request 502s while the deployment happily reports success.
+  #
+  # Deliberately runs AFTER health_check: the new container is already serving
+  # before we move the edge, so the cut-over is the last step and the old target
+  # is never dropped in favour of something unproven.
+  #
+  # Caddy edges are untouched — a host-Caddy route points at a stable host:port,
+  # not a container id, so replacing the container is invisible to it.
+  def republish_edge_route
+    return true if app.domain.blank?
+    return true unless app.server&.edge_type == "kamal_proxy"
+
+    container = app.container_id.presence
+    return fail_step("no container id recorded — cannot repoint the edge") if container.blank?
+
+    upstream = "#{container}:#{app.port || 3000}"
+    log "Republishing #{app.domain} on kamal-proxy -> #{upstream}"
+    result = Edge.for(app.server, ssh: ssh).publish(domain: app.domain, upstream: upstream)
+    log "Edge published (service=#{result[:service]})"
+    true
+  rescue Edge::UnsupportedEdge, Edge::KamalProxyAdapter::Error => e
+    fail_step("edge republish failed: #{e.message}")
+  end
+
+  def fail_step(message)
+    log "ERROR: #{message}"
     false
   end
 

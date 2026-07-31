@@ -72,7 +72,8 @@ class EdgeTest < ActiveSupport::TestCase
     assert_equal "kamal_proxy", result[:edge]
     assert_equal "a.com", result[:domain]
     assert_equal "kamal-proxy", result[:applied_by]
-    cmd = ssh.commands.first
+    cmd = ssh.commands.find { |c| c.include?("kamal-proxy deploy") }
+    assert cmd, "expected a publish command; got #{ssh.commands.inspect}"
     assert_includes cmd, "docker exec kamal-proxy kamal-proxy deploy"
     assert_includes cmd, "--host a.com"
     assert_includes cmd, "--target app-web:3000"
@@ -83,7 +84,8 @@ class EdgeTest < ActiveSupport::TestCase
     ssh = FakeSsh.new
     result = Edge.for(server("kamal_proxy"), ssh: ssh).unpublish(domain: "a.com")
     assert_equal "kamal_proxy", result[:edge]
-    assert_includes ssh.commands.first, "kamal-proxy remove"
+    assert ssh.commands.any? { |c| c.include?("kamal-proxy remove") },
+           "expected a remove command; got #{ssh.commands.inspect}"
   end
 
   test "KamalProxyAdapter raises a legible error when kamal-proxy fails" do

@@ -57,8 +57,11 @@ class KamalDeployerTest < ActiveSupport::TestCase
     FileUtils.remove_entry(@ssh_root) if @ssh_root && Dir.exist?(@ssh_root)
   end
 
-  def deploy_with(shell)
-    KamalDeployer.new(@app, @deployment, shell: shell).tap(&:deploy!)
+  # allow_self_deploy mirrors the supervised override. Routine paths refuse a
+  # self-managed deploy (it strands the kamal lock); these tests exercise the
+  # secret-resolution and lock-recovery mechanisms, which is a separate concern.
+  def deploy_with(shell, allow_self_deploy: true)
+    KamalDeployer.new(@app, @deployment, shell: shell, allow_self_deploy: allow_self_deploy).tap(&:deploy!)
   end
 
   def rollback_with(shell, version: "deadbeefcafe1234")
@@ -450,7 +453,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     shell = LockedThenOkShell.new
 
     with_env("RAILS_MASTER_KEY" => "k") do
-      KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+      KamalDeployer.new(@app, @deployment, shell: shell, allow_self_deploy: true).deploy!
     end
 
     assert_equal "succeeded", @deployment.reload.status, "should recover after releasing the lock"
@@ -508,11 +511,33 @@ class KamalDeployerTest < ActiveSupport::TestCase
   test "a failed migration fails the deploy — never marked succeeded (the recurring-500 guard)" do
     shell = FailOnShell.new("db:migrate")
     with_env("RAILS_MASTER_KEY" => "k") do
-      KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+      KamalDeployer.new(@app, @deployment, shell: shell, allow_self_deploy: true).deploy!
     end
 
     assert_equal "failed", @deployment.reload.status, "a failed migration must fail the deploy"
     assert_match(/db:migrate failed/i, @deployment.log.to_s)
+  end
+
+  # The policy itself: routine callers (webhook/job/MCP/UI) must not be able to
+  # make Conductor deploy itself — kamal kills the container mid-run, stranding
+  # the deploy lock and blocking every later deploy.
+  test "a self-managed deploy is REFUSED by default" do
+    @app.update!(self_managed: true)
+
+    KamalDeployer.new(@app, @deployment, shell: FakeShell.new(success: true)).deploy!
+
+    assert_equal "failed", @deployment.reload.status
+    assert_match(/deploy from CI/i, @deployment.log.to_s)
+  end
+
+  test "a stale lock is NOT reclaimed for a self-managed app — CI may hold it" do
+    @app.update!(self_managed: true)
+    shell = FakeShell.new(success: true)
+
+    KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+
+    assert_not shell.runs.any? { |r| r[:command].join(" ").include?("lock release") },
+               "must not grab a lock CI could be holding"
   end
 
   test "a self-managed deploy logs the replace-and-reconcile note" do
@@ -689,7 +714,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     shell = FakeShell.new(success: true)
 
     GithubApp.stub(:from_config, fake_app) do
-      KamalDeployer.new(@app, @deployment, shell: shell).deploy!
+      KamalDeployer.new(@app, @deployment, shell: shell, allow_self_deploy: true).deploy!
     end
 
     sync = shell.runs.find { |r| r[:command].last.include?("git clone") }

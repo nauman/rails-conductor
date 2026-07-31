@@ -4,7 +4,7 @@ Infrastructure and ops references for Conductor.
 
 | File | Purpose |
 | --- | --- |
-| `caddy_ops_ui_architecture.md` | Early architecture draft (Caddy/Kamal/Portainer/R2) |
+| `edge-and-deploy-forms.md` | How deploy method and edge interact; diagnosing a 502 after a green deploy; the form-change checklist |
 | `docs/infra/INDEX.md` | This index |
 
 ## Planned Docs

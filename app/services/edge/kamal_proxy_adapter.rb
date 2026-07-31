@@ -34,9 +34,40 @@ class Edge
 
     private
 
-    # kamal-proxy's route key — derived from the host so it's stable + unique.
+    # kamal-proxy's route key. Order matters:
+    #
+    #   1. an explicitly injected service, when the caller knows it;
+    #   2. the service that ALREADY serves this host on the live proxy;
+    #   3. a key derived from the host.
+    #
+    # Step 2 is not a nicety. A route created by `kamal deploy` is keyed on the
+    # kamal service + role (e.g. "starrrs-web"), not on the host. Publishing the
+    # same host under a derived key ("starrrs-com") leaves TWO services claiming
+    # one hostname instead of replacing the stale one — which is how you turn a
+    # 502 into an intermittent 502.
     def service_for(domain)
-      @service.presence || domain.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+      @service.presence || live_service_for(domain) || derived_service(domain)
+    end
+
+    def derived_service(domain)
+      domain.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+    end
+
+    # Parse `kamal-proxy list` and return the service currently serving `domain`.
+    # Best-effort: any failure falls back to the derived key.
+    def live_service_for(domain)
+      res = @ssh.execute_with_status("docker exec #{PROXY_CONTAINER} kamal-proxy list")
+      return nil unless res[:success]
+
+      wanted = domain.to_s.downcase
+      res[:output].to_s.each_line do |line|
+        service, host = line.split(/\s+/).first(2)
+        next if service.blank? || host.blank?
+        return service if host.downcase == wanted
+      end
+      nil
+    rescue StandardError
+      nil
     end
 
     def esc(str) = Shellwords.escape(str.to_s)

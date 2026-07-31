@@ -22,10 +22,14 @@ require "digest"
 class KamalDeployer
   attr_reader :app, :deployment, :error
 
-  def initialize(app, deployment, shell: nil, target_server: nil)
+  # allow_self_deploy: escape hatch for the one legitimate in-product self-deploy
+  # caller — a deliberate, supervised override. Every routine path (webhook,
+  # job, MCP, UI) leaves it false so a self-managed app cannot deploy itself.
+  def initialize(app, deployment, shell: nil, target_server: nil, allow_self_deploy: false)
     @app = app
     @deployment = deployment
     @shell = shell || LocalShell.new
+    @allow_self_deploy = allow_self_deploy
     # The destination host. Defaults to the app's own server; an app transfer
     # (spec 26) passes a different server to stand the app up on box B. Threads
     # through the SSH/env/key setup AND the generated deploy overlay.
@@ -72,6 +76,16 @@ class KamalDeployer
     write_secrets_file
     write_self_describing_config if app.self_describing?
     log_ssh_diagnostics
+    # Belt and braces with the webhook guard: a self-managed app must not deploy
+    # itself from inside the container kamal is about to replace. The killed
+    # process strands the deploy lock and blocks every later deploy, and the boot
+    # reconciler then records the row "succeeded" without the gated migrations
+    # below ever having run. CI is the only supported path for these.
+    if app.self_managed? && !@allow_self_deploy
+      fail_with("self-managed apps deploy from CI, not in-product — refusing to self-deploy " \
+                "(see docs/learnings/deploy-lock-stranded-by-self-deploy.md)")
+      return false
+    end
     note_self_deploy if app.self_managed?
     stop_prior_container_if_fixed_port
     unless run_kamal_deploy
@@ -416,16 +430,24 @@ class KamalDeployer
   # killed mid-run (e.g. a self-deploy where kamal stops THIS container) never
   # releases it, so the next deploy fails with "Deploy lock found".
   #
-  # The unique partial index idx_one_active_deploy_per_app guarantees at most one
-  # in-flight deployment per app, so a "Deploy lock found" here is ALWAYS a stale
-  # lock from a prior killed run — never a genuinely-concurrent deploy. That makes
-  # it safe to release-and-retry for every app (no longer scoped to self-managed).
+  # CAUTION — this used to release-and-retry for EVERY app, justified by the
+  # unique partial index idx_one_active_deploy_per_app "guaranteeing" at most one
+  # in-flight deploy per app. That premise is false: the index constrains
+  # Deployment ROWS, and a deploy can happen without creating one — CI
+  # (.github/workflows/deploy.yml) does exactly that, as does a laptop running
+  # bin/kamal. So a lock may belong to a genuinely concurrent deploy, and blindly
+  # releasing it would let two rolls run against one host at once.
+  #
+  # CI only ever deploys the self-managed app (Conductor itself), and those no
+  # longer deploy in-product at all — so restricting reclamation to
+  # non-self-managed apps removes exactly the case where a live competing
+  # deployer can exist, while keeping recovery for the ordinary killed-job case.
   def run_kamal_deploy
     log "Running: kamal deploy"
     result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
-    if result.output.to_s.include?("Deploy lock found")
+    if result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
       log "Stale kamal deploy lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
       @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
       result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
@@ -443,7 +465,7 @@ class KamalDeployer
     result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
-    if result.output.to_s.include?("Deploy lock found")
+    if result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
       log "Stale kamal lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
       @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
       result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
@@ -461,6 +483,17 @@ class KamalDeployer
 
   def kamal_rollback_command(version)
     ["bash", "-lc", "#{kamal_bin} rollback #{esc(version)}#{destination_flag}"]
+  end
+
+  # A lock is only ours to reclaim when no other deployer can hold it. CI deploys
+  # the self-managed app, so for that app a lock may be LIVE — never grab it.
+  def reclaimable_lock?
+    return true unless app.self_managed?
+    return true if @allow_self_deploy
+
+    log "Deploy lock found for a self-managed app — NOT releasing: CI may hold it. " \
+        "If CI is idle, release it by hand (bin/kamal lock release -d production)."
+    false
   end
 
   def kamal_lock_release_command

@@ -14,6 +14,15 @@ class WebhooksController < ActionController::Base
     head(:unauthorized) and return unless valid_signature?(app)
 
     head(:ok) and return unless app.auto_deploy?
+    # A self-managed app deploys ITSELF: kamal runs inside the container it is
+    # replacing, gets killed before releasing the deploy lock, and strands it —
+    # blocking every later deploy. Such an app must ship from CI (a clean control
+    # machine) instead. Ack the push so the provider doesn't retry, and say why.
+    if app.self_managed?
+      Rails.logger.warn("[webhook] refusing in-product self-deploy for app=#{app.id} (#{app.name}); " \
+                        "self-managed apps deploy from CI — see docs/learnings/deploy-lock-stranded-by-self-deploy.md")
+      head(:ok) and return
+    end
     head(:ok) and return unless ref_matches_branch?(app)
     deployment, status = app.start_deployment!(commit_sha: params[:after].presence)
     head(:ok) and return if status == :already_running # debounce
