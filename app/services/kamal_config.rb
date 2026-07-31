@@ -32,10 +32,23 @@ class KamalConfig
     @server = target_server || app.server
   end
 
+  # The `service` value MUST equal the `service` LABEL on the running containers,
+  # because that is how `kamal app logs / exec / console` finds them.
+  #
+  #   kamal-deployed — Kamal creates the containers and labels them from this
+  #                    value, so it stays the slug. Changing it would rename
+  #                    every container AND the proxy route key: a form change.
+  #   Conductor-deployed — Conductor labels containers with the stable resource
+  #                    key (ADR 0004), so the config must say the same thing or
+  #                    the ops CLI is blind to every container we deployed.
+  def service_name
+    app.kamal? ? app.slug : app.resource_key
+  end
+
   # The real, literal destination overlay (config/deploy.production.yml).
   def deploy_overlay_yaml
     overlay = {
-      "service" => app.slug,
+      "service" => service_name,
       "image"   => "#{registry_username}/#{app.slug}",
       "servers" => { "web" => [@server&.ip_address].compact },
       "ssh"     => { "user" => @server&.ssh_user_or_default || "deploy" },

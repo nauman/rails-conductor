@@ -66,6 +66,38 @@ class KamalLabelContractTest < ActiveSupport::TestCase
     REQUIRED_LABELS.each { |label| assert_includes run, "--label #{label}=" }
   end
 
+  # THE contract test. `kamal app logs/exec/console` reads `service:` from
+  # deploy.yml, then filters containers by that LABEL. If the two disagree, every
+  # ops command silently finds nothing — which is worse than an error, because it
+  # looks like the app simply has no logs.
+  test "deploy.yml's service matches the label our deploy actually applies" do
+    ssh = Class.new do
+      attr_reader :commands
+      def initialize = @commands = []
+      def execute_with_status(cmd) = (@commands << cmd; { success: true, output: "cid", stderr: "" })
+      def output = "cid"
+    end.new
+
+    deployer = AppDeployer.new(@app, @deployment)
+    deployer.stub(:ssh, ssh) { deployer.send(:start_container) }
+    applied = ssh.commands.find { |c| c.start_with?("docker run") }[/--label service=(\S+)/, 1]
+
+    config = YAML.safe_load(KamalConfig.new(@app).deploy_overlay_yaml)
+
+    assert_equal applied, config["service"],
+      "deploy.yml says service=#{config['service'].inspect} but the container is labelled " \
+      "#{applied.inspect} — the Kamal ops CLI would find nothing"
+  end
+
+  # A Kamal-deployed app is labelled BY Kamal from this same value, so it must
+  # keep its slug: changing it would rename every container and the proxy route.
+  test "a kamal app's service stays the slug, not the resource key" do
+    @app.update!(deploy_method: "kamal")
+
+    config = YAML.safe_load(KamalConfig.new(@app).deploy_overlay_yaml)
+    assert_equal @app.slug, config["service"]
+  end
+
   # The gem is pinned precisely because this contract is undocumented.
   test "kamal is pinned in the Gemfile, not floating" do
     gemfile = File.read(Rails.root.join("Gemfile"))

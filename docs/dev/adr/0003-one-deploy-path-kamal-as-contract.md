@@ -115,9 +115,9 @@ targets a stable **host:port** (Caddy) needs nothing.
 | Retain prior images | ✅ shipped — keeps `RETAINED_RELEASES` (5) | `AppDeployer#cleanup` |
 | **Rollback for docker apps** | ✅ shipped | `DockerRollback` |
 | Edge republished on deploy | ✅ shipped | `AppDeployer#republish_edge_route` |
-| `deploy.yml` for all methods | ⚠️ Kamal apps only | `app/services/kamal_config.rb` |
+| `deploy.yml` for all methods | ✅ shipped — docker apps too; `service` matches the applied label | `KamalConfig#service_name` |
 | Candidate → health → swap → drain | ✅ shipped for `kamal_proxy` **and** `caddy`; unproxied cannot have it | `AppDeployer::ZERO_DOWNTIME_STEPS` |
-| Conductor self-deploys via CI | ⚠️ CI runs, but still calls `bin/kamal` | `.github/workflows/deploy.yml` |
+| Conductor self-deploys via CI | ✅ **resolved by decision** — CI keeps `bin/kamal` (see below) | `.github/workflows/deploy.yml` |
 
 ### What the contract unlocked
 
@@ -131,6 +131,33 @@ The same change hands docker apps the Kamal ops CLI: `kamal app logs`, `exec`,
 and `console` locate containers by the `service` label, so labelling containers
 is all that was required. The label carries the **stable resource key** (ADR
 0004) rather than the slug, so a rename cannot orphan it.
+
+## Why Conductor's own CI keeps using `bin/kamal`
+
+"One deploy path" does **not** mean the CI workflow must stop calling Kamal, and
+converting it would be a mistake:
+
+- **The bug is already fixed.** The stranded lock came from the *in-product*
+  self-deploy — Kamal running inside the container it was replacing. That is now
+  refused at the webhook and the deployer. CI runs on a clean control machine and
+  never self-kills, so it cannot strand a lock; with self-deploy refused it is
+  also the only deployer, so there is nothing to contend with.
+- **CI cannot use `AppDeployer` anyway.** The deployer reads the App record, its
+  env variables, and its server from Conductor's own database. A GitHub Actions
+  runner has no database access, so "use the same code" is not available — the
+  realistic alternative is re-implementing build → push → SSH → cutover in bash.
+- **That alternative is strictly worse.** It would hand-roll, untested, the exact
+  release transaction this ADR is careful about — on the one app whose failure
+  takes out the control plane, and it would lose Kamal's health-gated cutover
+  for it.
+
+So Conductor's CI keeps Kamal as its deploy driver. That is consistent with this
+ADR rather than an exception to it: the ADR's objection is to Kamal as the
+*in-product* driver, where the self-deploy inversion lives — not to an external
+control machine using the tool it is good at.
+
+If this ever changes, the right shape is CI invoking Conductor's deployer with
+database access, not a bash re-implementation.
 
 ## The cutover constraint (found while implementing)
 

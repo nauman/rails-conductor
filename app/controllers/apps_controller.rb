@@ -152,8 +152,12 @@ class AppsController < ApplicationController
   # `kamal console -d production` works from the repo. Read-only preview to copy
   # into the repo (Kamal only for now).
   def deploy_config
-    unless @app.kamal?
-      return redirect_to @app, alert: "Self-describing deploy config is Kamal-only for now (this app deploys via #{@app.deploy_method})."
+    # ADR 0003 widens this beyond Kamal apps: a docker app needs a real deploy.yml
+    # too, because that is what lets `bin/kamal app logs / exec / console` and
+    # `kamal rollback` work against a Conductor-performed deploy. Native apps have
+    # no containers for those commands to find, so they are still excluded.
+    if @app.native?
+      return redirect_to @app, alert: "Deploy config is for container deploys; this app runs natively."
     end
     @files = KamalConfig.new(@app).files
 
