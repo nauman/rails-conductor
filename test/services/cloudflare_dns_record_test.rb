@@ -4,13 +4,23 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
   # A CloudflareClient stub recording the calls it received.
   class FakeClient
     attr_reader :seen, :deleted
-    def initialize(record: { "id" => "rec1" }) = @record = record
+    attr_reader :deleted_ids
+    def initialize(record: { "id" => "rec1" }, records: nil)
+      @record = record
+      @records = records
+      @deleted_ids = []
+    end
     def upsert_dns_record(zone, name:, content:, type:, proxied:)
       @seen = [ zone, name, content, type, proxied ]
       CloudflareClient::Result.new(ok: true, data: { "id" => "rec1", "name" => name })
     end
-    def dns_record(_zone, _name) = CloudflareClient::Result.new(ok: true, data: @record)
-    def delete_dns_record(zone, id) = (@deleted = [ zone, id ]; CloudflareClient::Result.new(ok: true, data: {}))
+    def dns_record(_zone, _name, type: nil) = CloudflareClient::Result.new(ok: true, data: @record)
+    def dns_records(_zone, _name, type: nil) = CloudflareClient::Result.new(ok: true, data: Array(@records || [ @record ].compact))
+    def delete_dns_record(zone, id)
+      @deleted = [ zone, id ]
+      @deleted_ids << id
+      CloudflareClient::Result.new(ok: true, data: {})
+    end
   end
 
   setup do
@@ -103,5 +113,31 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
 
     assert_not r.ok?
     assert_match(/Unsupported record type MX/, r.message)
+  end
+
+  # A name can carry several records. Deleting only the first while reporting
+  # success leaves it still resolving — a false success on a destructive action,
+  # which is worse than failing, because the caller believes it is done.
+  test "deletes EVERY record at the name, not just the first" do
+    client = FakeClient.new(records: [ { "id" => "a1", "type" => "A" },
+                                       { "id" => "a2", "type" => "A" },
+                                       { "id" => "q1", "type" => "AAAA" } ])
+
+    r = CloudflareDnsRecord.new(cf_creds, client_for: ->(_) { client }).delete!(domain: "platepose.com")
+
+    assert r.ok?, r.message
+    assert_equal %w[a1 a2 q1], client.deleted_ids, "every record must go"
+    assert_match(/3 record\(s\)/, r.message)
+    assert_match(/2×A/, r.message)
+  end
+
+  test "reports already-absent without claiming a deletion" do
+    client = FakeClient.new(records: [])
+
+    r = CloudflareDnsRecord.new(cf_creds, client_for: ->(_) { client }).delete!(domain: "platepose.com")
+
+    assert r.ok?
+    assert_empty client.deleted_ids
+    assert_match(/already absent/, r.message)
   end
 end

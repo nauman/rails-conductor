@@ -56,14 +56,26 @@ class CloudflareDnsRecord
     return failure("No connected Cloudflare account owns #{domain}. Connect + Verify the account first.") unless zone
 
     client = @client_for.call(cred)
-    rec = client.dns_record(zone["id"], domain)
-    return failure("Couldn't read the DNS record for #{domain}: #{rec.error}") unless rec.ok?
-    return Result.new(ok: true, record: nil, message: "#{domain} has no DNS record in Cloudflare (already absent).") if rec.data.nil?
+    # ALL records at this name. Deleting only the first and reporting success
+    # would leave the name resolving — the worst kind of result for a
+    # destructive action, because the caller believes it is done.
+    recs = client.dns_records(zone["id"], domain)
+    return failure("Couldn't read the DNS records for #{domain}: #{recs.error}") unless recs.ok?
 
-    r = client.delete_dns_record(zone["id"], rec.data["id"])
-    return failure("Deleting the DNS record failed: #{r.error}") unless r.ok?
+    found = Array(recs.data)
+    if found.empty?
+      return Result.new(ok: true, record: nil,
+                        message: "#{domain} has no DNS record in Cloudflare (already absent).")
+    end
 
-    Result.new(ok: true, record: rec.data, message: "Deleted #{domain} from Cloudflare (#{cred.name}).")
+    found.each do |rec|
+      r = client.delete_dns_record(zone["id"], rec["id"])
+      return failure("Deleting the #{rec['type']} record for #{domain} failed: #{r.error}") unless r.ok?
+    end
+
+    types = found.map { |r| r["type"] }.tally.map { |t, n| n > 1 ? "#{n}×#{t}" : t }.join(", ")
+    Result.new(ok: true, record: found.first,
+               message: "Deleted #{domain} from Cloudflare (#{cred.name}) — #{found.size} record(s): #{types}.")
   end
 
   private

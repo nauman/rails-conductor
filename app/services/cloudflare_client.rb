@@ -45,12 +45,23 @@ class CloudflareClient
   # type — critical for upsert: a name can hold several records (e.g. an A and a
   # TXT), and rewriting the wrong one would destroy unrelated DNS data.
   def dns_record(zone_id, name, type: nil)
+    all = dns_records(zone_id, name, type: type)
+    return all unless all.ok?
+
+    Result.new(ok: true, data: all.data.first) # nil if the host has no such record
+  end
+
+  # EVERY record at this name, not just the first. A name can legitimately carry
+  # several records (two A records for round-robin, A + AAAA), and a delete that
+  # removes `.first` while reporting success leaves the name still resolving —
+  # a false success on a destructive operation.
+  def dns_records(zone_id, name, type: nil)
     query = "name=#{name}"
     query += "&type=#{type}" if type.present?
     body = get("/zones/#{zone_id}/dns_records?#{query}")
     return failure(body) unless body["success"]
 
-    Result.new(ok: true, data: body["result"].first) # nil if the host has no such record
+    Result.new(ok: true, data: Array(body["result"]))
   end
 
   # Flip a record's orange cloud on/off (partial PATCH — proxied only).
