@@ -100,4 +100,61 @@ class ToolAuthorizationTest < ActiveSupport::TestCase
     allowed = call("conductor_app", { "action" => "transfer_plan" }, user: @owner)
     assert_no_match(/read-only/i, allowed.error.to_s)
   end
+
+  # SC-009 Decision B. `runner` is owner-only because it executes arbitrary Ruby,
+  # but a bare read-only task is a different thing wearing the same action name:
+  # an editor who can deploy should be able to ask whether migrations are pending.
+  test "an editor may run an allowlisted READ-ONLY task" do
+    ReadOnlyRailsTasks::TASKS.each do |task|
+      res = call("conductor_app", { "action" => "runner", "task" => task }, user: @editor)
+
+      assert_no_match(/requires an organization owner/i, res.error.to_s,
+                      "#{task} is read-only and should not need :execute")
+    end
+  end
+
+  test "an editor is still refused a task that is NOT allowlisted" do
+    res = call("conductor_app", { "action" => "runner", "task" => "db:migrate" }, user: @editor)
+
+    assert_not res.success?
+    assert_match(/execute/, res.error)
+  end
+
+  # The dangerous half must stay owner-only whatever else is passed.
+  test "arbitrary ruby is owner-only even alongside an allowlisted task" do
+    res = call("conductor_app",
+               { "action" => "runner", "task" => "db:version", "ruby" => "User.destroy_all" },
+               user: @editor)
+
+    assert_not res.success?
+    assert_match(/execute/, res.error, "a ruby payload must not be laundered through a safe task name")
+  end
+
+  test "arbitrary ruby alone is owner-only" do
+    res = call("conductor_app", { "action" => "runner", "ruby" => "puts 1" }, user: @editor)
+
+    assert_not res.success?
+    assert_match(/execute/, res.error)
+  end
+
+  # A prefix rule would quietly admit db:migrate because db:migrate:status is safe.
+  test "the allowlist matches exactly, not by prefix" do
+    assert ReadOnlyRailsTasks.allow?("db:migrate:status")
+    assert_not ReadOnlyRailsTasks.allow?("db:migrate")
+    assert_not ReadOnlyRailsTasks.allow?("db:migrate:status:extra")
+    assert_not ReadOnlyRailsTasks.allow?("db:migrate:status; rm -rf /")
+  end
+
+  test "an owner is unaffected by the allowlist" do
+    res = call("conductor_app", { "action" => "runner", "ruby" => "puts 1" }, user: @owner)
+
+    assert_no_match(/requires an organization owner/i, res.error.to_s)
+  end
+
+  test "a plain member gets nothing, allowlisted or not" do
+    res = call("conductor_app", { "action" => "runner", "task" => "db:version" }, user: @member)
+
+    assert_not res.success?
+    assert_match(/owner or editor/i, res.error)
+  end
 end

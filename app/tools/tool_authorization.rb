@@ -92,8 +92,27 @@ module ToolAuthorization
   # The capability this call needs, or nil for "operator is enough".
   def capability_for(tool_name, action, input = {})
     action = action.to_s
+    # De-escalation first: an action that is owner-only in general can be
+    # operator-safe for a specific, allowlisted input (SC-009 Decision B).
+    return nil if read_only_task_run?(tool_name, action, input)
+
     escalation = FIELD_ESCALATIONS.dig(tool_name, action)&.find { |field, _| input.key?(field) }&.last
 
     escalation || OWNER_ONLY_ACTIONS.dig(tool_name, action)
+  end
+
+  # `runner` is owner-only because it executes arbitrary Ruby in production. A
+  # bare, allowlisted, READ-ONLY task is a different thing wearing the same
+  # action name — an editor who can deploy should be able to ask whether
+  # migrations are pending.
+  #
+  # Both conditions are required: no `ruby` payload at all, AND the task is on
+  # the allowlist. Passing both is rejected by the tool itself, but this must not
+  # depend on that.
+  def read_only_task_run?(tool_name, action, input)
+    return false unless tool_name == "conductor_app" && action == "runner"
+    return false if input["ruby"].to_s.strip.present?
+
+    ReadOnlyRailsTasks.allow?(input["task"])
   end
 end

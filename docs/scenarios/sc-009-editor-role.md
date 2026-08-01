@@ -77,7 +77,8 @@ are masked unconditionally, for owners too.
 | Database pulls | ❌ | ❌ | ✅ |
 | Mint a `deploy`-scoped MCP token | ❌ | ✅ | ✅ |
 | **Destroy** apps, servers, DB clusters; retire/decommission | ❌ | ❌ | ✅ |
-| **Run arbitrary commands** — Scripts, `conductor_app` `runner`, cron | ❌ | ❌ | ✅ |
+| **Run arbitrary commands** — Scripts, `runner` with `ruby`, cron | ❌ | ❌ | ✅ |
+| Run a READ-ONLY rails task (`runner` with an allowlisted `task`) | ❌ | ✅ | ✅ |
 | **Repoint an app** at a different repository | ❌ | ❌ | ✅ |
 | Seed production on next deploy | ❌ | ❌ | ✅ |
 | **Stored credentials & SSH keys** (read or write) | ❌ | ❌ | ✅ |
@@ -174,6 +175,26 @@ Surfaces needing the new check:
 Tests first, per house style: the boundary cases are the last-owner guard, an
 editor hitting each owner-only band on all three surfaces, and a demoted user's
 existing deploy token going inert.
+
+## Resolved Decisions
+
+**Decision B — split `runner` (RESOLVED 2026-08-01, implemented).** `runner`
+accepts either arbitrary Ruby or a bare task name. Arbitrary Ruby is
+unrestricted code and stays owner-only. A bare task from
+`ReadOnlyRailsTasks::TASKS` is available to editors, because treating
+`db:migrate:status` as equally dangerous made the role weaker than it needed to
+be: an editor who can deploy could not ask whether migrations were pending —
+exactly the question worth answering *before* deploying.
+
+Deliberately an **allowlist**, not a denylist: a task nobody has classified needs
+`:execute`, so forgetting to categorise something refuses an editor rather than
+letting one run a migration. Matching is exact, since a prefix rule would admit
+`db:migrate` on the strength of `db:migrate:status` being safe. Passing a `ruby`
+payload alongside a safe task name does not launder it.
+
+Cron remains owner-only. The same allowlist is the obvious basis for editor-safe
+cron, but a cron entry installs a *recurring* command into a real crontab, which
+is a larger decision than running one task once.
 
 ## Open Questions
 
