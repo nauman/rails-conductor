@@ -75,4 +75,39 @@ class FleetSituationTest < ActiveSupport::TestCase
 
     assert snap[:in_flight].none? { |o| o[:app] == "Theirs" }, "must not leak another org's ops"
   end
+
+  # Five backups failed in production while `situation` reported nothing wrong.
+  # A backup nobody is taking is only discovered when it is needed.
+  test "a failed backup appears in needs_attention" do
+    cred = @org.credentials.create!(name: "r2", provider: "cloudflare", api_key: "k")
+    b = Backup.create!(organization: @org, server: @server, credential: cred,
+                       provider: "cloudflare_r2", bucket_name: "bk", schedule: "daily", enabled: true)
+    b.update_columns(status: "failed", last_run_at: 1.hour.ago)
+
+    kinds = FleetSituation.new(server_scope: Server.where(id: @server.id)).snapshot[:needs_attention].map { |i| i[:kind] }
+    assert_includes kinds, "failed_backup"
+  end
+
+  test "a backup stuck in running is surfaced separately from a failure" do
+    cred = @org.credentials.create!(name: "r2b", provider: "cloudflare", api_key: "k")
+    b = Backup.create!(organization: @org, server: @server, credential: cred,
+                       provider: "cloudflare_r2", bucket_name: "bk2", schedule: "daily", enabled: true)
+    b.update_columns(status: "running", last_run_at: (Backup::STUCK_AFTER + 1.hour).ago)
+
+    item = FleetSituation.new(server_scope: Server.where(id: @server.id))
+                         .snapshot[:needs_attention].find { |i| i[:kind] == "stuck_backup" }
+    assert item, "a died backup process must be visible, not just silently reaped"
+    assert_includes item[:detail], "process died"
+  end
+
+  test "a healthy backup adds no noise" do
+    cred = @org.credentials.create!(name: "r2c", provider: "cloudflare", api_key: "k")
+    b = Backup.create!(organization: @org, server: @server, credential: cred,
+                       provider: "cloudflare_r2", bucket_name: "bk3", schedule: "daily", enabled: true)
+    b.update_columns(status: "completed", last_run_at: 10.minutes.ago)
+
+    kinds = FleetSituation.new(server_scope: Server.where(id: @server.id)).snapshot[:needs_attention].map { |i| i[:kind] }
+    assert_not_includes kinds, "failed_backup"
+    assert_not_includes kinds, "stuck_backup"
+  end
 end

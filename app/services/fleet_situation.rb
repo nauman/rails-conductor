@@ -76,7 +76,39 @@ class FleetSituation
     servers.find_each do |s|
       items << { kind: "at_risk_server", server: s.name, detail: "last audit graded at_risk — resolve before deploying" } if s.last_audit_status == "at_risk"
     end
+    items.concat(backup_attention)
     items
+  end
+
+  # Backups were invisible here. Five failed in production while `situation`
+  # reported nothing wrong — the control plane could not have told anyone that
+  # backups had stopped being taken, which is the one failure you most want it to
+  # notice. A backup nobody is taking is only discovered when it is needed.
+  def backup_attention
+    # Scoped through the SAME server relation as everything else here, so the
+    # situation still cannot leak across tenants.
+    Backup.enabled
+          .where(server_id: servers.select(:id))
+          .or(Backup.enabled.where(app_id: apps.select(:id)))
+          .includes(:app).flat_map do |backup|
+      label = backup.app&.name || backup.bucket_name
+
+      case
+      when backup.status == "failed"
+        [ { kind: "failed_backup", app: label, backup_id: backup.id,
+            detail: "last backup failed#{backup.last_run_at ? " at #{backup.last_run_at.iso8601}" : ''}" } ]
+      when backup.stuck_running?
+        [ { kind: "stuck_backup", app: label, backup_id: backup.id,
+            detail: "stuck in 'running' since #{backup.last_run_at&.iso8601 || 'unknown'} — " \
+                    "its process died; it is reaped and rescheduled automatically" } ]
+      when backup.overdue?
+        [ { kind: "overdue_backup", app: label, backup_id: backup.id,
+            detail: "scheduled #{backup.schedule} but next run was due #{backup.next_run_at&.iso8601} — " \
+                    "the scheduler may not be running" } ]
+      else
+        []
+      end
+    end
   end
 
   # What just happened — terminal events, newest first.

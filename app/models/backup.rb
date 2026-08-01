@@ -62,6 +62,13 @@ class Backup < ApplicationRecord
   # single missed night is not an alarm.
   SCHEDULE_INTERVAL = { "hourly" => 1.hour, "daily" => 1.day, "weekly" => 1.week, "monthly" => 30.days }.freeze
 
+  # Its process died: still flagged "running" long after anything legitimate
+  # would have finished. The reaper releases these, but they are worth SEEING —
+  # a backup that keeps dying is not a backup.
+  def stuck_running?
+    status == "running" && (last_run_at.nil? || last_run_at < STUCK_AFTER.ago)
+  end
+
   def overdue?
     return false unless enabled? && last_run_at.present?
 
