@@ -160,9 +160,21 @@ jobs:
                    "$status" "$GITHUB_SHA" "${GITHUB_SHA:0:7}")
           # HMAC-SHA256 over the RAW body, same scheme as the push webhook.
           sig="sha256=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$CONDUCTOR_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}')"
-          # --fail-with-body: without it, a 4xx/5xx still exits 0 and we print
-          # "Reported deploy" for a report the control plane never accepted.
-          curl --fail-with-body -sS --max-time 15 -X POST "https://$APP_HOST/webhooks/$CONDUCTOR_APP_ID/deployment" \
-            -H "Content-Type: application/json" -H "X-Hub-Signature-256: $sig" \
-            --data "$body" && echo "Reported deploy ($status) to Conductor." || \
-            echo "::warning::Could not report deploy to Conductor (non-fatal)."
+          # Capture the STATUS, not just success/failure. "Could not report" with no
+          # code is undiagnosable — 401 (wrong secret) and 404 (wrong app id) are
+          # completely different fixes, and this warned identically for both on
+          # every deploy for weeks.
+          code=$(curl -sS --max-time 15 -o /tmp/report-body.txt -w '%{http_code}' \
+                   -X POST "https://$APP_HOST/webhooks/$CONDUCTOR_APP_ID/deployment" \
+                   -H "Content-Type: application/json" -H "X-Hub-Signature-256: $sig" \
+                   --data "$body" || echo "000")
+
+          case "$code" in
+            2*) echo "Reported deploy ($status) to Conductor." ;;
+            401) echo "::warning::Conductor rejected the deploy report: 401 unauthorized. " \
+                      "CONDUCTOR_DEPLOY_WEBHOOK_SECRET does not match app $CONDUCTOR_APP_ID's webhook_secret." ;;
+            404) echo "::warning::Conductor rejected the deploy report: 404 not found. " \
+                      "CONDUCTOR_APP_ID ($CONDUCTOR_APP_ID) is not an app in Conductor." ;;
+            000) echo "::warning::Could not reach Conductor to report the deploy (network/TLS)." ;;
+            *)   echo "::warning::Conductor rejected the deploy report: HTTP $code — $(head -c 200 /tmp/report-body.txt)" ;;
+          esac
