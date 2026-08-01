@@ -94,6 +94,36 @@ Before calling a loop complete:
 - [ ] `docs/dev/ROADMAP.md`, `docs/dev/FEATURES.md`, or `docs/dev/CHANGELOG.md` changed if product reality changed.
 - [ ] No secrets, tokens, real credentials, or destructive production actions were introduced.
 
+## Infrastructure Work: additional completion bar
+
+Applies to anything touching **deploy, rollback, backup, migration, or edge
+routing**. For this work, "tests green" is not a completion state.
+
+Across 2026-07-31/08-01, six independent audits were run on such changes. Every
+one found real defects in code already declared finished — including two ways to
+take an app down introduced by the zero-downtime cutover itself, and two
+security bugs in code written to fix a security bug. Green tests and
+implementation review were not modelling live topology or interruption points.
+
+- [ ] **Adversarial review before merge**, explicitly covering: a retry after
+      partial completion, the process dying between *every* pair of steps, stale
+      state left by a previous shape, a missing dependency, and the compensation
+      path itself failing.
+- [ ] **A canary on the real topology.** Not a similar app — the same edge, the
+      same deploy method, the same port shape. A kamal-proxy app proves nothing
+      about a fixed-port Caddy app.
+- [ ] **Production evidence from OUTSIDE the system.** A deployment row saying
+      "succeeded" is the thing under test, not proof of it. Use an external
+      probe, the actual container state, or the real URL.
+- [ ] **A written manual recovery path**, prepared *before* the change runs —
+      the exact commands to restore service by hand.
+- [ ] **One operational change at a time.** Two shipped together means neither
+      is proven when something breaks.
+
+A canary uses an app with a REAL health endpoint. Without one the cutover
+promotes on "the container is running" alone, which is not the property being
+verified.
+
 ## Reasonable Limits
 
 This loop can steadily complete Conductor, but only by completing one verifiable slice at a time. If a task spans multiple pillars, split it into a plan or scenario first. If the loop uncovers missing product decisions, write the question into the relevant plan or session note and stop instead of guessing.

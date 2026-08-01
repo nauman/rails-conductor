@@ -42,6 +42,14 @@ development:
     queue: ops
     schedule: every hour at minute 25
 
+  # SB-002 interim: callbacks can be bypassed, so detect the result. Daily is
+  # enough — an ownerless org is not urgent, it is just invisible until someone
+  # tries to manage members and finds they cannot.
+  check_ownerless_organizations:
+    class: OwnerlessOrganizationCheckJob
+    queue: ops
+    schedule: every day at 6am
+
 production:
   refresh_server_metrics:
     class: RefreshServerMetricsJob
@@ -74,6 +82,14 @@ production:
     command: "ResidueCheckJob.sweep"
     queue: ops
     schedule: every hour at minute 25
+
+  # SB-002 interim: callbacks can be bypassed, so detect the result. Daily is
+  # enough — an ownerless org is not urgent, it is just invisible until someone
+  # tries to manage members and finds they cannot.
+  check_ownerless_organizations:
+    class: OwnerlessOrganizationCheckJob
+    queue: ops
+    schedule: every day at 6am
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"

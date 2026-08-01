@@ -99,16 +99,37 @@ Every application code path goes through validated writes, and the invariant
 covers the two real ways it was reachable (demotion and moving an owner
 membership to another org). The gap is deliberate console/raw-SQL use.
 
+### Interim mitigation — DO THIS FIRST
+
+A reconciliation job that finds ownerless organizations and surfaces them, plus
+a documented recovery path. Detection, not prevention — but proportionate, and
+it removes the "silently unmanageable org nobody notices" outcome, which is the
+part that actually hurts. See `OwnerlessOrganizationCheckJob`.
+
 ### What a real fix requires
 
-A database-level constraint, since the guarantee cannot be expressed in Ruby:
+A database-level constraint, since the guarantee cannot be expressed in Ruby.
+Three things the first draft of this section got wrong, corrected here so nobody
+implements from it verbatim:
 
-1. A Postgres `AFTER INSERT OR UPDATE OR DELETE ... FOR EACH STATEMENT` trigger
-   on `memberships` that raises when an organization is left with no
-   `role = 1` row — deferred to end-of-transaction so multi-step ownership
-   handovers still work.
-2. Alternatively, a nightly reconciliation job that reports ownerless orgs, if a
-   trigger is judged too heavy. Detection, not prevention.
+1. **The trigger must be `FOR EACH ROW`, not `FOR EACH STATEMENT`.** Postgres
+   deferred constraint triggers (`CREATE CONSTRAINT TRIGGER ... DEFERRABLE
+   INITIALLY DEFERRED`) are row-level only; a statement-level trigger cannot be
+   deferred, so it would fire mid-transaction and reject legitimate multi-step
+   ownership handovers.
+2. **It must also cover `organizations`.** An organization INSERTed with no
+   membership never touches the `memberships` table, so a memberships-only
+   trigger misses the case entirely.
+3. **`schema.rb` will not preserve it.** This repo relies on `db:prepare`
+   (`bin/setup`) and `db:test:prepare` (CI), so a trigger installed only by a
+   migration means every freshly-created database — including CI's — is silently
+   weaker than production. Adopting `structure.sql` is part of the work, not an
+   optional extra, and a "narrower trigger" does not avoid it.
+
+Because of (3), this is a schema-management change affecting every future
+migration in a repo where several agents work on shared main. Schedule it
+deliberately: serialize migration ownership and freeze schema changes while it
+lands.
 
 Recovery today is manual: a platform admin can re-assign ownership from the
 console.
