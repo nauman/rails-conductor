@@ -69,4 +69,39 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
     refute res.ok?
     assert_match(/No connected Cloudflare account owns/, res.message)
   end
+
+  # TXT support exists so domain verification and email records — SPF, DKIM,
+  # SES/Google identity tokens — stop requiring the Cloudflare dashboard.
+  test "writes a TXT record" do
+    client = FakeClient.new
+    r = CloudflareDnsRecord.new(cf_creds, client_for: ->(_) { client })
+                           .set!(domain: "google._domainkey.platepose.com",
+                                 content: "v=DKIM1; k=rsa; p=MIIBIjANBg", type: "TXT")
+
+    assert r.ok?, r.message
+    _zone, name, content, type, proxied = client.seen
+    assert_equal "google._domainkey.platepose.com", name
+    assert_equal "TXT", type
+    assert_equal "v=DKIM1; k=rsa; p=MIIBIjANBg", content
+    assert_equal false, proxied
+  end
+
+  # Cloudflare rejects a proxied TXT; refusing here explains why instead of
+  # forwarding a request that cannot succeed.
+  test "refuses to proxy a TXT record" do
+    r = CloudflareDnsRecord.new(cf_creds, client_for: ->(_) { FakeClient.new })
+                           .set!(domain: "platepose.com", content: "v=spf1 -all",
+                                 type: "TXT", proxied: true)
+
+    assert_not r.ok?
+    assert_match(/cannot be proxied/, r.message)
+  end
+
+  test "refuses an unsupported record type" do
+    r = CloudflareDnsRecord.new(cf_creds, client_for: ->(_) { FakeClient.new })
+                           .set!(domain: "platepose.com", content: "10 mx.example.com", type: "MX")
+
+    assert_not r.ok?
+    assert_match(/Unsupported record type MX/, r.message)
+  end
 end

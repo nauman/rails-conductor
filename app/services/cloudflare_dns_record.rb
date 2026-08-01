@@ -15,11 +15,28 @@ class CloudflareDnsRecord
     @client_for = client_for || ->(cred) { CloudflareClient.new(cred.api_key) }
   end
 
+  # Record types Conductor will write. TXT matters for domain verification and
+  # email — DKIM, SPF, SES/Google identity tokens — which previously had to be
+  # done by hand in the Cloudflare dashboard.
+  SUPPORTED_TYPES = %w[A AAAA CNAME TXT].freeze
+
+  # Only address-shaped records can sit behind Cloudflare's proxy. Asking to
+  # proxy a TXT record is an API error, so refuse it here with a reason rather
+  # than forwarding a request that cannot succeed.
+  PROXYABLE_TYPES = %w[A AAAA CNAME].freeze
+
   def set!(domain:, content:, type: "A", proxied: false)
     return failure("A domain (record name) is required.") if domain.blank?
-    return failure("A content value (target IP for A, hostname for CNAME) is required.") if content.blank?
+    return failure("A content value is required (an IP for A, a hostname for CNAME, the value for TXT).") if content.blank?
 
     type = type.to_s.upcase
+    unless SUPPORTED_TYPES.include?(type)
+      return failure("Unsupported record type #{type}. Supported: #{SUPPORTED_TYPES.join(', ')}.")
+    end
+
+    if proxied && !PROXYABLE_TYPES.include?(type)
+      return failure("#{type} records cannot be proxied through Cloudflare — set proxied: false.")
+    end
     cred, zone = resolve_cloudflare_zone_in(@credentials, domain)
     return failure("No connected Cloudflare account owns #{domain}. Connect + Verify the account first.") unless zone
 

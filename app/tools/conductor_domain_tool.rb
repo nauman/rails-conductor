@@ -20,7 +20,7 @@ class ConductorDomainTool
       "remove (remove a domain from Caddy — server_id, domain), " \
       "put_behind_cloudflare (proxy an app's domain through Cloudflare for CDN + edge TLS — app_id or app_name, optional ssl_mode; needs a Verified Cloudflare account, see conductor_read action=cloudflare), " \
       "purge_cloudflare (purge an app's Cloudflare cache — app_id or app_name, optional files array of URLs; omit files to purge everything. Use after a deploy that left stale/404'd assets at the edge), " \
-      "set_dns (create/update a Cloudflare A/CNAME record via a connected account that owns the zone — domain, content, optional type=A, proxied=false. Idempotent; zero vault), " \
+      "set_dns (create/update a Cloudflare DNS record via a connected account that owns the zone — domain, content, optional type (A/AAAA/CNAME/TXT, default A), proxied=false. TXT covers SPF, DKIM and domain-verification tokens; a TXT record cannot be proxied. Idempotent; zero vault), " \
       "delete_dns (delete a Cloudflare DNS record by name — domain. Idempotent; for cleaning up a subdomain that pointed at a decommissioned host), " \
       "enable_on_demand_tls (turn on Caddy on-demand TLS for a zone on a host-Caddy server so each subdomain gets its own Let's Encrypt cert on first request, gated by an app ask endpoint — server_id/server_name, domain, ask_upstream; use when Cloudflare can't proxy the wildcard), " \
       "remove_stray_proxy (remove an INERT kamal-proxy container left on a host-Caddy box after it migrated off kamal-proxy — server_id/server_name. Report-first: bare call inspects, confirm:true removes. Refuses unless the box is host-Caddy AND kamal-proxy routes/binds nothing, so it can't break a live proxy box). " \
@@ -41,8 +41,8 @@ class ConductorDomainTool
         app_name:  { type: "string",  description: "put_behind_cloudflare/purge_cloudflare: the target app (alt to app_id)" },
         ssl_mode:  { type: "string",  description: "put_behind_cloudflare: zone SSL mode (default 'full'; off/flexible/full/strict)" },
         files:     { type: "array", items: { type: "string" }, description: "purge_cloudflare: specific full URLs to purge (omit = purge everything)" },
-        content:   { type: "string",  description: "set_dns: record target — an IP for type=A, a hostname for type=CNAME" },
-        type:      { type: "string",  description: "set_dns: record type (default A; A/CNAME)" },
+        content:   { type: "string",  description: "set_dns: record value — an IP for A, a hostname for CNAME, or the full string for TXT" },
+        type:      { type: "string",  description: "set_dns: record type (default A; A/AAAA/CNAME/TXT)" },
         proxied:   { type: "boolean", description: "set_dns: proxy through Cloudflare (orange cloud)? Default false (DNS-only)" }
       },
       required: %w[action]

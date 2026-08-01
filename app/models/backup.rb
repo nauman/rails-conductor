@@ -27,7 +27,20 @@ class Backup < ApplicationRecord
   scope :recent, -> { order(created_at: :desc) }
   scope :for_provider, ->(provider) { where(provider: provider) }
   scope :enabled, -> { where(enabled: true) }
-  scope :due, -> { enabled.where("next_run_at <= ?", Time.current) }
+  # Due AND not already running. Without the second half, a backup whose process
+  # died mid-run stays "running" with next_run_at in the past, so the dispatcher
+  # re-enqueues it EVERY MINUTE — a stampede that exhausted SSH on the box and
+  # failed every other backup with "connection closed by remote host".
+  scope :due, -> { enabled.where("next_run_at <= ?", Time.current).where.not(status: "running") }
+
+  # A run that has been "running" longer than this had its process die — nothing
+  # legitimate takes this long, and the row must be released or it blocks its own
+  # schedule forever.
+  STUCK_AFTER = 30.minutes
+
+  scope :stuck, lambda {
+    enabled.where(status: "running").where("last_run_at IS NULL OR last_run_at < ?", STUCK_AFTER.ago)
+  }
 
   after_save :calculate_next_run, if: -> { saved_change_to_enabled? || saved_change_to_schedule? }
 
@@ -131,6 +144,13 @@ class Backup < ApplicationRecord
 
   def mark_failed!
     update!(status: "failed", last_run_at: Time.current)
+    calculate_next_run
+  end
+
+  # Release a run whose process died. Recorded as failed — it did not succeed,
+  # and a silent reset would hide that backups are not being taken.
+  def reap_stuck!
+    update!(status: "failed", last_run_at: last_run_at || Time.current)
     calculate_next_run
   end
 

@@ -14,9 +14,9 @@ class SetDnsRecordTool
       type: "object",
       properties: {
         domain:  { type: "string",  description: "The record name / FQDN (e.g. old.platepose.com)" },
-        content: { type: "string",  description: "Target: an IP for type=A, or a hostname for type=CNAME" },
-        type:    { type: "string",  description: "Record type (default A). One of: A, CNAME" },
-        proxied: { type: "boolean", description: "Proxy through Cloudflare (orange cloud)? Default false (DNS-only)" }
+        content: { type: "string",  description: "Target: an IP for A, a hostname for CNAME, or the full value for TXT (SPF/DKIM/verification tokens)" },
+        type:    { type: "string",  description: "Record type (default A). One of: A, AAAA, CNAME, TXT" },
+        proxied: { type: "boolean", description: "Proxy through Cloudflare (orange cloud)? Default false. Only valid for A/AAAA/CNAME — a TXT record cannot be proxied." }
       },
       required: %w[domain content]
     }
