@@ -744,4 +744,32 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "failed", @deployment.reload.status
     assert_match "target host", deployer.error
   end
+
+  # calm.page and platepose failed EVERY redeploy with "port is already
+  # allocated" because the stop-first step keyed on a CADDY_PUBLISH_PORT env var
+  # — a convention — instead of the condition. On a host-Caddy box kamal-proxy is
+  # off, so the container publishes a fixed port and nothing can hold two
+  # releases at once.
+  test "a host-Caddy app stops the prior container first, even without CADDY_PUBLISH_PORT" do
+    @app.server.update!(edge_type: "caddy")
+    # A caddy-edge deploy is refused without an explicit role-level proxy:false,
+    # so the config has to be realistic for the stop-first step to be reached.
+    write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n")
+    shell = FakeShell.new(success: true)
+
+    deploy_with(shell)
+
+    assert shell.runs.any? { |r| r[:command].join(" ").include?("app stop") },
+           "a fixed-port app must free the port before booting the new release"
+  end
+
+  test "a kamal-proxy app does NOT stop first — the proxy holds both releases" do
+    @app.server.update!(edge_type: "kamal_proxy")
+    shell = FakeShell.new(success: true)
+
+    deploy_with(shell)
+
+    assert_not shell.runs.any? { |r| r[:command].join(" ").include?("app stop") },
+               "stopping first on a proxied app would cause needless downtime"
+  end
 end

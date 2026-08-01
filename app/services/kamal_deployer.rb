@@ -400,13 +400,29 @@ class KamalDeployer
 
   def stop_prior_container_if_fixed_port
     return true if app.self_managed?
-    return true unless deploy_env.key?("CADDY_PUBLISH_PORT")
+    return true unless fixed_port_app?
 
     log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
     result = @shell.run("bash", "-lc", "#{kamal_bin} app stop#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
     @stopped_prior = true
     true
+  end
+
+  # Does this app publish a FIXED host port that the old container still holds
+  # when the new one boots?
+  #
+  # This used to be detected solely by the presence of a CADDY_PUBLISH_PORT env
+  # var — a naming convention, not the condition. Apps that publish a fixed port
+  # any other way (straight `publish:` in deploy.yml) skipped the stop-first step
+  # and failed EVERY redeploy with "Bind for 0.0.0.0:<port> failed: port is
+  # already allocated". That is what kept calm.page and platepose failing.
+  #
+  # The structural signal is the edge: on a host-Caddy box kamal-proxy is off, so
+  # the container must publish a fixed port for Caddy to reach it. No proxy means
+  # nothing can hold two releases at once.
+  def fixed_port_app?
+    deploy_env.key?("CADDY_PUBLISH_PORT") || deploy_server&.edge_type == "caddy"
   end
 
   # Safety net for the stop-first path. Stopping the old container BEFORE boot means
