@@ -30,6 +30,18 @@ development:
     queue: ops
     schedule: every 5 minutes
 
+  # Residue from a previous form (ADR 0004). Hourly, not per-minute: it SSHes to
+  # every box, and the thing it looks for changes only when an app changes shape.
+  # Preflight reads the stored rollup, so without this nothing ever populates it
+  # and every app reports "never checked".
+  sweep_residue:
+    # `command:`, not `class:` — ResidueCheckJob#perform takes an app_id, so a
+    # bare class entry would invoke it with none. The sweep fans out one job per
+    # eligible app.
+    command: "ResidueCheckJob.sweep"
+    queue: ops
+    schedule: every hour at minute 25
+
 production:
   refresh_server_metrics:
     class: RefreshServerMetricsJob
@@ -50,6 +62,18 @@ production:
     class: MonitorSitesJob
     queue: ops
     schedule: every 5 minutes
+
+  # Residue from a previous form (ADR 0004). Hourly, not per-minute: it SSHes to
+  # every box, and the thing it looks for changes only when an app changes shape.
+  # Preflight reads the stored rollup, so without this nothing ever populates it
+  # and every app reports "never checked".
+  sweep_residue:
+    # `command:`, not `class:` — ResidueCheckJob#perform takes an app_id, so a
+    # bare class entry would invoke it with none. The sweep fans out one job per
+    # eligible app.
+    command: "ResidueCheckJob.sweep"
+    queue: ops
+    schedule: every hour at minute 25
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
