@@ -46,6 +46,10 @@ class ReleaseDriftDetector
 
     containers = running_containers
     return unknown("could not inspect #{@app.server.name}: #{@blind}") if containers.nil?
+    if containers == :ambiguous
+      return unknown("containers matching #{@app.name} are running on #{@app.server.name}, but none " \
+                     "run an image recognisable as this app's own — cannot identify the release")
+    end
     return not_running if containers.empty?
 
     tags = containers.map { |c| c[:tag] }.uniq
@@ -153,21 +157,73 @@ class ReleaseDriftDetector
     out = capture(%(docker ps --format '{{.Names}}|{{.Image}}'))
     return nil if out.nil?
 
-    out.lines.filter_map do |line|
+    named = out.lines.filter_map do |line|
       name, image = line.strip.split("|", 2)
       next if name.blank? || image.blank?
       next unless ours?(name)
 
-      { name: name, image: image, tag: image.rpartition(":").last }
+      { name: name, image: image, repo: repo_of(image), tag: image.rpartition(":").last }
     end
+
+    release_containers(named)
   end
+
+  # An app's own releases, separated from the accessories sitting beside them.
+  #
+  # `inventlist-db` (pgvector), `railslink-redis` (redis) and `conductor-postgres`
+  # all match the app's name prefix, and all run MUTABLE version tags — pg18,
+  # 7-alpine, 16. Counting them as releases made every app with a database
+  # report "runs a mutable tag, cannot identify the commit", which is a wrong
+  # answer dressed as a careful one.
+  #
+  # The discriminator is the image REPOSITORY: an app's release image is
+  # published under a name derived from the app (ghcr.io/x/inventlist,
+  # naumantariq/kuickr, conductor/starrrs), while an accessory runs a stock
+  # upstream image that never mentions it.
+  def release_containers(candidates)
+    return [] if candidates.empty?
+
+    release = candidates.select { |c| release_repo?(c[:repo]) }
+    # Candidates but nothing recognisable as this app's own image: say so rather
+    # than reporting "not running", which would read as a clean answer.
+    return :ambiguous if release.empty?
+
+    release
+  end
+
+  def release_repo?(repo)
+    tokens = [ @app.slug, @app.image_name.to_s.split("/").last ].compact_blank.map(&:downcase)
+    haystack = repo.to_s.downcase
+    tokens.any? { |t| haystack.include?(t) }
+  end
+
+  # Repository without the tag. Rindex on ":" would cut a registry port, so only
+  # strip a trailing tag that contains no "/".
+  def repo_of(image) = image.to_s.sub(%r{:[^:/]+\z}, "")
 
   # Name shapes this app's containers take, across every form it has had.
   # Anchored at the start so another tenant's containers on a shared box are
   # never claimed as ours.
+  #
+  # A longer match by ANOTHER app on this box wins. The legacy scheme is
+  # `conductor-<slug>`, so the app whose slug is literally "conductor" would
+  # otherwise swallow `conductor-starrrs` and `conductor-postgres` — every other
+  # app's legacy container on a shared box.
   def ours?(name)
-    prefixes = [ @app.resource_key, @app.container_name, @app.slug ].compact_blank
-    prefixes.any? { |p| name == p || name.start_with?("#{p}-") }
+    mine = longest_prefix_match(prefixes_for(@app), name)
+    return false if mine.nil?
+
+    competing_apps.none? { |other| (longest_prefix_match(prefixes_for(other), name) || 0) > mine }
+  end
+
+  def prefixes_for(app) = [ app.resource_key, app.container_name, app.slug ].compact_blank
+
+  def longest_prefix_match(prefixes, name)
+    prefixes.select { |p| name == p || name.start_with?("#{p}-") }.map(&:length).max
+  end
+
+  def competing_apps
+    @competing_apps ||= App.where(server_id: @app.server_id).where.not(id: @app.id).to_a
   end
 
   def capture(command)

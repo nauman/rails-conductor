@@ -148,4 +148,67 @@ class ReleaseDriftDetectorTest < ActiveSupport::TestCase
     assert_equal "unknown", r.status
     assert_match(/latest/, r.detail)
   end
+
+  # ------------------------------------------- accessories vs releases
+  #
+  # Found only by running this against the real fleet: a database or cache
+  # sitting beside the app matches its name prefix AND runs a mutable version
+  # tag, so counting it as a release made every app with a database report
+  # "cannot identify the commit" — a wrong answer dressed as a careful one.
+
+  test "an accessory database beside the app is not part of the release" do
+    record_deploy!("abc123def456")
+    r = detect([
+      "inventlist-web|ghcr.io/x/inventlist:abc123def456",
+      "inventlist-db|pgvector/pgvector:pg18"
+    ].join("\n"))
+
+    assert_equal "in_sync", r.status, "pgvector:pg18 is the database, not this app's release"
+  end
+
+  test "redis and postgres accessories never make a healthy app unknown" do
+    record_deploy!("abc123def456")
+    r = detect([
+      "inventlist-web|ghcr.io/x/inventlist:abc123def456",
+      "inventlist-redis|redis:7-alpine",
+      "inventlist-postgres|postgres:16"
+    ].join("\n"))
+
+    assert_equal "in_sync", r.status
+  end
+
+  test "matching containers with no recognisable app image is unknown, not not_running" do
+    record_deploy!("abc123def456")
+    r = detect("inventlist-db|pgvector/pgvector:pg18")
+
+    assert_equal "unknown", r.status
+    assert_match(/cannot identify the release/i, r.detail)
+  end
+
+  # ------------------------------------------- shared-box name collisions
+  #
+  # The legacy container scheme is `conductor-<slug>`, so an app whose slug is
+  # literally "conductor" matched every OTHER app's legacy container on the box.
+
+  test "an app does not claim another app's container that matches more specifically" do
+    other = @org.apps.create!(name: "Starrrs", slug: "starrrs", server: @server,
+                              deploy_method: "docker", port: 3001,
+                              repository_url: "https://github.com/x/s.git")
+    conductor = @org.apps.create!(name: "Conductor", slug: "conductor", server: @server,
+                                  deploy_method: "kamal", port: 3002,
+                                  repository_url: "https://github.com/x/c.git")
+    conductor.deployments.create!(status: "succeeded", commit_sha: "abc123def456")
+
+    ps = [
+      "conductor-web-abc123def456|ghcr.io/x/conductor:abc123def456",
+      "conductor-starrrs|ghcr.io/x/starrrs:latest",
+      "conductor-postgres|postgres:16"
+    ].join("\n")
+
+    r = ReleaseDriftDetector.new(conductor, ssh: FakeSsh.new(ps)).result
+
+    assert_equal "in_sync", r.status,
+                 "conductor-starrrs belongs to Starrrs; conductor-postgres is an accessory"
+    assert_equal other.slug, "starrrs"
+  end
 end
