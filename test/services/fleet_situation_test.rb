@@ -110,4 +110,22 @@ class FleetSituationTest < ActiveSupport::TestCase
     assert_not_includes kinds, "failed_backup"
     assert_not_includes kinds, "stuck_backup"
   end
+
+  # The alert used to quote next_run_at — a timestamp in the FUTURE — as its
+  # evidence, so an operator chasing "the scheduler may not be running" was sent
+  # after a scheduler that was working fine.
+  test "an overdue backup cites when it last RAN, not when it is next due" do
+    cred = @org.credentials.create!(name: "r2", provider: "cloudflare", api_key: "k", api_secret: "s")
+    backup = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "b", credential: cred,
+                                  server: @server, schedule: "daily", enabled: true, status: "completed")
+    backup.update_columns(last_run_at: 5.days.ago, next_run_at: 1.day.from_now)
+
+    item = snap[:needs_attention].find { |i| i[:kind] == "overdue_backup" }
+
+    assert item, "a backup with no run in 5 days must be reported"
+    assert_match "has not run since", item[:detail]
+    assert_includes item[:detail], backup.last_run_at.iso8601
+    assert_not_includes item[:detail], backup.next_run_at.iso8601,
+                        "a future timestamp is not evidence that something is overdue"
+  end
 end

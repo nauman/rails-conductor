@@ -102,9 +102,13 @@ class FleetSituation
             detail: "stuck in 'running' since #{backup.last_run_at&.iso8601 || 'unknown'} — " \
                     "its process died; it is reaped and rescheduled automatically" } ]
       when backup.overdue?
+        # Cite the field the condition is actually measured from. This used to
+        # quote next_run_at — a FUTURE timestamp — as evidence that a backup was
+        # overdue, which sent an operator hunting a stopped scheduler while the
+        # scheduler was running normally.
         [ { kind: "overdue_backup", app: label, backup_id: backup.id,
-            detail: "scheduled #{backup.schedule} but next run was due #{backup.next_run_at&.iso8601} — " \
-                    "the scheduler may not be running" } ]
+            detail: "scheduled #{backup.schedule} but has not run since " \
+                    "#{backup.last_run_at&.iso8601 || 'never'} — more than two intervals ago" } ]
       else
         []
       end
