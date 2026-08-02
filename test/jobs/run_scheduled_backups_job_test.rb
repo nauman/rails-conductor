@@ -27,7 +27,25 @@ class RunScheduledBackupsJobTest < ActiveSupport::TestCase
   test "a due backup is dispatched" do
     b = backup(status: "completed", next_run_at: 1.minute.ago)
 
-    assert_enqueued_with(job: BackupJob, args: [ b.id ]) { RunScheduledBackupsJob.perform_now }
+    assert_enqueued_with(job: BackupJob, args: ->(args) { args.first == b.id }) do
+      RunScheduledBackupsJob.perform_now
+    end
+  end
+
+  # The dispatch is recorded before the enqueue, so a job that never reaches a
+  # worker still leaves a row. Without it, a lost job is invisible: it never
+  # starts, so it never fails either.
+  test "the dispatch is written to history, and the job carries that run's id" do
+    b = backup(status: "completed", next_run_at: 1.minute.ago)
+
+    assert_difference "BackupRun.count", 1 do
+      RunScheduledBackupsJob.perform_now
+    end
+
+    run = b.runs.last
+    assert_equal "dispatched", run.status
+    assert_equal "scheduled", run.trigger
+    assert_enqueued_with(job: BackupJob, args: [ b.id, run.id ])
   end
 
   # The stampede.
@@ -70,7 +88,9 @@ class RunScheduledBackupsJobTest < ActiveSupport::TestCase
     backup(status: "running", next_run_at: 1.day.ago, last_run_at: 2.days.ago)
     healthy = backup(status: "completed", next_run_at: 1.minute.ago)
 
-    assert_enqueued_with(job: BackupJob, args: [ healthy.id ]) { RunScheduledBackupsJob.perform_now }
+    assert_enqueued_with(job: BackupJob, args: ->(args) { args.first == healthy.id }) do
+      RunScheduledBackupsJob.perform_now
+    end
   end
 
   test "a disabled backup is never dispatched or reaped" do

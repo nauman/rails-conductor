@@ -64,7 +64,8 @@ class BackupsController < ApplicationController
   end
 
   def run
-    BackupJob.perform_later(@backup.id)
+    run = @backup.record_dispatch!(trigger: "manual")
+    BackupJob.perform_later(@backup.id, run.id)
     redirect_to @backup, notice: "Backup started. Check back for status."
   end
 

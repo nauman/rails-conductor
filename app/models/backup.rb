@@ -14,6 +14,9 @@ class Backup < ApplicationRecord
   belongs_to :server, optional: true
   belongs_to :app, optional: true
   belongs_to :credential, optional: true
+  # Per-attempt history. The columns on this row only ever describe the LATEST
+  # run, which is why a skipped night used to leave no evidence at all.
+  has_many :runs, class_name: "BackupRun", dependent: :destroy
 
   validates :provider, presence: true, inclusion: { in: PROVIDERS }
   validates :bucket_name, presence: true
@@ -140,12 +143,32 @@ class Backup < ApplicationRecord
     next_run_at < dispatch_grace_period.ago
   end
 
-  def mark_completed!
-    update!(
+  # Record that this schedule was enqueued. Written BEFORE any work happens, so a
+  # job that is lost between the dispatcher and a worker leaves a row that stops
+  # at "dispatched" — the trace that was missing.
+  def record_dispatch!(trigger:)
+    runs.create!(trigger: trigger, status: "dispatched", dispatched_at: Time.current)
+  end
+
+  # Stamp last_run_at at the START, not at the outcome.
+  #
+  # It used to be written only on failure, which inverted every signal built on
+  # it: `overdue?` called a nightly-succeeding backup stale, and `Backup.stuck`
+  # matched a healthy run the moment it began. "When did this last run" is a
+  # question about the attempt, not about whether the attempt worked.
+  def begin_run!
+    update!(status: "running", last_run_at: Time.current)
+  end
+
+  def mark_completed!(size_bytes: nil)
+    attrs = {
       status: "completed",
       completed_at: Time.current,
       last_run_at: Time.current
-    )
+    }
+    attrs[:size_bytes] = size_bytes unless size_bytes.nil?
+
+    update!(attrs)
     calculate_next_run
   end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_01_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_02_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -96,6 +96,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_01_000003) do
     t.index ["server_id"], name: "index_apps_on_server_id"
     t.index ["slug"], name: "index_apps_on_slug", unique: true
     t.index ["status"], name: "index_apps_on_status"
+  end
+
+  create_table "backup_runs", force: :cascade do |t|
+    t.bigint "backup_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "dispatched_at", null: false
+    t.string "error_message"
+    t.datetime "finished_at"
+    t.bigint "size_bytes"
+    t.datetime "started_at"
+    t.string "status", default: "dispatched", null: false
+    t.string "trigger", default: "scheduled", null: false
+    t.datetime "updated_at", null: false
+    t.index ["backup_id", "dispatched_at"], name: "index_backup_runs_on_backup_id_and_dispatched_at"
+    t.index ["backup_id"], name: "index_backup_runs_on_backup_id"
+    t.index ["status", "dispatched_at"], name: "index_backup_runs_on_status_and_dispatched_at"
   end
 
   create_table "backups", force: :cascade do |t|
@@ -614,6 +630,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_01_000003) do
   add_foreign_key "app_transfers", "servers", column: "target_server_id"
   add_foreign_key "apps", "organizations"
   add_foreign_key "apps", "servers"
+  add_foreign_key "backup_runs", "backups"
   add_foreign_key "backups", "apps"
   add_foreign_key "backups", "credentials"
   add_foreign_key "backups", "organizations"

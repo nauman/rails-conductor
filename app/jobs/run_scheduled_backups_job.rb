@@ -30,8 +30,12 @@ class RunScheduledBackupsJob < ApplicationJob
       # moved on, so the worst case is one missed run — not a re-run every
       # minute until someone notices.
       backup.calculate_next_run
+      # Recorded before the enqueue. If the job never reaches a worker, this row
+      # stays at "dispatched" and BackupRun.lost finds it — otherwise a lost job
+      # leaves nothing behind, because a run that never starts never fails.
+      run = backup.record_dispatch!(trigger: "scheduled")
       Rails.logger.info "[ScheduledBackup] Running backup #{backup.id}: #{backup.bucket_name}"
-      BackupJob.perform_later(backup.id)
+      BackupJob.perform_later(backup.id, run.id)
     end
   end
 end

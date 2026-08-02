@@ -5,14 +5,21 @@ class DatabaseBackup
   # gzip stream (what a failed dump leaves) is ~20 bytes. Below this = not a backup.
   MIN_DUMP_BYTES = 200
 
-  attr_reader :backup, :error
+  attr_reader :backup, :error, :run
 
-  def initialize(backup)
+  # `run` is the BackupRun the dispatcher already created. Manual paths pass
+  # nothing and get one here, so every attempt lands in history no matter how it
+  # was triggered.
+  def initialize(backup, run: nil)
     @backup = backup
+    @run = run
   end
 
   def run!
-    backup.update!(status: "running")
+    @run ||= backup.record_dispatch!(trigger: "manual")
+    @run.start!
+    # Stamps last_run_at as well — see Backup#begin_run!.
+    backup.begin_run!
 
     unless backup.credential
       return fail_with("No credential configured")
@@ -55,12 +62,8 @@ class DatabaseBackup
     # Cleanup
     ssh.execute("rm -f #{local_path}")
 
-    # Mark completed
-    backup.update!(
-      status: "completed",
-      size_bytes: size_bytes,
-      completed_at: Time.current
-    )
+    run.complete!(size_bytes: size_bytes)
+    backup.mark_completed!(size_bytes: size_bytes)
 
     true
   rescue => e
@@ -71,6 +74,7 @@ class DatabaseBackup
 
   def fail_with(message)
     @error = message
+    run&.fail!(message)
     backup.update!(status: "failed", last_run_at: Time.current)
     backup.calculate_next_run if backup.enabled?
     Rails.logger.error "[Backup:#{backup.id}] #{message}"
