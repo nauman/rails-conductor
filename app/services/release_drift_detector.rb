@@ -180,22 +180,42 @@ class ReleaseDriftDetector
   # published under a name derived from the app (ghcr.io/x/inventlist,
   # naumantariq/kuickr, conductor/starrrs), while an accessory runs a stock
   # upstream image that never mentions it.
+  # Container roles that are datastores rather than the app. An app whose only
+  # matching container is its database is NOT RUNNING — reporting `unknown`
+  # there implies we could not tell, when in fact we could.
+  ACCESSORY_ROLES = %w[db database postgres postgresql pg redis valkey mysql
+                       mariadb memcached elasticsearch opensearch].freeze
+
   def release_containers(candidates)
     return [] if candidates.empty?
 
     release = candidates.select { |c| release_repo?(c[:repo]) }
-    # Candidates but nothing recognisable as this app's own image: say so rather
-    # than reporting "not running", which would read as a clean answer.
-    return :ambiguous if release.empty?
+    return release if release.any?
 
-    release
+    # Nothing recognisable as the app's own image. If everything we matched is a
+    # datastore, the app simply is not running.
+    return [] if candidates.all? { |c| accessory?(c) }
+
+    # Otherwise something app-shaped is running that we cannot identify. Say so
+    # rather than reporting "not running", which would read as a clean answer.
+    :ambiguous
+  end
+
+  def accessory?(container)
+    role = container[:name].to_s.split("-").last.to_s.downcase
+    ACCESSORY_ROLES.include?(role)
   end
 
   def release_repo?(repo)
-    tokens = [ @app.slug, @app.image_name.to_s.split("/").last ].compact_blank.map(&:downcase)
-    haystack = repo.to_s.downcase
-    tokens.any? { |t| haystack.include?(t) }
+    tokens = [ @app.slug, @app.image_name.to_s.split("/").last ].compact_blank.map { |t| normalize(t) }
+    haystack = normalize(repo)
+    tokens.any? { |t| t.present? && haystack.include?(t) }
   end
+
+  # Separators are not identity. An app slugged `calm-page` publishes to
+  # `naumantariq/calmpage` and runs containers named `calmpage-web-…`; matching
+  # literally made a healthy app unidentifiable.
+  def normalize(str) = str.to_s.downcase.gsub(/[^a-z0-9]/, "")
 
   # Repository without the tag. Rindex on ":" would cut a registry port, so only
   # strip a trailing tag that contains no "/".
@@ -218,8 +238,17 @@ class ReleaseDriftDetector
 
   def prefixes_for(app) = [ app.resource_key, app.container_name, app.slug ].compact_blank
 
+  # Compared with separators removed, so `calm-page` matches `calmpage-web-…`.
+  # Length is measured on the NORMALISED prefix, so "more specific wins" still
+  # compares like with like when two apps' names differ only in punctuation.
   def longest_prefix_match(prefixes, name)
-    prefixes.select { |p| name == p || name.start_with?("#{p}-") }.map(&:length).max
+    target = normalize(name)
+    prefixes.filter_map do |p|
+      np = normalize(p)
+      next if np.blank?
+
+      np.length if target == np || target.start_with?(np)
+    end.max
   end
 
   def competing_apps

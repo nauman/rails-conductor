@@ -177,12 +177,15 @@ class ReleaseDriftDetectorTest < ActiveSupport::TestCase
     assert_equal "in_sync", r.status
   end
 
-  test "matching containers with no recognisable app image is unknown, not not_running" do
+  # A datastore on its own is answerable — see "an app whose only container is
+  # its database is not running". Only an app-SHAPED container we cannot
+  # identify is genuinely unknown.
+  test "an accessory image alone never counts as the release" do
     record_deploy!("abc123def456")
     r = detect("inventlist-db|pgvector/pgvector:pg18")
 
-    assert_equal "unknown", r.status
-    assert_match(/cannot identify the release/i, r.detail)
+    assert_not_equal "in_sync", r.status
+    assert_nil r.running_sha
   end
 
   # ------------------------------------------- shared-box name collisions
@@ -210,5 +213,44 @@ class ReleaseDriftDetectorTest < ActiveSupport::TestCase
     assert_equal "in_sync", r.status,
                  "conductor-starrrs belongs to Starrrs; conductor-postgres is an accessory"
     assert_equal other.slug, "starrrs"
+  end
+
+  # ------------------------------------------- separators are not identity
+  #
+  # Also from the real fleet: an app slugged `calm-page` publishes to
+  # `naumantariq/calmpage` and runs `calmpage-web-…`. Matching literally found
+  # only its postgres and called a healthy app unidentifiable.
+
+  test "a slug with a hyphen matches containers and images written without one" do
+    app = @org.apps.create!(name: "Calm.page", slug: "calm-page", server: @server,
+                            deploy_method: "docker", port: 3005,
+                            repository_url: "https://github.com/x/cp.git")
+    app.deployments.create!(status: "succeeded", commit_sha: "abc123def456")
+    ps = [
+      "calmpage-web-abc123def456|naumantariq/calmpage:abc123def456",
+      "calm-page-db|postgres:16-alpine"
+    ].join("\n")
+
+    r = ReleaseDriftDetector.new(app, ssh: FakeSsh.new(ps)).result
+
+    assert_equal "in_sync", r.status
+  end
+
+  # ------------------------------------------- accessory-only means stopped
+
+  test "an app whose only container is its database is not running, not unknown" do
+    record_deploy!("abc123def456")
+    r = detect("inventlist-db|postgres:16")
+
+    assert_equal "not_running", r.status,
+                 "we CAN tell: the app has no container, only its datastore"
+  end
+
+  test "an unidentifiable app-shaped container is still unknown" do
+    record_deploy!("abc123def456")
+    r = detect("inventlist-worker|some/unrelated-image:v3")
+
+    assert_equal "unknown", r.status
+    assert_match(/cannot identify the release/i, r.detail)
   end
 end
