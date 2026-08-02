@@ -58,6 +58,7 @@ Ordered by priority. **P0** = blocks the core "push → deploy" loop · **P1** =
 | [Two-identity servers (root=automation, deploy=app ops) + server automation/upgrades as root](25-two-identity-servers.html) | Continuous Maintenance | P1 | M | Planned · **security split** |
 | [App transfer between boxes + dedicated database containers](26-app-transfer.html) | Runtime Backends | P1 | L | **Spec locked** (A–D resolved 2026-07-26) · dedicated-DB + KamalProxyAdapter · ready to build |
 | [SES email observability (event-level, via SNS)](27-ses-observability.html) | Provider Automation | P1 | M | Draft · **annotate** · flight-recorder for slot 20 · (`plans/05`) |
+| [Retire per-app deploy scripts — every app deploys through Conductor](31-retire-per-app-deploy-scripts.html) | Runtime Backends | **P0** | M | **Spec'd 2026-08-03** — three apps (InventList, platepose, minimalnarrow) deploy via repo scripts Conductor never sees, so it holds no release record and can offer them no rollback. Conductor's stale record for app 13 was taken as a release baseline by an audit and produced a wholly fabricated migration protocol. `ReleaseDriftDetector` now SURFACES this (`unrecorded`); this slot removes the cause. Unblocked by ADR 0003 docker-on-Caddy cutover — the reason the scripts exist has expired. Also closes the root-SSH gap. |
 
 ## Critical path
 

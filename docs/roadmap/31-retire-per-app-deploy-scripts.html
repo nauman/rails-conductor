@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retire per-app deploy scripts · Conductor Roadmap</title>
+<style>
+  :root{--bg:#fafaf8;--card:#fff;--ink:#15161a;--body:#3a3633;--muted:#6b7280;--line:#e4e3de;--line-2:#d6d4cd;--accent:#3a5a3f;--accent-ink:#3a5a3f;--p1:#8a6a1f;--danger:#8a3a2f;--planned:#9ca3af;--serif:"Instrument Serif",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 "Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.page{margin-bottom:28px}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.05;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  h2{font-family:var(--serif);font-size:24px;margin:34px 0 12px;letter-spacing:-.01em;color:var(--ink)}
+  h3{font-size:15px;margin:20px 0 6px;color:var(--ink);font-weight:700}
+  p,li{color:var(--body)}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  a{color:var(--accent-ink)}
+  code{background:#f1f0ec;padding:1px 6px;border-radius:5px;font-size:13px;font-family:var(--mono)}
+  pre{background:#1d1f23;color:#e7e6e1;overflow-x:auto;padding:14px 16px;border-radius:12px;font-size:12.5px;line-height:1.55;font-family:var(--mono);margin:12px 0}
+  pre .c{color:#8b9a8e}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f0ec;font-weight:600;color:var(--ink)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:#f1f0ec;color:var(--body);border:1px solid var(--line);text-transform:uppercase;letter-spacing:.06em}
+  .badge.p1{background:#f5ebd3;color:var(--p1);border-color:#ecdcb8}
+  .badge.planned{background:#f1f0ec;color:var(--planned)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:16px}
+  .slices{counter-reset:slice;padding-left:0;list-style:none}
+  .slices>li{counter-increment:slice;position:relative;padding:10px 0 10px 40px;border-bottom:1px solid var(--line)}
+  .slices>li:last-child{border-bottom:0}
+  .slices>li::before{content:counter(slice);position:absolute;left:0;top:10px;width:26px;height:26px;background:var(--accent);color:#fff;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+  .acc{background:#e7f0e9;border:1px solid #cce6d5;border-radius:12px;padding:14px 18px}
+  .acc ul{margin:6px 0 0}
+  .decide{background:#f7efd9;border:1px solid #ecdcb8;border-radius:12px;padding:12px 16px;margin:12px 0}
+  .decide b{color:var(--p1);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .risk{background:#f6ece9;border:1px solid #e4c9c1;border-radius:12px;padding:12px 16px;margin:10px 0}
+  .risk b{color:var(--danger);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .lede{font-size:16px}
+  .back{display:inline-block;margin-bottom:20px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-decoration:none}
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+  .kpi div{background:#f1f0ec;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .kpi .n{font-family:var(--serif);font-size:22px;color:var(--ink);display:block}
+  .kpi .l{font-size:12px;color:var(--muted)}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;margin:14px 0 4px}
+  .fnode{appearance:none;cursor:pointer;font:inherit;text-align:left;background:#f1f0ec;border:1px solid var(--line);border-radius:10px;padding:8px 11px;min-width:118px;color:var(--ink);font-size:12.5px;font-weight:600;transition:.15s}
+  .fnode:hover{border-color:var(--accent);background:#eef2ee}
+  .fnode.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 8px rgba(58,90,63,.25)}
+  .fnode small{display:block;font-weight:400;font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.3}
+  .fnode.active small{color:#dcece0}
+  .farr{display:flex;align-items:center;color:var(--line-2);padding:0 5px;font-family:var(--mono);font-size:15px;user-select:none}
+  .fdetail{background:#fbfbf9;border:1px dashed var(--line-2);border-radius:12px;padding:12px 16px;font-size:13.5px;min-height:52px;margin-top:8px;color:var(--body)}
+  .fdetail b{color:var(--ink)}
+  .hint{font-size:12px;color:var(--muted);margin:2px 0 0}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style></head>
+<body data-kuickr-bar="float"><div class="wrap">
+<a class="back" href="backlog.md">← Back to backlog</a>
+<header class="page">
+  <h1>Retire per-app deploy scripts</h1>
+  <p class="sub">Every app deploys through Conductor. Three apps currently deploy via repo scripts Conductor never sees, so it holds no release record for them, can offer them no rollback, and — worse — presents a stale record as current truth.</p>
+  <div class="badges">
+    <span class="badge">Pillar: Runtime backends</span>
+    <span class="badge p1">Priority: P0</span>
+    <span class="badge">Effort: M</span>
+    <span class="badge planned">Status: Spec&#39;d 2026-08-03</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2>Problem</h2>
+  <p class="lede">A control plane that does not perform the deploy does not know what is deployed — and says so anyway.</p>
+  <p>Conductor learns about a release when <em>it</em> performs the deploy. <code>InventList</code>, <code>platepose</code> and <code>minimalnarrow</code> are rolled by repo scripts and plain <code>docker run</code>, so Conductor&#39;s record for them is whatever it last saw, indefinitely.</p>
+  <p>This is not a cosmetic gap. On <strong>2026-08-02</strong> Conductor&#39;s newest record for app 13 was a <strong>failed</strong> deploy from 07-28 against the <strong>retired</strong> <code>inventlist-mvps</code> box. An audit took that SHA as its release baseline and reported the pending release as ~119 commits / 274 files / 31k additions, with two migrations needing a lock-timeout and duplicate-count protocol. Measured against the actually-running image:</p>
+  <table>
+    <tr><th></th><th>Reported (from Conductor&#39;s stale record)</th><th>Actual (from the running image)</th></tr>
+    <tr><td>Commits</td><td>~119</td><td><strong>26</strong></td></tr>
+    <tr><td>Files</td><td>274</td><td><strong>156</strong></td></tr>
+    <tr><td>Insertions</td><td>31,406</td><td><strong>7,851</strong></td></tr>
+    <tr><td>Pending migrations</td><td>2, with a bespoke protocol</td><td><strong>0</strong></td></tr>
+  </table>
+  <div class="risk"><b>The failure mode</b>
+  <p style="margin:6px 0 0">A stale record is more dangerous than a missing one, because it is trusted. The whole migration-verification protocol had no target, and nothing in the system contradicted it.</p></div>
+</div>
+
+<div class="card">
+  <h2>What is already done</h2>
+  <p><code>ReleaseDriftDetector</code> (shipped 2026-08-02) <strong>surfaces</strong> this: it compares the running image SHA against the last succeeded deployment and reports <code>drift</code>, <code>unrecorded</code>, <code>mixed_release</code> or <code>unknown</code>, failing closed. On its first fleet run it flagged Conductor itself.</p>
+  <p>That is detection, not a cure. This slot removes the cause.</p>
+  <div class="acc"><b>Why this is unblocked now</b>
+  <ul>
+    <li>The scripts exist for exactly one reason: Conductor&#39;s registered deploy was Kamal-shaped, and a Kamal roll starts kamal-proxy on :80/:443, colliding with host Caddy on a shared box.</li>
+    <li><strong>That reason has expired.</strong> ADR 0003 gave Conductor plain-docker deploys behind a host-Caddy edge with a health-checked cutover, and the fixed-port detection fix (2026-08-01) made Caddy-edge apps deployable at all.</li>
+  </ul></div>
+</div>
+
+<div class="card">
+  <h2>Slices</h2>
+  <ol class="slices">
+    <li><strong>Bridge — report from the script.</strong> <code>bin/deploy-ssdnode</code> posts to the deploy webhook on EXIT, so failed rolls are recorded too. Committed 2026-08-03 as <code>d4431503</code>; deliberately temporary and deleted by slice 3.</li>
+    <li><strong>Parity audit per app.</strong> For each of the three: env file → Conductor env vars, accessory containers, host-Caddy route, published port, and the post-deploy batch (InventList runs seven backfills). Anything Conductor cannot yet express is the real work.</li>
+    <li><strong>Cut over, supervised, one app at a time.</strong> Reconfigure to <code>deploy_method: docker</code> on the Caddy edge, deploy through Conductor with an external probe running, clear the deploy hold last. Rollback path written before starting.</li>
+    <li><strong>Delete the scripts</strong> and the bridge reporting with them.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>What it closes</h2>
+  <table>
+    <tr><th>Gap</th><th>Today</th><th>After</th></tr>
+    <tr><td>Release record</td><td>Stale or absent; trusted anyway</td><td>Written by the deployer, automatically</td></tr>
+    <tr><td>Rollback</td><td>Impossible — no recorded release</td><td>Standard Conductor rollback</td></tr>
+    <tr><td>SSH identity</td><td><code>root@</code>, against the deploy-user standard</td><td><code>deploy@</code>, like every other app</td></tr>
+    <tr><td>Operability</td><td>One script only one agent knows how to run</td><td>UI + MCP, same as the fleet</td></tr>
+    <tr><td>Image tags</td><td>Two apps run <code>:latest</code> — no rollback target exists at all</td><td>SHA-tagged releases</td></tr>
+  </table>
+  <div class="decide"><b>Sequencing note</b>
+  <p style="margin:6px 0 0">Do the SHA-tagging first where it applies. A mutable tag means the box cannot say what commit it runs, so rollback is impossible regardless of how good the rollback code is — and that failure is silent.</p></div>
+</div>
+
+<div class="card">
+  <h2>Acceptance</h2>
+  <ul>
+    <li>All three apps report <code>in_sync</code> in <code>ReleaseDriftCheckJob</code> for a full sweep after a real deploy.</li>
+    <li>A deploy performed from the Conductor UI produces a deployment record with the correct SHA, and a rollback to the previous release succeeds on a canary.</li>
+    <li>No app deploys as <code>root</code>.</li>
+    <li>The repo scripts and the bridge reporting are deleted, not merely unused.</li>
+  </ul>
+</div>
+
+</div></body></html>
