@@ -42,6 +42,16 @@ development:
     queue: ops
     schedule: every hour at minute 25
 
+  # Does Conductor's record of what is deployed match what is actually running?
+  # An app deployed by anything other than Conductor leaves the record frozen,
+  # and a stale record is more dangerous than a missing one because it is
+  # trusted. Offset from the residue sweep so the two do not SSH the same boxes
+  # at the same moment.
+  sweep_release_drift:
+    command: "ReleaseDriftCheckJob.sweep"
+    queue: ops
+    schedule: every hour at minute 40
+
   # SB-002 interim: callbacks can be bypassed, so detect the result. Daily is
   # enough — an ownerless org is not urgent, it is just invisible until someone
   # tries to manage members and finds they cannot.
@@ -82,6 +92,16 @@ production:
     command: "ResidueCheckJob.sweep"
     queue: ops
     schedule: every hour at minute 25
+
+  # Does Conductor's record of what is deployed match what is actually running?
+  # An app deployed by anything other than Conductor leaves the record frozen,
+  # and a stale record is more dangerous than a missing one because it is
+  # trusted. Offset from the residue sweep so the two do not SSH the same boxes
+  # at the same moment.
+  sweep_release_drift:
+    command: "ReleaseDriftCheckJob.sweep"
+    queue: ops
+    schedule: every hour at minute 40
 
   # SB-002 interim: callbacks can be bypassed, so detect the result. Daily is
   # enough — an ownerless org is not urgent, it is just invisible until someone

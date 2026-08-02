@@ -65,6 +65,18 @@ class FleetSituation
 
       items << attn("deploy_hold", app, reason: app.deploy_hold_reason) if app.deploy_hold?
 
+      # Conductor's release record disagreeing with the box. Surfaced because a
+      # stale record is trusted: an agent took a five-day-old FAILED deploy as
+      # its release baseline and planned work against a machine that no longer
+      # served traffic. Reads the stored rollup only — never probes here.
+      if app.release_drift?
+        items << attn("release_drift", app,
+                      detail: app.release_state[:detail],
+                      remedy: app.release_state[:remedy],
+                      checked_at: app.release_checked_at&.iso8601,
+                      stale: app.release_state_stale?)
+      end
+
       # A down public URL is an incident the operator sees in the UI — surface it here
       # too, with the status code / error so the agent knows what actually failed.
       check = app.latest_site_check

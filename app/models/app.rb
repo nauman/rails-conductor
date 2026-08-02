@@ -425,6 +425,16 @@ class App < ApplicationRecord
     residue_checked_at.nil? || residue_checked_at < ResidueCheckJob::STALE_AFTER.ago
   end
 
+  # Whether Conductor's record of this app's release matches the box, from the
+  # STORED rollup (ReleaseDriftCheckJob). Never probes.
+  def release_state = (self[:release_state] || {}).symbolize_keys
+
+  def release_drift? = %w[drift unrecorded mixed_release].include?(release_state[:status])
+
+  def release_state_stale?
+    release_checked_at.nil? || release_checked_at < ReleaseDriftCheckJob::STALE_AFTER.ago
+  end
+
   # Has this app ever put anything on a box? Until it has, changing its shape
   # strands nothing.
   #

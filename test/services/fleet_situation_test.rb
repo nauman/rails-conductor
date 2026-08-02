@@ -128,4 +128,34 @@ class FleetSituationTest < ActiveSupport::TestCase
     assert_not_includes item[:detail], backup.next_run_at.iso8601,
                         "a future timestamp is not evidence that something is overdue"
   end
+
+  # A stale record is more dangerous than a missing one, because it is trusted:
+  # an agent took a five-day-old FAILED deploy as its release baseline and
+  # planned work against a box that no longer served traffic.
+  test "an app whose running release disagrees with Conductor's record is surfaced" do
+    @app.update_columns(
+      release_state: { "status" => "drift", "recorded_sha" => "aaaaaaa", "running_sha" => "bbbbbbb",
+                       "detail" => "running bbbbbbb, which is not what Conductor recorded",
+                       "remedy" => "treat the RUNNING sha as the baseline" },
+      release_checked_at: Time.current
+    )
+
+    item = snap[:needs_attention].find { |i| i[:kind] == "release_drift" }
+
+    assert item, "drift between the record and the box must reach the operator"
+    assert_match "not what Conductor recorded", item[:detail]
+    assert_equal false, item[:stale]
+  end
+
+  test "an app whose record matches the box is not reported" do
+    @app.update_columns(release_state: { "status" => "in_sync" }, release_checked_at: Time.current)
+
+    assert_nil snap[:needs_attention].find { |i| i[:kind] == "release_drift" }
+  end
+
+  # Never checked is not the same as verified.
+  test "an unchecked app raises no drift item but is not treated as in sync" do
+    assert_nil snap[:needs_attention].find { |i| i[:kind] == "release_drift" }
+    assert @app.release_state_stale?, "never checked must read as stale, not as agreement"
+  end
 end
