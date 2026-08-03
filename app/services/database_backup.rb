@@ -62,7 +62,7 @@ class DatabaseBackup
     # Cleanup
     ssh.execute("rm -f #{local_path}")
 
-    run.complete!(size_bytes: size_bytes)
+    run.complete!(size_bytes: size_bytes, object_key: filename)
     backup.mark_completed!(size_bytes: size_bytes)
 
     true

@@ -37,9 +37,15 @@ class BackupRun < ApplicationRecord
     update!(status: "running", started_at: Time.current)
   end
 
-  def complete!(size_bytes:)
-    update!(status: "completed", finished_at: Time.current, size_bytes: size_bytes)
+  def complete!(size_bytes:, object_key: nil)
+    update!(status: "completed", finished_at: Time.current,
+            size_bytes: size_bytes, object_key: object_key)
   end
+
+  # Restorable in principle: it finished, and we know which object it wrote.
+  # A completed run with no object_key predates key recording and cannot be
+  # verified without guessing which file in the bucket it produced.
+  scope :verifiable, -> { succeeded.where.not(object_key: [ nil, "" ]) }
 
   # The reason is not optional. A failed row with no message tells the next
   # person that something broke and nothing about what.

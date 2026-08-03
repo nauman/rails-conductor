@@ -52,6 +52,16 @@ development:
     queue: ops
     schedule: every hour at minute 40
 
+  # Prove a backup actually restores. Nightly, and ONE per night: each restore
+  # downloads a full dump and runs a postgres container, so verifying the whole
+  # fleet at once is the same stampede that took backups down on 08-01. The
+  # stalest backup goes first, so a never-tested one always precedes a re-check.
+  # 04:30 — after the 03:00 backup window, well clear of it.
+  verify_backup_restore:
+    command: "VerifyBackupRestoreJob.sweep"
+    queue: ops
+    schedule: every day at 4:30am
+
   # SB-002 interim: callbacks can be bypassed, so detect the result. Daily is
   # enough — an ownerless org is not urgent, it is just invisible until someone
   # tries to manage members and finds they cannot.
@@ -102,6 +112,16 @@ production:
     command: "ReleaseDriftCheckJob.sweep"
     queue: ops
     schedule: every hour at minute 40
+
+  # Prove a backup actually restores. Nightly, and ONE per night: each restore
+  # downloads a full dump and runs a postgres container, so verifying the whole
+  # fleet at once is the same stampede that took backups down on 08-01. The
+  # stalest backup goes first, so a never-tested one always precedes a re-check.
+  # 04:30 — after the 03:00 backup window, well clear of it.
+  verify_backup_restore:
+    command: "VerifyBackupRestoreJob.sweep"
+    queue: ops
+    schedule: every day at 4:30am
 
   # SB-002 interim: callbacks can be bypassed, so detect the result. Daily is
   # enough — an ownerless org is not urgent, it is just invisible until someone
