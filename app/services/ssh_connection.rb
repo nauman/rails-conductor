@@ -27,6 +27,27 @@ class SshConnection
     success?
   end
 
+  # Make remote output safe to interpolate into a UTF-8 string.
+  #
+  # Net::SSH delivers channel data as ASCII-8BIT. Appending it to a UTF-8 buffer
+  # turns the buffer binary, and the failure surfaces far away — the moment that
+  # output lands in a log line:
+  #
+  #   incompatible character encodings: UTF-8 and BINARY (ASCII-8BIT)
+  #
+  # A Starrrs deploy died exactly there. `docker build` had SUCCEEDED; only the
+  # handling of its progress output failed, so a good release was recorded as a
+  # failed deploy. Short command output never trips it — only verbose non-ASCII
+  # output like a build, which is why it survived every prior deploy.
+  #
+  # scrub, not delete: valid UTF-8 (a build's box-drawing characters) must
+  # survive, and only genuinely invalid bytes are replaced.
+  def self.utf8(data)
+    return "" if data.nil?
+
+    data.to_s.dup.force_encoding(Encoding::UTF_8).scrub("?")
+  end
+
   def execute(command)
     @error = nil
     @output = nil
@@ -40,7 +61,7 @@ class SshConnection
         login_user,
         **ssh_options
       ) do |ssh|
-        @output = ssh.exec!(command)
+        @output = self.class.utf8(ssh.exec!(command))
       end
       @output
     rescue Net::SSH::AuthenticationFailed => e
@@ -76,8 +97,10 @@ class SshConnection
         ch.exec(command) do |ch2, success|
           raise "Could not execute command on remote" unless success
 
-          ch2.on_data { |_channel, data| stdout << data }
-          ch2.on_extended_data { |_channel, _type, data| stderr << data }
+          # utf8 at the point of accumulation — once a binary chunk lands in
+          # the buffer the whole buffer is binary, and the error surfaces later.
+          ch2.on_data { |_channel, data| stdout << self.class.utf8(data) }
+          ch2.on_extended_data { |_channel, _type, data| stderr << self.class.utf8(data) }
           ch2.on_request("exit-status") { |_channel, data| exit_code = data.read_long }
         end
       end
@@ -119,7 +142,7 @@ class SshConnection
 
     outputs = []
     Net::SSH.start(server.ip_address, login_user, **ssh_options) do |ssh|
-      commands.each { |c| outputs << ssh.exec!(c) }
+      commands.each { |c| outputs << self.class.utf8(ssh.exec!(c)) }
     end
     outputs
   rescue Net::SSH::AuthenticationFailed => e
@@ -146,8 +169,8 @@ class SshConnection
         ch.exec(script_body) do |ch2, success|
           raise "Could not execute script on remote" unless success
 
-          ch2.on_data         { |_, data| block.call(:stdout, data) if block }
-          ch2.on_extended_data { |_, _, data| block.call(:stderr, data) if block }
+          ch2.on_data         { |_, data| block.call(:stdout, self.class.utf8(data)) if block }
+          ch2.on_extended_data { |_, _, data| block.call(:stderr, self.class.utf8(data)) if block }
           ch2.on_request("exit-status") { |_, data| exit_code = data.read_long }
         end
       end
