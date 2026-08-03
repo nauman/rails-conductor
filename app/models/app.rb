@@ -429,7 +429,13 @@ class App < ApplicationRecord
   # STORED rollup (ReleaseDriftCheckJob). Never probes.
   def release_state = (self[:release_state] || {}).symbolize_keys
 
-  def release_drift? = %w[drift unrecorded mixed_release].include?(release_state[:status])
+  # `unknown` is included deliberately. The detector fails closed and records
+  # "I could not tell" — but if the worklist then stays silent about it, the
+  # system as a whole fails OPEN: an unreachable box or a mutable `:latest` tag
+  # produces no signal at all, which reads exactly like agreement.
+  RELEASE_ATTENTION = %w[drift unrecorded mixed_release unknown].freeze
+
+  def release_drift? = RELEASE_ATTENTION.include?(release_state[:status])
 
   def release_state_stale?
     release_checked_at.nil? || release_checked_at < ReleaseDriftCheckJob::STALE_AFTER.ago

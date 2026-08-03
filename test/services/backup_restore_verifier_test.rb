@@ -49,6 +49,7 @@ class BackupRestoreVerifierTest < ActiveSupport::TestCase
   def healthy_responses
     {
       "aws s3 cp"     => "download: s3://mybucket/... to /tmp/...",
+      "gzip -t"       => "",
       "pg_isready"    => "accepting connections",
       "gunzip"        => "",
       # Match on fragments that survive Shellwords.escape — the SQL reaches the
@@ -155,5 +156,62 @@ class BackupRestoreVerifierTest < ActiveSupport::TestCase
     assert_empty ssh.commands, "must not touch the box when there is nothing to verify"
     assert_equal "never_tested", @backup.reload.verification_status,
                  "skipping is not a failure — nothing was tested"
+  end
+
+  # --- codex review fixes -------------------------------------------------
+
+  # HIGH #2: the restore ended in `|| true`, discarding the one signal that
+  # matters — gunzip failing on a TRUNCATED archive. A half-downloaded dump
+  # could restore a schema with no data and still be recorded `verified`.
+  test "the restore pipeline runs under pipefail and its status is not discarded" do
+    _, ssh = verify(healthy_responses)
+    restore = ssh.commands.find { |c| c.include?("gunzip") }
+
+    assert_match(/bash -o pipefail -c/, restore)
+    assert_no_match(/\|\| true/, restore, "the restore's exit status must not be thrown away")
+  end
+
+  test "a truncated archive fails before any container is started" do
+    result, ssh = verify(healthy_responses.merge("gzip -t" => :fail))
+
+    assert_equal "failed", result.status
+    assert_match(/truncated or corrupt/i, result.detail)
+    assert ssh.commands.none? { |c| c.include?("docker run -d") },
+           "no point starting a postgres for an archive we already know is broken"
+  end
+
+  test "a restore that fails is not recorded as verified" do
+    result, = verify(healthy_responses.merge("gunzip" => :fail))
+
+    assert_equal "failed", result.status
+    assert_equal "failed", @backup.reload.verification_status
+  end
+
+  # HIGH #4: the container name was derived from the run id alone, so two
+  # verifiers collided — and teardown ran `docker rm -f` even when this
+  # invocation never created the container.
+  test "the container name is unique per invocation, not just per run" do
+    _, a = verify(healthy_responses)
+    _, b = verify(healthy_responses)
+
+    name_of = ->(ssh) { ssh.commands.join("\n")[/conductor-verify-\d+-[0-9a-f]+/] }
+
+    assert name_of.(a), "expected a unique suffix"
+    assert_not_equal name_of.(a), name_of.(b),
+                     "two verifications must never share a container name"
+  end
+
+  test "a container this run never started is NOT removed" do
+    _, ssh = verify(healthy_responses.merge("docker run -d" => :fail))
+
+    assert ssh.commands.none? { |c| c.include?("docker rm -f") },
+           "removing by name a container we did not create would destroy someone else's"
+  end
+
+  test "the downloaded dump is still removed when the container never started" do
+    _, ssh = verify(healthy_responses.merge("docker run -d" => :fail))
+
+    assert ssh.commands.any? { |c| c.include?("rm -f") },
+           "the dump is ours by construction and must never be left behind"
   end
 end

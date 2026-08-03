@@ -19,7 +19,18 @@ class Backup < ApplicationRecord
   has_many :runs, class_name: "BackupRun", dependent: :destroy
 
   validates :provider, presence: true, inclusion: { in: PROVIDERS }
-  validates :bucket_name, presence: true
+  # bucket_name reaches a SHELL on the managed box — the dump path, stat, rm -f,
+  # the S3 URI, and the upload confirmation — and it is editable by owners AND
+  # editors. It carried only a presence check while six other operator-editable
+  # fields were locked down on 2026-08-01; this one was missed.
+  #
+  # The rule is S3/R2's own naming rule, which happens to be shell-safe: 3–63
+  # chars, lowercase alphanumerics, dots and hyphens. Anything a real bucket can
+  # be called still validates, so this rejects nothing legitimate.
+  BUCKET_NAME = /\A[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\z/
+  validates :bucket_name, presence: true,
+                          format: { with: BUCKET_NAME,
+                                    message: "must be 3-63 chars, lowercase letters, numbers, dots or hyphens" }
   validates :status, inclusion: { in: STATUSES }
   validates :schedule, inclusion: { in: SCHEDULES }, allow_blank: true
   validates :verification_status, inclusion: { in: VERIFICATION_STATUSES }

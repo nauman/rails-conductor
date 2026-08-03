@@ -11,7 +11,7 @@ class VerifyBackupRestoreJobTest < ActiveSupport::TestCase
   end
 
   def backup(verified_at:, enabled: true, credential: :default)
-    @org.backups.create!(provider: "cloudflare_r2", bucket_name: "b",
+    @org.backups.create!(provider: "cloudflare_r2", bucket_name: "test-bucket",
                          credential: (credential == :default ? @cred : credential),
                          server: @server, schedule: "daily", enabled: enabled)
        .tap { |b| b.update_columns(verified_at: verified_at) }

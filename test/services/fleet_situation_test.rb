@@ -81,7 +81,7 @@ class FleetSituationTest < ActiveSupport::TestCase
   test "a failed backup appears in needs_attention" do
     cred = @org.credentials.create!(name: "r2", provider: "cloudflare", api_key: "k")
     b = Backup.create!(organization: @org, server: @server, credential: cred,
-                       provider: "cloudflare_r2", bucket_name: "bk", schedule: "daily", enabled: true)
+                       provider: "cloudflare_r2", bucket_name: "bk-backups", schedule: "daily", enabled: true)
     b.update_columns(status: "failed", last_run_at: 1.hour.ago)
 
     kinds = FleetSituation.new(server_scope: Server.where(id: @server.id)).snapshot[:needs_attention].map { |i| i[:kind] }
@@ -116,7 +116,7 @@ class FleetSituationTest < ActiveSupport::TestCase
   # after a scheduler that was working fine.
   test "an overdue backup cites when it last RAN, not when it is next due" do
     cred = @org.credentials.create!(name: "r2", provider: "cloudflare", api_key: "k", api_secret: "s")
-    backup = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "b", credential: cred,
+    backup = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "test-bucket", credential: cred,
                                   server: @server, schedule: "daily", enabled: true, status: "completed")
     backup.update_columns(last_run_at: 5.days.ago, next_run_at: 1.day.from_now)
 
@@ -157,5 +157,22 @@ class FleetSituationTest < ActiveSupport::TestCase
   test "an unchecked app raises no drift item but is not treated as in sync" do
     assert_nil snap[:needs_attention].find { |i| i[:kind] == "release_drift" }
     assert @app.release_state_stale?, "never checked must read as stale, not as agreement"
+  end
+
+  # codex MEDIUM #7: the detector failed closed and recorded `unknown`, but the
+  # worklist filtered it out — so an unreachable box or a mutable `:latest` tag
+  # produced no item at all. Silence reads exactly like agreement.
+  test "an app the detector could not assess is surfaced, not silently dropped" do
+    @app.update_columns(
+      release_state: { "status" => "unknown",
+                       "detail" => "runs a mutable image tag (:latest), cannot identify the commit",
+                       "remedy" => "deploy sha-tagged images" },
+      release_checked_at: Time.current
+    )
+
+    item = snap[:needs_attention].find { |i| i[:kind] == "release_drift" }
+
+    assert item, "could-not-tell must reach the operator — it is not a clean result"
+    assert_match(/mutable image tag/, item[:detail])
   end
 end

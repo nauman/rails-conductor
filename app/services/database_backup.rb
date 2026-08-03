@@ -36,9 +36,21 @@ class DatabaseBackup
     # Create backup filename
     timestamp = Time.current.strftime("%Y%m%d_%H%M%S")
     filename = "#{backup.bucket_name}_#{timestamp}.sql.gz"
-    local_path = "/tmp/#{filename}"
+    # Escaped everywhere it reaches a shell. bucket_name is now format-validated
+    # too, but validation is one migration or one `update_column` away from being
+    # bypassed — the six routes closed on 08-01 taught that either layer alone is
+    # a single mistake from being reopened.
+    local_path = esc("/tmp/#{filename}")
 
-    dump_cmd = build_dump_command(ssh, local_path)
+    # Run the pipeline under pipefail. EVERY dump is `pg_dump … | gzip > file`,
+    # and without it the exit code is GZIP's, not pg_dump's: a dump that writes
+    # 4 MB and then dies on a dropped connection exits 0, clears the 200-byte
+    # floor, uploads, and records completed. A truncated backup passing as
+    # healthy is worse than one that fails.
+    #
+    # `bash -o pipefail -c` rather than `set -o pipefail`, because the SSH exec
+    # shell is /bin/sh, which on Debian/Ubuntu is dash and has no pipefail.
+    dump_cmd = "bash -o pipefail -c #{esc(build_dump_command(ssh, local_path))}"
     dump = ssh.execute_with_status(dump_cmd)
     unless dump[:success]
       return fail_with("Database dump failed: #{(dump[:stderr].presence || dump[:output]).to_s.strip[0, 200]}")
@@ -54,6 +66,14 @@ class DatabaseBackup
     # "reports success, protects nothing" trap, so fail loud instead.
     if size_bytes < MIN_DUMP_BYTES
       return fail_with("Dump produced only #{size_bytes} bytes — treating as a failed/empty backup, not recording success")
+    end
+
+    # Size proves bytes were written; it does not prove the archive is complete.
+    # `gzip -t` reads the whole stream and rejects a truncated one — the failure
+    # mode pipefail alone still misses when the writer dies mid-stream without a
+    # non-zero status.
+    unless ssh.execute_with_status("gzip -t #{local_path}")[:success]
+      return fail_with("Dump is not a valid gzip archive — truncated or corrupt, not recording success")
     end
 
     # Upload to cloud storage
@@ -170,6 +190,17 @@ class DatabaseBackup
 
   def esc(value) = Shellwords.escape(value.to_s)
 
+  # Credential material is operator-supplied and reaches the shell as env
+  # assignments; an unescaped key containing a space or a quote breaks the
+  # command apart. Escaped for the same reason as the bucket name.
+  def credential_env(vendor, cred)
+    [
+      "AWS_ACCESS_KEY_ID=#{esc(cred.api_key)}",
+      "AWS_SECRET_ACCESS_KEY=#{esc(cred.api_secret)}",
+      "AWS_DEFAULT_REGION=#{esc(vendor.region(cred))}"
+    ]
+  end
+
   # `ssh.execute` returns the command OUTPUT, not its exit status, so
   # `execute(cmd) ? true : fail` only ever caught an unreachable box. A failed
   # upload returns its error text — a non-empty String, therefore truthy — and
@@ -206,13 +237,9 @@ class DatabaseBackup
 
   def s3_head_command(vendor, filename)
     cred = backup.credential
-    env = [
-      "AWS_ACCESS_KEY_ID=#{cred.api_key}",
-      "AWS_SECRET_ACCESS_KEY=#{cred.api_secret}",
-      "AWS_DEFAULT_REGION=#{vendor.region(cred)}"
-    ]
-    cmd = [ "aws", "s3", "ls", "s3://#{backup.bucket_name}/#{filename}" ]
-    cmd += [ "--endpoint-url", vendor.endpoint(cred) ] if vendor.endpoint(cred).present?
+    env = credential_env(vendor, cred)
+    cmd = [ "aws", "s3", "ls", esc("s3://#{backup.bucket_name}/#{filename}") ]
+    cmd += [ "--endpoint-url", esc(vendor.endpoint(cred)) ] if vendor.endpoint(cred).present?
     "#{env.join(' ')} #{cmd.join(' ')}"
   end
 
@@ -221,13 +248,9 @@ class DatabaseBackup
   # endpoint is added only when the vendor needs one (AWS S3 uses the default).
   def s3_upload_command(vendor, local_path, filename)
     cred = backup.credential
-    env = [
-      "AWS_ACCESS_KEY_ID=#{cred.api_key}",
-      "AWS_SECRET_ACCESS_KEY=#{cred.api_secret}",
-      "AWS_DEFAULT_REGION=#{vendor.region(cred)}"
-    ]
-    cmd = [ "aws", "s3", "cp", local_path, "s3://#{backup.bucket_name}/#{filename}" ]
-    cmd += [ "--endpoint-url", vendor.endpoint(cred) ] if vendor.endpoint(cred).present?
+    env = credential_env(vendor, cred)
+    cmd = [ "aws", "s3", "cp", local_path, esc("s3://#{backup.bucket_name}/#{filename}") ]
+    cmd += [ "--endpoint-url", esc(vendor.endpoint(cred)) ] if vendor.endpoint(cred).present?
     "#{env.join(' ')} #{cmd.join(' ')}"
   end
 

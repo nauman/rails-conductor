@@ -59,7 +59,7 @@ class DatabaseBackupTest < ActiveSupport::TestCase
   # local, and running even when the app is stopped. pg_dumpall = all dbs + roles.
   test "dumps from the dedicated DB container when one is running" do
     app = @org.apps.create!(name: "calm-page", slug: "calm-page", deploy_method: "kamal", repository_url: "https://x/y.git")
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk-backups", status: "pending", app: app)
     ssh = Object.new
     ssh.define_singleton_method(:execute) { |cmd| @o = cmd.include?("docker ps -q -f name=") ? "abc123" : ""; true }
     ssh.define_singleton_method(:output) { @o }
@@ -77,7 +77,7 @@ class DatabaseBackupTest < ActiveSupport::TestCase
     app = @org.apps.create!(name: "kuickr", slug: "kuickr", deploy_method: "kamal", repository_url: "https://x/y.git")
     app.define_singleton_method(:derived_database_url) { |*| nil }
     app.define_singleton_method(:deploy_network) { "kamal" }
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk-backups", status: "pending", app: app)
     ssh = Object.new
     ssh.define_singleton_method(:execute) do |cmd|
       @o = if cmd.include?("docker ps -q -f name=") then ""
@@ -97,7 +97,7 @@ class DatabaseBackupTest < ActiveSupport::TestCase
 
   test "native app (no dedicated container, no resolvable url) falls back to host DATABASE_URL" do
     app = @org.apps.create!(name: "n", slug: "n", deploy_method: "native", repository_url: "https://x/y.git")
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk-backups", status: "pending", app: app)
     ssh = Object.new
     ssh.define_singleton_method(:execute) { |*| @o = ""; true }
     ssh.define_singleton_method(:output) { @o }
@@ -111,7 +111,7 @@ class DatabaseBackupTest < ActiveSupport::TestCase
   test "resolve_database_url reads the url from the app container when Conductor has none" do
     app = @org.apps.create!(name: "k", slug: "k", deploy_method: "kamal", repository_url: "https://x/y.git")
     app.define_singleton_method(:derived_database_url) { |*| nil }
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk-backups", status: "pending", app: app)
 
     captured = nil
     fake_ssh = Object.new
@@ -128,7 +128,7 @@ class DatabaseBackupTest < ActiveSupport::TestCase
   test "resolve_database_url prefers a known derived url and does not touch ssh" do
     app = @org.apps.create!(name: "k2", slug: "k2", deploy_method: "kamal", repository_url: "https://x/y.git")
     app.define_singleton_method(:derived_database_url) { |*| "postgres://derived/db" }
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk-backups", status: "pending", app: app)
     fake_ssh = Object.new
     fake_ssh.define_singleton_method(:execute) { |*| raise "must not ssh when derived url is known" }
 
@@ -140,7 +140,7 @@ class DatabaseBackupTest < ActiveSupport::TestCase
   test "resolve_database_url asks the app via rails runner when there is no DATABASE_URL env" do
     app = @org.apps.create!(name: "k3", slug: "k3", deploy_method: "kamal", repository_url: "https://x/y.git")
     app.define_singleton_method(:derived_database_url) { |*| nil }
-    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk", status: "pending", app: app)
+    b = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "bk-backups", status: "pending", app: app)
 
     fake_ssh = Object.new
     fake_ssh.define_singleton_method(:execute) do |cmd|

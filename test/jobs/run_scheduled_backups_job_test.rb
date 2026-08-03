@@ -16,7 +16,7 @@ class RunScheduledBackupsJobTest < ActiveSupport::TestCase
 
   def backup(status:, next_run_at:, last_run_at: nil)
     b = Backup.create!(organization: @org, server: @server, credential: @credential,
-                       provider: "cloudflare_r2", bucket_name: "b", schedule: "daily",
+                       provider: "cloudflare_r2", bucket_name: "test-bucket", schedule: "daily",
                        enabled: true)
     # update_columns: the model recalculates next_run_at on save, which would
     # overwrite the very state under test.

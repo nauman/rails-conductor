@@ -21,7 +21,7 @@ class BackupLastRunAtTest < ActiveSupport::TestCase
     @org = Organization.create_for(user, name: "Acme")
     @server = @org.servers.create!(name: "box", status: "online", ip_address: "10.0.0.1")
     @cred = @org.credentials.create!(name: "r2", provider: "cloudflare", api_key: "k", api_secret: "s")
-    @backup = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "b",
+    @backup = @org.backups.create!(provider: "cloudflare_r2", bucket_name: "test-bucket",
                                    credential: @cred, server: @server,
                                    schedule: "daily", enabled: true)
     @backup.update_columns(last_run_at: 5.days.ago)

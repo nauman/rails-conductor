@@ -54,6 +54,7 @@ class DatabaseBackupUploadTest < ActiveSupport::TestCase
   def happy
     {
       "pg_dump"   => { success: true, output: "" },
+      "gzip -t"   => { success: true, output: "" },
       "stat"      => { success: true, output: "5000000" },
       "aws s3 cp" => { success: true, output: "" },
       "aws s3 ls" => { success: true, output: "2026-08-03 03:00:01  5000000 buck_x.sql.gz" },
@@ -123,5 +124,35 @@ class DatabaseBackupUploadTest < ActiveSupport::TestCase
     _, _, ssh = run_backup(happy)
 
     assert ssh.commands.none? { |c| c.include?("aws s3") }
+  end
+
+
+  # codex HIGH #6: every dump is `pg_dump | gzip`, and without pipefail the exit
+  # code is GZIP's. A dump that writes 4 MB then dies exits 0, clears the
+  # 200-byte floor, uploads, and records completed — a truncated backup passing
+  # as healthy. The previous commit claimed this was caught; it was not.
+  test "the dump pipeline runs under pipefail" do
+    _, _, ssh = run_backup(happy)
+    dump = ssh.commands.find { |c| c.include?("pg_dump") || c.include?("pg_dumpall") }
+
+    assert_match(/bash -o pipefail -c/, dump,
+                 "without pipefail the pipeline reports gzip's status, not pg_dump's")
+  end
+
+  test "a truncated archive is rejected even when it is large enough" do
+    ok, svc = run_backup(happy.merge("gzip -t" => { success: false, stderr: "unexpected end of file" }))
+
+    assert_not ok
+    assert_match(/not a valid gzip/i, svc.error.to_s)
+    assert_equal "failed", @backup.reload.status
+  end
+
+  test "the archive is integrity-checked before it is uploaded" do
+    _, _, ssh = run_backup(happy)
+    gzip_at = ssh.commands.index { |c| c.include?("gzip -t") }
+    cp_at   = ssh.commands.index { |c| c.include?("aws s3 cp") }
+
+    assert gzip_at, "the dump must be verified as a complete archive"
+    assert gzip_at < cp_at, "check before uploading, not after"
   end
 end

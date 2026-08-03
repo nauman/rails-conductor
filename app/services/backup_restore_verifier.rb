@@ -44,7 +44,10 @@ class BackupRestoreVerifier
     return fail!("no credential configured") if @backup.credential.nil?
 
     @run = run
-    @token = "conductor-verify-#{run.id}"
+    # Unique per invocation, not just per run. Two verifiers picking the same
+    # latest run would otherwise collide on the name, and the second one's
+    # teardown would kill the first one's container mid-restore.
+    @token = "conductor-verify-#{run.id}-#{SecureRandom.hex(4)}"
 
     perform_verification
   rescue StandardError => e
@@ -59,6 +62,7 @@ class BackupRestoreVerifier
 
   def perform_verification
     return fail!("download failed: #{@last_error}") unless download_dump
+    return fail!("downloaded archive is truncated or corrupt: #{@last_error}") unless archive_intact?
     return fail!("could not start a throwaway postgres: #{@last_error}") unless start_scratch_postgres
     return fail!("restore failed: #{@last_error}") unless restore_dump
 
@@ -77,12 +81,12 @@ class BackupRestoreVerifier
 
     cred = backup.credential
     env = [
-      "AWS_ACCESS_KEY_ID=#{cred.api_key}",
-      "AWS_SECRET_ACCESS_KEY=#{cred.api_secret}",
-      "AWS_DEFAULT_REGION=#{vendor.region(cred)}"
+      "AWS_ACCESS_KEY_ID=#{esc(cred.api_key)}",
+      "AWS_SECRET_ACCESS_KEY=#{esc(cred.api_secret)}",
+      "AWS_DEFAULT_REGION=#{esc(vendor.region(cred))}"
     ].join(" ")
-    cmd = [ "aws", "s3", "cp", "s3://#{backup.bucket_name}/#{run.object_key}", dump_path ]
-    cmd += [ "--endpoint-url", vendor.endpoint(cred) ] if vendor.endpoint(cred).present?
+    cmd = [ "aws", "s3", "cp", esc("s3://#{backup.bucket_name}/#{run.object_key}"), esc(dump_path) ]
+    cmd += [ "--endpoint-url", esc(vendor.endpoint(cred)) ] if vendor.endpoint(cred).present?
 
     ok?("#{env} #{cmd.join(' ')}")
   end
@@ -91,10 +95,15 @@ class BackupRestoreVerifier
   # pg18 dump with a pg16 server fails, so the source container's own image is
   # the safest choice when the app has a dedicated DB.
   def start_scratch_postgres
-    return false unless ok?(
+    started = ok?(
       "docker run -d --name #{esc(token)} -e POSTGRES_PASSWORD=verify " \
       "#{esc(scratch_image)} >/dev/null"
     )
+    # Only a container we actually started may be torn down. `docker rm -f` on a
+    # name we never created would delete someone else's container that happened
+    # to match.
+    @container_started = started
+    return false unless started
 
     ok?(
       "for i in $(seq 1 #{READY_ATTEMPTS}); do " \
@@ -111,12 +120,26 @@ class BackupRestoreVerifier
     PostgresContainerClient::DEFAULT_IMAGE
   end
 
-  # ON_ERROR_STOP is deliberately OFF: a pg_dumpall carries role grants that a
-  # fresh container may not accept, and those are not what is being tested. What
-  # is being tested is whether the DATA comes back — measured after the fact by
-  # counting, not by trusting psql's exit code.
+  # ON_ERROR_STOP stays OFF: a pg_dumpall carries role grants a fresh container
+  # may reject, and those are not what is being tested — psql returns 0 through
+  # such soft errors, which is what we want.
+  #
+  # But the pipeline runs under pipefail and its status is NOT discarded. The
+  # previous `|| true` threw away the one signal that matters: gunzip failing on
+  # a TRUNCATED archive. That let a half-downloaded dump restore a schema with
+  # no data and still be recorded `verified` — the exact false guarantee this
+  # class exists to prevent.
   def restore_dump
-    ok?("gunzip -c #{dump_path} | docker exec -i #{esc(token)} psql -U postgres -q >/dev/null 2>&1 || true")
+    ok?(
+      "bash -o pipefail -c " +
+      esc("gunzip -c #{dump_path} | docker exec -i #{esc(token)} psql -U postgres -q >/dev/null 2>&1")
+    )
+  end
+
+  # Read the archive end-to-end before restoring: a truncated gzip is not a
+  # backup, and finding out from a table count afterwards is guesswork.
+  def archive_intact?
+    ok?("gzip -t #{esc(dump_path)}")
   end
 
   # Memoised: it is asked once for the table count and once for the rows, and a
@@ -149,10 +172,15 @@ class BackupRestoreVerifier
   def teardown
     return if token.nil? || @ssh.nil?
 
-    # Both, unconditionally. A failed verification must not leak a container or
-    # a multi-hundred-megabyte dump onto the box.
-    @ssh.execute_with_status("docker rm -f #{esc(token)} >/dev/null 2>&1 || true")
-    @ssh.execute_with_status("rm -f #{dump_path}")
+    # Remove the container ONLY if this invocation started it. Removing by name
+    # unconditionally would destroy a container we never created — the name is
+    # predictable, and "it matched" is not the same as "it is ours".
+    @ssh.execute_with_status("docker rm -f #{esc(token)} >/dev/null 2>&1 || true") if @container_started
+
+    # The dump is ours by construction (the path carries the unique token), so
+    # it is always safe to remove — and a failed verification must not leave a
+    # multi-hundred-megabyte file behind.
+    @ssh.execute_with_status("rm -f #{esc(dump_path)}")
   end
 
   # --- outcomes ------------------------------------------------------------
