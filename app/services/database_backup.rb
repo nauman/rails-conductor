@@ -10,9 +10,10 @@ class DatabaseBackup
   # `run` is the BackupRun the dispatcher already created. Manual paths pass
   # nothing and get one here, so every attempt lands in history no matter how it
   # was triggered.
-  def initialize(backup, run: nil)
+  def initialize(backup, run: nil, ssh: nil)
     @backup = backup
     @run = run
+    @injected_ssh = ssh
   end
 
   def run!
@@ -30,7 +31,7 @@ class DatabaseBackup
       return fail_with("No server with SSH access")
     end
 
-    ssh = SshConnection.new(server)
+    ssh = @injected_ssh || SshConnection.new(server)
 
     # Create backup filename
     timestamp = Time.current.strftime("%Y%m%d_%H%M%S")
@@ -38,8 +39,9 @@ class DatabaseBackup
     local_path = "/tmp/#{filename}"
 
     dump_cmd = build_dump_command(ssh, local_path)
-    unless ssh.execute(dump_cmd)
-      return fail_with("Database dump failed: #{ssh.error}")
+    dump = ssh.execute_with_status(dump_cmd)
+    unless dump[:success]
+      return fail_with("Database dump failed: #{(dump[:stderr].presence || dump[:output]).to_s.strip[0, 200]}")
     end
 
     # Get file size
@@ -168,13 +170,50 @@ class DatabaseBackup
 
   def esc(value) = Shellwords.escape(value.to_s)
 
+  # `ssh.execute` returns the command OUTPUT, not its exit status, so
+  # `execute(cmd) ? true : fail` only ever caught an unreachable box. A failed
+  # upload returns its error text — a non-empty String, therefore truthy — and
+  # every backup in the fleet was recorded as uploaded while the bucket stayed
+  # empty. The dump was real, the local copy was then deleted, and the row said
+  # "completed" with a size. Check the exit code.
   def upload_to_storage(ssh, local_path, filename)
     return true if backup.provider == "local" # nothing to upload — keep the file
 
     vendor = BackupVendors[backup.provider]
     return fail_upload("Unsupported provider: #{backup.provider}") unless vendor
 
-    ssh.execute(s3_upload_command(vendor, local_path, filename)) ? true : fail_upload(ssh.error)
+    res = ssh.execute_with_status(s3_upload_command(vendor, local_path, filename))
+    unless res[:success]
+      return fail_upload((res[:stderr].presence || res[:output]).to_s.strip[0, 200])
+    end
+
+    confirm_uploaded(ssh, vendor, filename)
+  end
+
+  # Exit 0 is the command's opinion. Ask the bucket instead: the object must be
+  # listed, with a non-zero size. This is the same discipline the 0-byte dump
+  # guard applies one step earlier — an upload that "succeeded" and stored
+  # nothing is not a backup.
+  def confirm_uploaded(ssh, vendor, filename)
+    res = ssh.execute_with_status(s3_head_command(vendor, filename))
+    return fail_upload("uploaded object not found in bucket: #{filename}") unless res[:success]
+
+    size = res[:output].to_s.split(/\s+/).find { |t| t.match?(/\A\d+\z/) }.to_i
+    return fail_upload("uploaded object #{filename} is #{size} bytes in the bucket") if size < MIN_DUMP_BYTES
+
+    true
+  end
+
+  def s3_head_command(vendor, filename)
+    cred = backup.credential
+    env = [
+      "AWS_ACCESS_KEY_ID=#{cred.api_key}",
+      "AWS_SECRET_ACCESS_KEY=#{cred.api_secret}",
+      "AWS_DEFAULT_REGION=#{vendor.region(cred)}"
+    ]
+    cmd = [ "aws", "s3", "ls", "s3://#{backup.bucket_name}/#{filename}" ]
+    cmd += [ "--endpoint-url", vendor.endpoint(cred) ] if vendor.endpoint(cred).present?
+    "#{env.join(' ')} #{cmd.join(' ')}"
   end
 
   # One uniform `aws s3 cp` for every S3-compatible vendor. The vendor registry
