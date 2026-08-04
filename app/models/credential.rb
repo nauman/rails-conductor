@@ -6,6 +6,32 @@ class Credential < ApplicationRecord
   encrypts :api_key
   encrypts :api_secret
 
+  # Secrets are never RENDERED (they are encrypted, and the form shows a masked
+  # placeholder), so an edit form necessarily posts an empty field unless the
+  # operator retypes the value. Assigning that empty string used to overwrite the
+  # stored secret — silently. Renaming a credential, fixing an endpoint or
+  # changing a region would destroy the key pair, report success, and leave
+  # nothing to indicate the credential was now broken.
+  #
+  # That is how a working S3 key pair becomes half a key pair. The resulting
+  # upload failures then went unnoticed for weeks because a failed upload was
+  # being recorded as a successful backup.
+  #
+  # So a blank assignment on a PERSISTED record means "unchanged", not "clear".
+  # Clearing stays possible — see #clear_api_secret! — but has to be asked for.
+  SECRET_FIELDS = %i[api_key api_secret].freeze
+
+  SECRET_FIELDS.each do |field|
+    define_method("#{field}=") do |value|
+      return if persisted? && value.blank? && self[field].present?
+
+      super(value)
+    end
+  end
+
+  def clear_api_secret! = update_column(:api_secret, nil)
+  def clear_api_key!    = update_column(:api_key, nil)
+
   has_many :backups, dependent: :nullify
 
   validates :name, presence: true
