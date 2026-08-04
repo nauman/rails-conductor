@@ -63,6 +63,15 @@ class BackupsController < ApplicationController
     redirect_to backups_path, notice: notice
   end
 
+  # Create the R2 bucket a backup is about to write to, without leaving Conductor.
+  def create_bucket
+    name = params[:bucket_name].to_s.strip
+    r = R2Bucket.new(current_organization.credentials.where(provider: "cloudflare")).create!(name: name)
+
+    redirect_back fallback_location: backups_path,
+                  notice: (r.message if r.ok?), alert: (r.message unless r.ok?)
+  end
+
   def run
     run = @backup.record_dispatch!(trigger: "manual")
     BackupJob.perform_later(@backup.id, run.id)

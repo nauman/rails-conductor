@@ -185,6 +185,11 @@ Rails.application.routes.draw do
       # One button for the whole fleet (design B1): 0 of 12 apps were protected because
       # enabling one asked four questions. This asks none.
       post :protect_all
+      # Create the destination bucket from the same screen that asks for its
+      # name. Conductor could configure, migrate and CORS a bucket but not make
+      # one — so every setup detoured to the Cloudflare dashboard, and the fleet
+      # ran ten schedules pointed at a bucket that did not exist.
+      post :create_bucket
     end
   end
 

@@ -12,6 +12,7 @@
 #               Cloudflare-served, CDN-cached delivery (mutating).
 class ConductorStorageTool
   include ActorScoped
+  include CloudflareActorCredentials
 
   DEFINITION = {
     name: "conductor_storage",
@@ -22,14 +23,17 @@ class ConductorStorageTool
       "set_cors (set the R2 bucket's CORS policy so browser direct_upload PUTs work — bucket + optional origins, default the app's domain + wildcard subdomains — mutating, via the connected Cloudflare account), " \
       "connect_domain (attach a public custom domain to the bucket for Cloudflare-served CDN delivery — bucket + domain; Cloudflare provisions cert + proxied DNS — mutating). " \
       "audit + migrate run `bin/rails runner` in the app's running container over SSH (Kamal/Docker apps). " \
-      "set_cors + connect_domain need a Verified Cloudflare account whose token carries 'Workers R2 Storage: Edit'.",
+      "create_bucket (create an R2 bucket in the connected Cloudflare account — bucket; idempotent, an existing bucket reports OK. NOT app-scoped: a fleet backup bucket belongs to no single app), " \
+      "list_buckets (list the R2 buckets in the connected account — no arguments). " \
+      "set_cors, connect_domain, create_bucket + list_buckets need a Verified Cloudflare account whose token carries 'Workers R2 Storage: Edit'.",
     input_schema: {
       type: "object",
       properties: {
-        action:       { type: "string", enum: %w[audit configure migrate set_cors connect_domain], description: "Which storage operation" },
+        action:       { type: "string", enum: %w[audit configure migrate set_cors connect_domain create_bucket list_buckets], description: "Which storage operation" },
         app_id:       { type: "integer", description: "Target app" },
         app_name:     { type: "string",  description: "Target app (alt to app_id)" },
-        bucket:       { type: "string",  description: "configure/set_cors/connect_domain: R2 bucket name" },
+        bucket:       { type: "string",  description: "configure/set_cors/connect_domain/create_bucket: R2 bucket name" },
+        location_hint: { type: "string", description: "create_bucket: physical region (wnam/enam/weur/eeur/apac/oc). PERMANENT — it cannot be changed after creation. Omit to let Cloudflare choose." },
         account_id:   { type: "string",  description: "configure: Cloudflare account id (for the R2 endpoint)" },
         from_service: { type: "string",  description: "migrate: source service (default 'local')" },
         to_service:   { type: "string",  description: "migrate: target service (default 'cloudflare_r2')" },
@@ -47,6 +51,14 @@ class ConductorStorageTool
   end
 
   def call(input)
+    # Bucket operations are ACCOUNT-scoped, not app-scoped: the fleet's backup
+    # bucket belongs to no single app, and requiring one would make it
+    # impossible to create exactly the bucket that was missing.
+    case input["action"]
+    when "create_bucket" then return create_bucket(input)
+    when "list_buckets"  then return list_buckets
+    end
+
     app = find_app(input)
     return Result.fail("App not found. Pass a valid app_id or app_name.") unless app
 
@@ -56,11 +68,29 @@ class ConductorStorageTool
     when "migrate"        then migrate(app, input)
     when "set_cors"       then set_cors(app, input)
     when "connect_domain" then connect_domain(app, input)
-    else Result.fail("Missing or unknown action. Set action to one of: audit, configure, migrate, set_cors, connect_domain.")
+    else Result.fail("Missing or unknown action. Set action to one of: audit, configure, migrate, set_cors, connect_domain, create_bucket, list_buckets.")
     end
   end
 
   private
+
+  def create_bucket(input)
+    bucket = input["bucket"].presence
+    return Result.fail("create_bucket requires a bucket name.") unless bucket
+
+    r = R2Bucket.new(actor_cloudflare_credentials)
+                 .create!(name: bucket, location_hint: input["location_hint"].presence)
+    return Result.fail(r.message) unless r.ok?
+
+    Result.ok(bucket: r.bucket, message: r.message, _organization: Current.organization)
+  end
+
+  def list_buckets
+    r = R2Bucket.new(actor_cloudflare_credentials).list
+    return Result.fail(r.message) unless r.ok?
+
+    Result.ok(buckets: r.buckets, message: r.message, _organization: Current.organization)
+  end
 
   def set_cors(app, input)
     bucket = input["bucket"].presence
