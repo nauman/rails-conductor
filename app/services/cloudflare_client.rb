@@ -82,12 +82,15 @@ class CloudflareClient
 
   # Create or update an A/CNAME record by name. Idempotent: PATCHes the existing
   # record for that name if one exists, else POSTs a new one. ttl 1 = "automatic".
-  def upsert_dns_record(zone_id, name:, content:, type: "A", proxied: false, ttl: 1)
+  def upsert_dns_record(zone_id, name:, content:, type: "A", proxied: false, ttl: 1, priority: nil)
     # Match the SAME type only — never rewrite an existing TXT/MX/etc. at this name.
     existing = dns_record(zone_id, name, type: type)
     return existing unless existing.ok? # propagate the read error
 
     body = { type: type, name: name, content: content, proxied: proxied, ttl: ttl }
+    # Cloudflare requires priority on MX and rejects it elsewhere, so include it
+    # only when given.
+    body[:priority] = priority.to_i unless priority.nil?
     resp = if existing.data
       patch("/zones/#{zone_id}/dns_records/#{existing.data['id']}", body)
     else

@@ -91,7 +91,7 @@ class CloudflareToolsTest < ActiveSupport::TestCase
 
   test "conductor_domain action=set_dns upserts a record via CloudflareDnsRecord (DNS-only default)" do
     fake = Struct.new(:seen) do
-      def set!(domain:, content:, type:, proxied:)
+      def set!(domain:, content:, type:, proxied:, priority: nil)
         self.seen = [ domain, content, type, proxied ]
         CloudflareDnsRecord::Result.new(ok: true, message: "set #{domain}", record: { "id" => "r1" })
       end

@@ -14,9 +14,10 @@ class SetDnsRecordTool
       type: "object",
       properties: {
         domain:  { type: "string",  description: "The record name / FQDN (e.g. old.platepose.com)" },
-        content: { type: "string",  description: "Target: an IP for A, a hostname for CNAME, or the full value for TXT (SPF/DKIM/verification tokens)" },
-        type:    { type: "string",  description: "Record type (default A). One of: A, AAAA, CNAME, TXT" },
-        proxied: { type: "boolean", description: "Proxy through Cloudflare (orange cloud)? Default false. Only valid for A/AAAA/CNAME — a TXT record cannot be proxied." }
+        content: { type: "string",  description: "Target: an IP for A, a hostname for CNAME/MX, or the full value for TXT (SPF/DKIM/verification tokens)" },
+        type:    { type: "string",  description: "Record type (default A). One of: A, AAAA, CNAME, TXT, MX" },
+        priority: { type: "integer", description: "MX priority (0-65535), REQUIRED for type=MX and rejected for any other type. E.g. 10 for an SES custom MAIL-FROM bounce host." },
+        proxied: { type: "boolean", description: "Proxy through Cloudflare (orange cloud)? Default false. Only valid for A/AAAA/CNAME — TXT and MX cannot be proxied." }
       },
       required: %w[domain content]
     }
@@ -31,17 +32,20 @@ class SetDnsRecordTool
     content = input["content"].to_s.strip
     return Result.fail("Both domain and content are required.") if domain.blank? || content.blank?
 
-    type    = input["type"].presence || "A"
+    type     = input["type"].presence || "A"
+    priority = input["priority"]
     proxied = input["proxied"] == true
 
     r = CloudflareDnsRecord.new(actor_cloudflare_credentials)
-                           .set!(domain: domain, content: content, type: type, proxied: proxied)
+                           .set!(domain: domain, content: content, type: type,
+                                 proxied: proxied, priority: priority)
     return Result.fail(r.message) unless r.ok?
 
     Result.ok({
       domain: domain,
       type: type.upcase,
       content: content,
+      priority: (priority if type.to_s.upcase == "MX"),
       proxied: proxied,
       message: r.message,
       _organization: Current.organization

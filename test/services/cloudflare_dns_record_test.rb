@@ -10,8 +10,11 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
       @records = records
       @deleted_ids = []
     end
-    def upsert_dns_record(zone, name:, content:, type:, proxied:)
+    attr_reader :seen_kwargs
+    def upsert_dns_record(zone, name:, content:, type:, proxied:, priority: nil)
       @seen = [ zone, name, content, type, proxied ]
+      @seen_kwargs = { zone: zone, name: name, content: content, type: type,
+                       proxied: proxied, priority: priority }
       CloudflareClient::Result.new(ok: true, data: { "id" => "rec1", "name" => name })
     end
     def dns_record(_zone, _name, type: nil) = CloudflareClient::Result.new(ok: true, data: @record)
@@ -107,12 +110,13 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
     assert_match(/cannot be proxied/, r.message)
   end
 
+  # MX is supported now — see the MX section below. SRV still is not.
   test "refuses an unsupported record type" do
     r = CloudflareDnsRecord.new(cf_creds, client_for: ->(_) { FakeClient.new })
-                           .set!(domain: "platepose.com", content: "10 mx.example.com", type: "MX")
+                           .set!(domain: "_sip._tcp.platepose.com", content: "sip.example.com", type: "SRV")
 
     assert_not r.ok?
-    assert_match(/Unsupported record type MX/, r.message)
+    assert_match(/Unsupported record type SRV/, r.message)
   end
 
   # A name can carry several records. Deleting only the first while reporting
@@ -139,5 +143,75 @@ class CloudflareDnsRecordTest < ActiveSupport::TestCase
     assert r.ok?
     assert_empty client.deleted_ids
     assert_match(/already absent/, r.message)
+  end
+
+  # --- MX ------------------------------------------------------------------
+  #
+  # Without MX, email-deliverability setup could not be done through Conductor
+  # at all: SES/Postmark custom MAIL-FROM needs an MX at the bounce subdomain,
+  # so it had to be clicked into the Cloudflare dashboard by hand.
+
+  test "writes an MX record with its priority" do
+    fake = FakeClient.new
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake })
+            .set!(domain: "bounce.platepose.com", type: "MX",
+                  content: "feedback-smtp.ap-southeast-2.amazonses.com", priority: 10)
+
+    assert res.ok?, res.message
+    assert_equal "MX", fake.seen_kwargs[:type]
+    assert_equal 10, fake.seen_kwargs[:priority]
+    assert_match(/MX bounce.platepose.com → feedback-smtp/, res.message)
+    assert_match(/priority 10/, res.message)
+  end
+
+  # Cloudflare rejects an MX with no priority, so refuse locally with a reason
+  # rather than forwarding a request that cannot succeed.
+  test "an MX without a priority is refused, not sent" do
+    fake = FakeClient.new
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake })
+            .set!(domain: "bounce.platepose.com", type: "MX", content: "mail.example.com")
+
+    assert_not res.ok?
+    assert_match(/priority/i, res.message)
+    assert_nil fake.seen, "nothing should reach Cloudflare"
+  end
+
+  test "an MX priority outside 0-65535 is refused" do
+    fake = FakeClient.new
+    [ -1, 65_536 ].each do |bad|
+      res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake })
+              .set!(domain: "bounce.platepose.com", type: "MX", content: "m.example.com", priority: bad)
+      assert_not res.ok?, "priority #{bad} must be refused"
+    end
+    assert_nil fake.seen
+  end
+
+  test "MX cannot be proxied" do
+    fake = FakeClient.new
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake })
+            .set!(domain: "bounce.platepose.com", type: "MX", content: "m.example.com",
+                  priority: 10, proxied: true)
+
+    assert_not res.ok?
+    assert_match(/cannot be proxied/i, res.message)
+  end
+
+  # A priority on a non-MX record is meaningless; silently dropping it would be
+  # worse than saying so, because the caller believes it was applied.
+  test "a priority on a non-MX record is refused" do
+    fake = FakeClient.new
+    res = CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake })
+            .set!(domain: "a.platepose.com", type: "A", content: "1.2.3.4", priority: 10)
+
+    assert_not res.ok?
+    assert_match(/only.*MX/i, res.message)
+  end
+
+  test "non-MX records still send no priority" do
+    fake = FakeClient.new
+    CloudflareDnsRecord.new(cf_creds, client_for: ->(_c) { fake })
+      .set!(domain: "a.platepose.com", type: "A", content: "1.2.3.4")
+
+    assert_nil fake.seen_kwargs[:priority]
   end
 end
