@@ -30,7 +30,8 @@ class ServerDetailTool
       region:   server.region.presence,
       edge:     { type: server.edge_type, detail: server.edge_detail, detected: server.edge_detected? },
       metrics: {
-        cpu:        server.cpu_percent,
+        cpu_percent: server.cpu_percent, # utilisation, not cores
+        cpu_cores:   server.cpu_cores,   # nil = unknown
         memory:     server.formatted_memory,
         disk:       server.disk_percent,
         load:       server.load_average&.to_f,

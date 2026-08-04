@@ -159,8 +159,14 @@ class Server < ApplicationRecord
     ssh_configured? && !metrics_fresh?
   end
 
+  # Samples and inventory are different kinds of fact.
+  #
+  # Utilisation, load, memory-in-use and disk% are SAMPLES — each probe replaces
+  # the last. Core count is INVENTORY: it changes only when the machine does, and
+  # a probe that failed to read it must not erase what we already knew. Letting a
+  # sample overwrite inventory is how a 6-core box comes to report 1.
   def update_metrics!(metrics)
-    update!(
+    attrs = {
       cpu_percent: metrics[:cpu_percent],
       memory_used_mb: metrics[:memory_used_mb],
       memory_total_mb: metrics[:memory_total_mb],
@@ -171,7 +177,11 @@ class Server < ApplicationRecord
       last_seen_at: Time.current,
       metrics_updated_at: Time.current,
       rebooting_at: nil # the box answered — the reboot window is over
-    )
+    }
+    # Only when this probe actually read it. Absent = unknown = leave it alone.
+    attrs[:cpu_cores] = metrics[:cpu_cores] if metrics[:cpu_cores].present?
+
+    update!(attrs)
   end
 
   # A Conductor-initiated reboot is in flight: show a transitional state and open

@@ -19,7 +19,7 @@ class ConductorReadTool
   DEFINITION = {
     name: "conductor_read",
     description: "Read-only fleet visibility. Set `action` to one of: " \
-      "fleet_status (all servers + their apps/health, incl. cpu/memory/disk/load/uptime), " \
+      "fleet_status (all servers + their apps/health, incl. cpu_percent (utilisation) + cpu_cores (physical, nil if unread)/memory/disk/load/uptime), " \
       "server (ONE server's detail — metrics, stored audit/update/harden rollups, cron jobs, ssh + edge, apps. server_id/server_name. Fast by default; pass probe:true to ALSO run live SSH probes for the deep panels — health, audit checks, storage, privileged-ops readiness — under a `live` key, slower and can time out on a loaded box), " \
       "situation (RESUME point — in-flight ops, needs-attention worklist, recent events; call first on reconnect), " \
       "logs (recent script-run/deployment logs — server_id, script_run_id, limit), " \

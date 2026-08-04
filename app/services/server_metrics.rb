@@ -1,6 +1,11 @@
 class ServerMetrics
   METRICS_COMMAND = <<~BASH
     echo "CPU:$(top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1 2>/dev/null || echo '0')"
+    # PHYSICAL cores on the HOST. `nproc` alone reports the cgroup/affinity count,
+    # which inside a container is the --cpus quota, not the machine. Emitted with
+    # no fallback value: an unreadable count must arrive EMPTY so it is stored as
+    # unknown, never as a fabricated 0.
+    echo "CORES:$(nproc --all 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo '')"
     echo "MEM_USED:$(free -m | awk 'NR==2{print $3}' 2>/dev/null || echo '0')"
     echo "MEM_TOTAL:$(free -m | awk 'NR==2{print $2}' 2>/dev/null || echo '0')"
     echo "DISK:$(df -h / | awk 'NR==2{print $5}' | tr -d '%' 2>/dev/null || echo '0')"
@@ -55,6 +60,12 @@ class ServerMetrics
       case line
       when /^CPU:(.+)/
         metrics[:cpu_percent] = $1.to_f.round
+      when /^CORES:(.*)/
+        # Static inventory, and only when it is a sane positive integer. `to_i`
+        # alone would turn "" and "banana" into 0 — a confidently wrong core
+        # count, which is worse than admitting we could not read it.
+        raw = $1.to_s.strip
+        metrics[:cpu_cores] = raw.to_i if raw.match?(/\A[1-9]\d*\z/)
       when /^MEM_USED:(.+)/
         metrics[:memory_used_mb] = $1.to_i
       when /^MEM_TOTAL:(.+)/

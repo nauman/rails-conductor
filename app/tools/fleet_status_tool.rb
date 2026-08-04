@@ -32,7 +32,11 @@ class FleetStatusTool
         ip:          server.ip_address,
         status:      server.status,
         provider:    server.provider,
-        cpu:         server.cpu_percent,
+        # NOT a core count. This field was named `cpu` while carrying
+        # UTILISATION, and capacity decisions were made on it: a 6-core box
+        # reporting `cpu: 1` (1% busy) was read as a 1-core machine.
+        cpu_percent: server.cpu_percent,
+        cpu_cores:   server.cpu_cores, # nil = not yet read, never a guess
         memory:      server.formatted_memory,
         disk:        server.disk_percent,
         load:        server.load_average&.to_f,
