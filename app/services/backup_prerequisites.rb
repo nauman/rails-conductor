@@ -36,28 +36,49 @@ class BackupPrerequisites
     @ssh.execute_with_status("command -v aws >/dev/null 2>&1")[:success]
   end
 
-  # Check, and install once if missing. Never installs twice: if the CLI is still
-  # absent after apt reports success, that is a real problem (no sudo, held
-  # packages, no network) and looping on it just delays an honest failure.
+  # Check, then install if missing — apt first, then AWS's own v2 installer.
+  #
+  # Two routes are needed because apt is not enough: Ubuntu 24.04 (noble) ships
+  # NO awscli package at all (`apt-cache policy awscli` → `Candidate: (none)`),
+  # which is exactly why railslink's box could never satisfy this. apt is still
+  # tried first where it works — a distro package is patched by the distro.
+  #
+  # Neither route is retried. If the CLI is still absent after an installer
+  # reported success, that is a real problem (no sudo, no network, wrong arch)
+  # and looping on it only delays an honest failure.
   def ensure!
     return Result.new(ok: true, installed: false, detail: "aws CLI present") if aws_cli?
 
-    res = installer.install
+    apt = installer.install
+    return Result.new(ok: true, installed: true, detail: "installed #{PACKAGE} via apt") if apt.success? && aws_cli?
 
-    unless res.success?
-      return Result.new(ok: false, installed: false,
-                        detail: "aws CLI missing and `apt-get install #{PACKAGE}` failed: #{res.error}")
-    end
+    official = install_official_v2
+    return Result.new(ok: true, installed: true, detail: "installed AWS CLI v2 from awscli.amazonaws.com") if official[:success] && aws_cli?
 
-    if aws_cli?
-      Result.new(ok: true, installed: true, detail: "installed #{PACKAGE}")
-    else
-      Result.new(ok: false, installed: false,
-                 detail: "apt reported success but `aws` is still not on PATH")
-    end
+    Result.new(ok: false, installed: false, detail: <<~DETAIL.squish)
+      aws CLI missing. apt: #{apt.success? ? 'reported success but aws is still not on PATH' : apt.error};
+      AWS CLI v2 installer: #{official[:success] ? 'reported success but aws is still not on PATH' : (official[:stderr].presence || official[:output]).to_s.strip[0, 160]}
+    DETAIL
   end
 
   private
+
+  # AWS's supported install for distros without a package. `uname -m` picks the
+  # arch (x86_64 / aarch64) rather than assuming Intel — the fleet has both.
+  # `--update` makes a re-run harmless. The download and unzip need no
+  # privileges; only the final install step does.
+  def install_official_v2
+    @ssh.execute_with_status(<<~SH.strip)
+      set -e
+      command -v curl >/dev/null 2>&1 || sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y curl
+      command -v unzip >/dev/null 2>&1 || sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y unzip
+      cd /tmp
+      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+      unzip -q -o /tmp/awscliv2.zip -d /tmp
+      sudo -n /tmp/aws/install --update
+      rm -rf /tmp/awscliv2.zip /tmp/aws
+    SH
+  end
 
   def installer
     @installer ||= PackageInstaller.new(@server, [ PACKAGE ], ssh: @ssh)

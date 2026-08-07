@@ -40,13 +40,15 @@ class DatabaseBackup
     # fail with `aws: command not found`, which is how railslink's nightly backup
     # spent every night doing the expensive part and throwing it away. Check
     # first, install once if missing, and fail fast with something actionable.
-    prereq = BackupPrerequisites.new(server, ssh: ssh).ensure!
-    unless prereq.ok?
+    # A `local` backup keeps the dump on the server and never speaks S3, so it
+    # must not require the CLI — nor install a package it will never use.
+    prereq = uploads_to_object_store? ? BackupPrerequisites.new(server, ssh: ssh).ensure! : nil
+    if prereq && !prereq.ok?
       return fail_with("Cannot upload from this server: #{prereq.detail}. " \
                        "Install it from the server page, or: conductor_server " \
                        "action=install_packages packages=awscli")
     end
-    Rails.logger.info("[backup #{backup.id}] #{prereq.detail}") if prereq.installed?
+    Rails.logger.info("[backup #{backup.id}] #{prereq.detail}") if prereq&.installed?
 
     # The object key identifies the APP (`<slug>/<slug>_<ts>.sql.gz`). It used to
     # be named after the bucket, so a shared bucket got thirteen apps' dumps under
@@ -107,6 +109,21 @@ class DatabaseBackup
 
     run.complete!(size_bytes: size_bytes, object_key: filename)
     backup.mark_completed!(size_bytes: size_bytes)
+
+    # Enforce the retention window AFTER the new object is confirmed in the
+    # bucket, never before: pruning first would delete an old backup on the
+    # strength of a new one that might still fail to upload. A failure here is
+    # logged, not raised — the backup itself succeeded, and reporting it as
+    # failed because housekeeping stumbled would be a lie in the safer-sounding
+    # direction.
+    if uploads_to_object_store?
+      prune = BackupRetention.new(backup, ssh: ssh).prune!
+      if prune.ok?
+        Rails.logger.info("[backup #{backup.id}] retention: deleted #{prune.deleted}, kept #{prune.kept}")
+      else
+        Rails.logger.warn("[backup #{backup.id}] retention skipped: #{prune.error}")
+      end
+    end
 
     true
   rescue => e
@@ -228,6 +245,10 @@ class DatabaseBackup
   # every backup in the fleet was recorded as uploaded while the bucket stayed
   # empty. The dump was real, the local copy was then deleted, and the row said
   # "completed" with a size. Check the exit code.
+  # "local" keeps the dump on the server: no CLI needed, nothing to upload, and
+  # no bucket to prune.
+  def uploads_to_object_store? = backup.provider != "local"
+
   def upload_to_storage(ssh, local_path, filename)
     return true if backup.provider == "local" # nothing to upload — keep the file
 
