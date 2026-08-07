@@ -188,6 +188,20 @@ class DatabaseBackup
   def build_dump_command(ssh, output_path)
     app = backup.app
 
+    # EXPLICIT CONFIGURATION BEATS THE NAME HEURISTIC.
+    #
+    # `dedicated_db_container` matches purely on `<slug>-db`. That is a guess,
+    # and intellecta.co is the case that proves it can be wrong: an abandoned,
+    # EMPTY `intellectaco-db` container sat on the box from a half-finished
+    # migration while the live app ran on the host with its data in host
+    # postgres. The guess matched, the dump succeeded, and it protected nothing.
+    #
+    # An env_file is an operator saying, in as many words, where the data is. A
+    # heuristic must never override that.
+    if backup.env_file.present?
+      return %(. #{esc(backup.env_file)} && pg_dump "$DATABASE_URL" | gzip > #{output_path})
+    end
+
     if (db = dedicated_db_container(ssh, app))
       return %(docker exec #{esc(db)} sh -c 'pg_dumpall -U "${POSTGRES_USER:-postgres}"' | gzip > #{output_path})
     end

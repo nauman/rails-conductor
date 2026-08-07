@@ -100,12 +100,30 @@ class DatabaseBackupEnvFileTest < ActiveSupport::TestCase
     assert_includes ssh.dump_command, "pg_dump"
   end
 
-  # A container-backed app must keep using the container even if someone fills in
-  # an env file — the container is the more specific, more reliable source.
-  test "a dedicated db container still wins over an env file" do
+  # THE PRECEDENCE, and it is the whole point.
+  #
+  # `dedicated_db_container` matches on the name `<slug>-db` — a guess. On
+  # SSD-Node an abandoned, EMPTY `intellectaco-db` container matched that guess
+  # while the live app's data sat in host postgres, so the backup dumped the
+  # ghost and reported success.
+  #
+  # An env_file is an operator stating where the data is. A name match must not
+  # override it. (An earlier draft of this class had it the other way round,
+  # which would have re-dumped the empty container.)
+  test "an explicit env file beats a name-matched db container" do
     ssh = FakeSsh.new(host_app_responses.merge("docker ps" => { success: true, output: "abc123" }))
     DatabaseBackup.new(backup_with(env_file: "/home/deploy/intellectaco/.asdf-vars"), ssh: ssh).run!
 
-    assert ssh.dump_command.include?("pg_dumpall"), "should dump the container: #{ssh.dump_command}"
+    assert_includes ssh.dump_command, "asdf-vars",
+                    "explicit configuration must win over the container guess: #{ssh.dump_command}"
+    refute_includes ssh.dump_command, "pg_dumpall"
+  end
+
+  # Without an env file the heuristic is still right for containerised apps.
+  test "a db container is still used when no env file is set" do
+    ssh = FakeSsh.new(host_app_responses.merge("docker ps" => { success: true, output: "abc123" }))
+    DatabaseBackup.new(backup_with(env_file: nil), ssh: ssh).run!
+
+    assert_includes ssh.dump_command, "pg_dumpall"
   end
 end
