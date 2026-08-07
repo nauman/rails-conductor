@@ -33,14 +33,35 @@ class DatabaseBackup
 
     ssh = @injected_ssh || SshConnection.new(server)
 
-    # Create backup filename
-    timestamp = Time.current.strftime("%Y%m%d_%H%M%S")
-    filename = "#{backup.bucket_name}_#{timestamp}.sql.gz"
-    # Escaped everywhere it reaches a shell. bucket_name is now format-validated
-    # too, but validation is one migration or one `update_column` away from being
-    # bypassed — the six routes closed on 08-01 taught that either layer alone is
-    # a single mistake from being reopened.
-    local_path = esc("/tmp/#{filename}")
+    # PREREQUISITE, CHECKED BEFORE ANY WORK.
+    #
+    # The upload needs the AWS CLI (R2 is S3-compatible; there is no R2 CLI).
+    # This used to be discovered at the END — dump the database, gzip it, then
+    # fail with `aws: command not found`, which is how railslink's nightly backup
+    # spent every night doing the expensive part and throwing it away. Check
+    # first, install once if missing, and fail fast with something actionable.
+    prereq = BackupPrerequisites.new(server, ssh: ssh).ensure!
+    unless prereq.ok?
+      return fail_with("Cannot upload from this server: #{prereq.detail}. " \
+                       "Install it from the server page, or: conductor_server " \
+                       "action=install_packages packages=awscli")
+    end
+    Rails.logger.info("[backup #{backup.id}] #{prereq.detail}") if prereq.installed?
+
+    # The object key identifies the APP (`<slug>/<slug>_<ts>.sql.gz`). It used to
+    # be named after the bucket, so a shared bucket got thirteen apps' dumps under
+    # one indistinguishable name — and same-second writes overwrote each other.
+    filename = backup.object_key_for
+
+    # The local dump path must stay FLAT: the key now contains a "/", and
+    # `pg_dump > /tmp/<slug>/<slug>_….sql.gz` would fail on a directory that does
+    # not exist. Only the remote key is foldered.
+    #
+    # Escaped everywhere it reaches a shell. Both halves are format-validated
+    # (BUCKET_NAME, SAFE_PREFIX), but validation is one migration or one
+    # `update_column` away from being bypassed — the six routes closed on 08-01
+    # taught that either layer alone is a single mistake from being reopened.
+    local_path = esc("/tmp/#{filename.tr('/', '_')}")
 
     # Run the pipeline under pipefail. EVERY dump is `pg_dump … | gzip > file`,
     # and without it the exit code is GZIP's, not pg_dump's: a dump that writes

@@ -6,6 +6,21 @@
 - The UI focuses on fleet monitoring (servers/VMs), Docker deploys, database backups to S3/R2, and Caddy routing. Active Storage introspection is deferred (see `docs/dev/FEATURES.md`).
 - Documentation lives under `docs/` and should stay concise and actionable.
 
+## Operating on Fleet Servers
+
+- **Use the `deploy` user for anything app-level** — `docker exec`, logs, dumps,
+  editing app files. Use `root` only for provisioning, hardening, OS updates, and
+  installing packages.
+- Root-run commands create `root:root` files that the container and the `deploy`
+  user can never write or `chown` back. The breakage surfaces at the *next*
+  deploy or backup, far from the command that caused it. See
+  `docs/learnings/operate-as-deploy-not-root.md`.
+- If `deploy` cannot do an app-level task, fix the provisioning (docker group,
+  ownership, a scoped sudo rule). Do not escalate to root to get unblocked.
+- Prefer Conductor's own audited paths (`conductor_app action=runner`,
+  `conductor_server action=install_packages`) over hand-run SSH: they target the
+  live container by construction and are recorded.
+
 ## Git Commits
 
 - Do not include AI attributions or disclaimers in commit messages.

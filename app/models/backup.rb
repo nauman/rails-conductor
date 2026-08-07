@@ -35,6 +35,36 @@ class Backup < ApplicationRecord
   validates :schedule, inclusion: { in: SCHEDULES }, allow_blank: true
   validates :verification_status, inclusion: { in: VERIFICATION_STATUSES }
 
+  # WHERE A DUMP LANDS IN THE BUCKET.
+  #
+  # This used to be `<bucket_name>_<timestamp>.sql.gz`, i.e. named after the
+  # DESTINATION. With one shared bucket for the whole fleet that meant every app
+  # wrote objects called `pavelabs-backups_<ts>.sql.gz`: you could not tell whose
+  # dump you were holding, and — because the stamp is second-resolution and every
+  # "daily" backup fires in the same minute — two apps finishing together wrote
+  # the SAME key. R2 PUT is last-write-wins, so one app's backup replaced
+  # another's, silently.
+  #
+  # An app slug is validated (it already reaches container names and systemd
+  # units). A server fallback covers a box-level backup with no app. The result
+  # is checked against SAFE_PREFIX anyway, because this string is interpolated
+  # into `aws s3 cp`, `aws s3 ls` and a /tmp path.
+  SAFE_PREFIX = /\A[a-z0-9][a-z0-9\-]*\z/
+
+  def object_prefix
+    raw = app&.slug.presence || "server-#{server_id}"
+    prefix = raw.to_s.downcase.tr("_", "-")
+    raise ArgumentError, "unsafe backup prefix: #{raw.inspect}" unless prefix.match?(SAFE_PREFIX)
+
+    prefix
+  end
+
+  # Foldered so the bucket stays browsable and a per-app lifecycle rule is
+  # possible later — retention is currently a promise nothing enforces.
+  def object_key_for(at = Time.current)
+    "#{object_prefix}/#{object_prefix}_#{at.strftime('%Y%m%d_%H%M%S')}.sql.gz"
+  end
+
   scope :completed, -> { where(status: "completed") }
   scope :failed, -> { where(status: "failed") }
   scope :pending, -> { where(status: "pending") }
