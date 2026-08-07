@@ -198,6 +198,13 @@ class DatabaseBackup
       "docker run --rm --network #{esc(net)} #{esc(PostgresContainerClient::DEFAULT_IMAGE)} pg_dump #{esc(url)} | gzip > #{output_path}"
     elsif url.present?
       "pg_dump #{esc(url)} | gzip > #{output_path}"
+    elsif backup.env_file.present?
+      # Host app with a per-app env file (Hatchbox: /home/deploy/<app>/.asdf-vars).
+      # There is no container to exec into and no DATABASE_URL in a
+      # non-interactive SSH session, so source the file first. Without this,
+      # intellecta.co's backup fell through to the branch below, dumped an empty
+      # variable, and Conductor instead picked up an abandoned container.
+      %(. #{esc(backup.env_file)} && pg_dump "$DATABASE_URL" | gzip > #{output_path})
     else
       # Last resort (native/host app): DATABASE_URL from the host env.
       %(pg_dump "$DATABASE_URL" | gzip > #{output_path})

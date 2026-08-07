@@ -188,14 +188,14 @@ class BackupRestoreVerifier
   def pass(tables, rows)
     note = "restored #{run.object_key} into a clean postgres: #{tables} tables" \
            "#{rows ? ", ~#{rows} rows" : ''}"
-    backup.update!(verification_status: "verified", verified_at: Time.current,
-                   verification_note: note.truncate(255))
+    backup.record_restore_success!(note: note)
     Result.new(status: "verified", tables: tables, rows: rows, detail: note)
   end
 
+  # Demotes `status` too — see Backup#record_restore_failure!. A dump that
+  # cannot restore is not a completed backup, and the row must not say it is.
   def fail!(detail)
-    backup.update!(verification_status: "failed", verified_at: Time.current,
-                   verification_note: detail.to_s.truncate(255))
+    backup.record_restore_failure!(detail)
     Rails.logger.error("[RestoreVerify:#{backup.id}] #{detail}")
     Result.new(status: "failed", detail: detail)
   end

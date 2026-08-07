@@ -120,6 +120,30 @@ class Backup < ApplicationRecord
     last_run_at < (interval * 2).ago
   end
 
+  # THE VERDICT IS THE RESTORE.
+  #
+  # These two used to be independent: intellectaco sat at `status: "completed"`
+  # with `verification_status: "failed"` — its dump restored to zero tables and
+  # the row still said the backup had succeeded. `status` is what the list, the
+  # coverage count and an operator's glance actually read, so the evidence has to
+  # move it. A dump that cannot restore is not a completed backup.
+  def record_restore_failure!(note, checked_at: Time.current)
+    attrs = { verification_status: "failed", verified_at: checked_at,
+              verification_note: note.to_s.truncate(255) }
+
+    # Verification runs long after the upload. If a NEWER run has succeeded since
+    # the dump under test, demoting would report the old dump's problem as the
+    # current state. Only demote when this verdict is about the current run.
+    attrs[:status] = "failed" if last_run_at.blank? || last_run_at <= checked_at
+
+    update!(attrs)
+  end
+
+  def record_restore_success!(note:, checked_at: Time.current)
+    update!(verification_status: "verified", verified_at: checked_at,
+            verification_note: note.to_s.truncate(255))
+  end
+
   # Proved by an actual restore. Deliberately NOT true for :unverified — the whole point
   # of the distinction is that an untested dump doesn't get to look green.
   def proven? = verification_state == :verified

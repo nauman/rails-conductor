@@ -93,7 +93,7 @@ class BackupsController < ApplicationController
   def backup_params
     params.require(:backup).permit(
       :server_id, :app_id, :credential_id, :provider, :bucket_name,
-      :retention_days, :status, :enabled, :schedule
+      :retention_days, :status, :enabled, :schedule, :env_file
     )
   end
 end
