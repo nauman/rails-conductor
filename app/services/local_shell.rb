@@ -18,7 +18,12 @@ class LocalShell
     status = nil
 
     Open3.popen2e(stringify(env), *command, opts) do |_stdin, out, wait_thr|
+      # Scrub at the point of accumulation, same as SshConnection: build tools
+      # (docker especially) emit raw binary bytes, and one unscrubbed line makes
+      # the whole log invalid UTF-8 — Postgres then rejects the append_log write.
+      out.binmode
       out.each_line do |line|
+        line = SshConnection.utf8(line)
         output << line
         yield line.chomp if block_given?
       end
