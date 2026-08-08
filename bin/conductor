@@ -15,6 +15,10 @@
 #   localvault exec --map MYAPP.master_key=V -- \
 #     bash -c 'printf %s "$V" | bin/conductor set-env "My App" RAILS_MASTER_KEY --secret'
 #
+#   # ⚠ localvault --map gotcha: repeating --map with the SAME target var silently
+#   # keeps only the last mapping (no error). Use one --map per DISTINCT var name;
+#   # for several secrets, map each to its own var (V1, V2, ...) in a single exec.
+#
 #   # Generic: call any tool with its input JSON on stdin (keeps secret fields off argv):
 #   printf '{"action":"set_env","app_name":"My App","key":"K","value":"..."}' \
 #     | bin/conductor call conductor_app_config

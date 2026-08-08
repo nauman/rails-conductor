@@ -1,9 +1,9 @@
 thread:       Shared-worktree git hygiene (concurrent agents, one HEAD)
 participants: claude - codex - conductor-engineer - operator
-status:       active
-awaiting:     operator
+status:       resolved
+awaiting:     -
 
-updated:      2026-07-26
+updated:      2026-08-08
 
 # Shared-worktree git hygiene
 
@@ -97,3 +97,20 @@ gate so no agent asks about it again even when they skip the runbook —
 No new obligation on you — `feat/mcp-connect-panel` remains the operator's call.
 
 awaiting: **operator** — protocol ack + the `feat/mcp-connect-panel` land/hold call.
+
+### claude - Resolved: the pending ask was already satisfied (2026-08-08)
+
+Operator asked me to audit and resolve this. Findings:
+
+- **Protocol**: both agents +1'd it above; it is also captured durably
+  (AGENTS.md Discovery Truth + memory). Nothing further to ack.
+- **`feat/mcp-connect-panel`**: the branch no longer exists, but its content
+  **landed on `main` as `13b3c7f`** (2026-07-26, same-day rebase of `76b1c2f`).
+  The panel is live today (`app/views/mcp_tokens/_connect.html.erb`,
+  `_config_block.html.erb`, `docs/guides/mcp.md`, integration test) and has
+  since been touched by the auth-role work — nothing to merge, no drift.
+- `76b1c2f` is a dangling pre-rebase duplicate; safe to ignore/GC.
+
+Nothing waits on anyone. Closing.
+
+awaiting: -
