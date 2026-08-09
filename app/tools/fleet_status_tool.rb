@@ -43,7 +43,11 @@ class FleetStatusTool
         uptime:      server.formatted_uptime,
         last_seen:   server.last_seen_at&.strftime('%Y-%m-%d %H:%M UTC'),
         edge:        server.edge_detected? ? { type: server.edge_type, detail: server.edge_detail } : nil,
-        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, notes: a.notes, runbook: a.deploy_runbook.present?, checklist: a.runbook_summary[:checklist_progress] } }
+        # deploy_method + port are the app's *form*: the box edge above only
+        # serves an app whose form matches it (a kamal-proxy box does not route a
+        # plain-docker app published on a host port). Both are stored on apps;
+        # withholding them forced agents to read free-text notes to learn them.
+        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, notes: a.notes, runbook: a.deploy_runbook.present?, checklist: a.runbook_summary[:checklist_progress] } }
       }
     end
 
