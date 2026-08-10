@@ -68,9 +68,24 @@ class DedicatedDbProvisionerTest < ActiveSupport::TestCase
     assert_raises(DedicatedDbProvisioner::Unreachable) { provision }
   end
 
-  test "refuses a non-Kamal app — no shared app↔DB network yet" do
-    @app.update!(deploy_method: "docker")
+  # This asserted that a `docker` app was refused, and had been failing locally
+  # since `fe5da70` (spec 26, "fix DB reachability") deliberately gave docker apps
+  # a deploy_network so their containers can resolve conductor-postgres by name.
+  # The guard is `unless @app.deploy_network`, which is now nil only for `native`,
+  # so docker apps legitimately pass and native ones are the refused case.
+  # Nothing caught the drift because .githooks/pre-push was never wired
+  # (core.hooksPath unset) — fixed alongside this.
+  # NOTE for whoever owns spec 26: the provisioner's comment still says "non-Kamal
+  # apps (their network wiring isn't built yet)", which now contradicts App#deploy_network.
+  # One of the two should be corrected; I have only realigned the test with shipped behaviour.
+  test "refuses a native app — a host process shares no docker network with its DB" do
+    @app.update!(deploy_method: "native")
     assert_raises(DedicatedDbProvisioner::Unreachable) { provision }
+  end
+
+  test "allows a docker app — spec 26 puts it on the shared network" do
+    @app.update!(deploy_method: "docker")
+    assert_nothing_raised { provision }
   end
 
   test "is idempotent — reuses the existing cluster + database" do
