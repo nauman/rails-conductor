@@ -109,4 +109,4 @@ group :development do
 end
 
 # jazari — shared operating-procedure domain (recipes, runbooks, queues, runs).
-gem "jazari", github: "nauman/jazari", ref: "a98802a"
+gem "jazari", "~> 0.1"
