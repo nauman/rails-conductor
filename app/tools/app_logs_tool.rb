@@ -12,20 +12,33 @@ class AppLogsTool
   DEFAULT_TAIL = 200
   MAX_TAIL = 2000
 
-  def initialize(user:, runner: nil)
+  def initialize(user:, runner: nil, kamal_ops: nil)
     @user = user
     @runner = runner
+    @kamal_ops = kamal_ops
   end
 
   def call(input)
     app = find_app(input) or return Result.fail("App not found. Pass app_id or app_name.")
     server = app.server or return Result.fail("#{app.name} has no server attached, so it has no container to read logs from.")
 
+    # Kamal is the ops harness where the app has a real kamal config (ADR 0003/0004):
+    # it knows the roles, the destination overlay and which release is current,
+    # where a hand-built `docker logs` only knows a container name we guessed —
+    # which is how an ops read ends up tailing a `_replaced_` leftover.
+    ops = kamal_ops_for(app)
+    if ops.available?
+      result = ops.logs(tail: tail_for(input))
+      return Result.fail(result.error) unless result.ok?
+
+      return Result.ok(payload(app, server, "via kamal", result.output, via: "kamal"))
+    end
+
     raw = run(server, command_for(app, tail_for(input)))
     return Result.fail("No running container found for #{app.name} on #{server.name}.") if raw.to_s.include?(NO_CONTAINER)
 
     container, log = split(raw)
-    Result.ok(payload(app, server, container, log))
+    Result.ok(payload(app, server, container, log, via: "docker"))
   end
 
   private
@@ -66,13 +79,16 @@ class AppLogsTool
   # (a JWT and an AWS key id are self-identifying, so nothing precedes them).
   WHOLE_MATCH_PATTERNS = [ 2, 3 ].freeze
 
-  def payload(app, server, container, log)
+  def payload(app, server, container, log, via:)
     clean = redact(log)
 
     {
       app: app.name,
       server: server.name,
       container: container,
+      # Which harness answered. "these are the logs" means something different
+      # through kamal (release-aware) than through docker (name-guessed).
+      via: via,
       lines: log.lines.size,
       # The oldest line still retained. If this is later than the moment you care
       # about, the evidence is gone — raise the container's log retention.
@@ -121,6 +137,10 @@ class AppLogsTool
     tail = input["tail"].to_i
     tail = DEFAULT_TAIL unless tail.positive?
     [ tail, MAX_TAIL ].min
+  end
+
+  def kamal_ops_for(app)
+    @kamal_ops || KamalOps.new(app)
   end
 
   def run(server, command)

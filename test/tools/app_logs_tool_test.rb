@@ -133,4 +133,49 @@ class AppLogsToolTest < ActiveSupport::TestCase
     assert_match(/page=2/, res.value[:log])
     refute res.value[:redacted], "a clean log must not be reported as redacted"
   end
+
+  # Kamal is the ops harness (ADR 0003/0004): when an app carries a real kamal
+  # config, `kamal app logs` is the path — it knows the app's roles, destination
+  # and current release, where a hand-built `docker logs` only knows a container
+  # name we guessed. Building this tool on raw docker bypassed the harness.
+  class FakeKamalOps
+    attr_reader :tails
+    def initialize(available:, output: "kamal line") = (@available = available; @output = output; @tails = [])
+    def available? = @available
+    def logs(tail: nil)
+      @tails << tail
+      KamalOps::Result.new(ok: true, output: @output, via: "kamal", error: nil)
+    end
+  end
+
+  test "a kamal app with a config reads logs THROUGH kamal, not docker" do
+    ops = FakeKamalOps.new(available: true, output: "web-1 | Completed 200 OK")
+    spy = []
+    res = AppLogsTool.new(user: @user, runner: ->(c) { spy << c; "x\n---\ny" }, kamal_ops: ops)
+                     .call("app_name" => "Logged", "tail" => 50)
+
+    assert res.success?, res.error
+    assert_equal "kamal", res.value[:via], "the payload must say which harness answered"
+    assert_match(/Completed 200 OK/, res.value[:log])
+    assert_equal [ 50 ], ops.tails, "the tail must reach kamal"
+    assert_empty spy, "docker must not be shelled when kamal can answer"
+  end
+
+  test "falls back to docker when the app has no kamal config, and says so" do
+    ops = FakeKamalOps.new(available: false)
+    res = AppLogsTool.new(user: @user, runner: ->(_c) { "web-1\n---\ndocker line" }, kamal_ops: ops)
+                     .call("app_name" => "Logged")
+
+    assert res.success?
+    assert_equal "docker", res.value[:via]
+    assert_match(/docker line/, res.value[:log])
+  end
+
+  test "credentials are redacted on the kamal path too" do
+    ops = FakeKamalOps.new(available: true, output: "Authorization: Bearer sk-live-abcdef123456")
+    res = AppLogsTool.new(user: @user, runner: ->(_c) { "" }, kamal_ops: ops).call("app_name" => "Logged")
+
+    refute_match(/sk-live-abcdef123456/, res.value[:log])
+    assert res.value[:redacted]
+  end
 end
