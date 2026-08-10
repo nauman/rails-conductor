@@ -57,4 +57,40 @@ class AppLogsToolTest < ActiveSupport::TestCase
     assert_equal AppLogsTool, ConductorReadTool::ACTIONS["app_logs"]
     assert ToolAuthorization.read_only?("conductor_read", "app_logs")
   end
+
+  # Application logs routinely carry credentials — a Bearer token in a request
+  # header dump, a DATABASE_URL in a boot error, an api_key in a query string.
+  # conductor_read is read-only for ANY read-scoped token, so returning raw log
+  # text would hand every such token production secrets for every visible app.
+  test "redacts bearer tokens, passwords, keys and connection strings" do
+    raw = <<~LOG
+      web-1
+      ---
+      Authorization: Bearer sk-live-abcdef1234567890
+      Started GET "/x?api_key=SUPERSECRETVALUE&page=2"
+      DATABASE_URL=postgres://user:hunter2@db.internal:5432/app
+      password=hunter2 confirmed
+      RAILS_MASTER_KEY=0123456789abcdef0123456789abcdef
+    LOG
+
+    log = tool(output: raw).call("app_name" => "Logged").value[:log]
+
+    refute_match(/sk-live-abcdef1234567890/, log, "a bearer token must not survive")
+    refute_match(/SUPERSECRETVALUE/, log, "a query-string api_key must not survive")
+    refute_match(/hunter2/, log, "a password must not survive, in a URL or a pair")
+    refute_match(/0123456789abcdef0123456789abcdef/, log, "a master key must not survive")
+    assert_match(/\[REDACTED\]/, log, "the reader must see that something was removed")
+    assert_match(/Started GET/, log, "ordinary log content must survive")
+    assert_match(/page=2/, log, "a harmless parameter must survive")
+  end
+
+  test "reports that redaction happened so a reader knows the text is altered" do
+    res = tool(output: "web-1\n---\nAuthorization: Bearer sk-live-xyz123456789").call("app_name" => "Logged")
+    assert res.value[:redacted], "the payload must flag that secrets were removed"
+  end
+
+  test "a clean log is not flagged as redacted" do
+    res = tool(output: "web-1\n---\nCompleted 200 OK in 4ms").call("app_name" => "Logged")
+    refute res.value[:redacted]
+  end
 end

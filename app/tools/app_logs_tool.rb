@@ -32,8 +32,28 @@ class AppLogsTool
 
   NO_CONTAINER = "__NO_CONTAINER__".freeze
   SEPARATOR = "---".freeze
+  REDACTION = "[REDACTED]".freeze
+
+  # Application logs routinely carry credentials: a Bearer token in a header dump,
+  # a DATABASE_URL in a boot error, an api_key in a query string. conductor_read is
+  # callable by any read-scoped token, so raw log text would hand every such token
+  # production secrets. Redaction is deliberately broad — a false positive costs a
+  # reader one obscured value, a false negative leaks a live credential.
+  SECRET_PATTERNS = [
+    # `Authorization: Bearer <token>` — the value follows whitespace, not a
+    # delimiter, because the colon belongs to the header name.
+    /(\b(?:bearer|basic)\s+)([^\s"',;]{6,})/i,
+    # Bearer / token / key / secret / password as a labelled value.
+    /((?:bearer|token|secret|password|passwd|api[_-]?key|access[_-]?key|master[_-]?key)["'\s]*[:=]\s*["']?)([^\s"'&,;]{6,})/i,
+    # Credentials inside a connection string: scheme://user:secret@host
+    %r{(://[^\s:/@]+:)([^\s@/]+)(@)},
+    # Any *_KEY / *_TOKEN / *_SECRET / *_PASSWORD env assignment.
+    /(\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*[:=]\s*)([^\s"',;]{6,})/
+  ].freeze
 
   def payload(app, server, container, log)
+    clean = redact(log)
+
     {
       app: app.name,
       server: server.name,
@@ -42,8 +62,18 @@ class AppLogsTool
       # The oldest line still retained. If this is later than the moment you care
       # about, the evidence is gone — raise the container's log retention.
       covers_from: timestamp_of(log.lines.first),
-      log: log
+      redacted: clean != log,
+      log: clean
     }
+  end
+
+  def redact(log)
+    SECRET_PATTERNS.reduce(log.to_s) do |text, pattern|
+      text.gsub(pattern) do
+        # Keep the label and any trailing delimiter; replace only the value.
+        "#{Regexp.last_match(1)}#{REDACTION}#{Regexp.last_match(3)}"
+      end
+    end
   end
 
   # One round trip: resolve the container, then tail it. Kamal labels its web
