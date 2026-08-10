@@ -53,4 +53,26 @@ class ServerRebootStateTest < ActiveSupport::TestCase
     assert_equal "online", @server.status
     assert_nil @server.rebooting_at
   end
+
+  # Root is for provisioning only; every app-level operation runs as the deploy
+  # user. The column already defaults to "deploy", but a row with a blank user
+  # used to fall back to ROOT — silent privilege escalation for any server
+  # registered without an explicit user. The only caller that legitimately needs
+  # root (HardenServer, on a box where the deploy user does not exist yet) passes
+  # `user: "root"` explicitly, so nothing depends on the implicit fallback.
+  test "a blank ssh_user falls back to deploy, never root" do
+    @server.update!(ssh_user: nil)
+    assert_equal "deploy", @server.ssh_user_or_default
+
+    @server.update!(ssh_user: "")
+    assert_equal "deploy", @server.ssh_user_or_default
+  end
+
+  test "an explicitly configured ssh_user is still honoured, including root for provisioning" do
+    @server.update!(ssh_user: "root")
+    assert_equal "root", @server.ssh_user_or_default, "provisioning must still be able to ask for root explicitly"
+
+    @server.update!(ssh_user: "ubuntu")
+    assert_equal "ubuntu", @server.ssh_user_or_default
+  end
 end

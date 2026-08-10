@@ -2,6 +2,10 @@ class Server < ApplicationRecord
   PROVIDERS = %w[hetzner digitalocean linode vultr aws gcp azure].freeze
   STATUSES = %w[online degraded offline rebooting].freeze
 
+  # The identity every app-level operation uses. Root is provisioning-only and
+  # must be asked for explicitly (see #ssh_user_or_default).
+  DEFAULT_SSH_USER = "deploy".freeze
+
   # How long after a Conductor-initiated reboot we treat the box being unreachable
   # as expected (status stays "rebooting", no offline alert) rather than an outage.
   REBOOT_GRACE = 8.minutes
@@ -128,8 +132,13 @@ class Server < ApplicationRecord
     ssh_key.present? && ip_address.present?
   end
 
+  # Root is for provisioning only — every app-level operation runs as the deploy
+  # user, because root-run commands leave root:root files the container and the
+  # deploy user can never write or chown back, and that surfaces at the NEXT
+  # deploy. HardenServer asks for root explicitly (the deploy user does not exist
+  # yet on a fresh box), so nothing needs an implicit root fallback here.
   def ssh_user_or_default
-    ssh_user.presence || "root"
+    ssh_user.presence || DEFAULT_SSH_USER
   end
 
   def ssh_port_or_default

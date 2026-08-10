@@ -18,7 +18,14 @@ class ConductorServerTool
 
   DEFINITION = {
     name: "conductor_server",
-    description: "Server management. Set `action` to one of: " \
+    description: "Server management. IDENTITY RULE: Conductor operates every host as the " \
+      "**deploy** user (the default when ssh_user is unset). Root is for provisioning and " \
+      "hardening ONLY, and must be requested explicitly — never register or update a server " \
+      "with ssh_user 'root' to get unblocked on an app-level task. Root-run commands leave " \
+      "root:root files the container and the deploy user can never write or chown back, and " \
+      "the breakage surfaces at the NEXT deploy, far from the command that caused it. If " \
+      "deploy cannot do something, fix the provisioning (use action=harden, or the docker " \
+      "group / ownership / a scoped sudo rule). Set `action` to one of: " \
       "register (add a host to the fleet — name, ip_address, ssh_user; optional ssh_key_id, provider), " \
       "update (change an existing host — server_id/server_name + any of name, ip_address, ssh_user, ssh_port, provider, region, and attach an SSH key via ssh_key_id or ssh_key_name), " \
       "add_ssh_key (generate a deploy keypair on the Conductor server — optional name; returns the PUBLIC key to add to your servers' authorized_keys, private key stays in Conductor), " \
