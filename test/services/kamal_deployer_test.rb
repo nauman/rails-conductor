@@ -33,6 +33,17 @@ class KamalDeployerTest < ActiveSupport::TestCase
     end
   end
 
+  # Records commands sent to the TARGET box and returns canned output.
+  class FakeSsh
+    attr_reader :commands
+    def initialize(output: "") = (@output = output; @commands = [])
+
+    def execute_with_status(command)
+      @commands << command
+      { success: true, exit_code: 0, output: @output, stderr: "" }
+    end
+  end
+
   setup do
     @workspace = Dir.mktmpdir("kamal-test")
     ENV["KAMAL_WORKSPACE"] = @workspace
@@ -60,8 +71,8 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # allow_self_deploy mirrors the supervised override. Routine paths refuse a
   # self-managed deploy (it strands the kamal lock); these tests exercise the
   # secret-resolution and lock-recovery mechanisms, which is a separate concern.
-  def deploy_with(shell, allow_self_deploy: true)
-    KamalDeployer.new(@app, @deployment, shell: shell, allow_self_deploy: allow_self_deploy).tap(&:deploy!)
+  def deploy_with(shell, allow_self_deploy: true, ssh: nil)
+    KamalDeployer.new(@app, @deployment, shell: shell, ssh: ssh, allow_self_deploy: allow_self_deploy).tap(&:deploy!)
   end
 
   def rollback_with(shell, version: "deadbeefcafe1234")
@@ -771,5 +782,45 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
     assert_not shell.runs.any? { |r| r[:command].join(" ").include?("app stop") },
                "stopping first on a proxied app would cause needless downtime"
+  end
+
+  # calm.page deploys 292/294/295: `kamal app stop` matches containers by their
+  # CURRENT name, but when the name is already taken kamal RENAMES the incumbent
+  # to <name>_replaced_<hash> before booting. The renamed container keeps running
+  # and keeps 127.0.0.1:9080, so the stop found nothing and every boot died with
+  # "port is already allocated". Free the port by what HOLDS it, not by its name.
+  test "fixed-port app also stops a renamed incumbent still holding the published port" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    # Same shape as the real incumbent, but wearing THIS app's service label.
+    ssh = FakeSsh.new(output: "abc123|#{@app.resource_key}-web-latest_replaced_e0d5aad|#{@app.resource_key}")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    assert ssh.commands.any? { |c| c.include?("--filter publish=9080") },
+      "expected a lookup of whatever holds the fixed port: #{ssh.commands.inspect}"
+    assert ssh.commands.any? { |c| c.include?("docker stop") && c.include?("abc123") },
+      "expected the renamed incumbent to be stopped: #{ssh.commands.inspect}"
+  end
+
+  # Refusing to kill a stranger's container is the whole safety property here: a
+  # fixed host port is exclusive, so if something ELSE holds it that is a genuine
+  # conflict for a human, not something to silently terminate mid-deploy.
+  test "a foreign container holding the port is reported, never stopped" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    ssh = FakeSsh.new(output: "dead99|someone-elses-web|otherapp")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    refute ssh.commands.any? { |c| c.include?("docker stop") },
+      "must not stop another app's container: #{ssh.commands.inspect}"
+  end
+
+  test "a kamal-proxy app never touches host ports" do
+    @server.update!(edge_type: "kamal_proxy")
+    ssh = FakeSsh.new(output: "")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    assert_empty ssh.commands, "zero-downtime roll apps must be left alone"
   end
 end

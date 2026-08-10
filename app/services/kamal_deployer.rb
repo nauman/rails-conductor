@@ -25,10 +25,13 @@ class KamalDeployer
   # allow_self_deploy: escape hatch for the one legitimate in-product self-deploy
   # caller — a deliberate, supervised override. Every routine path (webhook,
   # job, MCP, UI) leaves it false so a self-managed app cannot deploy itself.
-  def initialize(app, deployment, shell: nil, target_server: nil, allow_self_deploy: false)
+  def initialize(app, deployment, shell: nil, ssh: nil, target_server: nil, allow_self_deploy: false)
     @app = app
     @deployment = deployment
     @shell = shell || LocalShell.new
+    # Only used to free a stuck published port before boot (see #release_fixed_port).
+    # Everything else reaches the box through kamal, not directly.
+    @injected_ssh = ssh
     @allow_self_deploy = allow_self_deploy
     # The destination host. Defaults to the app's own server; an app transfer
     # (spec 26) passes a different server to stand the app up on box B. Threads
@@ -405,8 +408,58 @@ class KamalDeployer
     log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
     result = @shell.run("bash", "-lc", "#{kamal_bin} app stop#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
+    release_fixed_port
     @stopped_prior = true
     true
+  end
+
+  # `kamal app stop` matches containers by their CURRENT name — but when the name
+  # is already taken kamal RENAMES the incumbent to `<name>_replaced_<hash>` before
+  # booting the replacement. A renamed container keeps running and keeps holding
+  # the published port, so the stop above matches nothing and the boot still dies
+  # with "port is already allocated". calm.page deploys 292/294/295 failed exactly
+  # this way while `calmpage-web-latest_replaced_e0d5aad` sat healthy on :9080.
+  #
+  # So free the port by what HOLDS it rather than by what it is called — and only
+  # if it belongs to this app. A fixed host port is exclusive, so a STRANGER on it
+  # is a real conflict for a human to resolve, never something to kill mid-deploy.
+  def release_fixed_port
+    port = fixed_host_port
+    return if port.blank? || ssh.nil?
+
+    listing = ssh.execute_with_status(
+      %(docker ps --filter publish=#{port} --format '{{.ID}}|{{.Names}}|{{.Label "service"}}')
+    )
+    return unless listing[:success]
+
+    listing[:output].to_s.lines.map(&:strip).reject(&:empty?).each do |line|
+      id, name, service = line.split("|")
+      next if id.blank?
+
+      if owns_container?(name, service)
+        log "port #{port} still held by #{name} (#{id}) — kamal renamed it, so `app stop` missed it; stopping"
+        ssh.execute_with_status("docker stop -t 30 #{id}")
+      else
+        log "WARNING: port #{port} is held by #{name} (service=#{service}), which is NOT #{app.name}. " \
+            "Leaving it alone — the boot will fail and that is the honest outcome."
+      end
+    end
+  end
+
+  # The exclusive host port this app publishes when it runs proxy-less.
+  def fixed_host_port
+    deploy_env["CADDY_PUBLISH_PORT"].presence || app.port.presence
+  end
+
+  def owns_container?(name, service)
+    candidates = ([ app.resource_key ] + Array(app.kamal_service_candidates)).compact.map(&:to_s)
+    return true if service.present? && candidates.include?(service.to_s)
+
+    candidates.any? { |c| name.to_s.start_with?(c) }
+  end
+
+  def ssh
+    @ssh ||= @injected_ssh || (deploy_server && SshConnection.new(deploy_server))
   end
 
   # Does this app publish a FIXED host port that the old container still holds
