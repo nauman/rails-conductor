@@ -71,7 +71,11 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # allow_self_deploy mirrors the supervised override. Routine paths refuse a
   # self-managed deploy (it strands the kamal lock); these tests exercise the
   # secret-resolution and lock-recovery mechanisms, which is a separate concern.
-  def deploy_with(shell, allow_self_deploy: true, ssh: nil)
+  # ssh defaults to a fake so no unit test falls through to a live Net::SSH
+  # connection: before this, the fixed-port tests "passed" only because a real
+  # connection to 10.0.0.9 eventually errored and was rescued, costing the SSH
+  # timeout on every run (spotted in review of PR #31).
+  def deploy_with(shell, allow_self_deploy: true, ssh: FakeSsh.new)
     KamalDeployer.new(@app, @deployment, shell: shell, ssh: ssh, allow_self_deploy: allow_self_deploy).tap(&:deploy!)
   end
 
@@ -822,5 +826,30 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deploy_with(FakeShell.new(success: true), ssh: ssh)
 
     assert_empty ssh.commands, "zero-downtime roll apps must be left alone"
+  end
+
+  # Review of PR #31: the ownership fallback matched any name merely STARTING with
+  # a candidate, so an app whose service is a prefix of another's (`calm` vs
+  # `calmpage`) would have been judged the owner and had a stranger's container
+  # stopped mid-deploy — defeating the one safety property this step exists for.
+  test "a container whose name merely starts with this app's service is NOT owned" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    longer = "#{@app.resource_key}extra-web-abc123"
+    ssh = FakeSsh.new(output: "dead99|#{longer}|#{@app.resource_key}extra")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    refute ssh.commands.any? { |c| c.include?("docker stop") },
+      "#{longer} belongs to a different app and must be left running: #{ssh.commands.inspect}"
+  end
+
+  test "the app's own role container is still recognised across the - separator" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    ssh = FakeSsh.new(output: "abc123|#{@app.resource_key}-web-abc123|")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    assert ssh.commands.any? { |c| c.include?("docker stop") && c.include?("abc123") },
+      "an unlabelled container named <service>-web-<version> is ours: #{ssh.commands.inspect}"
   end
 end

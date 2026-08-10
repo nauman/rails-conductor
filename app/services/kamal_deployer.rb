@@ -451,11 +451,16 @@ class KamalDeployer
     deploy_env["CADDY_PUBLISH_PORT"].presence || app.port.presence
   end
 
+  # Kamal names containers `<service>-web-<version>`, so the fallback must anchor
+  # on the role separator. A bare `start_with?` let an app whose service is a
+  # PREFIX of another's (`calm` vs `calmpage`) claim a stranger's container and
+  # stop it — the precise opposite of what this step is for.
   def owns_container?(name, service)
     candidates = ([ app.resource_key ] + Array(app.kamal_service_candidates)).compact.map(&:to_s)
     return true if service.present? && candidates.include?(service.to_s)
+    return false if service.present? # labelled, and the label is not ours
 
-    candidates.any? { |c| name.to_s.start_with?(c) }
+    candidates.any? { |c| name.to_s == c || name.to_s.start_with?("#{c}-") }
   end
 
   def ssh
