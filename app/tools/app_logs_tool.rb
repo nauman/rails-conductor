@@ -34,11 +34,14 @@ class AppLogsTool
       return Result.ok(payload(app, server, "via kamal", result.output, via: "kamal"))
     end
 
+    # Carry the reason kamal could not answer. Silence here is what let an agent
+    # conclude "kamal cannot be used for this app" from a bare DNS failure.
+    kamal_note = ops.unavailable_reason
     raw = run(server, command_for(app, tail_for(input)))
     return Result.fail("No running container found for #{app.name} on #{server.name}.") if raw.to_s.include?(NO_CONTAINER)
 
     container, log = split(raw)
-    Result.ok(payload(app, server, container, log, via: "docker"))
+    Result.ok(payload(app, server, container, log, via: "docker").merge(kamal_unavailable: kamal_note).compact)
   end
 
   private

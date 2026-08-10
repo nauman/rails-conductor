@@ -29,11 +29,29 @@ class KamalOps
     @target_server = target_server
   end
 
-  # Can kamal actually answer for this app right now? Two conditions, both real:
-  # the app deploys via kamal, and its config is on disk for kamal to read. The
-  # edge type is deliberately NOT consulted — a disabled proxy is still a kamal app.
-  def available?
-    @app.kamal? && File.exist?(deploy_config_path)
+  # "Can kamal actually answer right now?" — not merely "does a file exist". The
+  # edge type is deliberately NOT consulted: a disabled proxy is still a kamal app.
+  #
+  # This distinction is the whole point. InventList's config deliberately points
+  # its hosts at `<app>-does-not-deploy-via-kamal.invalid` (RFC 2606, can never
+  # resolve) so `kamal deploy` is impossible. But nuking the HOSTS breaks every
+  # kamal verb, not just deploy — so an agent that ran `kamal app logs`, watched it
+  # die at DNS, and concluded "kamal cannot be used for this app" was misled by our
+  # own configuration rather than by kamal. Answer honestly, and say why.
+  def available? = unavailable_reason.nil?
+
+  # nil when kamal can answer; otherwise a sentence a reader can act on.
+  def unavailable_reason
+    return "#{@app.name} does not deploy via kamal (deploy_method: #{@app.deploy_method})" unless @app.kamal?
+    return "#{@app.name} has no kamal config checked out at #{deploy_config_path}" unless File.exist?(deploy_config_path)
+
+    tripwire = unresolvable_hosts
+    return nil if tripwire.empty?
+
+    "#{@app.name}'s kamal config points at #{tripwire.join(', ')} — a reserved .invalid host used " \
+      "to make `kamal deploy` impossible. It blocks EVERY kamal verb, not just deploy, so ops " \
+      "cannot run through kamal for this app. To restore the harness, point `servers:` at the real " \
+      "box and keep deploy blocked another way (`proxy: false` plus Conductor's deploy hold)."
   end
 
   def logs(tail: DEFAULT_TAIL)
@@ -52,6 +70,15 @@ class KamalOps
 
   private
 
+  # `.invalid` is reserved by RFC 2606 and can never resolve, so a host ending in
+  # it is a deliberate tripwire rather than a typo. Scanned as text on purpose: the
+  # config is ERB, and evaluating it just to read a hostname would be a worse bet.
+  def unresolvable_hosts
+    File.read(deploy_config_path).scan(/([A-Za-z0-9._-]+\.invalid)\b/).flatten.uniq
+  rescue StandardError
+    []
+  end
+
   def run(verb)
     return unavailable unless available?
 
@@ -68,8 +95,7 @@ class KamalOps
   end
 
   def unavailable
-    Result.new(ok: false, output: "", via: nil,
-               error: "#{@app.name} has no kamal config checked out — kamal ops unavailable")
+    Result.new(ok: false, output: "", via: nil, error: unavailable_reason)
   end
 
   def ops_env(key_file)

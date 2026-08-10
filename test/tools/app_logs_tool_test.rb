@@ -140,8 +140,10 @@ class AppLogsToolTest < ActiveSupport::TestCase
   # name we guessed. Building this tool on raw docker bypassed the harness.
   class FakeKamalOps
     attr_reader :tails
-    def initialize(available:, output: "kamal line") = (@available = available; @output = output; @tails = [])
+    def initialize(available:, output: "kamal line", reason: "no kamal config") =
+      (@available = available; @output = output; @reason = reason; @tails = [])
     def available? = @available
+    def unavailable_reason = (@available ? nil : @reason)
     def logs(tail: nil)
       @tails << tail
       KamalOps::Result.new(ok: true, output: @output, via: "kamal", error: nil)
@@ -169,6 +171,8 @@ class AppLogsToolTest < ActiveSupport::TestCase
     assert res.success?
     assert_equal "docker", res.value[:via]
     assert_match(/docker line/, res.value[:log])
+    assert_match(/no kamal config/, res.value[:kamal_unavailable],
+      "the fallback must say WHY kamal did not answer — silence is what misled an agent")
   end
 
   test "credentials are redacted on the kamal path too" do
