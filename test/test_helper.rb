@@ -2,6 +2,31 @@ ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
 require "minitest/mock"
+require "net/ssh"
+
+# No test may dial a real host. Two independent reviews on 2026-08-10 found tests
+# that "passed" only because a live `Net::SSH.start` eventually errored and was
+# rescued into an error string — one in the kamal deployer suite (~18s of every
+# run), one in the converted-pages suite (a 10s timeout against 203.0.113.10).
+# Both were invisible because the assertions still held.
+#
+# Refusing the connection INSTANTLY is the fix that breaks nothing: every service
+# here already rescues ECONNREFUSED, so a test that was relying on a failed
+# connection keeps its behaviour, loses the wall-clock, and stops depending on the
+# machine's egress rules. A test that wants SSH to *work* injects a fake
+# (`ssh: FakeSsh.new` or `SshConnection.stub(:new, …)`), which never reaches here.
+#
+# Set ALLOW_TEST_SSH=1 to opt out for a deliberate, manually-run integration check.
+module NoRealSshInTests
+  def start(host, *args, **kwargs, &block)
+    return super if ENV["ALLOW_TEST_SSH"] == "1"
+
+    raise Errno::ECONNREFUSED, "the test suite refused a real SSH connection to #{host} — " \
+                               "inject a fake (ssh: FakeSsh.new, or SshConnection.stub(:new, …)) " \
+                               "instead of relying on a live connect failing"
+  end
+end
+Net::SSH.singleton_class.prepend(NoRealSshInTests)
 
 module ActiveSupport
   class TestCase
