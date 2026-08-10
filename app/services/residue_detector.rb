@@ -42,6 +42,7 @@ class ResidueDetector
     @findings = []
     @blind = []
     check_stale_revision_containers
+    check_dead_boot_artifacts
     check_duplicate_legacy_container
     check_foreign_method_containers
     check_edge_routes
@@ -84,6 +85,41 @@ class ResidueDetector
         detail: "#{name} (#{id}) is from revision #{revision}; this app is at #{@app.infra_revision} [#{state}]",
         remedy: "verify nothing routes to it, then `docker rm -f #{name}`"
       )
+    end
+  end
+
+  # Containers left behind by a FAILED boot. calm.page accumulated eleven — three
+  # `Created` (never started) plus four kamal `_replaced_` leftovers — and this
+  # detector called the box clean for all of them, because every one carries an
+  # empty `conductor.infra_revision` and #check_stale_revision_containers skips a
+  # blank revision by construction.
+  #
+  # A plain `Exited` release container is deliberately NOT junk: kamal keeps those
+  # so `kamal rollback` has an image to boot. Flagging them would teach an operator
+  # to delete their own rollback targets. Only two shapes are unambiguous:
+  #   - `created` — the boot never started it, so it can hold no traffic and no history
+  #   - `_replaced_` and not running — kamal renamed the incumbent, then moved on
+  def check_dead_boot_artifacts
+    services = ([ @app.resource_key ] + Array(@app.kamal_service_candidates)).compact.uniq
+    seen = {}
+
+    services.each do |service|
+      out = capture(%(docker ps -a --filter "label=service=#{esc(service)}" --format '{{.ID}}|{{.Names}}|{{.State}}'))
+      next if out.nil?
+
+      out.lines.map(&:strip).reject(&:empty?).each do |line|
+        id, name, state = line.split("|")
+        next if id.blank? || seen[id]
+        next if state.to_s.casecmp?("running")
+        next unless state.to_s.casecmp?("created") || name.to_s.include?("_replaced_")
+
+        seen[id] = true
+        @findings << Finding.new(
+          kind: "dead_container",
+          detail: "#{name} (#{id}) is #{state} — a leftover from a failed or superseded boot, holding no traffic",
+          remedy: "`docker rm #{name}` — it is not a rollback target; a rollback boots an Exited RELEASE container, not this"
+        )
+      end
     end
   end
 

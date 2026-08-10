@@ -268,4 +268,49 @@ class ResidueDetectorTest < ActiveSupport::TestCase
 
     assert found.find { |f| f.kind == "orphan_edge_route" }
   end
+
+  # calm.page accumulated ELEVEN dead containers from failed kamal boots — three in
+  # `Created` (never started) plus four kamal `_replaced_` leftovers — and the
+  # detector reported a clean box for all of them. Cause: every one carries an EMPTY
+  # conductor.infra_revision label, and check_stale_revision_containers does
+  # `next if revision.blank?`, so the whole pile was skipped by construction.
+  #
+  # A plain Exited release container is deliberately NOT flagged: kamal keeps those
+  # so `kamal rollback` has something to boot. Flagging them would teach an operator
+  # to delete their own rollback targets.
+  test "flags containers that never started, even with no revision label" do
+    found = findings(
+      "docker ps -a" => "aa11|#{@app.resource_key}-web-abc|created\n" \
+                        "bb22|#{@app.resource_key}-web-def|exited"
+    )
+
+    dead = found.select { |f| f.kind == "dead_container" }
+    assert_equal 1, dead.size, "only the never-started one is junk: #{found.map(&:kind).inspect}"
+    assert_match(/aa11|#{@app.resource_key}-web-abc/, dead.first.detail)
+  end
+
+  test "flags a kamal _replaced_ leftover that is no longer running" do
+    found = findings(
+      "docker ps -a" => "cc33|#{@app.resource_key}-web-latest_replaced_e0d5aad|exited"
+    )
+
+    dead = found.select { |f| f.kind == "dead_container" }
+    assert_equal 1, dead.size
+    assert_match(/_replaced_/, dead.first.detail)
+  end
+
+  test "a RUNNING _replaced_ container is not junk — it is what serves right now" do
+    found = findings(
+      "docker ps -a" => "dd44|#{@app.resource_key}-web-latest_replaced_e0d5aad|running"
+    )
+
+    assert_empty found.select { |f| f.kind == "dead_container" },
+      "the live container was renamed by kamal but is still serving traffic"
+  end
+
+  test "a plain exited release container is left alone as rollback material" do
+    found = findings("docker ps -a" => "ee55|#{@app.resource_key}-web-oldsha|exited")
+
+    assert_empty found.select { |f| f.kind == "dead_container" }
+  end
 end
