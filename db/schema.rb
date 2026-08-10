@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_074923) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -356,6 +356,67 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_074923) do
     t.index ["invited_by_id"], name: "index_invitations_on_invited_by_id"
     t.index ["organization_id"], name: "index_invitations_on_organization_id"
     t.index ["token"], name: "index_invitations_on_token", unique: true
+  end
+
+  create_table "jazari_anchors", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.bigint "scope_id", null: false
+    t.string "scope_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["scope_type", "scope_id", "key"], name: "index_jazari_anchors_on_scope_type_and_scope_id_and_key", unique: true
+  end
+
+  create_table "jazari_recipes", force: :cascade do |t|
+    t.jsonb "checklist", default: [], null: false
+    t.datetime "created_at", null: false
+    t.text "description", default: "", null: false
+    t.string "recipe_id", null: false
+    t.string "run_policy", default: "unrestricted", null: false
+    t.string "topic", null: false
+    t.datetime "updated_at", null: false
+    t.integer "version", default: 1, null: false
+    t.index ["recipe_id"], name: "index_jazari_recipes_on_recipe_id", unique: true
+    t.check_constraint "run_policy::text = ANY (ARRAY['unrestricted'::character varying, 'once_per_calendar_day'::character varying]::text[])", name: "jazari_recipes_run_policy_chk"
+  end
+
+  create_table "jazari_runbooks", force: :cascade do |t|
+    t.jsonb "checklist", default: [], null: false
+    t.datetime "created_at", null: false
+    t.text "description", default: "", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.string "recipe_id", null: false
+    t.bigint "runbookable_id", null: false
+    t.string "runbookable_type", null: false
+    t.string "topic", null: false
+    t.datetime "updated_at", null: false
+    t.index ["recipe_id"], name: "index_jazari_runbooks_on_recipe_id"
+    t.index ["runbookable_type", "runbookable_id"], name: "index_jazari_runbooks_on_runbookable_type_and_runbookable_id", unique: true
+  end
+
+  create_table "jazari_runs", force: :cascade do |t|
+    t.string "actor_ref", null: false
+    t.jsonb "checklist_snapshot", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "evidence", default: [], null: false
+    t.timestamptz "finished_at"
+    t.string "idempotency_policy", default: "unrestricted", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.string "outcome"
+    t.string "recipe_id", null: false
+    t.string "source_digest", null: false
+    t.timestamptz "started_at", null: false
+    t.date "started_on", null: false
+    t.bigint "subject_id"
+    t.string "subject_type"
+    t.jsonb "ticks", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.index "recipe_id, COALESCE(subject_type, ''::character varying), COALESCE(subject_id, (0)::bigint), started_on", name: "jazari_runs_once_per_day_idx", unique: true, where: "((idempotency_policy)::text = 'once_per_calendar_day'::text)"
+    t.index ["recipe_id", "started_at"], name: "index_jazari_runs_on_recipe_id_and_started_at"
+    t.index ["subject_type", "subject_id", "started_at"], name: "idx_on_subject_type_subject_id_started_at_528a3eaaa5"
+    t.check_constraint "idempotency_policy::text = ANY (ARRAY['unrestricted'::character varying, 'once_per_calendar_day'::character varying]::text[])", name: "jazari_runs_idempotency_policy_chk"
+    t.check_constraint "started_on = (started_at AT TIME ZONE 'UTC'::text)::date", name: "jazari_runs_started_on_utc_chk"
+    t.check_constraint "subject_type IS NULL AND subject_id IS NULL OR subject_type IS NOT NULL AND subject_id IS NOT NULL", name: "jazari_runs_subject_pair_chk"
   end
 
   create_table "mcp_calls", force: :cascade do |t|

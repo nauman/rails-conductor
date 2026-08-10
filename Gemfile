@@ -107,3 +107,6 @@ group :development do
   gem "letter_opener"
   gem "letter_opener_web"
 end
+
+# jazari — shared operating-procedure domain (recipes, runbooks, queues, runs).
+gem "jazari", github: "nauman/jazari", ref: "a98802a"
