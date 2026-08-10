@@ -22,7 +22,7 @@ class ConductorReadTool
     description: "Read-only fleet visibility. Set `action` to one of: " \
       "fleet_status (all servers + their apps/health, incl. cpu_percent (utilisation) + cpu_cores (physical, nil if unread)/memory/disk/load/uptime), " \
       "server (ONE server's detail — metrics, stored audit/update/harden rollups, cron jobs, ssh + edge, apps. server_id/server_name. Fast by default; pass probe:true to ALSO run live SSH probes for the deep panels — health, audit checks, storage, privileged-ops readiness — under a `live` key, slower and can time out on a loaded box), " \
-      "situation (RESUME point — in-flight ops, needs-attention worklist, recent events; call first on reconnect), " \
+      "situation (RESUME point — in-flight ops, needs-attention worklist, `subjects` (per-app: the ritual its shape resolves to, checklist progress, last run, and whether an operator customised it), recent events; call first on reconnect), " \
       "logs (recent script-run/deployment logs — server_id, script_run_id, limit — Conductor's OWN record of an operation, NOT what the app said), " \
       "app_logs (what the RUNNING app said. Goes through `kamal app logs` when the app has a kamal config — release- and role-aware — and falls back to docker otherwise; the reply says which via `via`. app_id/app_name, optional tail (default 200, max 2000). Use this to diagnose a live incident instead of SSHing. The reply carries `covers_from`: a container log is a rotating buffer, so an empty window may have been overwritten rather than quiet — if covers_from is later than the moment you care about, the evidence is gone, raise the app's log retention), " \
       "deployment (one deployment's status + log — deployment_id, app_id, app_name, tail), " \
