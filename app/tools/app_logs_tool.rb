@@ -39,17 +39,32 @@ class AppLogsTool
   # callable by any read-scoped token, so raw log text would hand every such token
   # production secrets. Redaction is deliberately broad — a false positive costs a
   # reader one obscured value, a false negative leaks a live credential.
+  # Pattern-based redaction is best-effort by nature — an unlabelled secret in an
+  # unknown shape can always slip past. These cover the shapes a codex review
+  # confirmed were leaking, and every value bound is 1+ rather than 6+ because a
+  # short token is still a token.
   SECRET_PATTERNS = [
     # `Authorization: Bearer <token>` — the value follows whitespace, not a
     # delimiter, because the colon belongs to the header name.
-    /(\b(?:bearer|basic)\s+)([^\s"',;]{6,})/i,
+    /(\b(?:bearer|basic)\s+)(\S+)/i,
+    # Cookie / Set-Cookie: redact the whole value but keep the header name, so the
+    # line stays readable. Cookies are session credentials.
+    /^(\s*set-cookie\s*:\s*|\s*cookie\s*:\s*)(.+)$/i,
+    # A JWT anywhere, labelled or not: three base64url segments.
+    /\b(ey[A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]{6,})\.([A-Za-z0-9_-]{6,})/,
+    # AWS access key ids are self-identifying.
+    /\b((?:AKIA|ASIA|AGPA|AIDA)[A-Z0-9]{12,})/,
     # Bearer / token / key / secret / password as a labelled value.
-    /((?:bearer|token|secret|password|passwd|api[_-]?key|access[_-]?key|master[_-]?key)["'\s]*[:=]\s*["']?)([^\s"'&,;]{6,})/i,
+    /((?:bearer|token|secret|password|passwd|api[_-]?key|access[_-]?key|master[_-]?key|authorization)["'\s]*[:=]\s*["']?)([^\s"'&,;]+)/i,
     # Credentials inside a connection string: scheme://user:secret@host
     %r{(://[^\s:/@]+:)([^\s@/]+)(@)},
     # Any *_KEY / *_TOKEN / *_SECRET / *_PASSWORD env assignment.
-    /(\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*[:=]\s*)([^\s"',;]{6,})/
+    /(\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*[:=]\s*)([^\s"',;]+)/
   ].freeze
+
+  # Patterns whose FIRST group is the secret itself rather than a label to keep
+  # (a JWT and an AWS key id are self-identifying, so nothing precedes them).
+  WHOLE_MATCH_PATTERNS = [ 2, 3 ].freeze
 
   def payload(app, server, container, log)
     clean = redact(log)
@@ -68,10 +83,14 @@ class AppLogsTool
   end
 
   def redact(log)
-    SECRET_PATTERNS.reduce(log.to_s) do |text, pattern|
+    SECRET_PATTERNS.each_with_index.reduce(log.to_s) do |text, (pattern, index)|
       text.gsub(pattern) do
-        # Keep the label and any trailing delimiter; replace only the value.
-        "#{Regexp.last_match(1)}#{REDACTION}#{Regexp.last_match(3)}"
+        if WHOLE_MATCH_PATTERNS.include?(index)
+          REDACTION # the match IS the secret — a JWT or an AWS key id
+        else
+          # Keep the label and any trailing delimiter; replace only the value.
+          "#{Regexp.last_match(1)}#{REDACTION}#{Regexp.last_match(3)}"
+        end
       end
     end
   end

@@ -93,4 +93,44 @@ class AppLogsToolTest < ActiveSupport::TestCase
     res = tool(output: "web-1\n---\nCompleted 200 OK in 4ms").call("app_name" => "Logged")
     refute res.value[:redacted]
   end
+
+  # Codex review R-2 CONFIRMED these bypasses in the first redaction pass. Each
+  # one is a live credential reaching any read-scoped MCP caller.
+  test "redacts cookies, short values, JWTs and key-shaped blobs codex found leaking" do
+    raw = <<~LOG
+      web-1
+      ---
+      Cookie: session=abc123456; theme=dark
+      Set-Cookie: sid=zzz999888; Path=/; HttpOnly
+      Authorization: Bearer x
+      jwt: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r
+      aws_key: AKIAIOSFODNN7EXAMPLE
+    LOG
+
+    log = tool(output: raw).call("app_name" => "Logged").value[:log]
+
+    refute_match(/abc123456/, log, "a Cookie header value must not survive")
+    refute_match(/zzz999888/, log, "a Set-Cookie value must not survive")
+    refute_match(/Bearer x\b/, log, "a short bearer value must not survive the 6-char floor")
+    refute_match(/eyJhbGciOiJIUzI1NiJ9/, log, "a JWT must not survive")
+    refute_match(/AKIAIOSFODNN7EXAMPLE/, log, "an AWS access key id must not survive")
+    assert_match(/Cookie:/, log, "the header NAME should survive so the line stays readable")
+  end
+
+  test "redacts a bare JWT with no label at all" do
+    raw = "web-1\n---\nrejected token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.QWxhZGRpbjpvcGVuc2VzYW1l here"
+    log = tool(output: raw).call("app_name" => "Logged").value[:log]
+
+    refute_match(/eyJhbGciOiJIUzI1NiJ9/, log)
+    assert_match(/rejected token/, log)
+  end
+
+  test "leaves ordinary log lines untouched" do
+    raw = "web-1\n---\nCompleted 200 OK in 4ms (Views: 1.2ms | ActiveRecord: 0.8ms)\nStarted GET \"/orgs/acme/folders?page=2\""
+    res = tool(output: raw).call("app_name" => "Logged")
+
+    assert_match(/ActiveRecord: 0\.8ms/, res.value[:log])
+    assert_match(/page=2/, res.value[:log])
+    refute res.value[:redacted], "a clean log must not be reported as redacted"
+  end
 end

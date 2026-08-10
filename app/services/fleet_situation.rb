@@ -7,6 +7,9 @@
 # action layer (start_deployment! dedupes; blocked/forced attempts persist) so the
 # agent can safely resume by re-issuing.
 class FleetSituation
+  # Two recoveries in the recent window is a pattern, not a coincidence.
+  FLAPPING_RECOVERIES = 2
+
   # server_scope is an already-ACL'd relation (e.g. the actor's visible servers),
   # so the situation never leaks across tenants.
   def initialize(server_scope: Server.all, recent_limit: 8)
@@ -83,6 +86,13 @@ class FleetSituation
       if check&.status == :down
         detail = [ check.status_code && "HTTP #{check.status_code}", check.error.presence ].compact.join(" — ").presence || "unreachable"
         items << attn("site_down", app, detail: detail, checked_at: check.checked_at&.iso8601)
+      elsif (recoveries = app.recent_retry_recoveries) >= FLAPPING_RECOVERIES
+        # Serving, so never `site_down` — but a host that keeps failing its first
+        # probe and passing the retry is unstable, and suppressing the blip must
+        # not suppress that (codex review R-1).
+        items << attn("site_flapping", app,
+                      detail: "#{recoveries} of the last #{App::RETRY_RECOVERY_WINDOW} checks failed their first probe and passed the retry — serving, but unstable",
+                      checked_at: check&.checked_at&.iso8601)
       end
     end
     servers.find_each do |s|

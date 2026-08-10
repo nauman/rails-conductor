@@ -13,6 +13,10 @@ class SiteCheck < ApplicationRecord
 
   def slow? = up && ttfb_ms.to_i > SLOW_TTFB_MS
 
+  # An `up` check whose first probe failed. Serving, but unstable — the signal a
+  # bare retry would otherwise erase (codex review R-1).
+  def recovered_on_retry? = up && error.to_s.include?(SiteMonitor::RECOVERED)
+
   # Up/Slow/Down for badges + rollups.
   def status
     return :down unless up

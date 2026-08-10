@@ -260,6 +260,15 @@ class App < ApplicationRecord
 
   # Site latency/uptime monitoring — anything with a public URL is monitorable.
   def monitorable? = url.present?
+  # How many of the most recent checks were `up` only because the retry passed.
+  # A flapping host is serving, so it is never site_down — this is the signal that
+  # keeps it visible anyway (codex review R-1).
+  RETRY_RECOVERY_WINDOW = 6
+
+  def recent_retry_recoveries
+    site_checks.recent.limit(RETRY_RECOVERY_WINDOW).count(&:recovered_on_retry?)
+  end
+
   def latest_site_check = site_checks.recent.first
   def site_status = latest_site_check&.status # :up / :slow / :down / nil
   # Is the site currently served through a CDN/Cloudflare (per the latest check's

@@ -11,7 +11,18 @@ class SiteMonitor
   # A single failed probe is not an outage — a transient timeout once recorded a
   # healthy app as down and left the fleet reading red all day. Confirm any
   # failure with one re-probe before recording it.
-  RETRY_DELAY = 2
+  RETRY_DELAY = 1
+
+  # The confirmation probe is deliberately cheaper than the first. MonitorSitesJob
+  # sweeps every app SERIALLY every 5 minutes; at the full timeout a dead app cost
+  # TIMEOUT + delay + TIMEOUT, so enough dead apps overran the sweep's own
+  # schedule and left monitoring incomplete.
+  CONFIRM_TIMEOUT = 6
+
+  # A failure that clears on the retry. The check is recorded `up` — the app is
+  # serving — but saying so plainly is what keeps a flapping host visible instead
+  # of averaging it away into "healthy".
+  RECOVERED = "recovered on retry".freeze
 
   def initialize(app, runner: nil, retry_delay: RETRY_DELAY)
     @app = app
@@ -28,25 +39,32 @@ class SiteMonitor
 
   private
 
-  # One probe; on failure, sleep briefly and probe again. The second result is
-  # what gets recorded — so a blip resolves to `up`, and a real outage is marked
-  # as confirmed rather than merely observed once.
+  # One probe; on failure, sleep briefly and probe again more cheaply. A blip
+  # resolves to `up` but is labelled RECOVERED so a flapping host stays visible;
+  # a failure the retry agrees with is recorded as confirmed.
   def probe
-    first = parse(@runner.call(@app.url))
+    first = parse(probe_once(TIMEOUT))
     return first if first[:up]
 
     sleep @retry_delay if @retry_delay.to_f.positive?
-    confirmation = parse(@runner.call(@app.url))
-    return confirmation if confirmation[:up]
+    confirmation = parse(probe_once(CONFIRM_TIMEOUT))
 
-    confirmation.merge(error: "#{confirmation[:error]} (confirmed by a second probe)")
+    if confirmation[:up]
+      confirmation.merge(error: "#{RECOVERED} — first probe: #{first[:error]}")
+    else
+      confirmation.merge(error: "#{confirmation[:error]} (confirmed by a second probe)")
+    end
   end
 
-  def curl(url)
+  def probe_once(timeout)
+    @runner.call(@app.url, timeout)
+  end
+
+  def curl(url, timeout = TIMEOUT)
     # -D - dumps response headers to stdout (so we can detect a CDN in front); the
     # -w metrics line is appended last on its own line for a clean split in parse().
     out, = Open3.capture2e("curl", "-sSL", "-o", "/dev/null", "-D", "-",
-                           "--max-time", TIMEOUT.to_s, "-w", "\n#{FORMAT}", url)
+                           "--max-time", timeout.to_s, "-w", "\n#{FORMAT}", url)
     out
   end
 
