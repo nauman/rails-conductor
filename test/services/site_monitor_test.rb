@@ -65,4 +65,50 @@ class SiteMonitorTest < ActiveSupport::TestCase
     @app.update!(domain: nil)
     assert_nil SiteMonitor.new(@app, runner: ->(_) { "200 0 0 0 0 0" }).check!
   end
+
+  # A single timed-out probe is not an outage. On 2026-08-09 one transient
+  # timeout recorded Kuickr as down while it served 200 in 0.38s from every
+  # vantage point, and the fleet dashboard showed a red app for the rest of the
+  # day. A failure must be confirmed by a second probe before it is recorded.
+  class ProbeSpy
+    attr_reader :calls
+    def initialize(*outputs)
+      @outputs = outputs
+      @calls = 0
+    end
+
+    def to_proc = ->(_url) { @calls += 1; @outputs[[ @calls - 1, @outputs.size - 1 ].min] }
+  end
+
+  test "a failed probe that succeeds on retry is recorded as up, not down" do
+    spy = ProbeSpy.new("000 0 0 0 0 0", "200 0.002 0.020 0.040 0.100 0.150")
+    c = SiteMonitor.new(@app, runner: spy.to_proc, retry_delay: 0).check!
+
+    assert_equal 2, spy.calls, "a failure must trigger exactly one confirming re-probe"
+    assert c.up, "the confirming probe succeeded, so the app was never down"
+    assert_equal 200, c.status_code
+  end
+
+  test "a failure confirmed by the second probe is recorded as down and says so" do
+    spy = ProbeSpy.new("000 0 0 0 0 0", "000 0 0 0 0 0")
+    c = SiteMonitor.new(@app, runner: spy.to_proc, retry_delay: 0).check!
+
+    assert_equal 2, spy.calls
+    refute c.up
+    assert_equal :down, c.status
+    assert_match(/confirmed by a second probe/, c.error)
+  end
+
+  test "a healthy probe is never re-probed" do
+    spy = ProbeSpy.new("200 0.002 0.020 0.040 0.100 0.150")
+    SiteMonitor.new(@app, runner: spy.to_proc, retry_delay: 0).check!
+    assert_equal 1, spy.calls, "a healthy check must cost exactly one request"
+  end
+
+  test "an HTTP error status is also confirmed before being recorded" do
+    spy = ProbeSpy.new("502 0 0.01 0.02 0.03 0.04", "200 0.002 0.020 0.040 0.100 0.150")
+    c = SiteMonitor.new(@app, runner: spy.to_proc, retry_delay: 0).check!
+    assert_equal 2, spy.calls
+    assert c.up
+  end
 end

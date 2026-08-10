@@ -8,19 +8,39 @@ class SiteMonitor
   FORMAT = "%{http_code} %{time_namelookup} %{time_connect} %{time_appconnect} %{time_starttransfer} %{time_total}".freeze
   TIMEOUT = 20
 
-  def initialize(app, runner: nil)
+  # A single failed probe is not an outage — a transient timeout once recorded a
+  # healthy app as down and left the fleet reading red all day. Confirm any
+  # failure with one re-probe before recording it.
+  RETRY_DELAY = 2
+
+  def initialize(app, runner: nil, retry_delay: RETRY_DELAY)
     @app = app
     @runner = runner || method(:curl) # injectable for tests
+    @retry_delay = retry_delay
   end
 
   # Runs the check and persists a SiteCheck. Returns it, or nil if the app has no URL.
   def check!
     return nil if @app.url.blank?
 
-    @app.site_checks.create!(parse(@runner.call(@app.url)).merge(checked_at: Time.current))
+    @app.site_checks.create!(probe.merge(checked_at: Time.current))
   end
 
   private
+
+  # One probe; on failure, sleep briefly and probe again. The second result is
+  # what gets recorded — so a blip resolves to `up`, and a real outage is marked
+  # as confirmed rather than merely observed once.
+  def probe
+    first = parse(@runner.call(@app.url))
+    return first if first[:up]
+
+    sleep @retry_delay if @retry_delay.to_f.positive?
+    confirmation = parse(@runner.call(@app.url))
+    return confirmation if confirmation[:up]
+
+    confirmation.merge(error: "#{confirmation[:error]} (confirmed by a second probe)")
+  end
 
   def curl(url)
     # -D - dumps response headers to stdout (so we can detect a CDN in front); the
