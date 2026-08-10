@@ -160,6 +160,62 @@ class ResidueDetector
         remedy: "remove all but the one actually targeting the live container"
       )
     end
+
+    check_edge_targets(rows)
+  end
+
+  # Comparing routes only to EACH OTHER left the obvious question unasked: does the
+  # route point at anything real? calm.page moved to another box and left
+  # `calmpage-web -> 35d45b624d67:3000` registered behind it; every request
+  # reaching that box for the host 502'd, this detector reported a clean box for
+  # days, and it was finally found by hand.
+  def check_edge_targets(rows)
+    # A deploy is exactly when a target legitimately changes between reading the
+    # route table and reading the containers, so anything seen mid-deploy proves
+    # nothing. (I generated this false positive on myself before shipping.)
+    return if @app.deployments.in_progress.exists?
+
+    rows.each do |line|
+      cols = line.split(/\s+/)
+      next unless cols[1].to_s.casecmp?(@app.domain)
+
+      target = cols.find { |c| c.include?(":") && !c.start_with?("/") }
+      next if target.blank?
+
+      container = target.split(":").first
+      inspect_edge_target(container, target)
+    end
+  end
+
+  def inspect_edge_target(container, target)
+    # `--filter id=` matches a prefix, so a short id from the route table resolves.
+    out = capture(%(docker ps --filter id=#{esc(container)} --format '{{.ID}}|{{.Names}}|{{.Label "service"}}'))
+    return if out.nil? # capture already recorded the blindness
+
+    row = out.lines.map(&:strip).reject(&:empty?).first
+    return orphan_edge_route(target) if row.blank?
+
+    _id, name, service = row.split("|")
+    return if service.blank? # a docker deploy legitimately serves from conductor-<slug>, unlabelled
+    return if own_service?(service)
+
+    @findings << Finding.new(
+      kind: "misrouted_edge_target",
+      detail: "#{@app.domain} is routed to #{name} (#{target}), which carries service=#{service} — another app's container",
+      remedy: "republish the route against this app's own container"
+    )
+  end
+
+  def orphan_edge_route(target)
+    @findings << Finding.new(
+      kind: "orphan_edge_route",
+      detail: "#{@app.domain} is routed to #{target}, but no such container is running on #{@app.server.name}",
+      remedy: "the host 502s until this is fixed — republish the route, or remove it if the app moved boxes"
+    )
+  end
+
+  def own_service?(service)
+    ([ @app.resource_key ] + Array(@app.kamal_service_candidates)).compact.any? { |s| s.to_s == service.to_s }
   end
 
   # A failed command is NOT an empty result. Treating it as one made a broken

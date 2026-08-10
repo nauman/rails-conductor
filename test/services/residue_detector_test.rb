@@ -175,4 +175,97 @@ class ResidueDetectorTest < ActiveSupport::TestCase
 
     assert_empty findings("conductor.infra_revision" => "x|y|1|running")
   end
+
+  # The calm.page case, and the reason this detector reported a clean box while a
+  # hand sweep found real residue: check_edge_routes only compared routes to EACH
+  # OTHER, so it never noticed a route pointing at a container that no longer
+  # exists. calm.page moved to another box and left `calmpage-web ->
+  # 35d45b624d67:3000` registered here; anything reaching this box for that host
+  # 502s, and nothing said so for days.
+  ROUTE_HEADER = "Service        Host           Path  Target             State    TLS".freeze
+
+  def route_rows(*rows) = ([ ROUTE_HEADER ] + rows).join("\n")
+
+  test "flags a route whose target container no longer exists" do
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     deadbeef1234:3000  running  yes"),
+      "--filter id=deadbeef1234" => "" # not running
+    )
+
+    orphan = found.find { |f| f.kind == "orphan_edge_route" }
+    assert orphan, "expected an orphan_edge_route finding, got: #{found.map(&:kind).inspect}"
+    assert_match(/deadbeef1234/, orphan.detail)
+    assert_match(/starrrs\.com/, orphan.detail)
+  end
+
+  test "a route whose target is running is not flagged as an orphan" do
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     abc123456789:3000  running  yes"),
+      "--filter id=abc123456789" => "abc123456789|conductor-starrrs|starrrs"
+    )
+
+    assert_nil found.find { |f| f.kind == "orphan_edge_route" }
+  end
+
+  # A docker-deploy app legitimately serves from `conductor-<slug>`, which carries
+  # no kamal service label. Flagging a missing label would have called Starrrs
+  # broken while starrrs.com was serving 200 — so only a label belonging to a
+  # DIFFERENT app counts as misrouting.
+  test "does not flag an unlabelled target — that is how a docker deploy serves" do
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     abc123456789:3000  running  yes"),
+      "--filter id=abc123456789" => "abc123456789|conductor-starrrs|"
+    )
+
+    assert_empty found.select { |f| f.kind.start_with?("orphan_edge", "misrouted_edge") }
+  end
+
+  test "flags a target that is running but wears ANOTHER app's service label" do
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     abc123456789:3000  running  yes"),
+      "--filter id=abc123456789" => "abc123456789|kuickr-web-99|kuickr"
+    )
+
+    misrouted = found.find { |f| f.kind == "misrouted_edge_target" }
+    assert misrouted, "expected misrouted_edge_target, got: #{found.map(&:kind).inspect}"
+    assert_match(/kuickr/, misrouted.detail)
+  end
+
+  test "a failed container lookup reports blindness, never a clean route" do
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     abc123456789:3000  running  yes"),
+      "--filter id=abc123456789" => :fail
+    )
+
+    assert found.any? { |f| f.kind == "unknown" }, "a detector that cannot look must say so"
+    assert_nil found.find { |f| f.kind == "orphan_edge_route" }
+  end
+
+  # I produced this false positive on myself: I compared a route table read hours
+  # earlier against containers read now, and "concluded" conductor.pavelabs.io had
+  # an orphan route while it served 200 — kamal had simply republished the route on
+  # deploy. A deploy is precisely when a target legitimately changes mid-check, so
+  # a route pointing at a vanished container during one proves nothing.
+  test "an in-progress deployment suppresses edge-target findings" do
+    @app.deployments.create!(status: "deploying")
+
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     deadbeef1234:3000  running  yes"),
+      "--filter id=deadbeef1234" => ""
+    )
+
+    assert_nil found.find { |f| f.kind == "orphan_edge_route" },
+      "a route flipping mid-deploy is not residue"
+  end
+
+  test "a finished deployment does not suppress them" do
+    @app.deployments.create!(status: "succeeded")
+
+    found = findings(
+      "kamal-proxy ls" => route_rows("starrrs-web    starrrs.com    /     deadbeef1234:3000  running  yes"),
+      "--filter id=deadbeef1234" => ""
+    )
+
+    assert found.find { |f| f.kind == "orphan_edge_route" }
+  end
 end

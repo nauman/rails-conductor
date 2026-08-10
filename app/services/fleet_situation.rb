@@ -80,6 +80,21 @@ class FleetSituation
                       stale: app.release_state_stale?)
       end
 
+      # Residue from a previous form, read from the STORED rollup. The detector,
+      # the hourly sweep and the columns all existed, but nothing surfaced them
+      # here — so the resume point read "nothing wrong" while a stale route sat in
+      # the rollup, and the residue on this fleet was found by hand instead.
+      if app.residue?
+        kinds = app.residue.map { |f| f[:kind] }.tally
+                   .map { |kind, n| n > 1 ? "#{kind} ×#{n}" : kind }.join(", ")
+        items << attn("residue", app,
+                      count: app.residue.size,
+                      detail: "#{kinds} — #{app.residue.first[:detail]}",
+                      remedy: app.residue.first[:remedy],
+                      stale: app.residue_stale?,
+                      checked_at: app.residue_checked_at&.iso8601)
+      end
+
       # A down public URL is an incident the operator sees in the UI — surface it here
       # too, with the status code / error so the agent knows what actually failed.
       check = app.latest_site_check
