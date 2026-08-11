@@ -78,8 +78,16 @@ class FleetCanonTest < ActiveSupport::TestCase
     assert_match(/app-#{subject.id}/, target.public_reference)
   end
 
-  test "every recipe the canon can name is declared, so a pointer cannot dangle" do
-    assert_equal FleetCanon::RECIPES.keys.sort, FleetCanon::RECIPES.keys.uniq.sort
-    FleetCanon::RECIPES.each_value { |id| assert_match(/\A[a-z0-9-]+\z/, id) }
+  # Was a tautology: Hash#keys is unique by definition, so the old assertion could
+  # never fail while claiming to prove a pointer cannot dangle (caught in review of
+  # PR #34). The dangling-pointer property is genuinely tested in
+  # FleetRecipesTest#"every recipe the canon can point at has content behind it";
+  # what belongs HERE is that the map itself is sane.
+  test "no two shapes point at the same recipe, and every id is a usable slug" do
+    ids = FleetCanon::RECIPES.values
+
+    assert_equal ids.uniq, ids,
+      "two shapes pointing at one recipe means one of them has no ritual of its own: #{ids.inspect}"
+    ids.each { |id| assert_match(/\A[a-z0-9-]+\z/, id, "#{id} is not a usable recipe id") }
   end
 end
