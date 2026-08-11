@@ -18,14 +18,16 @@ class AppDeployer
   # cannot have this at all.
   ZERO_DOWNTIME_STEPS = %i[
     ensure_docker clone_or_pull_repo build_image
-    start_candidate health_check_candidate republish_edge_route drain_previous_container cleanup
+    start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
+    republish_edge_route drain_previous_container cleanup
   ].freeze
 
   # The original order. Traffic is down from stop_old_container until the edge is
   # republished — unavoidable when the fixed host port IS the service.
   STOP_FIRST_STEPS = %i[
     ensure_docker clone_or_pull_repo build_image
-    stop_old_container start_container health_check republish_edge_route cleanup
+    stop_old_container start_container health_check run_gated_migrations run_seeds_if_requested
+    republish_edge_route cleanup
   ].freeze
 
   def deploy!
@@ -465,6 +467,75 @@ class AppDeployer
 
     log "Health check failed after 60 seconds"
     false
+  end
+
+  # A Kamal artifact still carries the Rails release contract even though Kamal
+  # no longer drives the roll. Run the schema gate inside the proven candidate
+  # before traffic moves. Plain Docker artifacts may not be Rails applications,
+  # so they retain their existing opt-out until migrations become an explicit
+  # capability instead of an artifact convention.
+  def run_gated_migrations
+    return true unless app.kamal?
+
+    log "=== gated migrations: bin/rails db:migrate ==="
+    unless run_in_release("bin/rails db:migrate")
+      return fail_release_gate("db:migrate failed — the previous release keeps serving")
+    end
+
+    unless run_in_release("bin/rails db:abort_if_pending_migrations")
+      return fail_release_gate("pending migrations remain after db:migrate — the previous release keeps serving")
+    end
+
+    true
+  end
+
+  def run_seeds_if_requested
+    return true unless app.seed_on_next_deploy?
+
+    log "=== running seeds (requested): bin/rails db:seed ==="
+    digest = seeds_digest
+    succeeded = run_in_release("bin/rails db:seed")
+    output = ssh.output.to_s.last(4000)
+
+    app.seed_applications.create!(
+      status: succeeded ? "succeeded" : "failed",
+      digest: digest,
+      applied_at: Time.current,
+      output: output
+    )
+    app.update_columns(seed_on_next_deploy: false)
+
+    return true if succeeded
+
+    fail_release_gate("db:seed failed — seed run recorded as failed; the previous release keeps serving")
+  end
+
+  def run_in_release(command)
+    run("docker exec #{esc(release_container_name)} #{command}")
+  end
+
+  def release_container_name
+    @candidate_name.presence || app.container_name
+  end
+
+  def seeds_digest
+    return nil unless run("test -f #{esc(app_dir)}/db/seeds.rb && sha256sum #{esc(app_dir)}/db/seeds.rb || true")
+
+    ssh.output.to_s[/\b[0-9a-f]{64}\b/]
+  end
+
+  # Before edge publication, a failed release gate is compensatable: restore
+  # the recorded incumbent and discard only the unserved candidate. Stop-first
+  # shapes have no incumbent left to preserve, so leave their running container
+  # available for diagnosis while still failing the deployment.
+  def fail_release_gate(message)
+    unless @candidate_name.present?
+      log "ERROR: #{message}"
+      return false
+    end
+
+    app.update!(container_id: @previous_container.presence) if @previous_container != @candidate_container
+    discard_candidate(message)
   end
 
   # A docker deploy replaces the container, which changes the container id the

@@ -7,14 +7,16 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
   class FakeSsh
     attr_reader :commands
 
-    def initialize(healthy: true)
+    def initialize(healthy: true, fail_on: nil)
       @commands = []
       @healthy = healthy
+      @fail_on = fail_on
     end
 
     def execute_with_status(cmd)
       @commands << cmd
-      { success: true, output: output_for(cmd), stderr: "" }
+      failed = @fail_on && cmd.include?(@fail_on)
+      { success: !failed, output: output_for(cmd), stderr: failed ? "forced failure" : "" }
     end
 
     def output = @last_output.to_s
@@ -43,7 +45,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     @org = Organization.create!(name: "Acme")
     @server = @org.servers.create!(name: "box", status: "online", ip_address: "10.0.0.1",
                                    edge_type: "kamal_proxy")
-    @app = @org.apps.create!(name: "Shop", slug: "shop", server: @server, deploy_method: "docker",
+    @app = @org.apps.create!(name: "Shop", slug: "shop", server: @server, deploy_method: "kamal",
                              port: 3000, image_name: "shop", domain: "shop.example.com",
                              health_check_path: "/up", repository_url: "https://github.com/x/y.git")
     @deployment = @app.deployments.create!(status: "deploying", commit_sha: "abc1234def")
@@ -56,7 +58,8 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
       @deployer.stub(:sleep, nil) do
         # Mirror the real pipeline: it aborts on the first failing step, so a
         # failed health check must never reach the swap or the drain.
-        %i[start_candidate health_check_candidate republish_edge_route drain_previous_container]
+        %i[start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
+           republish_edge_route drain_previous_container]
           .each_with_object({}) do |step, out|
             out[step] = @deployer.send(step)
             break out unless out[step]
@@ -122,6 +125,44 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
 
     assert health, "expected a health check"
     assert health < swap, "must not move traffic to an unproven container"
+  end
+
+  test "schema gates run inside the healthy candidate before traffic moves" do
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    migrate = index_of(ssh, /docker exec .* db:migrate/)
+    pending = index_of(ssh, /docker exec .* db:abort_if_pending_migrations/)
+    swap = index_of(ssh, /kamal-proxy deploy/)
+
+    assert migrate, "expected db:migrate in the candidate"
+    assert pending, "expected the pending-migration assertion in the candidate"
+    assert migrate < pending
+    assert pending < swap, "traffic must not move before the schema gate passes"
+  end
+
+  test "a failed migration discards the candidate and leaves the old release serving" do
+    ssh = FakeSsh.new(fail_on: "db:migrate")
+    results = cutover(ssh)
+
+    assert_not results[:run_gated_migrations]
+    assert ssh.commands.any? { |c| c.match?(/docker rm -f .*app-#{@app.id}-r1/) }
+    assert_not ssh.commands.any? { |c| c.include?("kamal-proxy deploy") }
+    assert_not ssh.commands.any? { |c| c.match?(/docker stop oldcid999/) }
+  end
+
+  test "requested seeds run in the candidate and are recorded before cutover" do
+    @app.update!(seed_on_next_deploy: true)
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    seed = index_of(ssh, /docker exec .* db:seed/)
+    swap = index_of(ssh, /kamal-proxy deploy/)
+
+    assert seed
+    assert seed < swap
+    assert @app.seed_applications.last.proven?
+    refute @app.reload.seed_on_next_deploy?
   end
 
   test "the edge is swapped to the candidate, not the old container" do

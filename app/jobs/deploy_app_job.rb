@@ -6,17 +6,30 @@ class DeployAppJob < ApplicationJob
     app = deployment.app
 
     return if reentrant_self_deploy?(app, deployment)
+    return if refuse_self_deploy?(app, deployment)
 
     deployer =
       case app.deploy_method
       when "native" then NativeDeployer.new(app, deployment)
-      when "kamal"  then KamalDeployer.new(app, deployment)
       else AppDeployer.new(app, deployment)
       end
     deployer.deploy!
   end
 
   private
+
+  # Conductor itself is the one app that cannot safely run its own in-product
+  # release transaction: draining the incumbent kills the worker performing the
+  # drain. Its external CI control machine remains the supported exception.
+  def refuse_self_deploy?(app, deployment)
+    return false unless app.self_managed?
+
+    deployment.fail!(
+      "self-managed apps deploy from CI, not in-product — refusing to replace " \
+      "the worker running this deployment"
+    )
+    true
+  end
 
   # Self-deploy re-entry guard — the fix for the self-deploy loop + false emails.
   #
