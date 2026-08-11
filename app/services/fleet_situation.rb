@@ -21,14 +21,61 @@ class FleetSituation
     {
       in_flight:       in_flight,
       needs_attention: needs_attention,
+      subjects:        subjects,
       recent:          recent,
-      hint: "Resume by addressing needs_attention (each carries the app + next action). " \
+      hint: "Resume by addressing needs_attention (each carries the app + next action), then read " \
+            "`subjects` — each names the ritual its shape resolves to, its checklist progress and " \
+            "whether the last run finished. `diverged: true` means an operator customised that " \
+            "runbook and it no longer tracks the canon. " \
             "For an in-flight deployment, poll conductor_read action=deployment with its id. " \
             "Actions are single-flight/idempotent — re-issuing a deploy returns already_running, not a duplicate."
     }
   end
 
   private
+
+  # Subject-scoped resume: for each app, the ritual its SHAPE resolves to, plus how
+  # far through it we are and whether the last run finished.
+  #
+  # Composition, not duplication. FleetCanon names the shape and points at a recipe;
+  # jazari owns the checklist, the run and the revision guard. Conductor holds neither
+  # steps nor progress — it asks.
+  #
+  # Before this, `situation` said what was broken and nothing about what to DO: the
+  # procedure lived in a session log, a learnings file, or one agent's memory, so it
+  # could not be called by name.
+  def subjects
+    apps.includes(:server).map { |app| subject_row(app) }.compact
+  end
+
+  def subject_row(app)
+    shape = FleetCanon.shape_for(app)
+    resolved = Jazari.resolve(target: FleetCanon.target_for(app))
+
+    {
+      app: app.name,
+      app_id: app.id,
+      shape: shape,
+      recipe_id: shape[:recipe_id],
+      state: resolved.state,
+      # A customised runbook diverges permanently rather than rebasing (jazari OQ-1),
+      # so say so here — otherwise a stale override is invisible.
+      diverged: resolved.custom?,
+      topic: resolved.topic,
+      checklist: resolved.progress,
+      last_run: last_run_summary(resolved.last_run)
+    }
+  rescue StandardError => e
+    # One odd subject must not take down the resume point. Report the blindness.
+    { app: app.name, app_id: app.id, recipe_id: nil,
+      error: "could not resolve this subject's ritual: #{e.message}" }
+  end
+
+  def last_run_summary(run)
+    return nil if run.blank?
+
+    run.respond_to?(:to_h) ? run.to_h.slice(:started_at, :finished_at, :outcome) : run
+  end
 
   def servers = @server_scope
 

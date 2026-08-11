@@ -98,6 +98,8 @@ class KamalDeployer
     return false unless run_gated_migrations
     return false unless run_seeds_if_requested
 
+    prune_dead_boot_artifacts
+
     # Record the version this release booted — for Kamal that's the deployed sha,
     # which Kamal tags its images with and `kamal rollback <version>` can boot again.
     deployment.update!(release_version: deployment.commit_sha) if deployment.commit_sha.present?
@@ -411,6 +413,40 @@ class KamalDeployer
     release_fixed_port
     @stopped_prior = true
     true
+  end
+
+  # A deploy that fails leaves a container behind, and nothing ever removed them:
+  # calm.page accumulated ELEVEN — three never-started plus four kamal `_replaced_`
+  # leftovers — and detecting them was not a solution. The deploy that creates the
+  # junk is the thing that should clear it, and it knows which containers are its own.
+  #
+  # Only after a SUCCESSFUL deploy. After a failure those leftovers are the evidence
+  # an operator needs to diagnose it, and removing them would be destroying the
+  # scene. Only never-started and superseded-by-rename containers, never a running
+  # one, and never another app's.
+  #
+  # Removing a stopped container costs no rollback: `kamal rollback <version>` boots
+  # from the retained IMAGE, and every calm.page release image was still present when
+  # its eleven containers were removed.
+  def prune_dead_boot_artifacts
+    return unless fixed_port_app? || app.kamal?
+    return if ssh.nil?
+
+    listing = ssh.execute_with_status(%(docker ps -a --format '{{.ID}}|{{.Names}}|{{.State}}'))
+    return unless listing[:success]
+
+    listing[:output].to_s.lines.map(&:strip).reject(&:empty?).each do |line|
+      id, name, state = line.split("|")
+      next if id.blank? || state.to_s.casecmp?("running")
+      next unless state.to_s.casecmp?("created") || name.to_s.include?("_replaced_")
+      next unless owns_container?(name, nil)
+
+      log "pruning dead boot artifact #{name} (#{id}, #{state}) — it holds no traffic and rollback boots from the image"
+      ssh.execute_with_status("docker rm #{id}")
+    end
+  rescue StandardError => e
+    # Never fail a successful deploy over cleanup.
+    log "prune skipped: #{e.message}"
   end
 
   # `kamal app stop` matches containers by their CURRENT name — but when the name

@@ -819,13 +819,20 @@ class KamalDeployerTest < ActiveSupport::TestCase
       "must not stop another app's container: #{ssh.commands.inspect}"
   end
 
-  test "a kamal-proxy app never touches host ports" do
+  # A kamal-proxy app keeps its zero-downtime roll: nothing frees a host port and
+  # nothing stops the incumbent. It may still be PRUNED of dead leftovers, which is
+  # a different operation — this test used to forbid both by asserting no commands
+  # at all, which was broader than the property it meant to protect.
+  test "a kamal-proxy app never has a host port freed or its incumbent stopped" do
     @server.update!(edge_type: "kamal_proxy")
     ssh = FakeSsh.new(output: "")
 
     deploy_with(FakeShell.new(success: true), ssh: ssh)
 
-    assert_empty ssh.commands, "zero-downtime roll apps must be left alone"
+    refute ssh.commands.any? { |c| c.include?("--filter publish=") },
+      "a proxied app publishes no exclusive host port: #{ssh.commands.inspect}"
+    refute ssh.commands.any? { |c| c.include?("docker stop") },
+      "the incumbent must keep serving until the proxy swaps"
   end
 
   # Review of PR #31: the ownership fallback matched any name merely STARTING with
@@ -851,5 +858,50 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
     assert ssh.commands.any? { |c| c.include?("docker stop") && c.include?("abc123") },
       "an unlabelled container named <service>-web-<version> is ours: #{ssh.commands.inspect}"
+  end
+
+  # calm.page accumulated ELEVEN dead containers because every failed boot left one
+  # behind and nothing ever removed them. Detecting them was not a solution: the
+  # deploy that creates the junk is the thing that should clear it, and it knows
+  # exactly which containers are its own.
+  test "a deploy prunes its own dead boot artifacts afterwards" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    ssh = FakeSsh.new(output: "junk1|#{@app.resource_key}-web-old|created\n" \
+                              "junk2|#{@app.resource_key}-web-x_replaced_abc|exited")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    pruned = ssh.commands.select { |c| c.include?("docker rm") }
+    assert pruned.any? { |c| c.include?("junk1") }, "a never-started container must be removed: #{ssh.commands.inspect}"
+    assert pruned.any? { |c| c.include?("junk2") }, "a _replaced_ leftover must be removed"
+  end
+
+  test "pruning never touches a running container" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    ssh = FakeSsh.new(output: "live1|#{@app.resource_key}-web-current|running")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    refute ssh.commands.any? { |c| c.include?("docker rm") && c.include?("live1") },
+      "the live container serves traffic: #{ssh.commands.inspect}"
+  end
+
+  test "pruning never touches another app's container" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    ssh = FakeSsh.new(output: "other1|someone-elses-web-abc|exited")
+
+    deploy_with(FakeShell.new(success: true), ssh: ssh)
+
+    refute ssh.commands.any? { |c| c.include?("docker rm") }, "not ours to remove"
+  end
+
+  test "a FAILED deploy does not prune — the leftovers are the evidence" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    ssh = FakeSsh.new(output: "junk1|#{@app.resource_key}-web-old|created")
+
+    deploy_with(FailOnShell.new("kamal deploy"), ssh: ssh)
+
+    refute ssh.commands.any? { |c| c.include?("docker rm") },
+      "removing artifacts of a failed deploy destroys what an operator needs to diagnose it"
   end
 end
