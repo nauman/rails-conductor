@@ -80,4 +80,37 @@ class FleetSituationRitualsTest < ActiveSupport::TestCase
 
     assert snapshot[:needs_attention].is_a?(Array)
   end
+
+  # jazari 0.3 splits two things my code was conflating. `custom?` only says a row
+  # EXISTS; `origin` says WHY. A runbook the phase-2 backfill materialized is
+  # custom-but-inherited, and reporting it as diverged would have shown six false
+  # divergences on day one — making the signal noise exactly when it first appears.
+  #
+  # jazari-agent's point is sharper than my original suggestion: comparing content
+  # against the canon cannot separate them either, because a backfilled runbook
+  # genuinely DIFFERS (it carries the app's hand-written steps). Provenance is the
+  # only honest discriminator.
+  test "a runbook materialized by the backfill is not reported as diverged" do
+    target = FleetCanon.target_for(@app)
+    resolved = Jazari.resolve(target: target)
+    skip "needs jazari >= 0.3 (origin)" unless resolved.respond_to?(:diverged?)
+
+    Jazari.customize(target: target, expected_revision: resolved.revision,
+                     topic: "Backfilled", description: "from deploy_checklist_items",
+                     checklist: [ { id: "one", text: "step" } ], origin: "migration")
+
+    row = subject_row
+    assert_equal "custom", row[:state], "the row exists, so the state is custom"
+    refute row[:diverged], "it was materialized, not chosen — provenance says so"
+    assert_equal "migration", row[:origin]
+  end
+
+  test "an operator's own edit is still reported as diverged" do
+    target = FleetCanon.target_for(@app)
+    resolved = Jazari.resolve(target: target)
+    Jazari.customize(target: target, expected_revision: resolved.revision,
+                     topic: "Operator's way", description: "mine", checklist: [ { id: "one", text: "step" } ])
+
+    assert subject_row[:diverged], "no origin means a human chose this"
+  end
 end

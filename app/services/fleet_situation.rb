@@ -58,9 +58,17 @@ class FleetSituation
       shape: shape,
       recipe_id: shape[:recipe_id],
       state: resolved.state,
-      # A customised runbook diverges permanently rather than rebasing (jazari OQ-1),
-      # so say so here — otherwise a stale override is invisible.
-      diverged: resolved.custom?,
+      # `custom?` only says a row EXISTS. `origin` says WHY: a runbook the phase-2
+      # backfill materialized is custom-but-INHERITED, and calling that diverged
+      # would show six false divergences the day it lands — noise exactly when the
+      # signal first appears. Comparing content against the canon cannot separate
+      # them either, because a backfilled runbook genuinely differs (it carries the
+      # app's hand-written steps). Provenance is the only honest discriminator.
+      #
+      # Falls back to `custom?` on jazari < 0.3, which has no origin, so this needs
+      # no ordering against the gem bump in PR #36.
+      diverged: resolved.respond_to?(:diverged?) ? resolved.diverged? : resolved.custom?,
+      origin: (resolved.origin if resolved.respond_to?(:origin)),
       topic: resolved.topic,
       checklist: resolved.progress,
       last_run: last_run_summary(resolved.last_run)
