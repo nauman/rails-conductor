@@ -26,7 +26,7 @@ class BackfillJazariFromDeployChecklists < ActiveRecord::Migration[8.0]
   MIGRATION_ACTOR = "migration:20260811090001"
 
   # What the first version of this migration wrote, before the value was scoped.
-  # 20260811090003 backfills these; #down matches both so a rollback is complete
+  # 20260811171026 backfills these; #down matches both so a rollback is complete
   # on a host that ran either version.
   LEGACY_ACTOR = "migration"
 
