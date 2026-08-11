@@ -98,10 +98,20 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     cutover(ssh)
 
     run = ssh.commands.find { |c| c.start_with?("docker run") }
-    assert_includes run, "--name app-#{@app.id}-r1-abc1234"
+    assert_includes run, "--name app-#{@app.id}-r1-d#{@deployment.id}-abc1234"
     assert_not_includes run, "-p 3000:3000",
                         "binding the old container's port defeats running alongside"
     assert_includes run, "--network"
+  end
+
+  test "same-commit config redeploys get a new container name" do
+    first = @app.release_container_name(@deployment.commit_sha, deployment_id: @deployment.id)
+    @deployment.update!(status: "succeeded")
+    later = @app.deployments.create!(status: "deploying", commit_sha: @deployment.commit_sha)
+    second = @app.release_container_name(later.commit_sha, deployment_id: later.id)
+
+    assert_not_equal first, second,
+                     "reusing the serving name makes candidate cleanup remove the live release"
   end
 
   test "nothing stops the old container before the edge has been swapped" do

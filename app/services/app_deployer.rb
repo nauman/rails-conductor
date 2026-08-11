@@ -365,7 +365,7 @@ class AppDeployer
     log "Previous container: #{@previous_container.presence || '(none)'}"
 
     runtime_port = app.runtime_port
-    name = app.release_container_name(deployment.commit_sha)
+    name = app.release_container_name(deployment.commit_sha, deployment_id: deployment.id)
 
     # A retry can find a same-named candidate from a previous attempt. Removing it
     # blindly is an outage: if that attempt died between publishing the edge and
