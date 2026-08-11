@@ -10,7 +10,16 @@
 # Safe to re-run: seed! is create-if-missing, so an operator's edit wins once the
 # row exists.
 class SeedFleetRecipes < ActiveRecord::Migration[8.0]
+  # FleetRecipes arrives in PR #34. If this migration reaches main first, the next
+  # deploy dies inside db:migrate on a bare NameError — and because Conductor
+  # deploys itself through that path, the symptom is not "the migration did not
+  # run", it is "nothing can deploy". A sentence beats a constant lookup failure.
   def up
+    unless defined?(FleetRecipes)
+      raise "SeedFleetRecipes requires FleetRecipes, which lands in PR #34. " \
+            "Deploy #34 before this migration."
+    end
+
     FleetRecipes.seed!
   end
 

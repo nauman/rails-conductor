@@ -385,6 +385,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_11_090001) do
     t.datetime "created_at", null: false
     t.text "description", default: "", null: false
     t.integer "lock_version", default: 0, null: false
+    t.string "origin"
     t.string "recipe_id", null: false
     t.bigint "runbookable_id", null: false
     t.string "runbookable_type", null: false

@@ -27,6 +27,11 @@ class BackfillJazariFromDeployChecklists < ActiveRecord::Migration[8.0]
   # wrote. Depending on an enclosing transaction makes that guarantee something a
   # caller can remove without noticing.
   def up
+    unless defined?(FleetCanon)
+      raise "BackfillJazariFromDeployChecklists requires FleetCanon, which lands in " \
+            "PR #34. Deploy #34 before this migration."
+    end
+
     ActiveRecord::Base.transaction { backfill! }
   end
 
@@ -60,6 +65,10 @@ class BackfillJazariFromDeployChecklists < ActiveRecord::Migration[8.0]
       runbook.topic       = Jazari::RecipeRegistry.fetch(recipe_id).topic.presence || "Deploy"
       runbook.description = app.deploy_runbook.to_s
       runbook.checklist   = checklist
+      # Provenance, so this backfill does not read as six deliberate divergences
+      # on day one. jazari clears it as soon as an operator edits the row, which
+      # is exactly when the divergence becomes theirs.
+      runbook.origin      = MIGRATION_ACTOR
       runbook.save!
 
       moved += checklist.length
@@ -75,9 +84,17 @@ class BackfillJazariFromDeployChecklists < ActiveRecord::Migration[8.0]
     say "backfilled #{moved} checklist items (#{skipped} already present) across #{apps.count} apps"
   end
 
+  # Deletes only what it can PROVE it wrote. The first version deleted every App
+  # runbook, which would have taken any an operator created after this ran — a
+  # rollback that quietly destroys work nobody asked it to touch.
+  #
+  # Both markers are unambiguous: runs carry `actor_ref: "migration"`, runbooks
+  # carry `origin: "migration"`, and jazari clears that origin the moment anyone
+  # edits the row. So a runbook this migration created and an operator then made
+  # their own is correctly NOT deleted here — it stopped being our artifact.
   def down
     Jazari::Run.where(actor_ref: MIGRATION_ACTOR).delete_all
-    Jazari::Runbook.where(runbookable_type: "App").delete_all
+    Jazari::Runbook.where(runbookable_type: "App", origin: MIGRATION_ACTOR).delete_all
   end
 
   private
