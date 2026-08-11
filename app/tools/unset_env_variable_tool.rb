@@ -10,16 +10,16 @@ class UnsetEnvVariableTool
   include OrgResolvable
 
   DEFINITION = {
-    name: 'unset_env_variable',
-    description: 'Remove an environment variable from an app (idempotent).',
+    name: "unset_env_variable",
+    description: "Remove an environment variable from an app (idempotent).",
     input_schema: {
-      type: 'object',
+      type: "object",
       properties: {
-        app_id:   { type: 'integer', description: 'App id (or use app_name)' },
-        app_name: { type: 'string',  description: 'App name (or use app_id)' },
-        key:      { type: 'string',  description: 'Variable name to remove (UPPER_SNAKE_CASE)' }
+        app_id:   { type: "integer", description: "App id (or use app_name)" },
+        app_name: { type: "string",  description: "App name (or use app_id)" },
+        key:      { type: "string",  description: "Variable name to remove (UPPER_SNAKE_CASE)" }
       },
-      required: [ 'key' ]
+      required: [ "key" ]
     }
   }.freeze
 
@@ -31,7 +31,7 @@ class UnsetEnvVariableTool
     app = find_app(input)
     return Result.fail("App not found: #{input['app_id'] || input['app_name']}") unless app
 
-    key = input['key'].to_s
+    key = input["key"].to_s
     return Result.fail("Missing required param: key") if key.blank?
 
     org = app.organization || resolve_organization(input).first
@@ -63,5 +63,4 @@ class UnsetEnvVariableTool
   end
 
   private
-
 end

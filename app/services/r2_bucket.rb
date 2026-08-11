@@ -6,7 +6,7 @@
 # the Cloudflare dashboard, outside Conductor's audit trail.
 #
 # It is also how the fleet came to run ten backup schedules pointed at
-# `pavelabs-backups`, a bucket that never existed: nothing here could create it,
+# `shared-backups`, a bucket that never existed: nothing here could create it,
 # and nothing checked it was there.
 #
 # Needs a VERIFIED Cloudflare account whose token carries

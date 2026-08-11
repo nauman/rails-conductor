@@ -41,8 +41,8 @@ class Edge
     #   3. a key derived from the host.
     #
     # Step 2 is not a nicety. A route created by `kamal deploy` is keyed on the
-    # kamal service + role (e.g. "starrrs-web"), not on the host. Publishing the
-    # same host under a derived key ("starrrs-com") leaves TWO services claiming
+    # kamal service + role (e.g. "myapp-web"), not on the host. Publishing the
+    # same host under a derived key ("myapp-com") leaves TWO services claiming
     # one hostname instead of replacing the stale one — which is how you turn a
     # 502 into an intermittent 502.
     def service_for(domain)

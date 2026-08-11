@@ -39,7 +39,7 @@ class ConductorStorageTool
         to_service:   { type: "string",  description: "migrate: target service (default 'cloudflare_r2')" },
         limit:        { type: "integer", description: "migrate: max migratable blobs this call (default 1000; repeat until remaining_migratable is 0)" },
         origins:      { type: "array", items: { type: "string" }, description: "set_cors: allowed origins (default ['https://<app.domain>','https://*.<app.domain>'])" },
-        domain:       { type: "string",  description: "connect_domain: the public custom domain to serve the bucket (e.g. assets.calm.page)" },
+        domain:       { type: "string",  description: "connect_domain: the public custom domain to serve the bucket (e.g. assets.my-app.com)" },
         confirm:      { type: "boolean", description: "connect_domain: required to actually publish. Without it, the call returns a preview and does nothing — connect_domain makes the bucket PUBLIC on the internet." }
       },
       required: %w[action]

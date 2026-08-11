@@ -9,7 +9,7 @@ class EnableOnDemandTlsTool
       properties: {
         server_id:    { type: "integer", description: "The host-Caddy server (or server_name)" },
         server_name:  { type: "string",  description: "The host-Caddy server by name (or server_id)" },
-        domain:       { type: "string",  description: "The zone whose subdomains go on-demand, e.g. calm.page (the on-demand subject becomes *.calm.page)" },
+        domain:       { type: "string",  description: "The zone whose subdomains go on-demand, e.g. my-app.com (the on-demand subject becomes *.my-app.com)" },
         ask_upstream: { type: "string",  description: "host:port that serves the ask endpoint — the app's loopback publish, e.g. 127.0.0.1:9080" },
         ask_path:     { type: "string",  description: "Path of the ask endpoint (default /caddy/ask)" },
         subject:      { type: "string",  description: "Override the on-demand subject directly (default *.<domain>)" }

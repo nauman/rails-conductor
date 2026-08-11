@@ -12,7 +12,7 @@ class DeleteDnsRecordTool
     input_schema: {
       type: "object",
       properties: {
-        domain: { type: "string", description: "The record name / FQDN to delete (e.g. old.platepose.com)" }
+        domain: { type: "string", description: "The record name / FQDN to delete (e.g. old.example.com)" }
       },
       required: %w[domain]
     }

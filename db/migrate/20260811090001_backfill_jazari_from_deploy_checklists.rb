@@ -9,7 +9,7 @@
 # Three things this migration will not do, each because it would destroy something:
 #
 #   1. It does not reset `done`. Operators are mid-procedure right now — at the
-#      last census Calm.page was 3 of 12 and Starrrs 13 of 14. A migration that
+#      last census two apps were mid-procedure at 3 of 12 and 13 of 14. A migration that
 #      restarts them erases that work with no trace and no complaint.
 #   2. It does not translate item ids. Every existing id already satisfies
 #      Jazari::Checklist::ID_FORMAT as a string, measured rather than assumed, so

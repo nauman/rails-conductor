@@ -35,7 +35,7 @@ class SshConnection
   #
   #   incompatible character encodings: UTF-8 and BINARY (ASCII-8BIT)
   #
-  # A Starrrs deploy died exactly there. `docker build` had SUCCEEDED; only the
+  # A deploy died exactly there. `docker build` had SUCCEEDED; only the
   # handling of its progress output failed, so a good release was recorded as a
   # failed deploy. Short command output never trips it — only verbose non-ASCII
   # output like a build, which is why it survived every prior deploy.

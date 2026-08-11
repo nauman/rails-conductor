@@ -13,7 +13,7 @@ class App < ApplicationRecord
   #   managed           Conductor's to run — the default, and the only one we chase.
   #   unmanaged         running elsewhere and not adopted yet. A real gap; offer adoption.
   #   pending_migration deliberately running until it becomes something else (e.g. a
-  #                     calm.page theme). Not a gap — a decision with a finish line.
+  #                     my-app.com theme). Not a gap — a decision with a finish line.
   #   placeholder       a name and a domain, nothing more. Exclude from everything.
   # Nagging about a decision already made is how a checklist becomes noise.
   INTENTS = %w[managed unmanaged pending_migration placeholder].freeze
@@ -98,7 +98,7 @@ class App < ApplicationRecord
 
   # The port stored on an app is the HOST port published to Caddy/direct
   # traffic. It is not necessarily the port the process listens on inside the
-  # container (Calm.page is 9080 -> 3000). Rails defaults to 3000; apps with a
+  # container (an app is 9080 -> 3000). Rails defaults to 3000; apps with a
   # different internal listener declare PORT explicitly in their deploy env.
   def runtime_port
     configured = Integer(env_hash["PORT"], exception: false)
@@ -428,7 +428,7 @@ class App < ApplicationRecord
   # The stable key for every infrastructure artifact this app owns — edge route,
   # container, service label, volume prefix. Derived from the immutable id, NOT
   # from name/slug/deploy_method/role, so it survives a rename, a box move, and
-  # a deploy-method switch. `starrrs-web` (kamal service + role) is exactly the
+  # a deploy-method switch. `myapp-web` (kamal service + role) is exactly the
   # form-derived name this replaces.
   def resource_key = "app-#{id}"
 
@@ -548,7 +548,7 @@ class App < ApplicationRecord
 
   # Kamal names its own containers (<service>-<role>-<version>) — never
   # conductor-<slug> — and the `service` label isn't always the slug (an adopted
-  # app with slug "calm-page" can run as service "calmpage"). So resolve the
+  # app with slug "my-app" can run as service "myapp"). So resolve the
   # running container by matching any service candidate against the label — the
   # same lookup ContainerStatus uses — instead of guessing a fixed name.
   def kamal_log_command(n)
@@ -599,7 +599,7 @@ class App < ApplicationRecord
   end
 
   def needs_attention?
-    # An app you've parked (placeholder, or running until it becomes a calm.page theme)
+    # An app you've parked (placeholder, or running until it becomes a my-app.com theme)
     # can't "need attention" — you already decided. Chasing it is how a nag becomes noise.
     return false unless naggable?
     return true if status == "failed" || status_check_error.present?
@@ -632,7 +632,7 @@ class App < ApplicationRecord
   end
 
   # The service label on a running container doesn't always equal the slug: an
-  # adopted app can have slug "calm-page" but Kamal service "calmpage".
+  # adopted app can have slug "my-app" but Kamal service "myapp".
   # Match on the slug AND a separator-stripped variant so status sync finds it.
   def kamal_service_candidates
     [ kamal_service, kamal_service.gsub(/[^a-z0-9]/i, "").downcase ].uniq

@@ -617,7 +617,7 @@ class AppDeployer
     case app.server&.edge_type
     when "kamal_proxy"
       # The proxy targets the container itself, so it MUST move on every
-      # replacement — this is the Starrrs failure.
+      # replacement — this is the observed production failure.
       container = app.container_id.presence
       return fail_step("no container id recorded — cannot repoint the edge") if container.blank?
 

@@ -96,7 +96,7 @@ class EdgeDetector
     if caddy
       detail = "Host Caddy"
       detail += " (Admin API)" if v["CADDY_ADMIN"] == "200"
-      # Flag the exact trap that bit platepose: a kamal-proxy container sitting
+      # Flag the exact trap seen in production: a kamal-proxy container sitting
       # inert behind a Caddy edge.
       detail += " — note: an inert kamal-proxy container is also present" if proxy_present && !proxy_running
       { edge_type: "caddy", edge_detail: detail }
