@@ -113,6 +113,51 @@ class BackfillJazariFromDeployChecklistsTest < ActiveSupport::TestCase
     assert_nil Jazari::Run.find_by(subject_type: "App", subject_id: @app.id)
   end
 
+  # Without provenance the backfill makes every app read as diverged on day one,
+  # and a divergence signal that fires for everything on arrival is noise. It also
+  # cannot be fixed by comparing content: a backfilled runbook GENUINELY differs
+  # from the canon, because it carries the steps the app actually had.
+  test "a backfilled runbook is inherited, not a divergence someone chose" do
+    item("free the port")
+
+    run_migration
+
+    resolved = Jazari.resolve(target: FleetCanon.target_for(@app))
+    assert_equal "migration", resolved.origin
+    assert resolved.inherited?
+    refute resolved.diverged?, "a migration artifact is not an operator's decision"
+  end
+
+  test "an operator editing a backfilled runbook makes the divergence theirs" do
+    item("free the port")
+    run_migration
+
+    target = FleetCanon.target_for(@app)
+    before = Jazari.resolve(target: target)
+    Jazari.customize(target: target, expected_revision: before.revision,
+                     topic: "Our own words", description: "ours", checklist: [])
+
+    after = Jazari.resolve(target: target)
+    assert_nil after.origin
+    assert after.diverged?
+  end
+
+  test "rolling back removes only the rows this migration wrote" do
+    item("free the port")
+    run_migration
+
+    keeper = @org.apps.create!(name: "Handmade", slug: "handmade", server: @server,
+                               deploy_method: "kamal", port: 9083, domain: "handmade.test")
+    keeper_target = FleetCanon.target_for(keeper)
+    Jazari.customize(target: keeper_target, expected_revision: Jazari.resolve(target: keeper_target).revision,
+                     topic: "Written by hand", description: "", checklist: [])
+
+    BackfillJazariFromDeployChecklists.new.tap { |m| m.verbose = false }.down
+
+    assert_nil runbook, "the artifact it created should go"
+    assert Jazari.resolve(target: keeper_target).custom?, "an operator's runbook must survive a rollback"
+  end
+
   test "the runbook points at the recipe the app's shape resolves to" do
     item("free the port")
 
