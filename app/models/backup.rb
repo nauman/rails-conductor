@@ -39,7 +39,7 @@ class Backup < ApplicationRecord
   #
   # This used to be `<bucket_name>_<timestamp>.sql.gz`, i.e. named after the
   # DESTINATION. With one shared bucket for the whole fleet that meant every app
-  # wrote objects called `pavelabs-backups_<ts>.sql.gz`: you could not tell whose
+  # wrote objects called `acme-backups_<ts>.sql.gz`: you could not tell whose
   # dump you were holding, and — because the stamp is second-resolution and every
   # "daily" backup fires in the same minute — two apps finishing together wrote
   # the SAME key. R2 PUT is last-write-wins, so one app's backup replaced

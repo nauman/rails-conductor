@@ -9,7 +9,7 @@
 # Three things this migration will not do, each because it would destroy something:
 #
 #   1. It does not reset `done`. Operators are mid-procedure right now — at the
-#      last census Calm.page was 3 of 12 and Starrrs 13 of 14. A migration that
+#      last census two apps were mid-procedure at 3 of 12 and 13 of 14. A migration that
 #      restarts them erases that work with no trace and no complaint.
 #   2. It does not translate item ids. Every existing id already satisfies
 #      Jazari::Checklist::ID_FORMAT as a string, measured rather than assumed, so
@@ -20,7 +20,15 @@
 # It raises rather than fixing forward if the item count does not survive the
 # move. A backfill that silently loses steps is worse than one that stops.
 class BackfillJazariFromDeployChecklists < ActiveRecord::Migration[8.0]
-  MIGRATION_ACTOR = "migration"
+  # Version-scoped on purpose. A bare "migration" is reusable — any later migration
+  # or system process choosing it would have its runs deleted by #down below. The
+  # value names WHICH migration acted, which is also more honest attribution.
+  MIGRATION_ACTOR = "migration:20260811090001"
+
+  # What the first version of this migration wrote, before the value was scoped.
+  # 20260811171026 backfills these; #down matches both so a rollback is complete
+  # on a host that ran either version.
+  LEGACY_ACTOR = "migration"
 
   # Its own transaction, rather than relying on the one the migration runner opens:
   # the census below is only a safety gate if a shortfall un-writes what it already
@@ -92,9 +100,18 @@ class BackfillJazariFromDeployChecklists < ActiveRecord::Migration[8.0]
   # carry `origin: "migration"`, and jazari clears that origin the moment anyone
   # edits the row. So a runbook this migration created and an operator then made
   # their own is correctly NOT deleted here — it stopped being our artifact.
+  # `down` is read from THIS file at rollback time, so unlike `up` an edit here does
+  # take effect on a host that already ran the migration.
+  #
+  # Scoped to runs whose subject is an App backfilled by this migration, rather than
+  # to the actor value alone: deleting every run that merely shares an actor string
+  # would take a later migration's work with it.
   def down
-    Jazari::Run.where(actor_ref: MIGRATION_ACTOR).delete_all
-    Jazari::Runbook.where(runbookable_type: "App", origin: MIGRATION_ACTOR).delete_all
+    actors = [ MIGRATION_ACTOR, LEGACY_ACTOR ]
+    backfilled = Jazari::Runbook.where(runbookable_type: "App", origin: [ MIGRATION_ACTOR, LEGACY_ACTOR ])
+
+    Jazari::Run.where(actor_ref: actors, subject_type: "App", subject_id: backfilled.select(:runbookable_id)).delete_all
+    backfilled.delete_all
   end
 
   private

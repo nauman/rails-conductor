@@ -64,7 +64,7 @@ class ResidueDetector
   private
 
   # Containers wearing this app's service label from an OLDER shape. This is the
-  # Starrrs case: an app moved form and the previous form's container kept
+  # canonical case: an app moved form and the previous form's container kept
   # running, invisible because nothing compared it to anything.
   def check_stale_revision_containers
     out = capture(
@@ -88,7 +88,8 @@ class ResidueDetector
     end
   end
 
-  # Containers left behind by a FAILED boot. calm.page accumulated eleven — three
+  # Containers left behind by a FAILED boot. One app on this fleet accumulated
+  # eleven — three
   # `Created` (never started) plus four kamal `_replaced_` leftovers — and this
   # detector called the box clean for all of them, because every one carries an
   # empty `conductor.infra_revision` and #check_stale_revision_containers skips a
@@ -201,8 +202,8 @@ class ResidueDetector
   end
 
   # Comparing routes only to EACH OTHER left the obvious question unasked: does the
-  # route point at anything real? calm.page moved to another box and left
-  # `calmpage-web -> 35d45b624d67:3000` registered behind it; every request
+  # route point at anything real? An app moved to another box and left
+  # `<service>-web -> <container-id>:3000` registered behind it; every request
   # reaching that box for the host 502'd, this detector reported a clean box for
   # days, and it was finally found by hand.
   def check_edge_targets(rows)

@@ -5,7 +5,7 @@
 # therefore a hard prerequisite on EVERY box that holds a database, and it is not
 # installed by default anywhere.
 #
-# railslink's box found this the expensive way: the backup ran nightly, dumped the
+# One box found this the expensive way: the backup ran nightly, dumped the
 # database, gzipped it, and only then failed with `aws: command not found` — after
 # all the work, at 3am, on a box nobody was watching.
 #
@@ -40,7 +40,7 @@ class BackupPrerequisites
   #
   # Two routes are needed because apt is not enough: Ubuntu 24.04 (noble) ships
   # NO awscli package at all (`apt-cache policy awscli` → `Candidate: (none)`),
-  # which is exactly why railslink's box could never satisfy this. apt is still
+  # which is exactly why that box could never satisfy this. apt is still
   # tried first where it works — a distro package is patched by the distro.
   #
   # Neither route is retried. If the CLI is still absent after an installer

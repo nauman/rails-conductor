@@ -42,7 +42,7 @@ class Credential < ApplicationRecord
   # A region, not a host. Pasting the SMTP endpoint here (`email-smtp.<region>.amazonaws.com`)
   # is an easy mistake and fails silently: SesClient interpolates it into
   # `email-smtp.#{region}.amazonaws.com`, so Verify dials a doubled hostname that
-  # resolves to nothing. Caught in production once (calm.page, 2026-07-28).
+  # resolves to nothing. Caught in production once.
   # Format-only, deliberately: it rejects hostnames (dots can't match) without
   # pinning a region list that AWS keeps extending. The first segment is [a-z]+,
   # not [a-z]{2}, so longer prefixes like eusc-de-east-1 still pass.

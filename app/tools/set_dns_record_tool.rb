@@ -13,7 +13,7 @@ class SetDnsRecordTool
     input_schema: {
       type: "object",
       properties: {
-        domain:  { type: "string",  description: "The record name / FQDN (e.g. old.platepose.com)" },
+        domain:  { type: "string",  description: "The record name / FQDN (e.g. old.example.com)" },
         content: { type: "string",  description: "Target: an IP for A, a hostname for CNAME/MX, or the full value for TXT (SPF/DKIM/verification tokens)" },
         type:    { type: "string",  description: "Record type (default A). One of: A, AAAA, CNAME, TXT, MX" },
         priority: { type: "integer", description: "MX priority (0-65535), REQUIRED for type=MX and rejected for any other type. E.g. 10 for an SES custom MAIL-FROM bounce host." },

@@ -108,7 +108,7 @@ class CaddyClient
   end
 
   # Turn on Caddy on-demand TLS for a (usually wildcard) subject, gated by an
-  # `ask` endpoint. This is what lets `*.calm.page` subdomains each get their own
+  # `ask` endpoint. This is what lets `*.my-app.com` subdomains each get their own
   # Let's Encrypt cert on first request WITHOUT a proxied wildcard at Cloudflare
   # (Enterprise-only) or a DNS-challenge wildcard cert.
   #
@@ -276,7 +276,7 @@ class CaddyClient
   end
 
   def route_id_for(domain)
-    # A wildcard (`*.calm.page`) and its apex (`calm.page`) slug to the same string
+    # A wildcard (`*.my-app.com`) and its apex (`my-app.com`) slug to the same string
     # once the `*.` is stripped, which would make one route overwrite the other.
     # Prefix wildcards so apex + wildcard are DISTINCT routes for the same app.
     wildcard = domain.to_s.start_with?("*.")

@@ -32,7 +32,8 @@ class KamalOps
   # "Can kamal actually answer right now?" — not merely "does a file exist". The
   # edge type is deliberately NOT consulted: a disabled proxy is still a kamal app.
   #
-  # This distinction is the whole point. InventList's config deliberately points
+  # This distinction is the whole point. An externally-driven app's config
+  # deliberately points
   # its hosts at `<app>-does-not-deploy-via-kamal.invalid` (RFC 2606, can never
   # resolve) so `kamal deploy` is impossible. But nuking the HOSTS breaks every
   # kamal verb, not just deploy — so an agent that ran `kamal app logs`, watched it

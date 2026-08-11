@@ -26,7 +26,7 @@ class FleetRecipes
         roll cannot work — there is a brief downtime by design. Worse, when the container
         name is already taken kamal RENAMES the incumbent to `<name>_replaced_<hash>`, and
         `kamal app stop` then matches nothing while the renamed container keeps the port.
-        calm.page failed deploys 292, 294 and 295 exactly that way.
+        A proxy-less app on this fleet failed three consecutive deploys exactly that way.
 
         Deploying with a constant version (`KAMAL_VERSION=latest`) guarantees the name
         collision and leaves the release unidentifiable from the image tag. Use sha tags.
@@ -52,7 +52,7 @@ class FleetRecipes
         The edge targets a CONTAINER, so it must be republished by every deploy path —
         a deploy that skips it leaves the proxy pointing at a container that no longer
         exists, which reads as an intermittent 502 rather than a clean failure. Route
-        keys are `<service>-<role>` (`starrrs-web`), NOT derived from the host, so
+        keys are `<service>-<role>` (e.g. `myapp-web`), NOT derived from the host, so
         publishing under a host-derived key leaves two services claiming one domain.
       MD
       checklist: [
@@ -71,8 +71,8 @@ class FleetRecipes
         artifact contract may still be kamal, but Conductor must not drive the deploy.
 
         ## Hidden truth
-        A kamal config can be BUILD config only. InventList's `servers:` deliberately
-        point at a reserved `.invalid` host so `kamal deploy` is impossible — which also
+        A kamal config can be BUILD config only. An externally-driven app on this fleet
+        points its `servers:` at a reserved `.invalid` host so `kamal deploy` is impossible — which also
         blocks every other kamal verb, so ops fall back to docker. That is a
         configuration choice, NOT evidence that kamal is inapplicable; an agent read the
         DNS failure and wrongly concluded the harness could not be used at all.

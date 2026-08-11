@@ -384,10 +384,10 @@ class KamalDeployer
   # never block the deploy on it — a genuine conflict still surfaces at boot.
   # Forced invariant: a host-Caddy box runs NO kamal-proxy. kamal-proxy would
   # seize :80/:443 and collide with the host Caddy fronting the shared box
-  # (calm.page deploy #185 did exactly this). On a caddy-edge target the config
+  # (a caddy-edge app did exactly this once). On a caddy-edge target the config
   # MUST turn kamal-proxy off EXPLICITLY — merely omitting the `proxy:` block is
   # not enough, kamal 2.x still boots it. Assert a literal `proxy: false` is present
-  # in config/deploy*.yml (calm.page's is inside a Caddy-mode ERB branch; platepose
+  # in config/deploy*.yml (one app nests it inside a Caddy-mode ERB branch, another
   # sets it flat — both satisfy the grep). If absent, refuse rather than let the
   # collision reach the box. Non-caddy targets (or an undetected edge) are exempt.
   def verify_proxy_off_on_caddy_edge
@@ -399,7 +399,7 @@ class KamalDeployer
     fail_with("Refusing to deploy #{app.name} to #{deploy_server.name}: it fronts with host Caddy, so " \
               "kamal-proxy must be OFF, but no explicit `proxy: false` is set in config/deploy*.yml. " \
               "`kamal deploy` would boot kamal-proxy on :80/:443 and collide with host Caddy. Add a " \
-              "role-level `proxy: false` (see calm.page / platepose).")
+              "role-level `proxy: false` (see any caddy-edge app in this fleet).")
     false
   end
 
@@ -416,7 +416,7 @@ class KamalDeployer
   end
 
   # A deploy that fails leaves a container behind, and nothing ever removed them:
-  # calm.page accumulated ELEVEN — three never-started plus four kamal `_replaced_`
+  # One app accumulated ELEVEN — three never-started plus four kamal `_replaced_`
   # leftovers — and detecting them was not a solution. The deploy that creates the
   # junk is the thing that should clear it, and it knows which containers are its own.
   #
@@ -426,7 +426,7 @@ class KamalDeployer
   # one, and never another app's.
   #
   # Removing a stopped container costs no rollback: `kamal rollback <version>` boots
-  # from the retained IMAGE, and every calm.page release image was still present when
+  # from the retained IMAGE, and every release image was still present when
   # its eleven containers were removed.
   def prune_dead_boot_artifacts
     return unless fixed_port_app? || app.kamal?
@@ -453,8 +453,8 @@ class KamalDeployer
   # is already taken kamal RENAMES the incumbent to `<name>_replaced_<hash>` before
   # booting the replacement. A renamed container keeps running and keeps holding
   # the published port, so the stop above matches nothing and the boot still dies
-  # with "port is already allocated". calm.page deploys 292/294/295 failed exactly
-  # this way while `calmpage-web-latest_replaced_e0d5aad` sat healthy on :9080.
+  # with "port is already allocated". Three consecutive deploys failed exactly this
+  # way while a `<service>-web-latest_replaced_<hash>` container sat healthy on the port.
   #
   # So free the port by what HOLDS it rather than by what it is called — and only
   # if it belongs to this app. A fixed host port is exclusive, so a STRANGER on it
@@ -489,7 +489,7 @@ class KamalDeployer
 
   # Kamal names containers `<service>-web-<version>`, so the fallback must anchor
   # on the role separator. A bare `start_with?` let an app whose service is a
-  # PREFIX of another's (`calm` vs `calmpage`) claim a stranger's container and
+  # PREFIX of another's (`calm` vs `myapp`) claim a stranger's container and
   # stop it — the precise opposite of what this step is for.
   def owns_container?(name, service)
     candidates = ([ app.resource_key ] + Array(app.kamal_service_candidates)).compact.map(&:to_s)
@@ -510,7 +510,7 @@ class KamalDeployer
   # var — a naming convention, not the condition. Apps that publish a fixed port
   # any other way (straight `publish:` in deploy.yml) skipped the stop-first step
   # and failed EVERY redeploy with "Bind for 0.0.0.0:<port> failed: port is
-  # already allocated". That is what kept calm.page and platepose failing.
+  # already allocated". That is what kept the fixed-port apps failing.
   #
   # The structural signal is the edge: on a host-Caddy box kamal-proxy is off, so
   # the container must publish a fixed port for Caddy to reach it. No proxy means
@@ -522,7 +522,7 @@ class KamalDeployer
   # Safety net for the stop-first path. Stopping the old container BEFORE boot means
   # a failed deploy leaves the app with NOTHING running — strictly worse than a
   # normal failed roll where the old container keeps serving (this is what briefly
-  # took calm.page down: the image was fine, a lock race just failed the run). So on
+  # took an app down: the image was fine, a lock race just failed the run). So on
   # a post-stop failure, best-effort `kamal app boot` to bring the app back up
   # (boots the latest good version kamal retains). Only fires when we actually
   # stopped first; never raises — recovery must not mask the original failure.
@@ -731,7 +731,7 @@ class KamalDeployer
       # (`kamal-local-docker-container`), but its endpoint is baked in from the
       # DOCKER_HOST of whichever deploy created it. With one shared buildx config,
       # app A's deploy inherits app B's builder and tries to build on B's server:
-      # calm.page's deploy 154 failed dialling InventList's host as root, using an
+      # One deploy failed dialling ANOTHER app's host as root, using an
       # identity for an app it has nothing to do with. Per-target state means a
       # record made for one host can never be handed to another.
       env["BUILDX_CONFIG"] = buildx_config_dir

@@ -90,7 +90,7 @@ class BackfillJazariFromDeployChecklistsTest < ActiveSupport::TestCase
     run = Jazari::Run.find_by(subject_type: "App", subject_id: @app.id)
     assert run, "expected a backfilled run"
     assert_equal "completed", run.outcome
-    assert_equal "migration", run.actor_ref
+    assert_equal BackfillJazariFromDeployChecklists::MIGRATION_ACTOR, run.actor_ref
     assert_equal at.utc.to_i, run.started_at.to_i
     assert_equal (at + 1.hour).utc.to_i, run.finished_at.to_i
     assert_equal 2, run.ticks.length
@@ -123,7 +123,7 @@ class BackfillJazariFromDeployChecklistsTest < ActiveSupport::TestCase
     run_migration
 
     resolved = Jazari.resolve(target: FleetCanon.target_for(@app))
-    assert_equal "migration", resolved.origin
+    assert_equal BackfillJazariFromDeployChecklists::MIGRATION_ACTOR, resolved.origin
     assert resolved.inherited?
     refute resolved.diverged?, "a migration artifact is not an operator's decision"
   end

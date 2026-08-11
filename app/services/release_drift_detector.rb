@@ -170,15 +170,15 @@ class ReleaseDriftDetector
 
   # An app's own releases, separated from the accessories sitting beside them.
   #
-  # `inventlist-db` (pgvector), `railslink-redis` (redis) and `conductor-postgres`
+  # `otherapp-db` (pgvector), `otherapp-redis` (redis) and `conductor-postgres`
   # all match the app's name prefix, and all run MUTABLE version tags — pg18,
   # 7-alpine, 16. Counting them as releases made every app with a database
   # report "runs a mutable tag, cannot identify the commit", which is a wrong
   # answer dressed as a careful one.
   #
   # The discriminator is the image REPOSITORY: an app's release image is
-  # published under a name derived from the app (ghcr.io/x/inventlist,
-  # naumantariq/kuickr, conductor/starrrs), while an accessory runs a stock
+  # published under a name derived from the app (ghcr.io/x/otherapp,
+  # naumantariq/otherapp, conductor/myapp), while an accessory runs a stock
   # upstream image that never mentions it.
   # Container roles that are datastores rather than the app. An app whose only
   # matching container is its database is NOT RUNNING — reporting `unknown`
@@ -212,8 +212,8 @@ class ReleaseDriftDetector
     tokens.any? { |t| t.present? && haystack.include?(t) }
   end
 
-  # Separators are not identity. An app slugged `calm-page` publishes to
-  # `naumantariq/calmpage` and runs containers named `calmpage-web-…`; matching
+  # Separators are not identity. An app slugged `my-app` publishes to
+  # `naumantariq/myapp` and runs containers named `myapp-web-…`; matching
   # literally made a healthy app unidentifiable.
   def normalize(str) = str.to_s.downcase.gsub(/[^a-z0-9]/, "")
 
@@ -227,7 +227,7 @@ class ReleaseDriftDetector
   #
   # A longer match by ANOTHER app on this box wins. The legacy scheme is
   # `conductor-<slug>`, so the app whose slug is literally "conductor" would
-  # otherwise swallow `conductor-starrrs` and `conductor-postgres` — every other
+  # otherwise swallow `conductor-myapp` and `conductor-postgres` — every other
   # app's legacy container on a shared box.
   def ours?(name)
     mine = longest_prefix_match(prefixes_for(@app), name)
@@ -238,7 +238,7 @@ class ReleaseDriftDetector
 
   def prefixes_for(app) = [ app.resource_key, app.container_name, app.slug ].compact_blank
 
-  # Compared with separators removed, so `calm-page` matches `calmpage-web-…`.
+  # Compared with separators removed, so `my-app` matches `myapp-web-…`.
   # Length is measured on the NORMALISED prefix, so "more specific wins" still
   # compares like with like when two apps' names differ only in punctuation.
   def longest_prefix_match(prefixes, name)

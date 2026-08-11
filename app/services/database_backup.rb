@@ -37,7 +37,7 @@ class DatabaseBackup
     #
     # The upload needs the AWS CLI (R2 is S3-compatible; there is no R2 CLI).
     # This used to be discovered at the END — dump the database, gzip it, then
-    # fail with `aws: command not found`, which is how railslink's nightly backup
+    # fail with `aws: command not found`, which is how otherapp's nightly backup
     # spent every night doing the expensive part and throwing it away. Check
     # first, install once if missing, and fail fast with something actionable.
     # A `local` backup keeps the dump on the server and never speaks S3, so it
@@ -156,7 +156,7 @@ class DatabaseBackup
   # The app's live DATABASE_URL, resolved most-authoritative first:
   #   1. Conductor's derived URL (dedicated DBs it manages), then
   #   2. the container's DATABASE_URL env (Conductor-managed apps set it), then
-  #   3. ASK THE APP — older/unregistered apps (e.g. Kuickr) carry no derived URL
+  #   3. ASK THE APP — older/unregistered apps (e.g. an older app) carry no derived URL
   #      and no DATABASE_URL env; they configure the DB via database.yml, but
   #      ActiveRecord still resolves the real connection, so the app reports it.
   def resolve_database_url(ssh)

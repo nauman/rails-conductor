@@ -50,7 +50,7 @@ class BackupDefaults
   private
 
   # Never auto-protect an app the operator has parked — a placeholder or one awaiting
-  # migration into a calm.page theme. Acting on those is the same failure as nagging
+  # migration into a my-app.com theme. Acting on those is the same failure as nagging
   # about them.
   def protectable? = @app.naggable? && @app.organization.present?
 

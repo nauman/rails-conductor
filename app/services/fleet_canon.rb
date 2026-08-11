@@ -7,8 +7,9 @@
 #
 # It exists because an app's shape was only ever inferable from prose. `deploy_method`
 # conflates two independent facts — the ARTIFACT contract (how the image is built and
-# addressed) and the DRIVER (who performs the roll) — which is why InventList cannot
-# record the truth: setting it to "docker" flips a residue heuristic on and
+# addressed) and the DRIVER (who performs the roll) — which is why an
+# externally-driven app cannot record the truth: setting it to "docker" flips a
+# residue heuristic on and
 # manufactures false findings against a healthy app. Splitting the axes lets the
 # record be true without changing any heuristic's meaning.
 #
