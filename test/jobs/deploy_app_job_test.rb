@@ -14,13 +14,18 @@ class DeployAppJobTest < ActiveSupport::TestCase
     app.deployments.create!
   end
 
-  test "dispatches kamal apps to KamalDeployer" do
+  test "dispatches Conductor-driven Kamal artifacts through AppDeployer" do
     deployment = deployment_for("kamal")
     called = nil
-    KamalDeployer.stub(:new, ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = :kamal }; obj }) do
-      DeployAppJob.new.perform(deployment.id)
+    app_deployer = ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = :conductor }; obj }
+
+    KamalDeployer.stub(:new, ->(*) { flunk "Kamal is an ops utility, not Conductor's deploy driver" }) do
+      AppDeployer.stub(:new, app_deployer) do
+        DeployAppJob.new.perform(deployment.id)
+      end
     end
-    assert_equal :kamal, called
+
+    assert_equal :conductor, called
   end
 
   test "dispatches native apps to NativeDeployer" do
@@ -62,18 +67,20 @@ class DeployAppJobTest < ActiveSupport::TestCase
     assert_match(/re-entered/i, deployment.log.to_s)
   end
 
-  test "a fresh self-managed deploy (not yet deploying) still runs" do
+  test "a fresh self-managed in-product deploy is refused" do
     app = @org.apps.create!(name: "conductor2", slug: "conductor2", server: @server,
                             deploy_method: "kamal", repository_url: "https://example.com/r.git",
                             self_managed: true)
     deployment = app.deployments.create! # status defaults to pending, not "deploying"
 
-    called = false
-    KamalDeployer.stub(:new, ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = true }; obj }) do
-      DeployAppJob.new.perform(deployment.id)
+    AppDeployer.stub(:new, ->(*) { flunk "self-managed deploy must stop before dispatch" }) do
+      KamalDeployer.stub(:new, ->(*) { flunk "self-managed deploy must stop before dispatch" }) do
+        DeployAppJob.new.perform(deployment.id)
+      end
     end
 
-    assert called, "a first-run self-managed deploy must proceed normally"
+    assert_equal "failed", deployment.reload.status
+    assert_match(/deploy from CI, not in-product/, deployment.failure_reason)
   end
 
   # The infinite-handoff hole: the reconciler finalizes the row to "succeeded" on

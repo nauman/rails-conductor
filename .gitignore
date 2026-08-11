@@ -39,6 +39,7 @@
 .inventlist.yml
 .claude/
 .kuickr/
+.worktrees/
 
 # Rust build artifacts (never commit)
 conductor-cli/target/
