@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fleet-private identifiers must not enter this PUBLIC repo. Scans the STAGED diff
+# only (added lines), so a pre-existing occurrence in a touched file does not block
+# an unrelated commit. See bin/privacy-check for the denylist location and why it is
+# deliberately not committed. Escape hatch: git commit --no-verify.
+set -uo pipefail
+exec "$(git rev-parse --show-toplevel)/bin/privacy-check" --staged

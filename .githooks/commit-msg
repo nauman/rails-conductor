@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# The message is where most of the leakage happened: incident numbers, app names and
+# mid-procedure counts were narrated into commit messages by people who knew the rule.
+# A file-only check would have caught none of it.
+set -uo pipefail
+exec "$(git rev-parse --show-toplevel)/bin/privacy-check" "$1"

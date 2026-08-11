@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Blocks fleet-private identifiers from entering a PUBLIC repo.
+#
+# This exists because the rule already existed and was still broken: app names,
+# incident numbers, container names and mid-procedure checklist counts reached a
+# public repo in code comments and commit messages, written by people who knew the
+# rule. A convention that depends on remembering is not a control.
+#
+# (This file's own first commit was refused by this hook, because the example in the
+#  hint below named a real app. The example is a placeholder now.)
+#
+# The DENYLIST IS NOT IN THIS REPO, deliberately: a committed list of the names you
+# are protecting publishes exactly what it protects. It lives in `.git/privacy-denylist`,
+# which git can never track. A clone without one is not blocked — an outside
+# contributor has no fleet to leak, and a silent skip beats a hook everybody disables.
+#
+#   Usage:  bin/privacy-check <file>...        # scan files
+#           bin/privacy-check --staged          # scan the staged diff
+#
+#   Set up (once, per machine):
+#       printf '%s\n' myapp.example otherapp acme > .git/privacy-denylist
+#   Allow specific strings that only LOOK private (e.g. a product URL you publish):
+#       printf '%s\n' 'docs.example.com' > .git/privacy-allowlist
+#
+# Escape hatch: `git commit --no-verify`. Use it when you mean to publish something.
+set -uo pipefail
+
+GIT_DIR="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
+DENY="$GIT_DIR/privacy-denylist"
+ALLOW="$GIT_DIR/privacy-allowlist"
+
+[ -s "$DENY" ] || exit 0   # no list on this machine → nothing to enforce
+
+# One extended-regex alternation, case-insensitive, comments and blanks stripped.
+patterns="$(grep -vE '^\s*(#|$)' "$DENY" | paste -sd'|' -)"
+[ -n "$patterns" ] || exit 0
+
+scan() { # $1 = label, stdin = content
+  local label="$1" hits
+  hits="$(grep -inE "$patterns" || true)"
+  [ -n "$ALLOW" ] && [ -s "$ALLOW" ] && hits="$(printf '%s\n' "$hits" | grep -viFf "$ALLOW" || true)"
+  [ -z "${hits//[[:space:]]/}" ] && return 0
+
+  echo "privacy-check: fleet-private identifiers found in $label" >&2
+  printf '%s\n' "$hits" | sed 's/^/  /' >&2
+  return 1
+}
+
+status=0
+
+if [ "${1:-}" = "--staged" ]; then
+  # Added lines only: existing occurrences are a separate cleanup, and blocking on
+  # them would make every unrelated commit in a touched file impossible.
+  added="$(git diff --cached --unified=0 --diff-filter=ACM | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+  printf '%s\n' "$added" | scan "staged changes" || status=1
+else
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    scan "$f" < "$f" || status=1
+  done
+fi
+
+if [ "$status" -ne 0 ]; then
+  cat >&2 <<'HINT'
+
+  This repository is PUBLIC. Keep fleet specifics out of code, comments, docs,
+  tests and commit messages: name the MECHANISM, not the app.
+
+    instead of:  <app-name> deploys 292/294/295 failed this way
+    write:       three consecutive deploys failed this way
+
+  Genuinely meant to publish it? git commit --no-verify
+HINT
+fi
+
+exit "$status"
