@@ -96,6 +96,17 @@ class App < ApplicationRecord
     env_hash["DOCKER_NETWORK"].presence || env_hash["KAMAL_NETWORK"].presence || "kamal"
   end
 
+  # The port stored on an app is the HOST port published to Caddy/direct
+  # traffic. It is not necessarily the port the process listens on inside the
+  # container (Calm.page is 9080 -> 3000). Rails defaults to 3000; apps with a
+  # different internal listener declare PORT explicitly in their deploy env.
+  def runtime_port
+    configured = Integer(env_hash["PORT"], exception: false)
+    configured&.between?(1, 65_535) ? configured : 3000
+  end
+
+  def published_port = port || runtime_port
+
   # The provisioned dedicated database backing this app ON a given server
   # (dedicated mode). Server-scoped because during a transfer the app has a
   # dedicated DB on BOTH the source and target box (same container name), so the

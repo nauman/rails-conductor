@@ -112,6 +112,24 @@ class DockerRollbackTest < ActiveSupport::TestCase
     assert_equal "127.0.0.1:3000", published.first[:upstream]
   end
 
+  test "a caddy rollback publishes the host port to the Rails runtime port" do
+    @app.server.update!(edge_type: "caddy")
+    @app.update!(port: 9080)
+    published = []
+    fake_edge = Object.new
+    fake_edge.define_singleton_method(:publish) { |**kw| published << kw; { route_id: "r1" } }
+    ssh = FakeSsh.new
+
+    Edge.stub(:for, ->(*, **) { fake_edge }) do
+      DockerRollback.new(@app, @deployment, ssh: ssh).rollback!("abc1234")
+    end
+
+    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    assert_includes run, "-p 9080:3000"
+    assert_includes run, "-e PORT=3000"
+    assert_equal "127.0.0.1:9080", published.first[:upstream]
+  end
+
   test "a container that exits immediately fails the rollback" do
     ssh = FakeSsh.new(container: "")
 

@@ -233,6 +233,19 @@ class AppDeployer
   # here is the boundary, not a nicety.
   def esc(value) = Shellwords.escape(value.to_s)
 
+  # App#deploy_env_pairs includes Conductor-derived values such as the
+  # dedicated DATABASE_URL. Reading EnvVariable rows directly silently omitted
+  # those values from plain-docker and Conductor-driven Kamal artifacts.
+  def deploy_env_flags(redacted: false)
+    secret_keys = app.deploy_secret_keys(server: app.server)
+    app.deploy_env_pairs(server: app.server).filter_map do |key, value|
+      next if %w[PORT RAILS_ENV RAILS_LOG_TO_STDOUT].include?(key)
+
+      rendered = redacted && secret_keys.include?(key) ? "[REDACTED]" : Shellwords.escape(value.to_s)
+      "-e #{key}=#{rendered}"
+    end.join(" ")
+  end
+
   # Stop whatever is actually serving, resolved by label — not just the fixed
   # name. An app that previously deployed zero-downtime runs as
   # app-<id>-r<rev>-<sha>, and it can fall back to this path by losing its
@@ -253,7 +266,8 @@ class AppDeployer
   end
 
   def start_container
-    port = app.port || 3000
+    published_port = app.published_port
+    runtime_port = app.runtime_port
 
     # Kamal-compatible labels (ADR 0003): `kamal app logs/exec/console` locate a
     # container by its `service` label, never by name — so labelling here is what
@@ -268,21 +282,21 @@ class AppDeployer
       "--label destination=production",
       "--label conductor.infra_revision=#{app.infra_revision}",
       "--label conductor.release=#{Shellwords.escape(release_tag)}",
-      "-p #{port}:#{port}"
+      "-p #{published_port}:#{runtime_port}"
     ]
     # Join the shared docker network so a container-name DB host (conductor-postgres)
     # resolves — without it the app lands on the default bridge and crash-loops on
     # `could not translate host name`.
     prefix << "--network #{esc(app.deploy_network)}" if app.deploy_network.present?
     suffix = [
-      "-e PORT=#{port}",
+      "-e PORT=#{runtime_port}",
       "-e RAILS_ENV=production",
       "-e RAILS_LOG_TO_STDOUT=true",
       esc(image_ref(release_tag))
     ]
-    docker_run = (prefix + [ app.env_variables.map(&:to_docker_env).join(" ") ] + suffix).join(" ")
+    docker_run = (prefix + [ deploy_env_flags ] + suffix).join(" ")
     # Redact secret env values in the logged/broadcast copy.
-    display    = (prefix + [ app.env_variables.map(&:to_docker_env_redacted).join(" ") ] + suffix).join(" ")
+    display    = (prefix + [ deploy_env_flags(redacted: true) ] + suffix).join(" ")
 
     if run(docker_run, display: display)
       # Get container ID
@@ -350,7 +364,7 @@ class AppDeployer
     @previous_container = resolve_serving_container
     log "Previous container: #{@previous_container.presence || '(none)'}"
 
-    port = app.port || 3000
+    runtime_port = app.runtime_port
     name = app.release_container_name(deployment.commit_sha)
 
     # A retry can find a same-named candidate from a previous attempt. Removing it
@@ -377,9 +391,9 @@ class AppDeployer
       "--label conductor.release=#{Shellwords.escape(release_tag)}",
       "--label conductor.candidate=true"
     ]
-    suffix = [ "-e PORT=#{port}", "-e RAILS_ENV=production", "-e RAILS_LOG_TO_STDOUT=true", image_ref(release_tag) ]
-    cmd = (prefix + [ app.env_variables.map(&:to_docker_env).join(" ") ] + suffix).join(" ")
-    display = (prefix + [ app.env_variables.map(&:to_docker_env_redacted).join(" ") ] + suffix).join(" ")
+    suffix = [ "-e PORT=#{runtime_port}", "-e RAILS_ENV=production", "-e RAILS_LOG_TO_STDOUT=true", image_ref(release_tag) ]
+    cmd = (prefix + [ deploy_env_flags ] + suffix).join(" ")
+    display = (prefix + [ deploy_env_flags(redacted: true) ] + suffix).join(" ")
 
     return false unless run(cmd, display: display)
 
@@ -408,7 +422,7 @@ class AppDeployer
       port = candidate_host_port
       raise "no free host port in this app's candidate window" if port.nil?
 
-      parts = [ "-p 127.0.0.1:#{port}:#{app.port || 3000}" ]
+      parts = [ "-p 127.0.0.1:#{port}:#{app.runtime_port}" ]
       parts << "--network #{Shellwords.escape(app.deploy_network)}" if app.deploy_network.present?
       parts
     end
@@ -449,7 +463,7 @@ class AppDeployer
   end
 
   def candidate_health_url
-    port = app.port || 3000
+    port = app.runtime_port
     return "http://127.0.0.1:#{candidate_host_port}#{app.health_check_path}" unless proxy_targets_container?
 
     run("docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' #{Shellwords.escape(@candidate_name)}")
@@ -499,8 +513,7 @@ class AppDeployer
   def health_check
     return true if app.health_check_path.blank?
 
-    port = app.port || 3000
-    url = "http://localhost:#{port}#{app.health_check_path}"
+    url = "http://localhost:#{app.published_port}#{app.health_check_path}"
 
     # Wait for container to be ready (max 60 seconds)
     log "Waiting for health check at #{url}"
@@ -608,7 +621,7 @@ class AppDeployer
       container = app.container_id.presence
       return fail_step("no container id recorded — cannot repoint the edge") if container.blank?
 
-      publish_edge("#{container}:#{app.port || 3000}")
+      publish_edge("#{container}:#{app.runtime_port}")
     when "caddy"
       # Caddy targets a loopback host:port. On the zero-downtime path that is the
       # candidate's ephemeral port; on the stop-first path the app's own port is
