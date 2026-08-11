@@ -475,11 +475,13 @@ class App < ApplicationRecord
   # Not a git tag and unrelated to the commit being deployed.
   def infra_identity = "#{id}.#{infra_revision}"
 
-  # Container name for a given release. Carries the revision so residue is
-  # detectable by arithmetic: any container whose revision isn't current is
-  # stale by definition.
-  def release_container_name(sha = nil)
-    [ resource_key, "r#{infra_revision}", sha.presence&.first(7) ].compact.join("-")
+  # Container name for a given deployment. Carries the revision so residue is
+  # detectable by arithmetic, plus the deployment id so a same-commit config
+  # redeploy can boot beside the currently-serving container. The release SHA
+  # alone is not unique when env, edge, or other runtime config changes.
+  def release_container_name(sha = nil, deployment_id: nil)
+    deployment = "d#{deployment_id}" if deployment_id
+    [ resource_key, "r#{infra_revision}", deployment, sha.presence&.first(7) ].compact.join("-")
   end
 
   # LEGACY name, still live on every box deployed before ADR 0004. Kept for the
