@@ -61,6 +61,27 @@ class AppDeployerTest < ActiveSupport::TestCase
     assert_equal d.app.app_dir, d.send(:app_dir)
   end
 
+  test "private repository clone uses the app deploy key without logging it" do
+    ssh = FakeSsh.new do |cmd|
+      if cmd.include?("test -d")      then result(success: true, stdout: "missing\n")
+      elsif cmd.include?("git clone") then result(success: true, stderr: "Cloning into 'starrrs'...\n")
+      else result(success: true)
+      end
+    end
+    d = deployer_with(ssh)
+    private_key = valid_private_key
+    d.app.create_deploy_key!(public_key: "ssh-ed25519 AAAA conductor-starrrs", private_key: private_key)
+
+    assert d.send(:prepare_repository_access)
+    assert d.send(:clone_or_pull_repo)
+
+    clone = ssh.commands.find { |cmd| cmd.include?("git clone") }
+    assert_includes clone, "GIT_SSH_COMMAND="
+    assert_includes clone, "git@github.com:x/y.git"
+    refute_includes clone, "https://github.com"
+    refute_includes d.deployment.log, private_key
+  end
+
   test "a clone that exits non-zero fails the step (exit status, not stderr, decides)" do
     ssh = FakeSsh.new do |cmd|
       if cmd.include?("test -d")      then result(success: true, stdout: "missing\n")

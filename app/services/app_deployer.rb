@@ -1,4 +1,5 @@
 require "shellwords"
+require "base64"
 
 class AppDeployer
   attr_reader :app, :deployment, :ssh, :error
@@ -17,7 +18,7 @@ class AppDeployer
   # at all. See ADR 0003 for why Caddy needs a port dance and an unproxied app
   # cannot have this at all.
   ZERO_DOWNTIME_STEPS = %i[
-    ensure_docker clone_or_pull_repo build_image
+    ensure_docker prepare_repository_access clone_or_pull_repo build_image
     start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
     republish_edge_route drain_previous_container cleanup
   ].freeze
@@ -25,7 +26,7 @@ class AppDeployer
   # The original order. Traffic is down from stop_old_container until the edge is
   # republished — unavoidable when the fixed host port IS the service.
   STOP_FIRST_STEPS = %i[
-    ensure_docker clone_or_pull_repo build_image
+    ensure_docker prepare_repository_access clone_or_pull_repo build_image
     stop_old_container start_container health_check run_gated_migrations run_seeds_if_requested
     republish_edge_route cleanup
   ].freeze
@@ -61,6 +62,8 @@ class AppDeployer
     true
   rescue => e
     fail_with("Unexpected error: #{e.message}")
+  ensure
+    cleanup_repository_access
   end
 
   private
@@ -120,6 +123,27 @@ class AppDeployer
     run("which docker || (curl -fsSL https://get.docker.com | sh)")
   end
 
+  # Private repositories use the app's existing read-only deploy key. Materialize
+  # it only on the target host, with restrictive permissions, and redact the key
+  # bytes from every deployment log/broadcast. Public repositories need no setup.
+  def prepare_repository_access
+    key = app.deploy_key&.private_key
+    return true if key.blank?
+
+    @repository_key_path = "/home/#{app.server.ssh_user_or_default}/.conductor/keys/#{app.resource_key}"
+    key_dir = File.dirname(@repository_key_path)
+    encoded = Base64.strict_encode64(key)
+    command =
+      "mkdir -p #{esc(key_dir)} && chmod 700 #{esc(key_dir)} && " \
+      "printf %s #{esc(encoded)} | base64 -d > #{esc(@repository_key_path)} && " \
+      "chmod 600 #{esc(@repository_key_path)}"
+    display =
+      "mkdir -p #{esc(key_dir)} && chmod 700 #{esc(key_dir)} && " \
+      "[REDACTED deploy key] > #{esc(@repository_key_path)} && chmod 600 #{esc(@repository_key_path)}"
+
+    run(command, display: display)
+  end
+
   def clone_or_pull_repo
     return false unless run("mkdir -p #{esc(app_dir)}")
 
@@ -133,17 +157,42 @@ class AppDeployer
     run("test -d #{esc(app_dir)}/.git && echo exists || echo missing")
     ok =
       if ssh.output.to_s.include?("exists")
-        run("cd #{esc(app_dir)} && git fetch origin && git reset --hard #{esc(target)}")
+        run("cd #{esc(app_dir)} && #{set_repository_origin}#{git_prefix}git fetch origin && git reset --hard #{esc(target)}")
       else
         # Return the CLONE's real result — never leak the `nil` from a trailing
         # `... if commit_sha.present?` on a first deploy (commit_sha is null then),
         # which is what falsely failed the step even though the clone succeeded.
-        run("rm -rf #{esc(app_dir)} && git clone --branch #{esc(app.branch)} #{esc(app.repository_url)} #{esc(app_dir)}") &&
+        run("rm -rf #{esc(app_dir)} && #{git_prefix}git clone --branch #{esc(app.branch)} #{esc(repository_url)} #{esc(app_dir)}") &&
           (deployment.commit_sha.present? ? run("cd #{esc(app_dir)} && git reset --hard #{esc(target)}") : true)
       end
 
     record_shipped_sha if ok
     ok
+  end
+
+  def repository_url
+    @repository_key_path ? DeployKey.ssh_url(app.repository_url) : app.repository_url
+  end
+
+  def set_repository_origin
+    @repository_key_path ? "git remote set-url origin #{esc(repository_url)} && " : ""
+  end
+
+  def git_prefix
+    return "" unless @repository_key_path
+
+    ssh_command = "ssh -i #{@repository_key_path} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+    "GIT_SSH_COMMAND=#{esc(ssh_command)} "
+  end
+
+  def cleanup_repository_access
+    return if @repository_key_path.blank?
+
+    ssh.execute_with_status("rm -f #{esc(@repository_key_path)}")
+  rescue StandardError => e
+    log "WARNING: could not remove temporary repository key: #{e.message}"
+  ensure
+    @repository_key_path = nil
   end
 
   # Record what actually shipped, so a docker deploy's audit row carries the sha
