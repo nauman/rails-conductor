@@ -202,6 +202,48 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     assert_not_includes run, "-p 3000:3000", "must not contend for the live port"
   end
 
+  test "a caddy candidate separates the published port from the Rails runtime port" do
+    @app.server.update!(edge_type: "caddy")
+    @app.update!(port: 9080)
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    assert_match(/-p 127\.0\.0\.1:\d+:3000/, run,
+                 "the candidate host port must forward to Rails' internal port")
+    assert_includes run, "-e PORT=3000"
+    assert_not_includes run, ":9080", "9080 is the stable host publish port, not a container port"
+  end
+
+  test "a configured PORT overrides the default Rails runtime port" do
+    @app.server.update!(edge_type: "caddy")
+    @app.update!(port: 9080)
+    @app.env_variables.create!(key: "PORT", value: "4000")
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    assert_match(/-p 127\.0\.0\.1:\d+:4000/, run)
+    assert_includes run, "-e PORT=4000"
+  end
+
+  test "a candidate receives the derived dedicated DATABASE_URL without logging it" do
+    cluster = @org.database_clusters.create!(server: @server, name: @app.dedicated_db_container_name,
+                                             container_name: @app.dedicated_db_container_name,
+                                             admin_username: "conductor", admin_password: "x", port: 5432)
+    cluster.databases.create!(organization: @org, app: @app, name: "shop",
+                              username: "shop", password: "top-secret", status: "active")
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    assert_includes run, "DATABASE_URL="
+    assert_includes run, "top-secret"
+
+    display = @deployment.reload.log.to_s
+    assert_not_includes display, "top-secret"
+  end
+
   test "a caddy candidate is probed on its own port, then Caddy is repointed at it" do
     @app.server.update!(edge_type: "caddy")
     ssh = FakeSsh.new

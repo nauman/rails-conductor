@@ -96,7 +96,8 @@ class DockerRollback
   end
 
   def run_command(version)
-    port = app.port || 3000
+    published_port = app.published_port
+    runtime_port = app.runtime_port
     parts = [
       "docker run -d",
       "--name #{esc(app.container_name)}",
@@ -106,11 +107,11 @@ class DockerRollback
       "--label destination=production",
       "--label conductor.infra_revision=#{app.infra_revision}",
       "--label conductor.release=#{esc(version)}",
-      "-p #{port}:#{port}"
+      "-p #{published_port}:#{runtime_port}"
     ]
     parts << "--network #{esc(app.deploy_network)}" if app.deploy_network.present?
-    parts += [ "-e PORT=#{port}", "-e RAILS_ENV=production", "-e RAILS_LOG_TO_STDOUT=true" ]
-    (parts + [ app.env_variables.map(&:to_docker_env).join(" "), esc(ref(version)) ]).join(" ")
+    parts += [ "-e PORT=#{runtime_port}", "-e RAILS_ENV=production", "-e RAILS_LOG_TO_STDOUT=true" ]
+    (parts + [ deploy_env_flags, esc(ref(version)) ]).join(" ")
   end
 
   # A rollback replaces the container, so ANY edge that points at the old one
@@ -127,11 +128,11 @@ class DockerRollback
     app.update!(container_id: container)
 
     if app.server.edge_type == "kamal_proxy"
-      Edge.for(app.server, ssh: @ssh).publish(domain: app.domain, upstream: "#{container}:#{app.port || 3000}")
+      Edge.for(app.server, ssh: @ssh).publish(domain: app.domain, upstream: "#{container}:#{app.runtime_port}")
     else
       # The rolled-back container binds the app's own port again, so Caddy points
       # back at the stable loopback address.
-      Edge.for(app.server).publish(domain: app.domain, upstream: "127.0.0.1:#{app.port || 3000}")
+      Edge.for(app.server).publish(domain: app.domain, upstream: "127.0.0.1:#{app.published_port}")
     end
     true
   rescue StandardError => e
@@ -156,6 +157,14 @@ class DockerRollback
 
   def ref(version) = "#{app.image_name}:#{version}"
   def esc(str) = Shellwords.escape(str.to_s)
+
+  def deploy_env_flags
+    app.deploy_env_pairs(server: app.server).filter_map do |key, value|
+      next if %w[PORT RAILS_ENV RAILS_LOG_TO_STDOUT].include?(key)
+
+      "-e #{key}=#{Shellwords.escape(value.to_s)}"
+    end.join(" ")
+  end
 
   def log(message)
     deployment.append_log(message)
