@@ -109,4 +109,4 @@ group :development do
 end
 
 # jazari — shared operating-procedure domain (recipes, runbooks, queues, runs).
-gem "jazari", "~> 0.3", ">= 0.3.0"
+gem "jazari", "~> 0.5", ">= 0.5.1"
