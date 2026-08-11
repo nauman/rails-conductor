@@ -44,7 +44,7 @@ class AppDeployerTest < ActiveSupport::TestCase
   test "first-deploy clone that writes 'Cloning into' to stderr is NOT a false failure" do
     ssh = FakeSsh.new do |cmd|
       if cmd.include?("test -d")            then result(success: true, stdout: "missing\n")
-      elsif cmd.include?("git clone")       then result(success: true, stderr: "Cloning into '/opt/conductor/apps/starrrs'...\n")
+      elsif cmd.include?("git clone")       then result(success: true, stderr: "Cloning into '/home/deploy/apps/starrrs'...\n")
       else result(success: true)
       end
     end
@@ -52,6 +52,13 @@ class AppDeployerTest < ActiveSupport::TestCase
 
     assert d.send(:clone_or_pull_repo), "a successful first-deploy clone must return truthy, not nil"
     assert ssh.commands.any? { |c| c.include?("git clone") }, "should have cloned"
+  end
+
+  test "checkout uses the app's deploy-user-owned directory" do
+    d = deployer_with(FakeSsh.new { result(success: true) })
+
+    assert_equal "/home/deploy/apps/starrrs", d.send(:app_dir)
+    assert_equal d.app.app_dir, d.send(:app_dir)
   end
 
   test "a clone that exits non-zero fails the step (exit status, not stderr, decides)" do

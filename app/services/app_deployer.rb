@@ -113,7 +113,7 @@ class AppDeployer
   end
 
   def app_dir
-    "/opt/conductor/apps/#{app.slug}"
+    app.app_dir
   end
 
   def ensure_docker
