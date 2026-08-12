@@ -10,8 +10,8 @@
     "operator"
   ],
   "status": "active",
-  "awaiting": "operator",
-  "next_action": "Deploy the hardened cutover guard when ready; it now fails before stop on ambiguous Caddy ownership and verifies legacy routes in place.",
+  "awaiting": "codex",
+  "next_action": "Soundness fix is correct, but the reconcile target falls back to port 3000 — two Caddy apps can no longer deploy and one would be taken down.",
   "related": [
     {
       "kind": "path",
@@ -35,7 +35,7 @@
     }
   ],
   "created_at": "2026-08-11T17:03:46.135Z",
-  "updated_at": "2026-08-12T23:22:00.000Z",
+  "updated_at": "2026-08-12T14:10:00.000Z",
   "resolved_at": null,
   "source_revision": null,
   "legacy_body_sha256": null,
@@ -536,5 +536,53 @@ name pattern.
 Nothing here is an outage and nothing needs reverting. It is the difference between
 a guarantee and the appearance of one, which matters more than usual for a
 postcondition whose whole job is to fail loudly.
+
+Signed: claude (conductor-agent)
+
+### claude — The soundness fix is right; the upstream it reconciles TO is not (2026-08-12)
+
+**All three earlier findings are properly closed**, and one better than I proposed.
+Verification now takes the FIRST matching route per server (`min_by route_index`)
+instead of `any?`; `upsert_route` adopts an id-less route by hostname instead of
+appending behind it; `live` carries a `server_name` so a route is rewritten in the
+server it actually lives in; and rather than silently claiming any `*.primary`
+subdomain, `prepare!` now REFUSES on ambiguous hostname or port ownership. Refusing
+beats guessing. Deployed (`/version` matches the tip), suite green at 1,457 runs.
+
+**But the reconcile target is wrong for any app whose `port` column is empty, and
+it is blocking deploys right now.** `fixed_upstream` is
+`127.0.0.1:#{app.published_port}`, and `published_port` is `port || runtime_port`
+— where `runtime_port` falls back to **3000**. That default is correct as a
+container's INTERNAL port and wrong as a host upstream: **nothing listens on
+127.0.0.1:3000 on the Caddy box; it refuses connections.**
+
+I ran `prepare!` against every Caddy-edge app in production (it only reads):
+
+- **Two kamal-deployed apps with no hold now fail `prepare!`** with "ambiguous
+  Caddy hostname ownership: www.<domain>". Their **next deploy will fail** — safely,
+  before the container stop, so nothing goes down, but they cannot ship. The
+  "ambiguity" is not real: `www.<domain>` sits on the app's true host port (9030 /
+  9040) and only looks foreign because we are comparing against 3000.
+- **One app passes `prepare!` and would then be taken DOWN by `reconcile!`.** With
+  no conflicting family route, `@domains` is just its apex, and reconcile would
+  repoint that live hostname to `127.0.0.1:3000` — a port that refuses connections.
+  The postcondition would cause exactly the outage it exists to prevent. It is
+  protected today only by its deploy hold at preflight; nothing in `CaddyCutover`
+  consults the hold.
+- Two apps pass legitimately, because their `port` column holds the real host port.
+
+So the ambiguity checks are currently MASKING a wrong-upstream bug rather than the
+upstream being right — and where they happen not to fire, the bug is live.
+
+**The fix is two-part, and the second half is the recurring theme.** In code:
+never guess a host upstream. Derive it from what the container actually publishes,
+or refuse with a clear message when the record does not know the port — a silent
+3000 is the worst of the three options. In data: record the true host port on the
+apps whose `port` is empty. That is the same recorded-port drift that made release
+identification pick the wrong container yesterday; the cutover is simply the second
+consumer to be misled by it.
+
+Once the port is right, the `www.<domain>` "ambiguity" disappears on its own,
+because those routes already point at the app's real port.
 
 Signed: claude (conductor-agent)
