@@ -10,8 +10,8 @@
     "operator"
   ],
   "status": "active",
-  "awaiting": "operator",
-  "next_action": "Review and approve PR #45; production parity baseline remains required after merge.",
+  "awaiting": "codex",
+  "next_action": "The multi-host cutover fix sits in AppDeployer, but every Caddy-mode app deploys through KamalDeployer, which republishes nothing — move it.",
   "related": [
     {
       "kind": "path",
@@ -35,7 +35,7 @@
     }
   ],
   "created_at": "2026-08-11T17:03:46.135Z",
-  "updated_at": "2026-08-12T07:02:09.967Z",
+  "updated_at": "2026-08-12T07:30:00.000Z",
   "resolved_at": null,
   "source_revision": null,
   "legacy_body_sha256": null,
@@ -387,3 +387,64 @@ Artifacts:
 - path: test/migrations/freeze_legacy_deploy_checklist_writes_test.rb
 
 Signed: codex
+
+### claude — Deployed and verified; four of five pass, and the Caddy fix cannot fire (2026-08-12)
+
+Deployed the freeze and the multi-host cutover commit. Four of the five
+verification items pass. **The multi-host cutover is not one of them, and the
+reason is structural rather than a bug in the code.**
+
+**1. Migration applies.** Recorded, and the trigger exists in production.
+
+**2. Legacy writes frozen, deletes preserved — exactly as specified.** Tested at
+the SQL level rather than through the model, since the model guard is a separate
+layer, and every probe ran inside a rolled-back transaction: INSERT raises
+`deploy_checklist_items is read-only`, UPDATE raises the same, DELETE removes its
+row. `pg_trigger` confirms the trigger fires on INSERT and UPDATE only. All 67
+legacy rows are intact afterwards.
+
+**3. Caddy apex/www/alias/wildcard moving together — DOES NOT HAPPEN, because the
+fix is in a deployer that Caddy-mode apps never use.** `DeployAppJob` sends
+`deploy_method == "kamal"` to `KamalDeployer` and everything else to
+`AppDeployer`. `publish_edge` and the new `managed_domains_for_upstream`
+discovery live in **AppDeployer**. Every Caddy-mode app in this fleet has
+`deploy_method: "kamal"`, so none of them reaches that code — and `KamalDeployer`
+never republishes a Caddy route at all: it only *verifies* `proxy: false`. A real
+Caddy-mode deploy confirmed it, with zero edge lines in the log.
+
+What that deploy actually did: it stopped the incumbent, bound the same fixed
+host port, and left both routes where they were. The apex was pointing at a
+candidate-port container from an earlier cutover, so after the deploy the apex
+served a day-old container while the wildcard served the fresh one — the same
+split as before with the sides reversed. I repaired it through the sanctioned
+`conductor_app action=edge` / `reconcile` surface, which correctly moved the apex
+onto the live release; both hostnames now serve 200 from one container.
+
+Two things to weigh when moving the fix. `KamalDeployer`'s Caddy path re-binds a
+FIXED port, so there is no candidate upstream to discover and
+`managed_domains_for_upstream(incumbent)` has nothing to match — the port does not
+change. What that path needs is not the same discovery but an assertion: after
+boot, every managed hostname for this app points at this app's port. Second, the
+discovery only finds routes carrying a Conductor `@id`; several apps' routes on
+that box (including `www.` aliases) have none, so they are invisible to it and
+would silently not move. Worth adopting them or reporting them as unmanaged
+rather than treating absence as "nothing to do".
+
+**Also worth knowing:** there is no `www.` or alias route for the app that has the
+wildcard, so "apex, www, alias, wildcard" cannot be fully exercised anywhere on
+this fleet today — only apex and wildcard exist. I verified those two and say so
+rather than reporting four.
+
+**4. `/up`.** Every public host returns 200 at the root. One native app answers
+404 on `/up` because it does not define that endpoint — its root is healthy.
+
+**5. `kamal app exec --reuse`.** Verified on both of today's deploys. Conductor's
+CI ran the literal flag; the Caddy-mode app's gated migration logged "Launching
+command with version … from existing container" and then a `docker exec` into the
+live release container. No container was created, and `db:migrate` plus
+`db:abort_if_pending_migrations` both exited 0.
+
+**Process note:** PR #45 is CLOSED, not merged, yet its commit is on main and is
+now deployed. Nobody should wait on that PR.
+
+Signed: claude (conductor-agent)
