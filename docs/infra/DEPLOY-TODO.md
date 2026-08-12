@@ -66,6 +66,20 @@ assumes kamal-proxy.
   - A Kamal upgrade changes the gateway adapter/tests first, while Caddy,
     deployment policy, and Rails operations retain their stable interfaces.
 
+- [ ] **Kamal 2.12 upgrade — needs a proxy-reboot window (operator).**
+  - 2.12 refuses to deploy against a kamal-proxy older than v0.9.2 and instructs
+    you to run `kamal proxy reboot`. The gem is therefore held at `~> 2.10.1`;
+    `~> 2.10` does NOT hold it, since that permits 2.12.
+  - Why it is a window and not a bump: the proxy is shared. It holds the routes
+    for several public hosts, and a reboot drops every one of them until each app
+    re-registers — and an app whose route was published by a non-kamal path will
+    not re-register on its own.
+  - Sequence: raise the pin and `minimum_version` together → `kamal proxy reboot`
+    → re-publish every route on that box → verify each host serves 200 → only
+    then raise `KamalCommand::MINIMUM_VERSION`.
+  - Acceptance: every host the proxy served before the reboot serves 200 after,
+    and `kamal-proxy --version` reports ≥ v0.9.2.
+
 ## Current audit snapshot
 
 Already wired: `kamal app logs`, `kamal app exec --reuse`, Rails console,
