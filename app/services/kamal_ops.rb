@@ -161,7 +161,13 @@ class KamalOps
   # container is needed for logs/details/exec --reuse.
   def materialize_ops_config
     FileUtils.mkdir_p(File.dirname(deploy_config_path))
-    File.write(deploy_config_path, "require_destination: true\n") unless File.exist?(deploy_config_path)
+    unless File.exist?(deploy_config_path)
+      File.write(deploy_config_path, <<~YAML)
+        require_destination: true
+        builder:
+          arch: amd64
+      YAML
+    end
     KamalConfig.new(@app, target_server: @target_server).files.each do |relative_path, content|
       path = File.join(checkout_dir, relative_path)
       FileUtils.mkdir_p(File.dirname(path))

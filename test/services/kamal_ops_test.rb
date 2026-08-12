@@ -75,7 +75,9 @@ class KamalOpsTest < ActiveSupport::TestCase
     ops = KamalOps.new(@app, shell: shell)
 
     assert ops.available?
-    assert File.exist?(File.join(@workspace, @app.slug, "config", "deploy.yml"))
+    base_path = File.join(@workspace, @app.slug, "config", "deploy.yml")
+    assert File.exist?(base_path)
+    assert_equal "amd64", YAML.safe_load_file(base_path).dig("builder", "arch")
     assert File.exist?(File.join(@workspace, @app.slug, "config", "deploy.production.yml"))
     assert File.exist?(File.join(@workspace, @app.slug, ".kamal", "secrets.production"))
     assert ops.logs.ok?

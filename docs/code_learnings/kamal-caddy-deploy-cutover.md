@@ -48,7 +48,9 @@
   ephemeral checkout is absent, and every logs/details/`exec --reuse` call gets
   an isolated temporary SSH home whose `IdentityFile` exists for the full Kamal
   process lifetime. Supplying `SSH_KEYS` alone does not authenticate Net::SSH
-  when the generated overlay has no `ssh.keys` entry.
+  when the generated overlay has no `ssh.keys` entry. The reconstructed base
+  must also declare `builder.arch`; Kamal validates builder configuration even
+  for read/live-container verbs that never build an image.
 - A custom alias outside the primary hostname family is owned only when its
   route is Conductor-managed and already targets the app's exclusive recorded
   host port. An unrelated legacy/no-id route on that port remains ambiguous and
