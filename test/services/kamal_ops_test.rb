@@ -8,11 +8,17 @@ require "tmpdir"
 # away release awareness, the destination overlay, and the roles kamal knows about.
 class KamalOpsTest < ActiveSupport::TestCase
   class FakeShell
-    attr_reader :runs
+    attr_reader :runs, :ssh_config_at_run, :identity_present_at_run
     def initialize(output: "", success: true) = (@output = output; @success = success; @runs = [])
 
     def run(*command, chdir: nil, env: {})
       @runs << { command: command, chdir: chdir, env: env }
+      config_path = File.join(env["HOME"].to_s, ".ssh", "config")
+      if File.exist?(config_path)
+        @ssh_config_at_run = File.read(config_path)
+        identity = @ssh_config_at_run[/IdentityFile (\S+)/, 1]
+        @identity_present_at_run = identity.present? && File.exist?(identity)
+      end
       yield @output if block_given?
       LocalShell::Result.new(success: @success, exit_code: @success ? 0 : 1, output: @output)
     end
@@ -59,6 +65,21 @@ class KamalOpsTest < ActiveSupport::TestCase
 
     assert KamalOps.new(@app, shell: FakeShell.new).available?,
       "a disabled edge must not disable the ops harness"
+  end
+
+  test "a self-describing app rebuilds its ops-only Kamal config after the control container restarts" do
+    @app.update!(self_describing: true, port: 9080)
+    @app.env_variables.create!(key: "KAMAL_REGISTRY_USERNAME", value: "owner")
+    @app.env_variables.create!(key: "KAMAL_REGISTRY_PASSWORD", value: "token", secret: true)
+    shell = FakeShell.new(output: "live logs")
+    ops = KamalOps.new(@app, shell: shell)
+
+    assert ops.available?
+    assert File.exist?(File.join(@workspace, @app.slug, "config", "deploy.yml"))
+    assert File.exist?(File.join(@workspace, @app.slug, "config", "deploy.production.yml"))
+    assert File.exist?(File.join(@workspace, @app.slug, ".kamal", "secrets.production"))
+    assert ops.logs.ok?
+    assert_match(/-d production/, shell.runs.last[:command].last)
   end
 
   test "logs run `kamal app logs` with a bounded tail, in the checkout" do
@@ -108,6 +129,18 @@ class KamalOpsTest < ActiveSupport::TestCase
 
     assert key_path.present?, "kamal needs an explicit key; env was #{shell.runs.last[:env].keys.inspect}"
     refute File.exist?(key_path), "the materialized key must not be left on disk"
+  end
+
+  test "ops pins HOME to an isolated SSH config that Net SSH can authenticate with" do
+    write_deploy_config
+    shell = FakeShell.new
+
+    KamalOps.new(@app, shell: shell).logs
+
+    assert_includes shell.ssh_config_at_run, "Host 10.0.0.9"
+    assert_includes shell.ssh_config_at_run, "User deploy"
+    assert shell.identity_present_at_run, "the IdentityFile must exist while Kamal runs"
+    refute Dir.exist?(shell.runs.last[:env]["HOME"]), "the isolated SSH home must be removed afterwards"
   end
 
   test "a failing kamal command reports the failure rather than pretending to succeed" do

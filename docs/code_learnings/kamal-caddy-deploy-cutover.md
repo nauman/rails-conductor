@@ -43,6 +43,12 @@
   only those exact app-owned units, verify the port is free before boot, and on
   failure re-enable, restart, and health-check the native service. A Kamal
   `app boot` is not a rollback when the captured incumbent was native.
+- The ops harness must survive replacement of Conductor's own container.
+  Self-describing apps reconstruct an ops-only destination config when the
+  ephemeral checkout is absent, and every logs/details/`exec --reuse` call gets
+  an isolated temporary SSH home whose `IdentityFile` exists for the full Kamal
+  process lifetime. Supplying `SSH_KEYS` alone does not authenticate Net::SSH
+  when the generated overlay has no `ssh.keys` entry.
 - A custom alias outside the primary hostname family is owned only when its
   route is Conductor-managed and already targets the app's exclusive recorded
   host port. An unrelated legacy/no-id route on that port remains ambiguous and

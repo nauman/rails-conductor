@@ -1,5 +1,6 @@
 require "shellwords"
 require "fileutils"
+require "tmpdir"
 
 # Kamal as the OPS harness, not just a deploy driver (ADR 0003/0004).
 #
@@ -47,6 +48,10 @@ class KamalOps
   # nil when kamal can answer; otherwise a sentence a reader can act on.
   def unavailable_reason
     return "#{@app.name} does not deploy via kamal (deploy_method: #{@app.deploy_method})" unless @app.kamal?
+    if @app.self_describing? && !File.exist?(deploy_config_path)
+      materialize_ops_config
+      return "#{@app.name} Kamal config could not be materialized: #{@materialize_error}" if @materialize_error
+    end
     return "#{@app.name} has no kamal config checked out at #{deploy_config_path}" unless File.exist?(deploy_config_path)
 
     nil
@@ -78,39 +83,63 @@ class KamalOps
   def run(verb)
     return unavailable unless available?
 
-    key_file = write_ssh_key
+    ssh_home, key_file = prepare_ssh_home
     write_secrets_file
     result = @shell.run("bash", "-lc", "#{kamal_bin} #{verb}",
-                        chdir: checkout_dir, env: ops_env(key_file))
+                        chdir: checkout_dir, env: ops_env(key_file, ssh_home))
 
     Result.new(ok: result.success?, output: result.output.to_s, via: "kamal",
                error: result.success? ? nil : "kamal #{verb} failed (exit #{result.exit_code})")
   ensure
-    # Never leave a private key on disk after an ops read.
-    FileUtils.rm_f(key_file) if key_file
+    # Never leave a private key or SSH config on disk after an ops read.
+    FileUtils.remove_entry(ssh_home) if ssh_home && Dir.exist?(ssh_home)
   end
 
   def unavailable
     Result.new(ok: false, output: "", via: nil, error: unavailable_reason)
   end
 
-  def ops_env(key_file)
+  def ops_env(key_file, ssh_home)
     env = @app.env_variables.each_with_object({}) { |v, h| h[v.key] = v.value }
     env["DEPLOY_SERVER_IP"] ||= server&.ip_address
     env["DEPLOY_SSH_USER"]  ||= server&.ssh_user_or_default
     env["APP_HOST"]         ||= @app.domain if @app.domain.present?
     env["SSH_KEYS"] = key_file if key_file # consumed by deploy.yml ssh.keys
+    env["HOME"] = ssh_home if ssh_home # Net::SSH reads the target IdentityFile from here
     env.compact
   end
 
-  def write_ssh_key
+  def prepare_ssh_home
     key = server&.ssh_key&.private_key
-    return nil if key.blank?
+    return [ nil, nil ] if key.blank?
 
-    path = File.join(workspace, ".ssh_ops_#{@app.slug}")
-    File.write(path, key.end_with?("\n") ? key : "#{key}\n")
-    File.chmod(0o600, path)
-    path
+    FileUtils.mkdir_p(workspace)
+    home = Dir.mktmpdir("kamal-ops-#{@app.slug}-", workspace)
+    ssh_dir = File.join(home, ".ssh")
+    FileUtils.mkdir_p(ssh_dir)
+    File.chmod(0o700, ssh_dir)
+
+    identity = File.join(ssh_dir, "identity")
+    File.write(identity, key.end_with?("\n") ? key : "#{key}\n")
+    File.chmod(0o600, identity)
+
+    known_hosts = File.join(ssh_dir, "known_hosts")
+    File.write(known_hosts, "")
+    File.chmod(0o600, known_hosts)
+
+    config = <<~CFG
+      Host #{server.ip_address}
+        User #{server.ssh_user_or_default}
+        IdentityFile #{identity}
+        IdentitiesOnly yes
+        StrictHostKeyChecking accept-new
+        UserKnownHostsFile #{known_hosts}
+    CFG
+    config_path = File.join(ssh_dir, "config")
+    File.write(config_path, config)
+    File.chmod(0o600, config_path)
+
+    [ home, identity ]
   end
 
   # Kamal resolves secret references from the checkout, so an ops verb needs the
@@ -122,6 +151,25 @@ class KamalOps
 
     FileUtils.mkdir_p(File.dirname(path))
     File.write(path, content)
+  end
+
+  # The deploy workspace lives inside Conductor's replaceable container. A
+  # control-plane redeploy therefore removes app checkouts, but self-describing
+  # apps already carry every coordinate Conductor needs to reconstruct the Kamal
+  # ops harness. Materialize a minimal destination-required base plus the same
+  # generated overlay/secrets used by deploy; no source clone or new app
+  # container is needed for logs/details/exec --reuse.
+  def materialize_ops_config
+    FileUtils.mkdir_p(File.dirname(deploy_config_path))
+    File.write(deploy_config_path, "require_destination: true\n") unless File.exist?(deploy_config_path)
+    KamalConfig.new(@app, target_server: @target_server).files.each do |relative_path, content|
+      path = File.join(checkout_dir, relative_path)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, content)
+    end
+    @materialize_error = nil
+  rescue StandardError => e
+    @materialize_error = e.message
   end
 
   def server = @target_server || @app.server
