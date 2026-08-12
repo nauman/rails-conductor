@@ -59,6 +59,12 @@ assumes kamal-proxy.
   - Add contract tests proving Caddy mode never runs `kamal proxy`, generic
     `kamal redeploy`, `kamal app maintenance`, or `kamal app live`.
 
+- [ ] **Caddy multi-host cutover.**
+  - Republish every configured hostname for an app during Caddy-mode cutover,
+    including apex, `www`, aliases, and wildcard subjects.
+  - Acceptance: no hostname remains attached to the superseded container after
+    a successful deploy, and each hostname is verified against the new release.
+
 - [x] **Keep Kamal grammar behind one gateway.**
   - Application services call the Conductor-owned `KamalGateway` DSL only.
   - `KamalCommand` is an internal translation layer covered by version contract
