@@ -4,7 +4,12 @@ service: conductor
 # Refuse to evaluate this file with an older Kamal binary. The deploy contract
 # relies on Kamal 2's role-level proxy switch and app exec --reuse.
 minimum_version: 2.12.0
-require_destination: true
+# NOT `require_destination: true`. It would be right for a repo that carries a
+# destination overlay, and this one does not: there is no config/deploy.production.yml
+# and no .kamal/secrets.production, because every value here comes from CI's env.
+# With the flag set, kamal refuses to evaluate the file at all — the deploy fails at
+# config load, before a container is touched, and no destination-less invocation can
+# succeed. Add the flag in the same change that commits the overlay, never before.
 deploy_timeout: 30
 drain_timeout: 30
 
