@@ -31,6 +31,10 @@
 - `CADDY_PUBLISH_PORT` may remain as repo-specific ERB grammar, but
   `KamalDeployer` derives or removes it from the target edge and `App#port`.
   It is never an independent stored source of routing truth.
+- A managed app's destination secrets must resolve `RAILS_MASTER_KEY` from the
+  environment Conductor injects. Only a self-managed app may read
+  `config/master.key`; that ignored file is deliberately absent from ordinary
+  server-side checkouts.
 - A custom alias outside the primary hostname family is owned only when its
   route is Conductor-managed and already targets the app's exclusive recorded
   host port. An unrelated legacy/no-id route on that port remains ambiguous and

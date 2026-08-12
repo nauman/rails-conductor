@@ -85,11 +85,19 @@ class KamalConfigTest < ActiveSupport::TestCase
     assert_includes s, "SECRET_KEY_BASE=$SECRET_KEY_BASE"
     assert_includes s, "DATABASE_URL=$DATABASE_URL"
     assert_includes s, "KAMAL_REGISTRY_PASSWORD=$KAMAL_REGISTRY_PASSWORD"
-    assert_includes s, "RAILS_MASTER_KEY=$(cat config/master.key)", "master key follows the Rails convention"
+    assert_includes s, "RAILS_MASTER_KEY=$RAILS_MASTER_KEY",
+      "a managed app receives its master key from Conductor, not an ignored checkout file"
     # Header documents seeding the env ONCE from localvault (not every command).
     assert_includes s, "export SECRET_KEY_BASE=$(localvault get appone.SECRET_KEY_BASE --vault devops)"
     # Never raw secret values.
     refute_match(/skb_raw_value|postgres:\/\/raw|deadbeef/, s)
+  end
+
+  test "self-managed app may resolve its own master key from the checkout" do
+    @app.update!(self_managed: true)
+
+    assert_includes KamalConfig.new(@app).secrets_file,
+      "RAILS_MASTER_KEY=$(cat config/master.key)"
   end
 
   test "vault is configurable in the seed header" do

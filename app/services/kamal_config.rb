@@ -72,7 +72,8 @@ class KamalConfig
   # at deploy time and an operator seeds ONCE for hand use. The header documents
   # the localvault seed so it isn't needed on every command ("seed once").
   def secrets_file
-    all_keys = (["KAMAL_REGISTRY_PASSWORD"] + secret_keys).uniq - ["RAILS_MASTER_KEY"]
+    all_keys = (["KAMAL_REGISTRY_PASSWORD"] + secret_keys).uniq
+    all_keys -= ["RAILS_MASTER_KEY"] if app.self_managed?
 
     header = ["# #{GENERATED} — .kamal/secrets.#{DESTINATION}",
               "# Git-safe: values are NOT here. Conductor injects these at deploy time.",
@@ -81,7 +82,9 @@ class KamalConfig
     all_keys.each { |k| header << "#   export #{k}=$(localvault get #{app.slug}.#{k} --vault #{vault})" }
 
     body = all_keys.map { |k| "#{k}=$#{k}" }
-    body << "RAILS_MASTER_KEY=$(cat config/master.key)" if secret_keys.include?("RAILS_MASTER_KEY") || app.env_hash.key?("RAILS_MASTER_KEY")
+    if app.self_managed? && (secret_keys.include?("RAILS_MASTER_KEY") || app.env_hash.key?("RAILS_MASTER_KEY"))
+      body << "RAILS_MASTER_KEY=$(cat config/master.key)"
+    end
 
     (header + [""] + body).join("\n") + "\n"
   end
