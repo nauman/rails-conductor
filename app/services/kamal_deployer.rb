@@ -95,6 +95,7 @@ class KamalDeployer
       return false
     end
     note_self_deploy if app.self_managed?
+    caddy_cutover.prepare! if caddy_cutover
     stop_prior_container_if_fixed_port
     unless run_kamal_deploy
       recover_after_stop_first
@@ -102,6 +103,7 @@ class KamalDeployer
     end
     return false unless run_gated_migrations
     return false unless run_seeds_if_requested
+    return false unless reconcile_caddy_edge
 
     prune_dead_boot_artifacts
 
@@ -405,6 +407,23 @@ class KamalDeployer
               "kamal-proxy must be OFF, but no explicit `proxy: false` is set in config/deploy*.yml. " \
               "`kamal deploy` would boot kamal-proxy on :80/:443 and collide with host Caddy. Add a " \
               "role-level `proxy: false` (see any caddy-edge app in this fleet).")
+    false
+  end
+
+  def caddy_cutover
+    return nil unless deploy_server&.edge_type == "caddy" && app.domain.present?
+
+    @caddy_cutover ||= CaddyCutover.new(app)
+  end
+
+  def reconcile_caddy_edge
+    return true unless caddy_cutover
+
+    report = caddy_cutover.reconcile!
+    log "Caddy routes reconciled: #{report[:domains].join(', ')} -> #{report[:upstream]}"
+    true
+  rescue CaddyCutover::Error => e
+    fail_with("Caddy edge reconciliation failed: #{e.message}")
     false
   end
 

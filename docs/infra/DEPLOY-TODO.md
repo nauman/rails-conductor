@@ -59,7 +59,7 @@ assumes kamal-proxy.
   - Add contract tests proving Caddy mode never runs `kamal proxy`, generic
     `kamal redeploy`, `kamal app maintenance`, or `kamal app live`.
 
-- [ ] **Caddy multi-host cutover.**
+- [x] **Caddy multi-host cutover.**
   - **Implementation boundary:** Caddy-edge apps with `deploy_method: kamal`
     run through `KamalDeployer`, not `AppDeployer`. The fixed-port assertion
     belongs in KamalDeployer after boot; implementing it only in AppDeployer is

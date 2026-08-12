@@ -75,8 +75,12 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # connection: before this, the fixed-port tests "passed" only because a real
   # connection to 10.0.0.9 eventually errored and was rescued, costing the SSH
   # timeout on every run (spotted in review of PR #31).
-  def deploy_with(shell, allow_self_deploy: true, ssh: FakeSsh.new)
-    KamalDeployer.new(@app, @deployment, shell: shell, ssh: ssh, allow_self_deploy: allow_self_deploy).tap(&:deploy!)
+  def deploy_with(shell, allow_self_deploy: true, ssh: FakeSsh.new, skip_caddy_cutover: false)
+    deployer = KamalDeployer.new(@app, @deployment, shell: shell, ssh: ssh, allow_self_deploy: allow_self_deploy)
+    return deployer.tap(&:deploy!) unless skip_caddy_cutover
+
+    deployer.stub(:caddy_cutover, nil) { deployer.deploy! }
+    deployer
   end
 
   def rollback_with(shell, version: "deadbeefcafe1234")
@@ -161,10 +165,25 @@ class KamalDeployerTest < ActiveSupport::TestCase
     @server.update!(edge_type: "caddy")
     write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n    hosts:\n      - 10.0.0.9\n")
     shell = FakeShell.new(success: true)
-    deploy_with(shell)
+    deploy_with(shell, skip_caddy_cutover: true)
 
     cmds = shell.runs.map { |r| r[:command].last }
     assert cmds.any? { |c| c.include?("kamal deploy") }, "proxy: false must pass the caddy-edge guard"
+    assert_equal "succeeded", @deployment.reload.status
+  end
+
+  test "a Kamal Caddy deploy runs the edge postcondition after boot" do
+    @server.update!(edge_type: "caddy")
+    write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n")
+    calls = []
+    verifier = Object.new
+    verifier.define_singleton_method(:prepare!) { calls << :prepare }
+    verifier.define_singleton_method(:reconcile!) { calls << :reconcile; { domains: [ "appone.example.com" ], upstream: "127.0.0.1:3000" } }
+    deployer = KamalDeployer.new(@app, @deployment, shell: FakeShell.new, ssh: FakeSsh.new, allow_self_deploy: true)
+
+    deployer.stub(:caddy_cutover, verifier) { deployer.deploy! }
+
+    assert_equal [ :prepare, :reconcile ], calls
     assert_equal "succeeded", @deployment.reload.status
   end
 
@@ -772,7 +791,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
     write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n")
     shell = FakeShell.new(success: true)
 
-    deploy_with(shell)
+    deploy_with(shell, skip_caddy_cutover: true)
 
     assert shell.runs.any? { |r| r[:command].join(" ").include?("app stop") },
            "a fixed-port app must free the port before booting the new release"

@@ -40,4 +40,6 @@
 These rules were confirmed during the 2026-08-12 Conductor deployment. The
 release was recovered by removing the unavailable destination requirement,
 holding Kamal at the 2.10 series, and fixing the runner availability check.
-The multi-host Caddy republish defect remains a follow-up implementation item.
+The multi-host Caddy republish defect is now enforced by the Kamal deploy
+postcondition; a stale or missing route fails the deployment before success is
+recorded.

@@ -46,6 +46,15 @@ class CaddyClient
     end
   end
 
+  def fetch_routes
+    config = fetch_config
+    http_servers(config).flat_map do |server_name, server_config|
+      Array(server_config["routes"]).flat_map do |route|
+        summarize_route_hosts(route, server_name)
+      end
+    end
+  end
+
   # Caddy is the source of truth for alternate hostnames: an app may have an
   # apex, www alias, or wildcard route without a separate App column for each.
   # During a candidate cutover, find every managed hostname still targeting the
@@ -215,6 +224,20 @@ class CaddyClient
       "server_name" => server_name,
       "route_index" => index
     }
+  end
+
+  def summarize_route_hosts(route, server_name)
+    proxy = Array(route["handle"]).find { |entry| entry["handler"] == "reverse_proxy" } || {}
+    upstream = Array(proxy["upstreams"]).first || {}
+    host_match = Array(route["match"]).find { |entry| entry.key?("host") } || {}
+    Array(host_match["host"]).map do |domain|
+      {
+        "route_id" => route["@id"],
+        "domain" => domain,
+        "upstream" => upstream["dial"],
+        "server_name" => server_name
+      }
+    end
   end
 
   def locate_route(config, route_id_or_domain)
