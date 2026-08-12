@@ -73,11 +73,48 @@ class ConductorRunbookTest < ActionDispatch::IntegrationTest
     assert_equal "b-secret-step", Jazari.resolve(target: FleetCanon.target_for(@app_b)).checklist.last[:text], "must not delete another org's item"
   end
 
+  test "check_item scopes a repeated opaque id to the named app" do
+    other = @org_a.apps.create!(name: "app-c", slug: "app-c")
+    customize_with_deploy_item(@app_a)
+    customize_with_deploy_item(other)
+    item_a = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last
+    item_c = Jazari.resolve(target: FleetCanon.target_for(other)).checklist.last
+    assert_equal item_a[:id], item_c[:id], "the regression requires a repeated recipe-local id"
+
+    call_tool(action: "check_item", app_id: other.id, item_id: item_c[:id])
+
+    assert_not Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last[:done]
+    assert Jazari.resolve(target: FleetCanon.target_for(other)).checklist.last[:done]
+  end
+
+  test "check_item refuses an unscoped id that belongs to more than one visible app" do
+    other = @org_a.apps.create!(name: "app-c", slug: "app-c")
+    customize_with_deploy_item(@app_a)
+    customize_with_deploy_item(other)
+    item_id = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last[:id]
+
+    call_tool(action: "check_item", item_id: item_id)
+
+    assert_match(/ambiguous|app_id|app_name/i, response.body)
+    assert_not Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last[:done]
+    assert_not Jazari.resolve(target: FleetCanon.target_for(other)).checklist.last[:done]
+  end
+
   test "a read-only token cannot manage runbooks" do
     ro, = ApiToken.generate(user: @user_a, name: "ro", organization: @org_a, scope: "read")
     post "/mcp/call", params: { name: "conductor_runbook", input: { action: "set_runbook", app_name: "app-a", runbook: "x" } },
          headers: { "Authorization" => "Bearer #{ro}" }, as: :json
     assert_match(/read-only/, response.body)
     assert_nil Jazari::Runbook.find_by(runbookable_type: "App", runbookable_id: @app_a.id)
+  end
+
+  private
+
+  def customize_with_deploy_item(app)
+    target = FleetCanon.target_for(app)
+    resolved = Jazari.resolve(target: target)
+    Jazari.customize(target: target, expected_revision: resolved.revision,
+                     topic: "Deploy", description: "Deploy safely",
+                     checklist: [ { id: "deploy", text: "Deploy", required: true, done: false } ])
   end
 end

@@ -12,9 +12,9 @@ class ConductorRunbookTool
       "get (return the runbook + checklist — app_id/app_name), " \
       "set_runbook (replace the markdown runbook — app_id/app_name, runbook), " \
       "add_item (append a checklist step — app_id/app_name, content, optional required), " \
-      "remove_item (delete a step — item_id), " \
-      "check_item (mark a step done or not — item_id, optional done=true), " \
-      "evidence (attach execution evidence — item_id, kind, value), " \
+      "remove_item (delete a step — app + item_id), " \
+      "check_item (mark a step done or not — app + item_id, optional done=true), " \
+      "evidence (attach execution evidence — app + item_id, kind, value), " \
       "reset (clear every done flag, e.g. before a new deploy — app_id/app_name).",
     input_schema: {
       type: "object",
@@ -25,7 +25,7 @@ class ConductorRunbookTool
         runbook:  { type: "string",  description: "set_runbook: the full markdown runbook body" },
         content:  { type: "string",  description: "add_item: the checklist step text" },
         required: { type: "boolean", description: "add_item: whether the step is required (default true)" },
-        item_id:  { type: "string", description: "remove_item/check_item: opaque checklist item id" },
+        item_id:  { type: "string", description: "remove_item/check_item/evidence: opaque checklist item id; include app_id/app_name when ids repeat" },
         done:     { type: "boolean", description: "check_item: mark done (default true) or undone (false)" },
         kind:     { type: "string", description: "evidence: one of output, url, sha, count, or note" },
         value:    { type: "string", description: "evidence: the reference, URL, commit, or note" },
@@ -76,19 +76,19 @@ class ConductorRunbookTool
   end
 
   def remove_item(input)
-    app = find_app_for_item(input) or return Result.fail("Checklist item not found: #{input['item_id']}")
+    app = find_app_for_item(input) or return item_lookup_failure(input)
     AppRunbook.new(app, actor: @user).remove_item(item_id: input["item_id"], expected_revision: input["expected_revision"])
     ok(app, "Removed checklist step from #{app.name}.")
   end
 
   def check_item(input)
-    app = find_app_for_item(input) or return Result.fail("Checklist item not found: #{input['item_id']}")
+    app = find_app_for_item(input) or return item_lookup_failure(input)
     AppRunbook.new(app, actor: @user).check_item(item_id: input["item_id"], done: input.fetch("done", true), expected_revision: input["expected_revision"])
     ok(app, "Checklist step updated on #{app.name}.")
   end
 
   def evidence(input)
-    app = find_app_for_item(input) or return Result.fail("Checklist item not found: #{input['item_id']}")
+    app = find_app_for_item(input) or return item_lookup_failure(input)
     return Result.fail("kind is required to attach evidence.") if input["kind"].to_s.strip.empty?
     return Result.fail("value is required to attach evidence.") if input["value"].to_s.strip.empty?
 
@@ -105,10 +105,31 @@ class ConductorRunbookTool
 
   # A checklist item, scoped to apps this actor may touch (cross-tenant safe).
   def find_app_for_item(input)
+    @item_lookup_ambiguous = false
     return nil if input["item_id"].blank?
 
-    visible_apps.find do |app|
+    if input["app_id"].present? || input["app_name"].present?
+      app = find_app(input)
+      return app if app && app_has_item?(app, input["item_id"])
+      return nil
+    end
+
+    matches = visible_apps.select do |app|
       app.runbook_summary[:checklist].any? { |item| item[:id].to_s == input["item_id"].to_s }
+    end
+    @item_lookup_ambiguous = matches.many?
+    matches.one? ? matches.first : nil
+  end
+
+  def app_has_item?(app, item_id)
+    app.runbook_summary[:checklist].any? { |item| item[:id].to_s == item_id.to_s }
+  end
+
+  def item_lookup_failure(input)
+    if @item_lookup_ambiguous
+      Result.fail("Checklist item id is ambiguous: #{input['item_id']}. Include app_id or app_name.")
+    else
+      Result.fail("Checklist item not found: #{input['item_id']}")
     end
   end
 
