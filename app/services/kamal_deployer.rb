@@ -96,7 +96,7 @@ class KamalDeployer
     end
     note_self_deploy if app.self_managed?
     caddy_cutover.prepare! if caddy_cutover
-    stop_prior_container_if_fixed_port
+    return false unless stop_prior_container_if_fixed_port
     unless run_kamal_deploy
       recover_after_stop_first
       return false
@@ -189,10 +189,25 @@ class KamalDeployer
     missing = required_secrets.reject do |key|
       provided.include?(key) || (app.self_managed? && resolvable_from_conductor_env?(key))
     end
-    return true if missing.empty?
+    unless missing.empty?
+      fail_with("Missing required env var(s): #{missing.join(', ')}. " \
+                "Add them under the app's Environment Variables (mark as secret), then redeploy.")
+      return false
+    end
 
-    fail_with("Missing required env var(s): #{missing.join(', ')}. " \
-              "Add them under the app's Environment Variables (mark as secret), then redeploy.")
+    verify_managed_master_key
+  end
+
+  # Rails encrypted credentials use an AES-128 key represented by exactly 32
+  # hexadecimal characters. Catching a SECRET_KEY_BASE pasted into this slot is
+  # important on a fixed-port adoption: otherwise the old native owner is stopped
+  # before Rails reports the malformed key during container boot.
+  def verify_managed_master_key
+    key = app.deploy_env_pairs(server: deploy_server).to_h["RAILS_MASTER_KEY"]
+    return true if key.blank? || key.match?(/\A[0-9a-f]{32}\z/i)
+
+    fail_with("RAILS_MASTER_KEY must be exactly 32 hexadecimal characters. " \
+              "Verify the app's credentials key; do not substitute SECRET_KEY_BASE.")
     false
   end
 
@@ -434,11 +449,64 @@ class KamalDeployer
     return true unless fixed_port_app?
 
     log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
+    return false unless stop_native_port_owner
+
     result = @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.stop}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
     release_fixed_port
     @stopped_prior = true
-    true
+    return true if fixed_port_free?
+
+    fail_with("Fixed port #{fixed_host_port} is still in use after releasing #{app.name}'s native units and containers. " \
+              "Refusing to boot or stop an unidentified process.")
+    recover_after_stop_first
+    false
+  end
+
+  # A first Kamal adoption can find the fixed port owned by the app's legacy
+  # systemd service rather than a container. The unit names are the native
+  # deploy contract (`<slug>-server.service` + socket), so stop only those exact
+  # app-owned units. Keep the snapshot for fail-safe recovery below.
+  def stop_native_port_owner
+    @stopped_native_units = active_native_units
+    return true if @stopped_native_units.empty?
+
+    units = Shellwords.join(@stopped_native_units)
+    log "fixed port #{fixed_host_port} is served by legacy native units; disabling them for Kamal adoption"
+    @stopped_prior = true
+    result = ssh.execute_with_status("systemctl --user disable --now #{units}")
+    return true if result[:success]
+
+    fail_with("Could not stop #{app.name}'s native units before Kamal adoption")
+    recover_after_stop_first
+    false
+  rescue StandardError => e
+    fail_with("Could not inspect #{app.name}'s native units: #{e.message}")
+    recover_after_stop_first
+    false
+  end
+
+  def active_native_units
+    return [] if ssh.nil?
+
+    candidates = [ "#{app.slug}-server.service", "#{app.slug}-server.socket" ]
+    checks = candidates.map do |unit|
+      escaped = Shellwords.escape(unit)
+      %(if systemctl --user is-active --quiet #{escaped}; then printf '%s\\n' #{escaped}; fi)
+    end
+    result = ssh.execute_with_status(checks.join("; "))
+    return [] unless result[:success]
+
+    result[:output].to_s.lines.map(&:strip) & candidates
+  end
+
+  def fixed_port_free?
+    return false if fixed_host_port.blank? || ssh.nil?
+
+    result = ssh.execute_with_status("ss -ltnH 'sport = :#{Integer(fixed_host_port)}'")
+    result[:success] && result[:output].to_s.strip.empty?
+  rescue ArgumentError, TypeError
+    false
   end
 
   # A deploy that fails leaves a container behind, and nothing ever removed them:
@@ -553,10 +621,29 @@ class KamalDeployer
   def recover_after_stop_first
     return unless @stopped_prior
 
+    if @stopped_native_units.present?
+      restore_native_units
+      return
+    end
+
     log "=== deploy failed after stop-first — best-effort rebooting so the app isn't left down ==="
     @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.boot}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
   rescue StandardError => e
     log "recovery reboot failed (#{e.message}); manual `kamal app boot` may be needed"
+  end
+
+  def restore_native_units
+    units = Shellwords.join(@stopped_native_units)
+    path = Shellwords.escape(app.health_check_path.presence || "/up")
+    port = Integer(fixed_host_port)
+    command = "systemctl --user daemon-reload && " \
+              "systemctl --user enable #{units} && " \
+              "systemctl --user start #{units} && " \
+              "for attempt in 1 2 3 4 5 6 7 8 9 10; do " \
+              "curl -fsS http://127.0.0.1:#{port}#{path} >/dev/null && exit 0; sleep 1; done; exit 1"
+    log "=== deploy failed after native handoff — restoring the prior native service and verifying health ==="
+    result = ssh.execute_with_status(command)
+    log "native recovery failed; manual systemd recovery is required" unless result[:success]
   end
 
   # Runs `kamal deploy`, recovering from a stale deploy lock. Kamal takes a global

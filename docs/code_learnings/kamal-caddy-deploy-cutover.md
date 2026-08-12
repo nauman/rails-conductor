@@ -35,6 +35,14 @@
   environment Conductor injects. Only a self-managed app may read
   `config/master.key`; that ignored file is deliberately absent from ordinary
   server-side checkouts.
+- Do not substitute `SECRET_KEY_BASE` for `RAILS_MASTER_KEY`. Rails credentials
+  keys are exactly 32 hexadecimal characters; validate that shape before a
+  fixed-port deploy stops the incumbent process.
+- The first Kamal deploy may find an app's fixed port owned by its legacy
+  `<slug>-server.service` and socket rather than Docker. Snapshot and disable
+  only those exact app-owned units, verify the port is free before boot, and on
+  failure re-enable, restart, and health-check the native service. A Kamal
+  `app boot` is not a rollback when the captured incumbent was native.
 - A custom alias outside the primary hostname family is owned only when its
   route is Conductor-managed and already targets the app's exclusive recorded
   host port. An unrelated legacy/no-id route on that port remains ambiguous and

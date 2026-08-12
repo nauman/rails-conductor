@@ -40,7 +40,12 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
     def execute_with_status(command)
       @commands << command
-      { success: true, exit_code: 0, output: @output, stderr: "" }
+      output = if command.include?("systemctl --user is-active") || command.include?("ss -ltnH")
+        ""
+      else
+        @output
+      end
+      { success: true, exit_code: 0, output:, stderr: "" }
     end
   end
 
