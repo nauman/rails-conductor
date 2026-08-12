@@ -12,10 +12,34 @@ export PARALLEL_WORKERS=1
 base="$(git merge-base origin/main HEAD 2>/dev/null || true)"
 [ -z "${base:-}" ] && base="$(git rev-parse HEAD~1 2>/dev/null || echo HEAD)"
 changed="$(git diff --name-only "$base"..HEAD 2>/dev/null || true)"
+
+# The DEPLOY CONFIG gate. Two consecutive deploys failed at kamal's config load —
+# once for a destination overlay this repo does not carry, once for the
+# `require_destination` flag that demanded it — and no gate could see either: the
+# test suite does not evaluate config/deploy.yml, and a workflow-only change used to
+# read as "docs". `kamal config` renders it in about a second and needs no secrets.
+# Validate with the SAME flags CI will use, since the failure was a mismatch BETWEEN
+# the workflow and the config, which neither file reveals alone.
+if printf '%s\n' "$changed" | grep -qE '^(config/deploy.*\.yml|\.kamal/|\.github/workflows/deploy\.yml)'; then
+  dest="$(grep -oE 'bin/kamal deploy( +-d +[A-Za-z0-9_-]+)?' .github/workflows/deploy.yml 2>/dev/null | head -1 | sed -nE 's/.*-d +([A-Za-z0-9_-]+).*/\1/p')"
+  echo "pre-push: validating the deploy config as CI invokes it (${dest:+-d $dest}${dest:+ }base)"
+  # shellcheck disable=SC2086
+  if ! bin/kamal config ${dest:+-d "$dest"} >/dev/null 2>/tmp/kamal-config-check.$$; then
+    echo "pre-push: ✗ deploy config is invalid for this invocation — CI would fail at config load:" >&2
+    sed 's/^/    /' /tmp/kamal-config-check.$$ >&2; rm -f /tmp/kamal-config-check.$$
+    echo "  Fix the config/workflow pair, or: git push --no-verify" >&2
+    exit 1
+  fi
+  rm -f /tmp/kamal-config-check.$$
+  echo "pre-push: ✓ deploy config renders."
+fi
+
 code_changed=0; tests=""
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  case "$f" in app/*|lib/*|config/*|db/*|test/*|Gemfile|Gemfile.lock) code_changed=1 ;; esac
+  # .github/** counts as code: a workflow change deploys differently, and calling it
+  # "docs" is how a broken deploy invocation reached main unexercised.
+  case "$f" in app/*|lib/*|config/*|db/*|test/*|.github/*|Gemfile|Gemfile.lock) code_changed=1 ;; esac
   case "$f" in
     test/system/*) : ;;
     *og_card*) : ;;
