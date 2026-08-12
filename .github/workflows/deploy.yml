@@ -110,14 +110,21 @@ jobs:
           eval "$(ssh-agent -s)"
           printf '%s\n' "$SSH_PRIVATE_KEY" | ssh-add -
           ssh-add -l
-          bin/kamal deploy -d production
+          # No `-d production` here. The destination overlay is a SELF-DESCRIBING
+          # app's file (KamalConfig writes config/deploy.production.yml into the
+          # checkout), and this repo carries only config/deploy.yml — so passing the
+          # destination makes kamal exit before it does anything: "Configuration file
+          # not found ... config/deploy.production.yml". Every code path guards this
+          # on app.self_describing? for exactly that reason; CI must too. Commit the
+          # overlay first if this repo is ever meant to deploy with a destination.
+          bin/kamal deploy
           # Explicit, gated migration. The image entrypoint also runs db:prepare on
           # boot, but running it here makes migrations a visible, fail-loud step —
           # a failed migration fails the deploy instead of leaving prod's DB lagging
           # the code (recurring 500s). Idempotent: a no-op if already migrated.
           echo "=== db:migrate (gated) ==="
-          bin/kamal app exec --reuse -d production "bin/rails db:migrate"
-          bin/kamal app exec --reuse -d production "bin/rails db:abort_if_pending_migrations"
+          bin/kamal app exec --reuse "bin/rails db:migrate"
+          bin/kamal app exec --reuse "bin/rails db:abort_if_pending_migrations"
 
       - name: Verify /version
         run: |
