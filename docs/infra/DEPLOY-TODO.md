@@ -60,8 +60,14 @@ assumes kamal-proxy.
     `kamal redeploy`, `kamal app maintenance`, or `kamal app live`.
 
 - [ ] **Caddy multi-host cutover.**
+  - **Implementation boundary:** Caddy-edge apps with `deploy_method: kamal`
+    run through `KamalDeployer`, not `AppDeployer`. The fixed-port assertion
+    belongs in KamalDeployer after boot; implementing it only in AppDeployer is
+    an incomplete fix that production will never execute for those apps.
   - Republish every configured hostname for an app during Caddy-mode cutover,
     including apex, `www`, aliases, and wildcard subjects.
+  - Do not rely only on Conductor `@id`: report unmanaged/no-id routes that
+    match the app's live port instead of silently treating them as absent.
   - Acceptance: no hostname remains attached to the superseded container after
     a successful deploy, and each hostname is verified against the new release.
 

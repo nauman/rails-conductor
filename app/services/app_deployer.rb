@@ -2,6 +2,10 @@ require "shellwords"
 require "base64"
 
 class AppDeployer
+  # IMPORTANT: this deployer is selected for non-Kamal deploy methods. A Kamal
+  # app on a Caddy server is deployed by KamalDeployer, even though its edge is
+  # Caddy. Do not put the fleet's Kamal+Caddy cutover guarantee here alone;
+  # changes for that shape belong in KamalDeployer's fixed-port path too.
   attr_reader :app, :deployment, :ssh, :error
 
   def initialize(app, deployment)

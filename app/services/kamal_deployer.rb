@@ -72,6 +72,11 @@ class KamalDeployer
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
     return false unless verify_synced_head
+    # Caddy is only the edge; Kamal still owns this deploy transaction. The
+    # Caddy-specific post-boot route assertion must run in this class, not in
+    # AppDeployer: deploy_method=kamal always reaches KamalDeployer. The Caddy
+    # path reuses one fixed host port, so it must validate every hostname after
+    # boot rather than looking for a changed candidate port.
     return false unless verify_proxy_off_on_caddy_edge
     record_commit_sha
     return false unless verify_required_secrets

@@ -19,6 +19,10 @@
   only its primary domain. Apex, `www`, and wildcard subjects are separate
   Caddy route matches; updating only one leaves stale traffic on the old
   container while health checks can still report green.
+- Select the deployer by deploy method before reasoning about the edge. A
+  `deploy_method: kamal` app on a Caddy server still runs through
+  `KamalDeployer`; Caddy changes placed only in `AppDeployer` will never execute
+  for that production shape. Its fixed-port path needs a post-boot assertion.
 
 ## Deployment checklist
 
