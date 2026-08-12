@@ -413,7 +413,10 @@ class KamalDeployer
   def caddy_cutover
     return nil unless deploy_server&.edge_type == "caddy" && app.domain.present?
 
-    @caddy_cutover ||= CaddyCutover.new(app)
+    @caddy_cutover ||= CaddyCutover.new(
+      app,
+      client: CaddyClient.new(deploy_server, ssh_connection: ssh)
+    )
   end
 
   def reconcile_caddy_edge

@@ -11,9 +11,11 @@ class CaddyCutoverTest < ActiveSupport::TestCase
 
     def fetch_routes = @routes
 
-    def live(domain:, upstream:)
+    def live(domain:, upstream:, server_name: nil)
       @live_calls << [ domain, upstream ]
-      route = @routes.find { |entry| entry["domain"] == domain }
+      route = @routes.find do |entry|
+        entry["domain"] == domain && (server_name.nil? || entry["server_name"] == server_name)
+      end
       route ? route["upstream"] = upstream : @routes << { "domain" => domain, "upstream" => upstream }
     end
   end
@@ -31,11 +33,16 @@ class CaddyCutoverTest < ActiveSupport::TestCase
       { "domain" => "example.com", "upstream" => "127.0.0.1:3000", "route_id" => nil },
       { "domain" => "*.example.com", "upstream" => "127.0.0.1:20000", "route_id" => nil },
       { "domain" => "www.example.com", "upstream" => "127.0.0.1:3000", "route_id" => nil },
-      { "domain" => "other.example.net", "upstream" => "127.0.0.1:3000", "route_id" => nil }
+      { "domain" => "other.example.net", "upstream" => "127.0.0.1:4000", "route_id" => nil }
     ]
     caddy = FakeCaddy.new(routes)
     cutover = CaddyCutover.new(@app, client: caddy)
 
+    assert_raises(CaddyCutover::Error, /ambiguous Caddy hostname ownership/) do
+      cutover.prepare!
+    end
+
+    routes[1]["upstream"] = "127.0.0.1:3000"
     cutover.prepare!
     result = cutover.reconcile!
 
@@ -43,9 +50,19 @@ class CaddyCutoverTest < ActiveSupport::TestCase
       [ "example.com", "127.0.0.1:3000" ],
       [ "*.example.com", "127.0.0.1:3000" ],
       [ "www.example.com", "127.0.0.1:3000" ],
-      [ "other.example.net", "127.0.0.1:3000" ]
     ], caddy.live_calls
     assert_empty result[:stale]
+  end
+
+  test "fails closed when an unrelated route shares the fixed port" do
+    routes = [
+      { "domain" => "example.com", "upstream" => "127.0.0.1:3000", "route_id" => nil },
+      { "domain" => "other.example.net", "upstream" => "127.0.0.1:3000", "route_id" => nil }
+    ]
+
+    assert_raises(CaddyCutover::Error, /ambiguous Caddy port ownership/) do
+      CaddyCutover.new(@app, client: FakeCaddy.new(routes)).prepare!
+    end
   end
 
   test "always includes the primary domain when no route exists yet" do

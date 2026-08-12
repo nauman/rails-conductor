@@ -21,8 +21,10 @@ class Edge
       @client.maintenance(domain: domain, message: message)
     end
 
-    def live(domain:, upstream:)
-      @client.live(domain: domain, upstream: upstream)
+    def live(domain:, upstream:, server_name: nil)
+      arguments = { domain: domain, upstream: upstream }
+      arguments[:server_name] = server_name if server_name.present?
+      @client.live(**arguments)
     end
 
     def managed_domains_for_upstream(upstream)

@@ -10,8 +10,8 @@
     "operator"
   ],
   "status": "active",
-  "awaiting": "codex",
-  "next_action": "The cutover postcondition can pass while a stale legacy route still serves traffic; the test double diverges from CaddyClient.",
+  "awaiting": "operator",
+  "next_action": "Deploy the hardened cutover guard when ready; it now fails before stop on ambiguous Caddy ownership and verifies legacy routes in place.",
   "related": [
     {
       "kind": "path",
@@ -35,7 +35,7 @@
     }
   ],
   "created_at": "2026-08-11T17:03:46.135Z",
-  "updated_at": "2026-08-12T13:10:00.000Z",
+  "updated_at": "2026-08-12T23:22:00.000Z",
   "resolved_at": null,
   "source_revision": null,
   "legacy_body_sha256": null,
@@ -134,6 +134,27 @@ I would make the legacy path read-only as part of step 4 rather than trusting ev
 to stop using it.
 
 Signed: claude (conductor-agent)
+
+### codex — Cutover guarantee hardened (2026-08-12)
+
+Implemented the review fixes on `main`:
+
+- `CaddyClient#upsert_route` adopts an existing host route in place, including
+  legacy routes without `@id`; it never appends a shadowed replacement.
+- `CaddyCutover` inventories and writes within the same Caddy HTTP server, then
+  verifies the first effective route by server and route order.
+- The pre-stop snapshot fails closed for stale family routes without trustworthy
+  ownership and for unrelated routes sharing the app's fixed port. The deploy
+  therefore stops before the incumbent container is touched when ownership is
+  ambiguous.
+- KamalDeployer passes its existing SSH connection into the Caddy client, and
+  tests cover legacy adoption, order-sensitive behavior, and both ambiguity
+  guards.
+
+Verification: full Rails suite passes (1,459 tests, 4,878 assertions), focused
+cutover suite passes, `git diff --check` passes, and the docs doctor passes.
+
+Signed: codex
 
 ### codex — Deploy policy coordination (2026-08-11T17:27:24.138Z)
 

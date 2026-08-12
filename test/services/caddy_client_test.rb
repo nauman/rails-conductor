@@ -73,6 +73,29 @@ class CaddyClientTest < ActiveSupport::TestCase
     assert_includes ssh.commands.last, "127.0.0.1:3000"
   end
 
+  def test_upsert_route_adopts_a_legacy_route_in_place
+    config = {
+      "apps" => { "http" => { "servers" => { "srv0" => { "routes" => [
+        { "match" => [ { "host" => [ "example.com" ] } ],
+          "handle" => [ { "handler" => "reverse_proxy", "upstreams" => [ { "dial" => "127.0.0.1:20000" } ] } ] },
+        { "@id" => "unrelated", "match" => [ { "host" => [ "other.example.com" ] } ] }
+      ] } } } }
+    }
+    loaded = nil
+    client = CaddyClient.new(build_server)
+    client.stub(:fetch_config, config) do
+      client.stub(:load_config, ->(value) { loaded = value }) do
+        result = client.live(domain: "example.com", upstream: "127.0.0.1:3000", server_name: "srv0")
+        assert_equal "updated", result["action"]
+      end
+    end
+
+    routes = loaded.dig("apps", "http", "servers", "srv0", "routes")
+    assert_equal 2, routes.length
+    assert_equal "conductor-route-example-com", routes.first["@id"]
+    assert_equal "127.0.0.1:3000", routes.first.dig("handle", 0, "upstreams", 0, "dial")
+  end
+
   def test_maintenance_route_returns_503_without_an_upstream
     ssh = FakeSsh.new([ { stdout: "{}" }, { stdout: "" } ])
     client = CaddyClient.new(build_server, ssh_connection: ssh)

@@ -49,8 +49,8 @@ class CaddyClient
   def fetch_routes
     config = fetch_config
     http_servers(config).flat_map do |server_name, server_config|
-      Array(server_config["routes"]).flat_map do |route|
-        summarize_route_hosts(route, server_name)
+      Array(server_config["routes"]).each_with_index.flat_map do |route, index|
+        summarize_route_hosts(route, server_name, index)
       end
     end
   end
@@ -75,7 +75,12 @@ class CaddyClient
     routes = config.dig("apps", "http", "servers", server_name, "routes") || []
     route = build_route(normalized)
 
-    existing_index = routes.index { |entry| entry["@id"] == route["@id"] }
+    # Adopt a legacy route by hostname when it has no @id. Appending a new
+    # route beside an earlier host match leaves the old route effective because
+    # Caddy evaluates routes in order; that creates a false-green postcondition.
+    existing_index = routes.index do |entry|
+      entry["@id"] == route["@id"] || route_hosts(entry).include?(normalized[:domain])
+    end
     if existing_index
       routes[existing_index] = route
       action = "updated"
@@ -106,8 +111,8 @@ class CaddyClient
     upsert_route(domain: domain, upstream: "127.0.0.1:1", maintenance: true, message: message)
   end
 
-  def live(domain:, upstream:)
-    upsert_route(domain: domain, upstream: upstream)
+  def live(domain:, upstream:, server_name: nil)
+    upsert_route(domain: domain, upstream: upstream, server_name: server_name)
   end
 
   def validate_route(route_definition)
@@ -226,7 +231,7 @@ class CaddyClient
     }
   end
 
-  def summarize_route_hosts(route, server_name)
+  def summarize_route_hosts(route, server_name, route_index)
     proxy = Array(route["handle"]).find { |entry| entry["handler"] == "reverse_proxy" } || {}
     upstream = Array(proxy["upstreams"]).first || {}
     host_match = Array(route["match"]).find { |entry| entry.key?("host") } || {}
@@ -235,9 +240,15 @@ class CaddyClient
         "route_id" => route["@id"],
         "domain" => domain,
         "upstream" => upstream["dial"],
-        "server_name" => server_name
+        "server_name" => server_name,
+        "route_index" => route_index
       }
     end
+  end
+
+  def route_hosts(route)
+    host_match = Array(route["match"]).find { |entry| entry.key?("host") } || {}
+    Array(host_match["host"])
   end
 
   def locate_route(config, route_id_or_domain)

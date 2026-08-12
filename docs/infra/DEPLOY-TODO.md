@@ -66,8 +66,9 @@ assumes kamal-proxy.
     an incomplete fix that production will never execute for those apps.
   - Republish every configured hostname for an app during Caddy-mode cutover,
     including apex, `www`, aliases, and wildcard subjects.
-  - Do not rely only on Conductor `@id`: report unmanaged/no-id routes that
-    match the app's live port instead of silently treating them as absent.
+  - Do not rely only on Conductor `@id`: adopt a legacy/no-id route in place,
+    verify the first effective route per server, and fail before stop when
+    hostname or fixed-port ownership is ambiguous.
   - Acceptance: no hostname remains attached to the superseded container after
     a successful deploy, and each hostname is verified against the new release.
 
