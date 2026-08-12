@@ -69,6 +69,14 @@ assumes kamal-proxy.
   - Do not rely only on Conductor `@id`: adopt a legacy/no-id route in place,
     verify the first effective route per server, and fail before stop when
     hostname or fixed-port ownership is ambiguous.
+  - `App#port` is mandatory for Docker/Kamal apps on Caddy. Never substitute
+    `runtime_port`/`PORT`: those are container listeners, not host upstreams.
+    A managed custom alias may follow only when it already targets that recorded
+    port; unrelated legacy/no-id routes fail closed.
+  - A non-empty primary/family route on a different upstream is also a hard
+    pre-stop failure. `CADDY_PUBLISH_PORT` is adapter grammar derived from
+    `App#port`, and is stripped on kamal-proxy targets so stale edge state cannot
+    follow an app during transfer.
   - Acceptance: no hostname remains attached to the superseded container after
     a successful deploy, and each hostname is verified against the new release.
 
@@ -92,6 +100,13 @@ assumes kamal-proxy.
     then raise `KamalCommand::MINIMUM_VERSION`.
   - Acceptance: every host the proxy served before the reboot serves 200 after,
     and `kamal-proxy --version` reports ≥ v0.9.2.
+
+- [ ] **Adopt placeholder Caddy app repository configs before deploy.**
+  - Any committed `config/deploy.yml` with placeholder host/image values or
+    kamal-proxy enabled on a Caddy target must be refused safely before stop.
+  - Populate its registry/secrets coordinates, then either commit a truthful
+    Caddy-mode config or enable and verify the self-describing destination
+    overlay. Do not force through the existing guard.
 
 ## Current audit snapshot
 

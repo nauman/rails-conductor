@@ -17,11 +17,14 @@ class CaddyCutover
   # wildcard/www/alias family, including routes without @id.
   def prepare!
     raise Error, "#{@app.name} has no primary domain" if @app.domain.blank?
+    raise Error, "#{@app.name} host-published port is not recorded" if @app.published_port.blank?
 
     @routes = @client.fetch_routes
     @domains = [ [ @app.domain, preferred_server ] ]
     same_port_routes = @routes.select { |route| route["upstream"] == fixed_upstream }
-    unrelated_same_port = same_port_routes.reject { |route| hostname_family?(route["domain"]) }
+    unrelated_same_port = same_port_routes.reject do |route|
+      hostname_family?(route["domain"]) || conductor_managed?(route)
+    end
     if unrelated_same_port.any?
       raise Error, "ambiguous Caddy port ownership for #{@app.name}: #{unrelated_same_port.map { |route| route["domain"] }.uniq.join(', ')}"
     end
@@ -29,8 +32,8 @@ class CaddyCutover
     @domains.concat(same_port_routes.map { |route| [ route["domain"], route["server_name"] ] })
     @domains = @domains.compact_blank.uniq
     conflicts = @routes.filter_map do |route|
-      route["domain"] if hostname_family?(route["domain"]) && route["domain"] != @app.domain &&
-        route["upstream"].present? && route["upstream"] != fixed_upstream
+      route["domain"] if hostname_family?(route["domain"]) && route["upstream"].present? &&
+        route["upstream"] != fixed_upstream
     end.uniq
     raise Error, "ambiguous Caddy hostname ownership for #{@app.name}: #{conflicts.join(', ')}" if conflicts.any?
     self
@@ -67,5 +70,9 @@ class CaddyCutover
     host = domain.to_s.downcase
     primary = @app.domain.to_s.downcase
     host == primary || host == "www.#{primary}" || host == "*.#{primary}" || host.end_with?(".#{primary}")
+  end
+
+  def conductor_managed?(route)
+    route["route_id"].to_s.start_with?(CaddyClient::ROUTE_ID_PREFIX)
   end
 end

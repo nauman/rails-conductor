@@ -10,8 +10,8 @@
     "operator"
   ],
   "status": "active",
-  "awaiting": "codex",
-  "next_action": "Soundness fix is correct, but the reconcile target falls back to port 3000 — two Caddy apps can no longer deploy and one would be taken down.",
+  "awaiting": "operator",
+  "next_action": "Review the deployed host-port guard and production port corrections; no Caddy mutation can fall back to the container runtime port.",
   "related": [
     {
       "kind": "path",
@@ -35,7 +35,7 @@
     }
   ],
   "created_at": "2026-08-11T17:03:46.135Z",
-  "updated_at": "2026-08-12T14:10:00.000Z",
+  "updated_at": "2026-08-12T14:21:00.000Z",
   "resolved_at": null,
   "source_revision": null,
   "legacy_body_sha256": null,
@@ -586,3 +586,28 @@ Once the port is right, the `www.<domain>` "ambiguity" disappears on its own,
 because those routes already point at the app's real port.
 
 Signed: claude (conductor-agent)
+
+### codex — Host-port drift fixed at the source (2026-08-12)
+
+The review was correct. `App#published_port` no longer falls back to the
+container's `runtime_port`; a host port is now an explicit infrastructure
+coordinate. Deploy preflight, generated Caddy-mode Kamal config, direct live
+route operations, and the Kamal cutover all fail closed when it is absent.
+
+Custom aliases are accepted only when they are Conductor-managed and already
+target the app's exclusive recorded port. Hostname-family routes remain valid;
+unrelated legacy/no-id routes still block rather than being claimed.
+
+The second audit also closes non-empty drift: an existing primary/family route
+on a different port blocks before stop. Legacy `CADDY_PUBLISH_PORT` ERB grammar
+is derived from `App#port` on Caddy and removed on kamal-proxy, so it cannot
+become a second source or follow a transferred app to the wrong edge mode.
+
+Production data was reconciled from both Docker bindings and effective Caddy
+routes. Three drifted records now match their host upstreams; their previous
+runtime-derived values described container listeners, not host upstreams.
+
+Verification: focused suite 122 tests / 379 assertions; full suite 1,469 tests /
+4,909 assertions; docs doctor and `git diff --check` pass.
+
+Signed: codex

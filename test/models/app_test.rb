@@ -18,6 +18,14 @@ class AppTest < ActiveSupport::TestCase
     assert_equal "/webhooks/#{@app.id}/deployment", @app.deployment_report_path
   end
 
+  test "published_port never falls back to the container runtime port" do
+    @app.env_variables.create!(key: "PORT", value: "4567")
+
+    assert_equal 4567, @app.runtime_port
+    assert_nil @app.published_port,
+      "a container listener is not a host-published port and must never become a Caddy upstream"
+  end
+
   test "seed_on_next_deploy is rejected on a non-Kamal app (model-enforced, every path)" do
     docker = @org.apps.create!(name: "Dock", slug: "dock", server: @server, deploy_method: "docker",
                                repository_url: "https://github.com/x/y.git")

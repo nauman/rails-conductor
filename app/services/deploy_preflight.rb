@@ -6,6 +6,7 @@
 #   seeds      — has a seed run been recorded for this app? (the seed ledger)
 #   audit      — the target server's last ServerAudit rollup (block on at_risk)
 #   threads    — an explicit deploy_hold an agent sets while a thread is owed
+#   published_port — explicit host coordinate for Caddy container apps
 #
 # A :fail row blocks the deploy (callers pass force: to override); :warn is
 # surfaced but does not block. Pure read — no SSH, no side effects.
@@ -27,10 +28,22 @@ class DeployPreflight
   def initialize(app) = @app = app
 
   def check
-    Result.new(checks: [ migrations_check, seeds_check, audit_check, threads_check, residue_check ])
+    Result.new(checks: [ published_port_check, migrations_check, seeds_check, audit_check, threads_check, residue_check ])
   end
 
   private
+
+  def published_port_check
+    caddy_container = @app.server&.edge_type == "caddy" && (@app.kamal? || @app.docker?)
+    return skip(:published_port, "Host-published port", "not required for this deploy shape") unless caddy_container
+
+    if @app.published_port.present?
+      ok(:published_port, "Host-published port", "127.0.0.1:#{@app.published_port} recorded")
+    else
+      fail_row(:published_port, "Host-published port",
+               "host-published port is not recorded — never substitute the container runtime port")
+    end
+  end
 
   # Reads the STORED rollup — no SSH, so this is safe on a page render and in a
   # deploy. WARNs rather than fails: residue is usually harmless right until a

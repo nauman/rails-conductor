@@ -12,6 +12,8 @@
 #   kamal console -d production   /   kamal app logs -d production
 # against real prod WITHOUT querying Conductor.
 class KamalConfig
+  class Error < StandardError; end
+
   DESTINATION = "production".freeze
 
   # Keys that ARE the deploy coordinates — represented structurally below, so they
@@ -19,6 +21,7 @@ class KamalConfig
   DEPLOY_KEYS = %w[
     KAMAL_SERVICE DEPLOY_SERVER_IP DEPLOY_SSH_USER APP_HOST
     KAMAL_REGISTRY_SERVER KAMAL_REGISTRY_USERNAME KAMAL_REGISTRY_PASSWORD
+    CADDY_PUBLISH_PORT
   ].freeze
 
   attr_reader :app, :vault
@@ -126,7 +129,9 @@ class KamalConfig
     hosts = [@server&.ip_address].compact
     return { "web" => hosts } if kamal_proxy_edge?
 
-    host_port = app.port || app.runtime_port
+    host_port = app.published_port
+    raise Error, "#{app.name} host-published port is not recorded" if host_port.blank?
+
     runtime_port = app.runtime_port
     {
       "web" => {

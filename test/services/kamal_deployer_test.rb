@@ -102,6 +102,12 @@ class KamalDeployerTest < ActiveSupport::TestCase
     path
   end
 
+  def configure_caddy_fixed_port(port = 9080)
+    @server.update!(edge_type: "caddy")
+    @app.update!(port: port)
+    write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n")
+  end
+
   test "runs git sync then kamal deploy locally, marks deployment succeeded" do
     shell = FakeShell.new(success: true)
     deploy_with(shell)
@@ -116,12 +122,11 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
   # Regression for deploy #182: a proxy-less (host-Caddy) app publishes a FIXED
   # host port, so kamal's boot-new-alongside-old roll dies with "port already
-  # allocated". CADDY_PUBLISH_PORT signals that mode — stop the prior container
-  # BEFORE boot so the port frees.
-  test "fixed-port (CADDY_PUBLISH_PORT) app stops the prior container before kamal deploy" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+  # allocated". The host-Caddy edge plus the recorded App#port is that mode.
+  test "host-Caddy app with a recorded port stops the prior container before kamal deploy" do
+    configure_caddy_fixed_port
     shell = FakeShell.new(success: true)
-    deploy_with(shell)
+    deploy_with(shell, skip_caddy_cutover: true)
 
     cmds = shell.runs.map { |r| r[:command].last }
     stop_idx   = cmds.index { |c| c.include?("kamal app stop") }
@@ -135,9 +140,9 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # the app down. On a post-stop failure the deployer must best-effort reboot it
   # (this is what would have instantly restored calm.page during the blip).
   test "fixed-port deploy that fails after stop-first reboots the app so it is not left down" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     shell = FailOnShell.new("kamal deploy")
-    deploy_with(shell)
+    deploy_with(shell, skip_caddy_cutover: true)
 
     cmds = shell.runs.map { |r| r[:command].last }
     stop_idx = cmds.index { |c| c.include?("kamal app stop") }
@@ -152,6 +157,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # config doesn't explicitly disable kamal-proxy, so it can't collide on :80/:443.
   test "refuses to deploy onto a host-Caddy box when config lacks an explicit proxy: false" do
     @server.update!(edge_type: "caddy")
+    @app.update!(port: 9080)
     write_checkout_file("config/deploy.yml", "service: appone\nservers:\n  web:\n    hosts:\n      - 10.0.0.9\n")
     shell = FakeShell.new(success: true)
     deploy_with(shell)
@@ -163,6 +169,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
   test "allows a proxy-less (proxy: false) app on a host-Caddy box" do
     @server.update!(edge_type: "caddy")
+    @app.update!(port: 9080)
     write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n    hosts:\n      - 10.0.0.9\n")
     shell = FakeShell.new(success: true)
     deploy_with(shell, skip_caddy_cutover: true)
@@ -174,6 +181,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
 
   test "a Kamal Caddy deploy runs the edge postcondition after boot" do
     @server.update!(edge_type: "caddy")
+    @app.update!(port: 3000)
     write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n")
     calls = []
     verifier = Object.new
@@ -593,6 +601,30 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert env["SSH_KEYS"].present?, "expected the materialized ssh key path"
   end
 
+  test "derives a Caddy-aware deploy config port from App#port" do
+    configure_caddy_fixed_port(9080)
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9999")
+    shell = FakeShell.new(success: true)
+
+    deploy_with(shell, skip_caddy_cutover: true)
+
+    env = shell.runs.find { |run| run[:command].last.include?("kamal deploy") }[:env]
+    assert_equal "9080", env["CADDY_PUBLISH_PORT"],
+      "repo-specific ERB may consume this adapter variable, but App#port remains its only source"
+  end
+
+  test "does not leak the Caddy adapter variable onto a kamal-proxy box" do
+    @server.update!(edge_type: "kamal_proxy")
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    shell = FakeShell.new(success: true)
+
+    deploy_with(shell)
+
+    env = shell.runs.find { |run| run[:command].last.include?("kamal deploy") }[:env]
+    refute env.key?("CADDY_PUBLISH_PORT"),
+      "a stale Caddy selector must not disable kamal-proxy after an app moves boxes"
+  end
+
   test "builds over SSH (DOCKER_HOST), no docker.sock, and pins HOME for the Net::SSH roll" do
     shell = FakeShell.new(success: true)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
@@ -786,6 +818,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # releases at once.
   test "a host-Caddy app stops the prior container first, even without CADDY_PUBLISH_PORT" do
     @app.server.update!(edge_type: "caddy")
+    @app.update!(port: 9080)
     # A caddy-edge deploy is refused without an explicit role-level proxy:false,
     # so the config has to be realistic for the stop-first step to be reached.
     write_checkout_file("config/deploy.yml", "servers:\n  web:\n    proxy: false\n")
@@ -813,11 +846,11 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # and keeps 127.0.0.1:9080, so the stop found nothing and every boot died with
   # "port is already allocated". Free the port by what HOLDS it, not by its name.
   test "fixed-port app also stops a renamed incumbent still holding the published port" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     # Same shape as the real incumbent, but wearing THIS app's service label.
     ssh = FakeSsh.new(output: "abc123|#{@app.resource_key}-web-latest_replaced_e0d5aad|#{@app.resource_key}")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     assert ssh.commands.any? { |c| c.include?("--filter publish=9080") },
       "expected a lookup of whatever holds the fixed port: #{ssh.commands.inspect}"
@@ -829,10 +862,10 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # fixed host port is exclusive, so if something ELSE holds it that is a genuine
   # conflict for a human, not something to silently terminate mid-deploy.
   test "a foreign container holding the port is reported, never stopped" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     ssh = FakeSsh.new(output: "dead99|someone-elses-web|otherapp")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     refute ssh.commands.any? { |c| c.include?("docker stop") },
       "must not stop another app's container: #{ssh.commands.inspect}"
@@ -859,21 +892,21 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # `calmpage`) would have been judged the owner and had a stranger's container
   # stopped mid-deploy — defeating the one safety property this step exists for.
   test "a container whose name merely starts with this app's service is NOT owned" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     longer = "#{@app.resource_key}extra-web-abc123"
     ssh = FakeSsh.new(output: "dead99|#{longer}|#{@app.resource_key}extra")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     refute ssh.commands.any? { |c| c.include?("docker stop") },
       "#{longer} belongs to a different app and must be left running: #{ssh.commands.inspect}"
   end
 
   test "the app's own role container is still recognised across the - separator" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     ssh = FakeSsh.new(output: "abc123|#{@app.resource_key}-web-abc123|")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     assert ssh.commands.any? { |c| c.include?("docker stop") && c.include?("abc123") },
       "an unlabelled container named <service>-web-<version> is ours: #{ssh.commands.inspect}"
@@ -884,11 +917,11 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # deploy that creates the junk is the thing that should clear it, and it knows
   # exactly which containers are its own.
   test "a deploy prunes its own dead boot artifacts afterwards" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     ssh = FakeSsh.new(output: "junk1|#{@app.resource_key}-web-old|created\n" \
                               "junk2|#{@app.resource_key}-web-x_replaced_abc|exited")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     pruned = ssh.commands.select { |c| c.include?("docker rm") }
     assert pruned.any? { |c| c.include?("junk1") }, "a never-started container must be removed: #{ssh.commands.inspect}"
@@ -896,29 +929,29 @@ class KamalDeployerTest < ActiveSupport::TestCase
   end
 
   test "pruning never touches a running container" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     ssh = FakeSsh.new(output: "live1|#{@app.resource_key}-web-current|running")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     refute ssh.commands.any? { |c| c.include?("docker rm") && c.include?("live1") },
       "the live container serves traffic: #{ssh.commands.inspect}"
   end
 
   test "pruning never touches another app's container" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     ssh = FakeSsh.new(output: "other1|someone-elses-web-abc|exited")
 
-    deploy_with(FakeShell.new(success: true), ssh: ssh)
+    deploy_with(FakeShell.new(success: true), ssh: ssh, skip_caddy_cutover: true)
 
     refute ssh.commands.any? { |c| c.include?("docker rm") }, "not ours to remove"
   end
 
   test "a FAILED deploy does not prune — the leftovers are the evidence" do
-    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9080")
+    configure_caddy_fixed_port
     ssh = FakeSsh.new(output: "junk1|#{@app.resource_key}-web-old|created")
 
-    deploy_with(FailOnShell.new("kamal deploy"), ssh: ssh)
+    deploy_with(FailOnShell.new("kamal deploy"), ssh: ssh, skip_caddy_cutover: true)
 
     refute ssh.commands.any? { |c| c.include?("docker rm") },
       "removing artifacts of a failed deploy destroys what an operator needs to diagnose it"

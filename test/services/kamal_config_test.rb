@@ -61,12 +61,22 @@ class KamalConfigTest < ActiveSupport::TestCase
     assert_match %r{curl -f http://127\.0\.0\.1:3000/up}, o.dig("servers", "web", "options", "health-cmd")
   end
 
+  test "Caddy edge refuses to generate a publish mapping without a recorded host port" do
+    @server.update!(edge_type: "caddy")
+    @app.update_column(:port, nil)
+
+    error = assert_raises(KamalConfig::Error) { overlay }
+    assert_match(/host-published port is not recorded/, error.message)
+  end
+
   test "env is split: secrets listed, clear excludes deploy-coordinate keys" do
+    @app.env_variables.create!(key: "CADDY_PUBLISH_PORT", value: "9999")
     env = overlay["env"]
     assert_equal %w[DATABASE_URL RAILS_MASTER_KEY SECRET_KEY_BASE], env["secret"].sort
     assert_includes env["clear"].keys, "REDIS_URL"
     refute_includes env["clear"].keys, "APP_HOST", "deploy-coordinate key must not leak into env.clear"
     refute_includes env["clear"].keys, "KAMAL_REGISTRY_USERNAME"
+    refute_includes env["clear"].keys, "CADDY_PUBLISH_PORT"
   end
 
   test "secrets file resolves from env (git-safe), documents the localvault seed, never raw values" do

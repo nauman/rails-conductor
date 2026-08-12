@@ -102,7 +102,11 @@ class App < ApplicationRecord
     configured&.between?(1, 65_535) ? configured : 3000
   end
 
-  def published_port = port || runtime_port
+  # A host-published port is an explicit infrastructure coordinate. It must
+  # never inherit the process's internal listener: Caddy cannot reach a
+  # container-only port, and guessing here can repoint a healthy route to an
+  # unused host port.
+  def published_port = port.presence
 
   # The provisioned dedicated database backing this app ON a given server
   # (dedicated mode). Server-scoped because during a transfer the app has a

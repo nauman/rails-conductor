@@ -381,10 +381,9 @@ class KamalDeployer
   # — boot the new container ALONGSIDE the old, health-check it, then retire the
   # old — can't bind: the old container still holds the port and `docker run` dies
   # with "port is already allocated" (the deploy #182 failure). When the app is in
-  # that mode — signalled by CADDY_PUBLISH_PORT, the exact flag that makes its
-  # deploy.yml drop the proxy block and publish a fixed 127.0.0.1:<port>:3000 — stop
-  # the prior container FIRST so the port frees before boot. Brief downtime, and
-  # only for fixed-port apps; kamal-proxy apps keep their zero-downtime roll.
+  # that mode — a host-Caddy edge plus an explicit App#port — stop the prior
+  # container FIRST so the port frees before boot. Brief downtime, and only for
+  # fixed-port apps; kamal-proxy apps keep their zero-downtime roll.
   #
   # Advisory by design: `kamal app stop` is idempotent (a no-op on a first deploy),
   # skipped for self-managed apps (which would kill their own deploy job), and we
@@ -510,9 +509,7 @@ class KamalDeployer
   end
 
   # The exclusive host port this app publishes when it runs proxy-less.
-  def fixed_host_port
-    deploy_env["CADDY_PUBLISH_PORT"].presence || app.port.presence
-  end
+  def fixed_host_port = app.published_port
 
   # Kamal names containers `<service>-web-<version>`, so the fallback must anchor
   # on the role separator. A bare `start_with?` let an app whose service is a
@@ -533,8 +530,8 @@ class KamalDeployer
   # Does this app publish a FIXED host port that the old container still holds
   # when the new one boots?
   #
-  # This used to be detected solely by the presence of a CADDY_PUBLISH_PORT env
-  # var — a naming convention, not the condition. Apps that publish a fixed port
+  # This used to be detected by a CADDY_PUBLISH_PORT env var — a naming
+  # convention and a second source of truth. Apps that publish a fixed port
   # any other way (straight `publish:` in deploy.yml) skipped the stop-first step
   # and failed EVERY redeploy with "Bind for 0.0.0.0:<port> failed: port is
   # already allocated". That is what kept the fixed-port apps failing.
@@ -543,7 +540,7 @@ class KamalDeployer
   # the container must publish a fixed port for Caddy to reach it. No proxy means
   # nothing can hold two releases at once.
   def fixed_port_app?
-    deploy_env.key?("CADDY_PUBLISH_PORT") || deploy_server&.edge_type == "caddy"
+    deploy_server&.edge_type == "caddy"
   end
 
   # Safety net for the stop-first path. Stopping the old container BEFORE boot means
@@ -733,6 +730,15 @@ class KamalDeployer
   # DEPLOY_SERVER_IP / KAMAL_REGISTRY_USERNAME), plus the SSH key for net-ssh.
   def deploy_env
     env = app.env_variables.each_with_object({}) { |v, h| h[v.key] = v.value }
+    # Some legacy app repos use this ERB selector to choose their Caddy branch.
+    # Keep that grammar at the adapter boundary, derived from the canonical
+    # App#port, so the stored env value can neither drift nor follow an app onto
+    # a kamal-proxy server and accidentally disable its proxy.
+    if deploy_server.edge_type == "caddy" && app.published_port.present?
+      env["CADDY_PUBLISH_PORT"] = app.published_port.to_s
+    else
+      env.delete("CADDY_PUBLISH_PORT")
+    end
     env["DEPLOY_SERVER_IP"] ||= deploy_server.ip_address
     env["DEPLOY_SSH_USER"]  ||= deploy_server.ssh_user_or_default
     env["APP_HOST"]         ||= app.domain if app.domain.present?

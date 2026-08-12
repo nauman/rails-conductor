@@ -73,6 +73,18 @@ class EdgeOperationsTest < ActiveSupport::TestCase
     assert_empty caddy.calls
   end
 
+  test "Caddy live refuses to invent a host upstream from the runtime port" do
+    @app.update_column(:port, nil)
+    caddy = FakeCaddy.new
+
+    error = assert_raises(EdgeOperations::UnsupportedOperation) do
+      EdgeOperations.new(@app, caddy_client: caddy).live!
+    end
+
+    assert_match(/host-published port is not recorded/, error.message)
+    assert_empty caddy.calls
+  end
+
   test "Kamal-proxy edge keeps proxy operations in Kamal" do
     app = @org.apps.create!(name: "Proxy App", slug: "proxy-app", server: @proxy,
                             deploy_method: "kamal", domain: "proxy.example.com",

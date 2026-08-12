@@ -20,7 +20,8 @@ class DeployPreflightTest < ActiveSupport::TestCase
     r = check
     assert_equal :clear, r.status
     refute r.blocked?
-    assert r.checks.all? { |c| c.status == :ok }, "all rows should be ok: #{r.checks.map { |c| [ c.key, c.status ] }.inspect}"
+    assert r.checks.all? { |c| %i[ok skip].include?(c.status) },
+      "all rows should be ok or not applicable: #{r.checks.map { |c| [ c.key, c.status ] }.inspect}"
   end
 
   test "an at_risk server audit is a fail and blocks the deploy" do
@@ -49,6 +50,26 @@ class DeployPreflightTest < ActiveSupport::TestCase
     assert_equal :fail, row(r, :threads).status
     assert_match(/subdomains-edge/, row(r, :threads).detail)
     assert r.blocked?
+  end
+
+  test "a Caddy container app without a recorded host port is blocked" do
+    @server.update!(edge_type: "caddy")
+
+    result = check
+    port_row = row(result, :published_port)
+
+    assert port_row, "preflight must surface the missing infrastructure coordinate"
+    assert_equal :fail, port_row.status
+    assert_match(/host-published port/, port_row.detail)
+    assert result.blocked?
+  end
+
+  test "a Kamal-proxy app does not need a host-published port" do
+    @server.update!(edge_type: "kamal_proxy")
+
+    port_row = row(check, :published_port)
+    assert port_row, "preflight must explain why no host port is required"
+    assert_equal :skip, port_row.status
   end
 
   test "kamal migrations are gated (ok); docker/native are not (warn)" do

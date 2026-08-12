@@ -96,7 +96,10 @@ class EdgeOperations
   end
 
   def caddy_upstream
-    "127.0.0.1:#{@app.published_port}"
+    port = @app.published_port
+    raise UnsupportedOperation, "#{@app.name} host-published port is not recorded" if port.blank?
+
+    "127.0.0.1:#{port}"
   end
 
   def healthy_for_edge?

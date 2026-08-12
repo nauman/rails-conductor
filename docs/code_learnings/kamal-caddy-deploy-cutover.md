@@ -19,6 +19,22 @@
   only its primary domain. Apex, `www`, and wildcard subjects are separate
   Caddy route matches; updating only one leaves stale traffic on the old
   container while health checks can still report green.
+- `App#port` is the host-published infrastructure coordinate. `PORT` and the
+  `runtime_port` fallback describe the listener inside the container and must
+  never become a Caddy upstream. A Caddy container app without `App#port`
+  refuses configuration, live-route mutation, and deploy before the incumbent
+  is stopped.
+- An existing primary or hostname-family route that disagrees with `App#port`
+  is drift, not a cutover target. Fixed-port Caddy deploys do not change host
+  ports between releases, so the pre-stop snapshot must refuse instead of
+  rewriting the route after boot.
+- `CADDY_PUBLISH_PORT` may remain as repo-specific ERB grammar, but
+  `KamalDeployer` derives or removes it from the target edge and `App#port`.
+  It is never an independent stored source of routing truth.
+- A custom alias outside the primary hostname family is owned only when its
+  route is Conductor-managed and already targets the app's exclusive recorded
+  host port. An unrelated legacy/no-id route on that port remains ambiguous and
+  blocks the deploy.
 - Select the deployer by deploy method before reasoning about the edge. A
   `deploy_method: kamal` app on a Caddy server still runs through
   `KamalDeployer`; Caddy changes placed only in `AppDeployer` will never execute
@@ -34,6 +50,8 @@
    harness is available, and Docker fallback where it is not.
 4. After Caddy cutover, inspect and verify every hostname associated with the
    app, including wildcard and alias routes, against the new live container.
+5. Compare the recorded `App#port` with both Docker's published binding and the
+   effective Caddy upstream. Correct drift before authorizing a deploy.
 
 ## Incident context
 
@@ -43,4 +61,7 @@ holding Kamal at the 2.10 series, and fixing the runner availability check.
 The multi-host Caddy republish defect is enforced by the Kamal deploy
 postcondition. Legacy routes are adopted in place, verification checks the
 first effective route on the same Caddy server, and ambiguous hostname or
-fixed-port ownership fails before the incumbent container is stopped.
+fixed-port ownership fails before the incumbent container is stopped. The
+follow-up fix removed the runtime-port fallback after production records with
+missing host ports would otherwise have reconciled healthy routes to unused
+`127.0.0.1:3000`.

@@ -65,6 +65,33 @@ class CaddyCutoverTest < ActiveSupport::TestCase
     end
   end
 
+  test "fails closed when the primary route disagrees with the recorded fixed port" do
+    routes = [
+      { "domain" => "example.com", "upstream" => "127.0.0.1:4000", "route_id" => nil }
+    ]
+
+    error = assert_raises(CaddyCutover::Error) do
+      CaddyCutover.new(@app, client: FakeCaddy.new(routes)).prepare!
+    end
+
+    assert_match(/ambiguous Caddy hostname ownership/, error.message)
+  end
+
+  test "includes a Conductor-managed custom alias on the app's fixed port" do
+    routes = [
+      { "domain" => "example.com", "upstream" => "127.0.0.1:3000", "route_id" => nil },
+      { "domain" => "custom.example.net", "upstream" => "127.0.0.1:3000",
+        "route_id" => "conductor-route-custom-example-net" }
+    ]
+    caddy = FakeCaddy.new(routes)
+    cutover = CaddyCutover.new(@app, client: caddy)
+
+    cutover.prepare!
+    cutover.reconcile!
+
+    assert_includes caddy.live_calls, [ "custom.example.net", "127.0.0.1:3000" ]
+  end
+
   test "always includes the primary domain when no route exists yet" do
     caddy = FakeCaddy.new([])
     cutover = CaddyCutover.new(@app, client: caddy)
@@ -74,5 +101,17 @@ class CaddyCutoverTest < ActiveSupport::TestCase
       cutover.reconcile!
       caddy.live_calls
     end
+  end
+
+  test "fails before route discovery when the host-published port is not recorded" do
+    @app.update_column(:port, nil)
+    caddy = FakeCaddy.new([])
+
+    error = assert_raises(CaddyCutover::Error) do
+      CaddyCutover.new(@app, client: caddy).prepare!
+    end
+
+    assert_match(/host-published port is not recorded/, error.message)
+    assert_empty caddy.live_calls
   end
 end
