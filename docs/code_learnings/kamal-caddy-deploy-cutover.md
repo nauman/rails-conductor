@@ -51,6 +51,10 @@
   when the generated overlay has no `ssh.keys` entry. The reconstructed base
   must also declare `builder.arch`; Kamal validates builder configuration even
   for read/live-container verbs that never build an image.
+- An ops-only workspace has no Git history, so pass Kamal's supported `VERSION`
+  environment variable from the app's latest successful recorded release.
+  Otherwise logs may work while `app exec --reuse` fails trying to derive a
+  commit hash from a directory that is deliberately not a repository.
 - A custom alias outside the primary hostname family is owned only when its
   route is Conductor-managed and already targets the app's exclusive recorded
   host port. An unrelated legacy/no-id route on that port remains ambiguous and

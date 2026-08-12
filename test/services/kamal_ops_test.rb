@@ -71,6 +71,8 @@ class KamalOpsTest < ActiveSupport::TestCase
     @app.update!(self_describing: true, port: 9080)
     @app.env_variables.create!(key: "KAMAL_REGISTRY_USERNAME", value: "owner")
     @app.env_variables.create!(key: "KAMAL_REGISTRY_PASSWORD", value: "token", secret: true)
+    @app.deployments.create!(user: @org.users.first, server: @server, status: "succeeded",
+                             commit_sha: "abc123", release_version: "abc123", deploy_method: "kamal")
     shell = FakeShell.new(output: "live logs")
     ops = KamalOps.new(@app, shell: shell)
 
@@ -82,6 +84,7 @@ class KamalOpsTest < ActiveSupport::TestCase
     assert File.exist?(File.join(@workspace, @app.slug, ".kamal", "secrets.production"))
     assert ops.logs.ok?
     assert_match(/-d production/, shell.runs.last[:command].last)
+    assert_equal "abc123", shell.runs.last[:env]["VERSION"]
   end
 
   test "logs run `kamal app logs` with a bounded tail, in the checkout" do

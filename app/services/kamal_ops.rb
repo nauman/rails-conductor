@@ -106,6 +106,7 @@ class KamalOps
     env["APP_HOST"]         ||= @app.domain if @app.domain.present?
     env["SSH_KEYS"] = key_file if key_file # consumed by deploy.yml ssh.keys
     env["HOME"] = ssh_home if ssh_home # Net::SSH reads the target IdentityFile from here
+    env["VERSION"] ||= live_version
     env.compact
   end
 
@@ -179,6 +180,7 @@ class KamalOps
   end
 
   def server = @target_server || @app.server
+  def live_version = @app.deployments.successful.recent.first&.target_version
   def deploy_config_path = File.join(checkout_dir, "config", "deploy.yml")
   def checkout_dir = File.join(workspace, @app.slug)
   def workspace = ENV.fetch("KAMAL_WORKSPACE", Rails.root.join("tmp", "kamal").to_s)
