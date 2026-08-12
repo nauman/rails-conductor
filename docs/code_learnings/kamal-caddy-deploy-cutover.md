@@ -63,6 +63,10 @@
   `deploy_method: kamal` app on a Caddy server still runs through
   `KamalDeployer`; Caddy changes placed only in `AppDeployer` will never execute
   for that production shape. Its fixed-port path needs a post-boot assertion.
+- Jazari checklist item IDs are recipe-local, not fleet-global. Every mutation
+  must resolve the named app first and then locate the item inside that app.
+  An unscoped item ID is allowed only when it has exactly one visible match;
+  repeated IDs must fail as ambiguous instead of selecting the first app.
 
 ## Deployment checklist
 

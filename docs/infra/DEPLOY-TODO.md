@@ -101,12 +101,41 @@ assumes kamal-proxy.
   - Acceptance: every host the proxy served before the reboot serves 200 after,
     and `kamal-proxy --version` reports ≥ v0.9.2.
 
-- [ ] **Adopt placeholder Caddy app repository configs before deploy.**
+- [x] **Adopt placeholder Caddy app repository configs before deploy.**
   - Any committed `config/deploy.yml` with placeholder host/image values or
     kamal-proxy enabled on a Caddy target must be refused safely before stop.
   - Populate its registry/secrets coordinates, then either commit a truthful
     Caddy-mode config or enable and verify the self-describing destination
     overlay. Do not force through the existing guard.
+  - Verified in production with an adopted private app: explicit `proxy: false`,
+    SHA release tag, loopback fixed-port publish, managed secrets, Caddy route
+    reconciliation, and post-replacement logs plus `app exec --reuse`.
+
+## Deploy execution topology
+
+- [ ] **Separate build execution from roll execution.**
+  - A production serving host must not also be the BuildKit worker. Building one
+    app there can starve every app sharing that host.
+  - Build on CI, a control machine, or a dedicated builder; push the immutable
+    `linux/amd64` image to the registry; let the target host only pull, boot,
+    health-check, and cut over that finished image.
+  - Model `build_executor` and `roll_executor` independently. Refuse a serving
+    host as the builder by default; an emergency override must be explicit,
+    audited, and protected by a capacity preflight.
+  - Acceptance: routine deploys never set a remote Docker/BuildKit endpoint to
+    the target serving host, and a resource audit proves no build workload runs
+    there during rollout.
+
+- [ ] **Make external release reporting verifiable and retryable.**
+  - The signed `POST /webhooks/:app_id/deployment` receiver and operator UI
+    already exist. External deploy templates must receive the endpoint, app id,
+    and per-app HMAC secret, then report success or failure with the exact SHA.
+  - A missed or rejected report must be visible and retried; it must not leave a
+    successful live roll represented by a stale Conductor release record.
+  - Acceptance: an external roll produces one idempotent deployment record for
+    its SHA, reports authentication/network failures distinctly, and Conductor
+    reconciles a live-but-unreported SHA without guessing it is the prior
+    release.
 
 ## Current audit snapshot
 

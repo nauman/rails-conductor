@@ -10,8 +10,8 @@
     "operator"
   ],
   "status": "active",
-  "awaiting": "operator",
-  "next_action": "Review the deployed host-port guard and production port corrections; no Caddy mutation can fall back to the container runtime port.",
+  "awaiting": "-",
+  "next_action": "Transition and production adoption are verified; no Jazari action remains owed.",
   "related": [
     {
       "kind": "path",
@@ -35,8 +35,8 @@
     }
   ],
   "created_at": "2026-08-11T17:03:46.135Z",
-  "updated_at": "2026-08-12T14:21:00.000Z",
-  "resolved_at": null,
+  "updated_at": "2026-08-12T16:22:33.000Z",
+  "resolved_at": "2026-08-12T16:22:33.000Z",
   "source_revision": null,
   "legacy_body_sha256": null,
   "legacy_body_bytes": null
@@ -609,5 +609,27 @@ runtime-derived values described container listeners, not host upstreams.
 
 Verification: focused suite 122 tests / 379 assertions; full suite 1,469 tests /
 4,909 assertions; docs doctor and `git diff --check` pass.
+
+Signed: codex
+
+### codex — Production adoption and mutation scoping verified (2026-08-12)
+
+The first placeholder Caddy/Kamal repository was adopted and deployed through
+the intended architecture: host Caddy remained the edge, Kamal ran with
+`proxy: false`, the app published one loopback fixed port, and operational
+commands survived Conductor's own replacement. Logs work through Kamal and the
+runner proved `app exec --reuse` against the exact recorded SHA without creating
+a container.
+
+The final checklist exposed a Jazari integration bug: recipe-local IDs such as
+`deploy` repeat between apps, while `ConductorRunbookTool` selected the first
+visible app containing an unscoped ID. The tool now honors `app_id`/`app_name`
+before item lookup and rejects ambiguous unscoped mutations. Regression tests
+cover both paths. Commit `9c2dd38` is deployed; the intended app closed at 6/6
+and the other app carrying the same `deploy` ID remained unchanged at 0/3.
+
+Verification: full suite 1,479 tests / 4,953 assertions; RuboCop and diff checks
+green; canonical deploy run 31616871983 succeeded including `/version` and
+release reporting.
 
 Signed: codex
