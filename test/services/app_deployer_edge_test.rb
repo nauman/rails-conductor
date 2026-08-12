@@ -105,6 +105,27 @@ class AppDeployerEdgeTest < ActiveSupport::TestCase
     assert_empty ssh.commands, "caddy needs no republish on container replacement"
   end
 
+  test "a caddy cutover republishes every hostname on the incumbent port" do
+    @app.server.update!(edge_type: "caddy")
+    @app.update!(domain: "example.com")
+    published = []
+    edge = Object.new
+    edge.define_singleton_method(:managed_domains_for_upstream) { |_upstream| [ "example.com", "www.example.com", "*.example.com" ] }
+    edge.define_singleton_method(:publish) { |domain:, upstream:| published << [ domain, upstream ]; { route_id: domain } }
+
+    Edge.stub(:for, ->(_server, **_options) { edge }) do
+      deployer = AppDeployer.new(@app, @deployment)
+      deployer.instance_variable_set(:@candidate_host_port, 20_000)
+      deployer.stub(:ssh, FakeSsh.new) { assert deployer.send(:republish_edge_route) }
+    end
+
+    assert_equal [
+      [ "example.com", "127.0.0.1:20000" ],
+      [ "www.example.com", "127.0.0.1:20000" ],
+      [ "*.example.com", "127.0.0.1:20000" ]
+    ], published
+  end
+
   test "an app with no domain is a no-op" do
     @app.update!(domain: nil)
     ssh = FakeSsh.new

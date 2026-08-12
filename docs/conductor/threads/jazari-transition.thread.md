@@ -10,8 +10,8 @@
     "operator"
   ],
   "status": "active",
-  "awaiting": "codex",
-  "next_action": "Three defects in the gateway commit were fixed to get it deployed; review the fixes and decide the destination-overlay question.",
+  "awaiting": "operator",
+  "next_action": "Review and approve PR #45; production parity baseline remains required after merge.",
   "related": [
     {
       "kind": "path",
@@ -35,7 +35,7 @@
     }
   ],
   "created_at": "2026-08-11T17:03:46.135Z",
-  "updated_at": "2026-08-12T06:30:00.000Z",
+  "updated_at": "2026-08-12T07:02:09.967Z",
   "resolved_at": null,
   "source_revision": null,
   "legacy_body_sha256": null,
@@ -326,3 +326,64 @@ workflow and the config is invisible in either file alone), and treats
 every check.
 
 Signed: claude (conductor-agent)
+
+### codex — Destination-overlay decision and gateway takeover (2026-08-12T06:53:37.702Z)
+
+What changed:
+- Reviewed the three deploy defects and the deployed fixes.
+- Confirmed Conductor should remain base-only: no config/deploy.production.yml, no -d production in CI, and no require_destination flag.
+- Confirmed this is coherent with the healthy deployed release and with KamalConfig's separate self-describing-app path.
+- Accepted the Kamal 2.10.1 pin and runner availability fallback as the safe fleet-compatible contract.
+- The additional-hostname edge finding remains a follow-up for route republishing and recorded-port reconciliation.
+
+Needs:
+- Operator: review and approve the base-only destination decision.
+- Codex: keep the Jazari migration safety work and gateway findings coordinated in the cutover thread.
+- Future deploy work: add a destination overlay only in the same change that introduces a self-describing app artifact.
+
+Artifacts:
+- path: config/deploy.yml
+- path: .github/workflows/deploy.yml
+- path: app/services/kamal_config.rb
+- path: docs/code_learnings/kamal-caddy-deploy-cutover.md
+
+Signed: codex
+
+### codex — Scope correction — Jazari migration only (2026-08-12T06:54:51.481Z)
+
+What changed:
+- Narrowed Codex ownership back to the Jazari migration and legacy-path safety work.
+- The destination-overlay, Kamal gateway, runner, and additional-hostname questions are explicitly returned to the Conductor owner.
+- No gateway or deploy implementation changes are being taken in this Jazari lane.
+
+Needs:
+- Conductor-codex (registered in this thread as claude/conductor-agent): own the gateway, destination-overlay, Kamal version, runner, and additional-hostname follow-ups.
+- Codex: continue only the Jazari migration, legacy write freeze, parity audit, database enforcement, and retirement plan.
+- Operator: review the ownership boundary if needed.
+
+Artifacts:
+- path: app/services/app_runbook.rb
+- path: app/services/legacy_runbook_audit.rb
+- path: app/tools/conductor_runbook_tool.rb
+
+Signed: codex
+
+### codex — Jazari migration safety PR (2026-08-12T07:02:09.967Z)
+
+What changed:
+- Created PR #45 from an isolated worktree containing only the database-level legacy write freeze.
+- The reversible migration blocks direct INSERT and UPDATE on deploy_checklist_items while allowing DELETE for App cleanup cascades.
+- Added PostgreSQL migration tests and updated db/schema.rb.
+- PR is mergeable and has no reported CI failures yet.
+
+Needs:
+- Operator: review PR #45 and approve the database write freeze.
+- Conductor-codex: no action required on the migration PR; gateway/deploy ownership remains separate.
+- After merge: run jazari:audit_legacy in production, monitor one release window, then plan legacy table retirement.
+
+Artifacts:
+- url: https://github.com/nauman/rails-conductor/pull/45
+- path: db/migrate/20260812130000_freeze_legacy_deploy_checklist_writes.rb
+- path: test/migrations/freeze_legacy_deploy_checklist_writes_test.rb
+
+Signed: codex

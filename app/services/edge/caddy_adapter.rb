@@ -24,5 +24,9 @@ class Edge
     def live(domain:, upstream:)
       @client.live(domain: domain, upstream: upstream)
     end
+
+    def managed_domains_for_upstream(upstream)
+      @client.managed_domains_for_upstream(upstream)
+    end
   end
 end

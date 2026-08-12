@@ -628,19 +628,25 @@ class AppDeployer
       # unchanged, so there is nothing to repoint.
       return true unless zero_downtime_cutover? && @candidate_host_port
 
-      publish_edge("127.0.0.1:#{@candidate_host_port}")
+      publish_edge("127.0.0.1:#{@candidate_host_port}", incumbent_upstream: "127.0.0.1:#{app.published_port}")
     else
       true
     end
   end
 
-  def publish_edge(upstream)
-    log "Republishing #{app.domain} (#{app.server.edge_type}) -> #{upstream}"
+  def publish_edge(upstream, incumbent_upstream: nil)
     # Adapters take different collaborators: kamal-proxy runs over SSH, Caddy
     # talks to its Admin API. Only pass what the chosen edge accepts.
     edge = proxy_targets_container? ? Edge.for(app.server, ssh: ssh) : Edge.for(app.server)
-    result = edge.publish(domain: app.domain, upstream: upstream)
-    log "Edge published (#{result[:service] || result[:route_id]})"
+    domains = [ app.domain ]
+    if incumbent_upstream && edge.respond_to?(:managed_domains_for_upstream)
+      domains.concat(edge.managed_domains_for_upstream(incumbent_upstream))
+    end
+    domains.compact_blank.uniq.each do |domain|
+      log "Republishing #{domain} (#{app.server.edge_type}) -> #{upstream}"
+      result = edge.publish(domain: domain, upstream: upstream)
+      log "Edge published (#{result[:service] || result[:route_id]})"
+    end
     true
   # Any edge failure, not just the two typed ones — reaching the outer rescue
   # would skip compensation and strand both the candidate and a database row

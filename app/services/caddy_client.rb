@@ -46,6 +46,17 @@ class CaddyClient
     end
   end
 
+  # Caddy is the source of truth for alternate hostnames: an app may have an
+  # apex, www alias, or wildcard route without a separate App column for each.
+  # During a candidate cutover, find every managed hostname still targeting the
+  # incumbent loopback port so none remains on the superseded release.
+  def managed_domains_for_upstream(upstream)
+    normalized = normalize_upstream(upstream.to_s.strip)
+    fetch_managed_routes.filter_map do |route|
+      route["domain"] if route["upstream"] == normalized
+    end.uniq
+  end
+
   def upsert_route(route_definition)
     normalized = normalize_route_definition(route_definition)
     validate_route!(normalized)

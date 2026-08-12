@@ -86,6 +86,26 @@ class CaddyClientTest < ActiveSupport::TestCase
     refute_includes loaded, "reverse_proxy"
   end
 
+  def test_managed_domains_for_upstream_finds_apex_alias_and_wildcard_routes
+    config = {
+      "apps" => { "http" => { "servers" => { "srv0" => { "routes" => [
+        { "@id" => "conductor-route-example-com", "match" => [ { "host" => [ "example.com" ] } ],
+          "handle" => [ { "handler" => "reverse_proxy", "upstreams" => [ { "dial" => "127.0.0.1:3000" } ] } ] },
+        { "@id" => "conductor-route-www-example-com", "match" => [ { "host" => [ "www.example.com" ] } ],
+          "handle" => [ { "handler" => "reverse_proxy", "upstreams" => [ { "dial" => "127.0.0.1:3000" } ] } ] },
+        { "@id" => "conductor-route-wildcard-example-com", "match" => [ { "host" => [ "*.example.com" ] } ],
+          "handle" => [ { "handler" => "reverse_proxy", "upstreams" => [ { "dial" => "127.0.0.1:3000" } ] } ] },
+        { "@id" => "conductor-route-other-com", "match" => [ { "host" => [ "other.com" ] } ],
+          "handle" => [ { "handler" => "reverse_proxy", "upstreams" => [ { "dial" => "127.0.0.1:4000" } ] } ] }
+      ] } } } }
+    }
+
+    client = CaddyClient.new(build_server, ssh_connection: FakeSsh.new([ { stdout: JSON.generate(config) } ]))
+
+    assert_equal [ "example.com", "www.example.com", "*.example.com" ],
+                 client.managed_domains_for_upstream("127.0.0.1:3000")
+  end
+
   # An apex and its wildcard are different routes to the same app; their ids must
   # differ so adding *.domain doesn't overwrite the apex route (and vice versa).
   def test_apex_and_wildcard_get_distinct_route_ids
