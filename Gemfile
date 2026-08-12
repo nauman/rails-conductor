@@ -51,7 +51,15 @@ gem "bootsnap", require: false
 # NOT a documented public API, so a major bump could silently break the
 # contract — test/services/kamal_label_contract_test.rb asserts it against the
 # installed gem, and this pin keeps the upgrade a deliberate act.
-gem "kamal", "~> 2.12", require: false
+#
+# Held at the 2.10 SERIES, not just the major: 2.12 refuses to deploy against a
+# kamal-proxy older than v0.9.2 and tells you to run `kamal proxy reboot`. That
+# proxy is shared — it holds the routes for several public hosts — and a reboot
+# drops every one of them until each app re-registers, so the upgrade is a
+# scheduled maintenance window, not a dependency bump. `~> 2.10` would NOT hold
+# this: it permits 2.12, which is how the bump arrived unnoticed and failed the
+# deploy after the image had already been built and pushed.
+gem "kamal", "~> 2.10.1", require: false
 
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem "thruster", require: false
