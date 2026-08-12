@@ -14,18 +14,16 @@ class DeployAppJobTest < ActiveSupport::TestCase
     app.deployments.create!
   end
 
-  test "dispatches Conductor-driven Kamal artifacts through AppDeployer" do
+  test "dispatches Kamal apps through KamalDeployer" do
     deployment = deployment_for("kamal")
     called = nil
-    app_deployer = ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = :conductor }; obj }
+    kamal_deployer = ->(*) { obj = Object.new; obj.define_singleton_method(:deploy!) { called = :kamal }; obj }
 
-    KamalDeployer.stub(:new, ->(*) { flunk "Kamal is an ops utility, not Conductor's deploy driver" }) do
-      AppDeployer.stub(:new, app_deployer) do
-        DeployAppJob.new.perform(deployment.id)
-      end
+    KamalDeployer.stub(:new, kamal_deployer) do
+      DeployAppJob.new.perform(deployment.id)
     end
 
-    assert_equal :conductor, called
+    assert_equal :kamal, called
   end
 
   test "dispatches native apps to NativeDeployer" do

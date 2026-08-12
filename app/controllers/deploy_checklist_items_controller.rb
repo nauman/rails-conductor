@@ -4,18 +4,26 @@ class DeployChecklistItemsController < ApplicationController
   before_action :set_item, only: [ :update, :destroy ]
 
   def create
-    @app.deploy_checklist_items.create(content: item_params[:content], required: item_params.fetch(:required, true))
+    AppRunbook.new(@app, actor: current_user).add_item(
+      content: item_params[:content], required: item_params.fetch(:required, true),
+      expected_revision: item_params[:expected_revision]
+    )
     redirect_to app_path(@app, anchor: "runbook")
   end
 
   # Toggle the done state (checkbox) or edit the content.
   def update
-    @item.update(item_params)
+    AppRunbook.new(@app, actor: current_user).check_item(
+      item_id: params[:id], done: ActiveModel::Type::Boolean.new.cast(item_params[:done]),
+      expected_revision: item_params[:expected_revision]
+    )
     redirect_to app_path(@app, anchor: "runbook")
   end
 
   def destroy
-    @item.destroy
+    AppRunbook.new(@app, actor: current_user).remove_item(
+      item_id: params[:id], expected_revision: params[:expected_revision]
+    )
     redirect_to app_path(@app, anchor: "runbook")
   end
 
@@ -26,10 +34,13 @@ class DeployChecklistItemsController < ApplicationController
   end
 
   def set_item
-    @item = @app.deploy_checklist_items.find(params[:id])
+    @item = @app.runbook_summary[:checklist].find { |item| item[:id].to_s == params[:id].to_s }
+    return if @item
+
+    redirect_to app_path(@app, anchor: "runbook"), alert: "Checklist item not found."
   end
 
   def item_params
-    params.require(:deploy_checklist_item).permit(:content, :required, :done)
+    params.require(:deploy_checklist_item).permit(:content, :required, :done, :expected_revision)
   end
 end

@@ -408,7 +408,7 @@ class KamalDeployer
     return true unless fixed_port_app?
 
     log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
-    result = @shell.run("bash", "-lc", "#{kamal_bin} app stop#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.stop}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
     release_fixed_port
     @stopped_prior = true
@@ -530,7 +530,7 @@ class KamalDeployer
     return unless @stopped_prior
 
     log "=== deploy failed after stop-first — best-effort rebooting so the app isn't left down ==="
-    @shell.run("bash", "-lc", "#{kamal_bin} app boot#{destination_flag}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.boot}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
   rescue StandardError => e
     log "recovery reboot failed (#{e.message}); manual `kamal app boot` may be needed"
   end
@@ -588,11 +588,11 @@ class KamalDeployer
 
   # `kamal deploy` from the checkout; prefer the bundled binstub.
   def kamal_command
-    ["bash", "-lc", "#{kamal_bin} deploy#{destination_flag}"]
+    ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.deploy}"]
   end
 
   def kamal_rollback_command(version)
-    ["bash", "-lc", "#{kamal_bin} rollback #{esc(version)}#{destination_flag}"]
+    ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.rollback(version)}"]
   end
 
   # A lock is only ours to reclaim when no other deployer can hold it. CI deploys
@@ -607,13 +607,7 @@ class KamalDeployer
   end
 
   def kamal_lock_release_command
-    ["bash", "-lc", "#{kamal_bin} lock release#{destination_flag}"]
-  end
-
-  # Self-describing apps deploy with a Kamal destination so the generated
-  # config/deploy.production.yml overlay + .kamal/secrets.production apply (ADR 0001).
-  def destination_flag
-    app.self_describing? ? " -d #{KamalConfig::DESTINATION}" : ""
+    ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.release_lock}"]
   end
 
   # Gated migrations (roadmap slot 24). The image entrypoint runs db:prepare
@@ -677,7 +671,11 @@ class KamalDeployer
   # Run a command inside the just-deployed container (kamal app exec --reuse),
   # honouring the destination for self-describing apps.
   def kamal_app_exec(command)
-    ["bash", "-lc", "#{kamal_bin} app exec --reuse \"#{command}\"#{destination_flag}"]
+    ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.exec_live(command)}"]
+  end
+
+  def kamal_gateway
+    @kamal_gateway ||= KamalGateway.new(destination: (KamalConfig::DESTINATION if app.self_describing?))
   end
 
   # How to invoke Kamal from Conductor's own container (the control machine).

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_11_171026) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_12_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -72,6 +72,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_11_171026) do
     t.string "intent", default: "managed", null: false
     t.string "intent_note"
     t.datetime "last_status_check_at"
+    t.string "maintenance_message"
+    t.boolean "maintenance_mode", default: false, null: false
     t.string "name", null: false
     t.text "notes"
     t.bigint "organization_id"

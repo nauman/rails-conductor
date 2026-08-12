@@ -5,6 +5,7 @@ Infrastructure and ops references for Conductor.
 | File | Purpose |
 | --- | --- |
 | `edge-and-deploy-forms.md` | How deploy method and edge interact; diagnosing a 502 after a green deploy; the form-change checklist |
+| `DEPLOY-TODO.md` | Edge-aware Kamal command integration, reuse invariant, and acceptance criteria |
 | `docs/infra/INDEX.md` | This index |
 
 ## Planned Docs

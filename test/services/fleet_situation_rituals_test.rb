@@ -67,6 +67,7 @@ class FleetSituationRitualsTest < ActiveSupport::TestCase
     Jazari.open_run(target: target, actor_ref: "test")
 
     assert subject_row[:last_run].present?, "a started run must be visible at the resume point"
+    assert_equal "test", subject_row[:last_run][:actor_ref]
   end
 
   test "resolving a subject never breaks the rest of the snapshot" do

@@ -78,8 +78,9 @@ class DecommissionRunnerTest < ActiveSupport::TestCase
     d = decommission
     DecommissionRunner.new(d, deps: FakeDeps.new, plan: FakePlan.new).run
 
-    assert_match(/Decommission learnings/i, @app.reload.deploy_runbook.to_s)
-    assert_match(/ss -tlnp/, @app.deploy_runbook.to_s, "the fired gotcha's note is folded in")
+    description = Jazari.resolve(target: FleetCanon.target_for(@app)).description
+    assert_match(/Decommission learnings/i, description)
+    assert_match(/ss -tlnp/, description, "the fired gotcha's note is folded in")
   end
 
   # --- FleetDeps command shape (real deps, fake SSH) -------------------------

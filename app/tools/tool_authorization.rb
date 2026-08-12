@@ -42,6 +42,10 @@ module ToolAuthorization
       "retire" => :destroy, "transfer" => :destroy,
       # `rails runner` with arbitrary Ruby inside the live production container.
       "runner" => :execute,
+      # Edge route changes, maintenance, live cutover, and redeploy are
+      # production traffic/deployment mutations. Keep them owner-only so an
+      # agent/editor cannot turn the edge action into an implicit deploy path.
+      "edge" => :execute,
       # Persists a managed Credential built from the app's env.
       "convert_database" => :credentials
     },

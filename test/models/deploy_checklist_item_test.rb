@@ -29,15 +29,25 @@ class DeployChecklistItemTest < ActiveSupport::TestCase
   end
 
   test "runbook_summary reports progress and destroys items with the app" do
-    @app.update!(deploy_runbook: "## Deploy steps")
-    @app.deploy_checklist_items.create!(content: "a").check!
-    @app.deploy_checklist_items.create!(content: "b")
+    FleetRecipes.seed!
+    AppRunbook.new(@app).set_runbook(description: "## Deploy steps")
+    AppRunbook.new(@app).add_item(content: "a")
+    AppRunbook.new(@app).add_item(content: "b")
+    item = Jazari.resolve(target: FleetCanon.target_for(@app)).checklist.first
+    AppRunbook.new(@app).check_item(item_id: item[:id], done: true)
     summary = @app.runbook_summary
     assert_equal "## Deploy steps", summary[:runbook]
-    assert_equal({ done: 1, total: 2 }, summary[:checklist_progress])
+    assert_equal({ done: 1, total: 5, percent: 20 }, summary[:checklist_progress])
 
-    assert_difference -> { DeployChecklistItem.count }, -2 do
+    assert_no_difference -> { DeployChecklistItem.count } do
       @app.destroy!
+    end
+  end
+
+  test "production legacy writes are blocked" do
+    Rails.env.stub(:production?, true) do
+      item = @app.deploy_checklist_items.new(content: "blocked")
+      assert_raises(ActiveRecord::RecordNotSaved) { item.save! }
     end
   end
 end

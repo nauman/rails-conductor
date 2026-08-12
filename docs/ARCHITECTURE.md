@@ -4,7 +4,7 @@
 
 ## The one-paragraph model
 
-Conductor (a Rails app) is the **control plane**. It never runs your app traffic; it *instructs* servers over SSH and manages the edge over an API. On each fleet server the edge is runtime-dependent: **Kamal apps front with kamal-proxy** (per ADR 0002), while native/dynamic routing uses **Caddy** (TLS, per-app subdomains). Behind the edge your app runs in one of **three runtimes**; the app server underneath is always **Puma**.
+Conductor (a Rails app) is the **control plane**. It never runs your app traffic; it instructs servers over SSH and manages Caddy over an API. The edge is a server property, independent of the Kamal artifact: a Caddy box keeps Kamal's Rails operations harness but disables kamal-proxy; a Kamal-proxy box uses Kamal's full release transaction. Behind the edge your app runs in one of three runtimes; the app server underneath is always Puma.
 
 ## Three axes (do not collapse them)
 
@@ -34,8 +34,8 @@ flowchart TB
     end
 
     subgraph SRV["Fleet server"]
-        CADDY["Caddy — edge for Native/Docker<br/>TLS · routing · per-app subdomains"]
-        KP["kamal-proxy — edge for Kamal<br/>(ADR 0002)"]
+        CADDY["Caddy — edge for Caddy boxes<br/>TLS · routing · per-app subdomains"]
+        KP["kamal-proxy — edge for Kamal boxes<br/>health · cutover · drain"]
         subgraph APPS["App runtimes · app server = Puma"]
             NAT["Native<br/>Puma + systemd<br/>&lt;app&gt;-server units"]
             KAM["Kamal<br/>containers"]
@@ -65,16 +65,16 @@ flowchart LR
     J -->|kamal| KD["KamalDeployer<br/>kamal deploy as control machine"]
 ```
 
-## The edge: Caddy for dynamic routing, kamal-proxy stays for Kamal
+## The edge: server-owned Caddy or Kamal-proxy
 
-Conductor uses **Caddy**, driven live via the Caddy **Admin API** (`CaddyClient`, port 2019), to add/remove domains and per-app subdomains without a redeploy. Per **ADR 0002**, Kamal apps keep fronting with **kamal-proxy** (the `proxy:` block in `deploy.yml`) — replacing it would mean rebuilding its battle-tested zero-downtime deploy handoff. Caddy is *added* narrowly for dynamic subdomains and native runtimes; it is **not** a default replacement for kamal-proxy.
+Conductor uses **Caddy**, driven live via the Caddy **Admin API** (`CaddyClient`, port 2019), on Caddy boxes. Kamal apps on those boxes emit a role-level `proxy: false`, publish their app port to loopback, and use a Docker healthcheck; Kamal remains the logs/exec/console/details harness. Kamal-proxy boxes retain Kamal's native `/up` healthcheck, traffic cutover, draining, and rollback behavior.
 
 ```mermaid
 flowchart LR
     NET(["HTTPS"]) --> C["Caddy<br/>edge for Native + Docker"]
     C -->|reverse_proxy localhost:PORT| P1["Native · Puma (systemd)"]
     C -->|reverse_proxy| P2["Docker · container"]
-    NET -->|HTTPS| KP["kamal-proxy<br/>edge for Kamal (ADR 0002)"]
+    NET -->|HTTPS| KP["kamal-proxy<br/>edge for Kamal boxes"]
     KP --> P3["Kamal · container"]
 ```
 

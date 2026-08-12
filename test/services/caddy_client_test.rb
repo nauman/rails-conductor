@@ -73,6 +73,19 @@ class CaddyClientTest < ActiveSupport::TestCase
     assert_includes ssh.commands.last, "127.0.0.1:3000"
   end
 
+  def test_maintenance_route_returns_503_without_an_upstream
+    ssh = FakeSsh.new([ { stdout: "{}" }, { stdout: "" } ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    client.maintenance(domain: "example.com", message: "planned")
+
+    loaded = ssh.commands.last
+    assert_includes loaded, "static_response"
+    assert_includes loaded, "503"
+    assert_includes loaded, "planned"
+    refute_includes loaded, "reverse_proxy"
+  end
+
   # An apex and its wildcard are different routes to the same app; their ids must
   # differ so adding *.domain doesn't overwrite the apex route (and vice versa).
   def test_apex_and_wildcard_get_distinct_route_ids

@@ -87,6 +87,17 @@ class KamalOpsTest < ActiveSupport::TestCase
     assert_match(/db:migrate:status/, cmd)
   end
 
+  test "console uses the live release with Kamal's interactive reuse flags" do
+    write_deploy_config
+    shell = FakeShell.new(output: "console")
+
+    result = KamalOps.new(@app, shell: shell).console
+
+    assert result.ok?
+    assert_match(/app exec --interactive --reuse/, shell.runs.last[:command].last)
+    assert_match(/bin\\?\/rails\\? console/, shell.runs.last[:command].last)
+  end
+
   test "the SSH key is materialized so kamal can reach the box, and removed after" do
     write_deploy_config
     shell = FakeShell.new
@@ -122,13 +133,7 @@ class KamalOpsTest < ActiveSupport::TestCase
   # The gap that misled an agent. InventList's config deliberately points its
   # hosts at `inventlist-does-not-deploy-via-kamal.invalid` (RFC 2606, can never
   # resolve) to make `kamal deploy` impossible. But nuking the HOSTS breaks every
-  # kamal command, not just deploy — so `kamal app logs` dies at DNS too, and the
-  # agent reading that concluded "kamal cannot be used for this app at all".
-  #
-  # available? must therefore mean "kamal can actually answer", not merely "a file
-  # exists", and it must say WHY when it cannot — otherwise a caller either fails
-  # opaquely at DNS or draws the wrong conclusion about the harness itself.
-  test "a config whose hosts are deliberately unresolvable is not available, with the reason" do
+  test "a config with a deploy guard still keeps the Kamal ops harness available" do
     write_deploy_config(<<~YML)
       service: opsy
       servers:
@@ -139,10 +144,8 @@ class KamalOpsTest < ActiveSupport::TestCase
 
     ops = KamalOps.new(@app, shell: FakeShell.new)
 
-    refute ops.available?, "an unresolvable host means kamal cannot answer"
-    assert_match(/\.invalid/, ops.unavailable_reason)
-    assert_match(/deploy/i, ops.unavailable_reason,
-      "the reason must point at the deploy tripwire, not imply kamal is unusable in general")
+    assert ops.available?, "deploy policy must not disable Kamal health/logs/exec"
+    assert_nil ops.unavailable_reason
   end
 
   test "the reason distinguishes a missing config from a deploy-blocked one" do
@@ -168,14 +171,13 @@ class KamalOpsTest < ActiveSupport::TestCase
     assert_nil ops.unavailable_reason
   end
 
-  test "an ops call on a deploy-blocked config fails with the reason, not a DNS error" do
+  test "an ops call still reaches Kamal when deploy policy is separate" do
     write_deploy_config("servers:\n  web:\n    hosts:\n      - x-does-not-deploy-via-kamal.invalid\n")
     shell = FakeShell.new
 
     result = KamalOps.new(@app, shell: shell).logs
 
-    refute result.ok?
-    assert_match(/\.invalid/, result.error)
-    assert_empty shell.runs, "do not shell out to kamal just to watch DNS fail"
+    assert result.ok?
+    assert_equal 1, shell.runs.size
   end
 end

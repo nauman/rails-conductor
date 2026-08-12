@@ -1,10 +1,15 @@
-# 0003. One deploy path; Kamal as artifact contract and ops CLI, not deploy driver
+# 0003. Kamal as the deploy and operations contract by edge
 
 Date: 2026-07-31
 
 ## Status
 
-**Accepted (2026-07-31).** Supersedes the framing of ADR 0001 (which assumed
+**Superseded (2026-08-12).** This historical decision is retained because it
+records the self-deploy incident, but its "Kamal is not the deploy driver"
+conclusion is superseded by the clarified edge contract: Kamal apps use
+`KamalDeployer` on both edge types; Caddy mode disables kamal-proxy and relies
+on a Docker healthcheck, while Kamal-proxy mode retains Kamal's health-gated
+cutover. Supersedes the framing of ADR 0001 (which assumed
 Kamal apps are a distinct class) and settles the question ADR 0002 left open
 after its rejection: how the fleet gets one deploy story without rebuilding
 kamal-proxy's handoff.

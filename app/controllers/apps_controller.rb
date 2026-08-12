@@ -4,10 +4,11 @@ class AppsController < ApplicationController
   # db:seed in production. Neither is an editor capability.
   owner_only :destroy, :destroy
   owner_only :execute, :toggle_seed_on_next_deploy
+  owner_only :execute, :edge
   # Generating a deploy key destroys the existing encrypted private key and
   # stores a new one — a credential write, not app config.
   owner_only :credentials, :generate_deploy_key
-  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site, :put_behind_cloudflare ]
+  before_action :set_app, only: [ :show, :edit, :update, :destroy, :deploy, :stop, :restart, :logs, :jobs, :env_vars, :sync_status, :provision_database, :generate_deploy_key, :toggle_auto_deploy, :toggle_deploy_hold, :toggle_seed_on_next_deploy, :deploy_config, :toggle_self_describing, :update_runbook, :check_site, :put_behind_cloudflare, :edge ]
   # Needs @app loaded to compare against the requested repository.
   before_action :require_repository_capability!, only: :update
 
@@ -80,6 +81,24 @@ class AppsController < ApplicationController
     else
       redirect_to @app, notice: "Deployment started. Check logs for progress."
     end
+  end
+
+  # Single authorized UI entrypoint for edge mutations. EdgeOperations keeps
+  # Caddy and kamal-proxy semantics separate; the controller only supplies the
+  # operator identity and translates the result into the normal app response.
+  def edge
+    operation = params[:operation].to_s
+    unless %w[reconcile redeploy maintenance live].include?(operation)
+      return edge_response(false, "Unknown edge operation '#{operation}'.")
+    end
+
+    confirmed = %w[1 true t yes on].include?(params[:confirm].to_s.strip.downcase)
+    return edge_response(false, "Edge operation '#{operation}' requires confirmation.") unless confirmed
+
+    result = EdgeOperations.new(@app, user: current_user).call(operation, message: params[:message])
+    edge_response(true, "#{operation.humanize} completed for #{@app.name}.", result)
+  rescue EdgeOperations::UnsupportedOperation => e
+    edge_response(false, e.message)
   end
 
   def toggle_auto_deploy
@@ -174,7 +193,10 @@ class AppsController < ApplicationController
   # Opt this app into ADR 0001: deploys write the generated overlay + secrets and
   # run `kamal deploy -d production`. Default off — flipping is per-app + reversible.
   def update_runbook
-    @app.update(deploy_runbook: params.require(:app).permit(:deploy_runbook)[:deploy_runbook])
+    values = params.require(:app).permit(:deploy_runbook, :expected_revision)
+    AppRunbook.new(@app, actor: current_user).set_runbook(
+      description: values[:deploy_runbook], expected_revision: values[:expected_revision]
+    )
     redirect_to app_path(@app, anchor: "runbook"), notice: "Deploy runbook saved."
   end
 
@@ -304,6 +326,15 @@ class AppsController < ApplicationController
       :repository_url, :branch, :dockerfile_path, :image_name,
       :health_check_path, :ssl_enabled, :deploy_method, :notes, :self_managed
     )
+  end
+
+  def edge_response(success, message, result = nil)
+    respond_to do |format|
+      format.html { redirect_to @app, (success ? { notice: message } : { alert: message }) }
+      format.json do
+        render json: { success: success, message: message, result: result }, status: (success ? :ok : :unprocessable_entity)
+      end
+    end
   end
 
   # An editor deploys, and deploying ships code — that is the job, and creating a

@@ -8,6 +8,7 @@ class DeployRunbookWebTest < ActionDispatch::IntegrationTest
   end
 
   setup do
+    FleetRecipes.seed!
     @owner = User.create!(email: "owner@example.com")
     @org = Organization.create_for(@owner, name: "Acme")
     @web_app = @org.apps.create!(name: "app", slug: "app")
@@ -23,19 +24,20 @@ class DeployRunbookWebTest < ActionDispatch::IntegrationTest
   test "an operator can save the runbook" do
     patch update_runbook_app_path(@web_app), params: { app: { deploy_runbook: "## steps" } }
     assert_redirected_to app_path(@web_app, anchor: "runbook")
-    assert_equal "## steps", @web_app.reload.deploy_runbook
+    assert_equal "## steps", Jazari.resolve(target: FleetCanon.target_for(@web_app)).description
+    assert_nil @web_app.reload.deploy_runbook
   end
 
   test "an operator can add, check, and remove checklist items" do
     post app_deploy_checklist_items_path(@web_app), params: { deploy_checklist_item: { content: "boot db" } }
-    item = @web_app.deploy_checklist_items.sole
-    assert_equal "boot db", item.content
+    item = Jazari.resolve(target: FleetCanon.target_for(@web_app)).checklist.find { |row| row[:text] == "boot db" }
+    assert item
 
-    patch app_deploy_checklist_item_path(@web_app, item), params: { deploy_checklist_item: { done: "1" } }
-    assert item.reload.done?
+    patch app_deploy_checklist_item_path(@web_app, item[:id]), params: { deploy_checklist_item: { done: "1" } }
+    assert Jazari.resolve(target: FleetCanon.target_for(@web_app)).checklist.find { |row| row[:id] == item[:id] }[:done]
 
-    delete app_deploy_checklist_item_path(@web_app, item)
-    assert_not DeployChecklistItem.exists?(item.id)
+    delete app_deploy_checklist_item_path(@web_app, item[:id])
+    assert_nil Jazari.resolve(target: FleetCanon.target_for(@web_app)).checklist.find { |row| row[:id] == item[:id] }
   end
 
   test "a plain member cannot manage the runbook" do
@@ -44,6 +46,6 @@ class DeployRunbookWebTest < ActionDispatch::IntegrationTest
     sign_in_as(member)
     patch update_runbook_app_path(@web_app), params: { app: { deploy_runbook: "x" } }
     assert_redirected_to root_path
-    assert_nil @web_app.reload.deploy_runbook
+    assert_nil Jazari::Runbook.find_by(runbookable_type: "App", runbookable_id: @web_app.id)
   end
 end

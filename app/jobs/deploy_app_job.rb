@@ -11,6 +11,7 @@ class DeployAppJob < ApplicationJob
     deployer =
       case app.deploy_method
       when "native" then NativeDeployer.new(app, deployment)
+      when "kamal" then KamalDeployer.new(app, deployment)
       else AppDeployer.new(app, deployment)
       end
     deployer.deploy!

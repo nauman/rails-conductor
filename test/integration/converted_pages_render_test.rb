@@ -69,7 +69,8 @@ class ConvertedPagesRenderTest < ActionDispatch::IntegrationTest
       "organizations" => organizations_path,
       "admin organizations" => admin_organizations_path,
       "admin users" => admin_users_path,
-      "admin mcp activity" => admin_mcp_calls_path
+      "admin mcp activity" => admin_mcp_calls_path,
+      "server logs" => logs_server_path(@server)
     }
 
     paths.each do |name, path|

@@ -50,7 +50,7 @@ class KamalConfig
     overlay = {
       "service" => service_name,
       "image"   => "#{registry_username}/#{app.slug}",
-      "servers" => { "web" => [@server&.ip_address].compact },
+      "servers" => servers_block,
       "ssh"     => { "user" => @server&.ssh_user_or_default || "deploy" },
       "proxy"   => proxy_block,
       "registry" => {
@@ -102,8 +102,50 @@ class KamalConfig
   end
 
   def proxy_block
+    return nil unless kamal_proxy_edge?
     return nil if app.domain.blank?
-    { "ssl" => !!app.ssl_enabled, "host" => app.domain, "app_port" => app.port || 3000 }.compact
+
+    {
+      "ssl" => !!app.ssl_enabled,
+      "host" => app.domain,
+      "app_port" => app.runtime_port,
+      "forward_headers" => true,
+      "healthcheck" => {
+        "path" => app.health_check_path.presence || "/up",
+        "interval" => 2,
+        "timeout" => 5
+      }
+    }
+  end
+
+  # Kamal 2 enables the proxy for the primary role when proxy is omitted. Caddy
+  # mode must therefore be explicit, and the app must publish only its private
+  # loopback port for Caddy to consume. The Docker healthcheck is what Kamal
+  # polls when no kamal-proxy is present.
+  def servers_block
+    hosts = [@server&.ip_address].compact
+    return { "web" => hosts } if kamal_proxy_edge?
+
+    host_port = app.port || app.runtime_port
+    runtime_port = app.runtime_port
+    {
+      "web" => {
+        "hosts" => hosts,
+        "proxy" => false,
+        "options" => {
+          "publish" => "127.0.0.1:#{host_port}:#{runtime_port}",
+          "health-cmd" => "curl -f http://127.0.0.1:#{runtime_port}#{app.health_check_path.presence || '/up'} || exit 1",
+          "health-interval" => "5s",
+          "health-timeout" => "3s",
+          "health-retries" => 10,
+          "health-start-period" => "10s"
+        }
+      }
+    }
+  end
+
+  def kamal_proxy_edge?
+    @server&.edge_type != "caddy"
   end
 
   def env_block

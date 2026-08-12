@@ -55,6 +55,21 @@ class EdgeTest < ActiveSupport::TestCase
     assert_equal "caddy", result[:edge]
   end
 
+  test "CaddyAdapter supports reversible maintenance/live route changes" do
+    fake = Class.new(FakeCaddy) do
+      attr_reader :maintenance_call, :live_call
+      def maintenance(**kwargs) = @maintenance_call = kwargs
+      def live(**kwargs) = @live_call = kwargs
+    end.new
+    adapter = Edge.for(server("caddy"), client: fake)
+
+    adapter.maintenance(domain: "a.com", message: "planned")
+    adapter.live(domain: "a.com", upstream: "127.0.0.1:3000")
+
+    assert_equal({ domain: "a.com", message: "planned" }, fake.maintenance_call)
+    assert_equal({ domain: "a.com", upstream: "127.0.0.1:3000" }, fake.live_call)
+  end
+
   # Instant cut-over via the kamal-proxy CLI over SSH.
   class FakeSsh
     attr_reader :commands

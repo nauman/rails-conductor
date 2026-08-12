@@ -16,5 +16,13 @@ class Edge
       route = @client.remove_route(domain)
       { edge: "caddy", domain: domain, action: (route["action"] if route.respond_to?(:[])) || "removed" }
     end
+
+    def maintenance(domain:, message:)
+      @client.maintenance(domain: domain, message: message)
+    end
+
+    def live(domain:, upstream:)
+      @client.live(domain: domain, upstream: upstream)
+    end
   end
 end

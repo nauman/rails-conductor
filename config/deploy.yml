@@ -1,6 +1,13 @@
 # Name of your application. Used to uniquely configure containers.
 service: conductor
 
+# Refuse to evaluate this file with an older Kamal binary. The deploy contract
+# relies on Kamal 2's role-level proxy switch and app exec --reuse.
+minimum_version: 2.12.0
+require_destination: true
+deploy_timeout: 30
+drain_timeout: 30
+
 # Name of the container image.
 image: <%= ENV["KAMAL_REGISTRY_USERNAME"].presence || "your-user" %>/conductor
 
@@ -18,6 +25,12 @@ ssh:
 proxy:
   ssl: true
   host: <%= ENV["APP_HOST"].presence || "conductor.example.com" %>
+  app_port: 80
+  forward_headers: true
+  healthcheck:
+    path: /up
+    interval: 2
+    timeout: 5
 
 # Container registry (Docker Hub by default; override via KAMAL_REGISTRY_SERVER).
 registry:

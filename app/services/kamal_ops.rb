@@ -14,7 +14,10 @@ require "fileutils"
 # ask #available? and fall back only when it says no — and report which path they
 # used, because "these are the logs" means something different in each case.
 #
-# Read-only by intent. This runs ops verbs; it never deploys, boots or stops.
+# The live-app harness. Its app commands never deploy, boot, start, stop, or
+# create a container; commands inside the live app always use `app exec --reuse`.
+# Edge mutations are exposed only to EdgeOperations, and deploy/rollback belong
+# to KamalDeployer's explicit transaction boundary.
 class KamalOps
   Result = Struct.new(:ok, :output, :via, :error, keyword_init: true) do
     def ok? = ok
@@ -46,46 +49,38 @@ class KamalOps
     return "#{@app.name} does not deploy via kamal (deploy_method: #{@app.deploy_method})" unless @app.kamal?
     return "#{@app.name} has no kamal config checked out at #{deploy_config_path}" unless File.exist?(deploy_config_path)
 
-    tripwire = unresolvable_hosts
-    return nil if tripwire.empty?
-
-    "#{@app.name}'s kamal config points at #{tripwire.join(', ')} — a reserved .invalid host used " \
-      "to make `kamal deploy` impossible. It blocks EVERY kamal verb, not just deploy, so ops " \
-      "cannot run through kamal for this app. To restore the harness, point `servers:` at the real " \
-      "box and keep deploy blocked another way (`proxy: false` plus Conductor's deploy hold)."
+    nil
   end
 
   def logs(tail: DEFAULT_TAIL)
-    run("app logs -n #{bounded(tail)}")
+    run(gateway.logs(lines: bounded(tail)))
   end
 
   # A command in the live release, through kamal rather than a hand-built
   # `docker exec` against a container name we guessed.
   def exec(command)
-    run("app exec #{Shellwords.escape(command)}")
+    run(gateway.exec_live(command))
+  end
+
+  # The interactive form is exposed for callers that can attach a TTY. Keeping
+  # it here ensures Rails console uses the same destination, secrets, and live
+  # release selection as logs and exec.
+  def console
+    run(gateway.exec_live("bin/rails console", interactive: true))
   end
 
   def details
-    run("app details")
+    run(gateway.details)
   end
 
   private
-
-  # `.invalid` is reserved by RFC 2606 and can never resolve, so a host ending in
-  # it is a deliberate tripwire rather than a typo. Scanned as text on purpose: the
-  # config is ERB, and evaluating it just to read a hostname would be a worse bet.
-  def unresolvable_hosts
-    File.read(deploy_config_path).scan(/([A-Za-z0-9._-]+\.invalid)\b/).flatten.uniq
-  rescue StandardError
-    []
-  end
 
   def run(verb)
     return unavailable unless available?
 
     key_file = write_ssh_key
     write_secrets_file
-    result = @shell.run("bash", "-lc", "#{kamal_bin} #{verb}#{destination_flag}",
+    result = @shell.run("bash", "-lc", "#{kamal_bin} #{verb}",
                         chdir: checkout_dir, env: ops_env(key_file))
 
     Result.new(ok: result.success?, output: result.output.to_s, via: "kamal",
@@ -133,8 +128,9 @@ class KamalOps
   def deploy_config_path = File.join(checkout_dir, "config", "deploy.yml")
   def checkout_dir = File.join(workspace, @app.slug)
   def workspace = ENV.fetch("KAMAL_WORKSPACE", Rails.root.join("tmp", "kamal").to_s)
-  def destination_flag = @app.self_describing? ? " -d #{KamalConfig::DESTINATION}" : ""
   def kamal_bin = "BUNDLE_GEMFILE=#{Shellwords.escape(conductor_gemfile)} bundle exec kamal"
   def conductor_gemfile = ENV["CONDUCTOR_GEMFILE"].presence || Rails.root.join("Gemfile").to_s
   def bounded(tail) = [ [ tail.to_i, 1 ].max, MAX_TAIL ].min
+  def gateway = @gateway ||= KamalGateway.new(destination: destination_name)
+  def destination_name = @app.self_describing? ? KamalConfig::DESTINATION : nil
 end

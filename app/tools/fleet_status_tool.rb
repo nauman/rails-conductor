@@ -21,7 +21,7 @@ class FleetStatusTool
   end
 
   def call(input = {})
-    servers = visible_servers.includes(:script_runs, apps: :deploy_checklist_items)
+    servers = visible_servers.includes(:script_runs, :apps)
     # Optional org scoping: keeps admin-global behavior by default.
     servers = servers.where(organization_id: input['organization_id']) if input['organization_id'].present?
 
@@ -47,7 +47,7 @@ class FleetStatusTool
         # serves an app whose form matches it (a kamal-proxy box does not route a
         # plain-docker app published on a host port). Both are stored on apps;
         # withholding them forced agents to read free-text notes to learn them.
-        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, notes: a.notes, runbook: a.deploy_runbook.present?, checklist: a.runbook_summary[:checklist_progress] } }
+        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, notes: a.notes, runbook: a.runbook_summary[:runbook].present?, checklist: a.runbook_summary[:checklist_progress] } }
       }
     end
 

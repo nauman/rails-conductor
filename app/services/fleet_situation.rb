@@ -71,18 +71,12 @@ class FleetSituation
       origin: (resolved.origin if resolved.respond_to?(:origin)),
       topic: resolved.topic,
       checklist: resolved.progress,
-      last_run: last_run_summary(resolved.last_run)
+      last_run: AppRunbook.new(app).last_run_summary
     }
   rescue StandardError => e
     # One odd subject must not take down the resume point. Report the blindness.
     { app: app.name, app_id: app.id, recipe_id: nil,
       error: "could not resolve this subject's ritual: #{e.message}" }
-  end
-
-  def last_run_summary(run)
-    return nil if run.blank?
-
-    run.respond_to?(:to_h) ? run.to_h.slice(:started_at, :finished_at, :outcome) : run
   end
 
   def servers = @server_scope
@@ -220,7 +214,7 @@ class FleetSituation
 
   def attn(kind, app, **extra)
     { kind: kind, app: app.name, app_id: app.id,
-      runbook: app.deploy_runbook.present?,
+      runbook: app.runbook_summary[:runbook].present?,
       checklist: app.runbook_summary[:checklist_progress] }.merge(extra)
   end
 end

@@ -163,6 +163,7 @@ Rails.application.routes.draw do
       patch :toggle_seed_on_next_deploy
       post :check_site
       post :put_behind_cloudflare
+      post :edge
       get :deploy_config
       patch :toggle_self_describing
       patch :update_runbook

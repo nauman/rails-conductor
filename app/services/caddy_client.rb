@@ -82,6 +82,14 @@ class CaddyClient
     summarize_route(route, server_name, index).merge("action" => "removed")
   end
 
+  def maintenance(domain:, message:)
+    upsert_route(domain: domain, upstream: "127.0.0.1:1", maintenance: true, message: message)
+  end
+
+  def live(domain:, upstream:)
+    upsert_route(domain: domain, upstream: upstream)
+  end
+
   def validate_route(route_definition)
     normalized = normalize_route_definition(route_definition)
     validate_route!(normalized)
@@ -224,7 +232,9 @@ class CaddyClient
       upstream: upstream,
       route_id: route_definition[:route_id].presence || route_id_for(domain),
       server_name: route_definition[:server_name],
-      tls_enabled: route_definition.key?(:tls_enabled) ? route_definition[:tls_enabled] : true
+      tls_enabled: route_definition.key?(:tls_enabled) ? route_definition[:tls_enabled] : true,
+      maintenance: route_definition[:maintenance] == true,
+      message: route_definition[:message].to_s
     }
   end
 
@@ -242,6 +252,13 @@ class CaddyClient
 
   def build_route(route_definition)
     upstream = normalize_upstream(route_definition[:upstream])
+
+    return {
+      "@id" => route_definition[:route_id],
+      "match" => [ { "host" => [ route_definition[:domain] ] } ],
+      "handle" => [ { "handler" => "static_response", "status_code" => "503", "body" => route_definition[:message] } ],
+      "terminal" => true
+    } if route_definition[:maintenance]
 
     proxy_handler = {
       "@id" => "#{route_definition[:route_id]}-proxy",

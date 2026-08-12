@@ -51,7 +51,7 @@ gem "bootsnap", require: false
 # NOT a documented public API, so a major bump could silently break the
 # contract — test/services/kamal_label_contract_test.rb asserts it against the
 # installed gem, and this pin keeps the upgrade a deliberate act.
-gem "kamal", "~> 2.10", require: false
+gem "kamal", "~> 2.12", require: false
 
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem "thruster", require: false
@@ -109,4 +109,4 @@ group :development do
 end
 
 # jazari — shared operating-procedure domain (recipes, runbooks, queues, runs).
-gem "jazari", "~> 0.5", ">= 0.5.1"
+gem "jazari", "~> 0.5", ">= 0.5.2"

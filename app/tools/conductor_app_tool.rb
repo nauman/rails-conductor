@@ -14,7 +14,8 @@ class ConductorAppTool
     "transfer_plan" => TransferPlanAppTool,
     "transfer"      => TransferAppTool,
     "retire"        => RetireAppTool,
-    "runner"        => RunAppRunnerTool
+    "runner"        => RunAppRunnerTool,
+    "edge"          => EdgeAppTool
   }.freeze
 
   DEFINITION = {
@@ -31,11 +32,12 @@ class ConductorAppTool
       "transfer (EXECUTE a move/clone to another server — app + target_server + mode + credential_id/bucket for the DB copy; requires confirm:true, a bare call returns the plan and does nothing), " \
       "retire (DECOMMISSION an app FROM a box — app_id/app_name + from_server_id/from_server_name (named EXPLICITLY, never defaulted). DISCOVERY-FIRST: a bare call SSH-inspects the box and returns what actually holds the app's port/containers/dedicated-DB (a native puma vs docker, stale idle containers, records still homed here) and mutates NOTHING; confirm:true then stops+removes the app's OWN service-labeled containers, its dedicated DB container+volume, and the stale Conductor records for THAT box, recording an audit trail + folding learnings into the runbook. Refuses to retire the app's live home (move it first) and NEVER drops a shared-cluster DB), " \
       "runner (run a one-off Rails command inside the app's LIVE container over SSH — the non-interactive `kamal console`: app_id/app_name + either `ruby` (arbitrary Ruby via `rails runner`) or `task` (a bare rails/rake task like db:migrate:status). kamal + docker apps only. Runs real code against production — a mutating script is destructive, confirm first). OWNER-ONLY for `ruby`; a bare READ-ONLY `task` from the allowlist (#{ReadOnlyRailsTasks.to_sentence}) is available to editors too. " \
+      "edge (operate the app's edge through Conductor's stable DSL — operation is reconcile, redeploy, maintenance, or live; app_id/app_name; maintenance may include message; every operation requires confirm:true. Caddy apps stay on Caddy and Kamal-proxy apps stay on Kamal. OWNER-ONLY), " \
       "deploy, rollback, transfer, and a mutating runner are destructive/outward-facing — confirm with the user first.",
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer retire runner], description: "Which app operation" },
+        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer retire runner edge], description: "Which app operation" },
         target_server_id:   { type: "integer", description: "transfer_plan/transfer: destination server by id (or target_server_name)" },
         target_server_name: { type: "string",  description: "transfer_plan/transfer: destination server by name (or target_server_id)" },
         from_server_id:     { type: "integer", description: "retire: the box to retire the app FROM, by id (or from_server_name). Named explicitly — never defaulted." },
@@ -51,6 +53,8 @@ class ConductorAppTool
         app_name:          { type: "string",  description: "update/deploy/sync_status/runner: target app by name" },
         ruby:              { type: "string",  description: "runner: arbitrary Ruby to execute via `rails runner` inside the live container (mutating = destructive, confirm first)" },
         task:              { type: "string",  description: "runner: a bare rails/rake task name to run in the live container (e.g. db:migrate:status). No arguments/shell." },
+        operation:         { type: "string",  enum: %w[reconcile redeploy maintenance live], description: "edge: operation to perform through the app's configured edge" },
+        message:           { type: "string",  description: "edge maintenance: message shown while the app is unavailable" },
         name:              { type: "string",  description: "create: app name" },
         repository_url:    { type: "string",  description: "create/update: git repository URL" },
         deploy_method:     { type: "string",  enum: %w[docker native kamal], description: "create (docker|native) / update (docker|native|kamal)" },

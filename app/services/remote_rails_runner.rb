@@ -51,10 +51,14 @@ class RemoteRailsRunner
   end
 
   def run(script)
+    return kamal_exec("echo #{Base64.strict_encode64(script)} | base64 -d | bin/rails runner -") if kamal_ops?
+
     exec(command(script))
   end
 
   def run_task(task)
+    return kamal_exec("bin/rails #{task}") if kamal_ops?
+
     exec(task_command(task))
   end
 
@@ -63,6 +67,18 @@ class RemoteRailsRunner
   def exec(cmd)
     res = @ssh.execute_with_status(cmd)
     Result.new(ok: res[:success], output: res[:output].to_s, exit_code: res[:exit_code])
+  end
+
+  # Kamal apps use Kamal's live-release resolver. This keeps runner behavior
+  # aligned with logs/console and avoids guessed docker container names.
+  def kamal_exec(command)
+    ops = KamalOps.new(@app)
+    result = ops.exec(command)
+    Result.new(ok: result.ok?, output: result.output.to_s, exit_code: result.ok? ? 0 : 1)
+  end
+
+  def kamal_ops?
+    @app.kamal? && @app.server.present?
   end
 
   # Prefix an in-container command with container resolution + a NO_CONTAINER guard.

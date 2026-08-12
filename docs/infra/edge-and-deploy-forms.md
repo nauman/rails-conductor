@@ -11,16 +11,17 @@ form. Assumes SSH access to the box as the deploy user.
 | Deploy method | `kamal` · `docker` · `native` | `App#deploy_method` |
 | Edge | `kamal_proxy` · `caddy` · `other` · `none` | `Server#edge_type` (set by `EdgeDetector`) |
 
-**Any combination is valid.** Deploy method does not imply edge — Starrrs is a
-`docker` app behind `kamal_proxy`. Assuming otherwise is the single most common
-source of bugs in this area.
+**Any combination is valid.** Deploy method does not imply edge — a `kamal` app
+can run behind Caddy. On a Caddy box, Kamal is still the deploy/ops tool, but its
+primary role must set `proxy: false` and publish a loopback port. On a
+`kamal_proxy` box, Kamal owns health, cutover, drain, and rollback.
 
 ### What each edge points at — the thing that matters
 
 | Edge | Target | Survives a container replacement? |
 | --- | --- | --- |
 | `kamal_proxy` | a **container id** (`166a73834701:3000`) | **No** — must be republished |
-| `caddy` | a stable **host:port** (`127.0.0.1:9050`) | Yes — nothing to do |
+| `caddy` | a stable **host:port** (`127.0.0.1:9050`) | No for a fixed-port Kamal roll; stop-first is required |
 
 That row is the whole runbook in one line: **a container-targeting edge must be
 republished by every deploy path that replaces the container.**
@@ -93,7 +94,7 @@ Conductor picks the cutover from the app's shape, and logs which one it used:
 | Edge | Cutover | Downtime |
 | --- | --- | --- |
 | `kamal_proxy` + a domain | candidate → health → swap → drain | **None** |
-| `caddy` | stop-first (a port dance is needed; not built) | Brief |
+| `caddy` | Kamal `proxy: false` + fixed loopback port; stop-first | Brief |
 | none / direct port | stop-first — the host port *is* the service | Brief, unavoidable |
 
 For the zero-downtime path the candidate runs under its release name

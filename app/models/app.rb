@@ -26,6 +26,8 @@ class App < ApplicationRecord
   has_many :deployments, dependent: :destroy
   has_many :seed_applications, dependent: :destroy
   has_many :site_checks, dependent: :destroy
+  # Legacy rows remain for the historical backfill and rollback audit. Product
+  # writes go through AppRunbook and Jazari; this association is not a source of truth.
   has_many :deploy_checklist_items, -> { order(:position) }, dependent: :destroy
   has_many :databases, dependent: :nullify
   has_many :database_pulls, dependent: :nullify
@@ -34,12 +36,7 @@ class App < ApplicationRecord
   # Deploy runbook + checklist snapshot for MCP/API/views. Read this before
   # deploying — each app deploys differently.
   def runbook_summary
-    items = deploy_checklist_items.to_a
-    {
-      runbook: deploy_runbook,
-      checklist: items.map { |i| { id: i.id, content: i.content, required: i.required, done: i.done } },
-      checklist_progress: { done: items.count(&:done?), total: items.size }
-    }
+    AppRunbook.new(self).summary
   end
 
   # A valid Postgres identifier base derived from the app, e.g. "calm_page".
@@ -271,6 +268,8 @@ class App < ApplicationRecord
 
   # Site latency/uptime monitoring — anything with a public URL is monitorable.
   def monitorable? = url.present?
+
+  def maintenance? = maintenance_mode?
   # How many of the most recent checks were `up` only because the retry passed.
   # A flapping host is serving, so it is never site_down — this is the signal that
   # keeps it visible anyway (codex review R-1).
@@ -363,6 +362,22 @@ class App < ApplicationRecord
   # `preflight` is the DeployPreflight::Result (nil on the already_running race).
   # Pass force: true to deploy past a blocking preflight.
   def start_deployment!(user: nil, force: false, commit_sha: nil)
+    if FleetCanon.shape_for(self)[:driver] == "external"
+      policy = DeployPreflight::Result.new(checks: [
+        DeployPreflight::Check.new(
+          key: :deploy_policy,
+          label: "Deploy policy",
+          status: :fail,
+          detail: "This app is externally deployed; Jazari/agents must not run kamal deploy."
+        )
+      ])
+      blocked = deployments.create!(user: user, commit_sha: commit_sha,
+                                    deploy_method: deploy_method, infra_revision: infra_revision,
+                                    status: "blocked",
+                                    preflight_snapshot: preflight_blockers_json(policy))
+      return [ blocked, :blocked, policy ]
+    end
+
     existing = deployments.in_progress.order(created_at: :desc).first
     return [ existing, :already_running, nil ] if existing
 

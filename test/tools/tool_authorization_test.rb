@@ -31,6 +31,7 @@ class ToolAuthorizationTest < ActiveSupport::TestCase
       [ "conductor_app", "retire" ] => "destroy",
       [ "conductor_app", "transfer" ] => "destroy",
       [ "conductor_app", "runner" ] => "execute",
+      [ "conductor_app", "edge" ] => "execute",
       [ "conductor_app", "convert_database" ] => "credentials",
       [ "conductor_server", "remove" ] => "destroy",
       [ "conductor_server", "run_script" ] => "execute",
@@ -99,6 +100,15 @@ class ToolAuthorizationTest < ActiveSupport::TestCase
 
     allowed = call("conductor_app", { "action" => "transfer_plan" }, user: @owner)
     assert_no_match(/read-only/i, allowed.error.to_s)
+  end
+
+  test "edge inspection is readable but edge mutation is owner-only" do
+    assert ToolAuthorization.read_only?("conductor_read", "edge")
+    assert_not ToolAuthorization.read_only?("conductor_app", "edge")
+
+    refused = call("conductor_app", { "action" => "edge", "operation" => "live", "confirm" => true }, user: @editor)
+    assert_not refused.success?
+    assert_match(/execute/, refused.error)
   end
 
   # SC-009 Decision B. `runner` is owner-only because it executes arbitrary Ruby,

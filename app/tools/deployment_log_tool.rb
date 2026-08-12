@@ -29,6 +29,7 @@ class DeploymentLogTool
       log = log.lines.last(n.to_i).join
     end
     app = deployment.app
+    runbook = app&.runbook_summary
 
     Result.ok({
       deployment_id: deployment.id,
@@ -43,8 +44,8 @@ class DeploymentLogTool
       log:           log,
       # Surface the app's deploy runbook + checklist so the agent watching a
       # deploy can follow the app-specific steps.
-      runbook:       app&.deploy_runbook,
-      checklist:     app ? app.runbook_summary[:checklist] : [],
+      runbook:       runbook && runbook[:runbook],
+      checklist:     runbook ? runbook[:checklist] : [],
       _organization: app&.organization || app&.server&.organization
     })
   end

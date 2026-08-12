@@ -84,8 +84,11 @@ class DecommissionRunner
     note = +"## Decommission learnings (#{@d.server.name}, #{Date.current})\n"
     lines.each { |l| note << "- #{l}\n" }
 
-    existing = @d.app.deploy_runbook.to_s
-    @d.app.update!(deploy_runbook: [ existing.presence, note.strip ].compact.join("\n\n"))
+    existing = AppRunbook.new(@d.app).resolve
+    AppRunbook.new(@d.app, actor_ref: "system:decommission").set_runbook(
+      description: [ existing.description.presence, note.strip ].compact.join("\n\n"),
+      expected_revision: existing.revision
+    )
   rescue StandardError => e
     @d.append_log("• runbook note skipped: #{e.message}")
   end

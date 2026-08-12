@@ -50,6 +50,17 @@ class KamalConfigTest < ActiveSupport::TestCase
     assert_equal [ "KAMAL_REGISTRY_PASSWORD" ], o["registry"]["password"]
   end
 
+  test "Caddy edge disables kamal-proxy and adds a loopback port plus healthcheck" do
+    @server.update!(edge_type: "caddy")
+    o = overlay
+
+    assert_nil o["proxy"]
+    assert_equal [ "192.0.2.10" ], o.dig("servers", "web", "hosts")
+    assert_equal false, o.dig("servers", "web", "proxy")
+    assert_equal "127.0.0.1:3000:3000", o.dig("servers", "web", "options", "publish")
+    assert_match %r{curl -f http://127\.0\.0\.1:3000/up}, o.dig("servers", "web", "options", "health-cmd")
+  end
+
   test "env is split: secrets listed, clear excludes deploy-coordinate keys" do
     env = overlay["env"]
     assert_equal %w[DATABASE_URL RAILS_MASTER_KEY SECRET_KEY_BASE], env["secret"].sort
