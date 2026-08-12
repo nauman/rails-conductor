@@ -72,14 +72,20 @@ class RemoteRailsRunner
   # Kamal apps use Kamal's live-release resolver. This keeps runner behavior
   # aligned with logs/console and avoids guessed docker container names.
   def kamal_exec(command)
-    ops = KamalOps.new(@app)
-    result = ops.exec(command)
-    Result.new(ok: result.ok?, output: result.output.to_s, exit_code: result.ok? ? 0 : 1)
+    result = kamal_ops.exec(command)
+    # A bare `ok: false` with no output is the least useful failure available: the
+    # caller cannot tell a broken command from a broken harness.
+    Result.new(ok: result.ok?, output: result.output.presence || result.error.to_s, exit_code: result.ok? ? 0 : 1)
   end
 
-  def kamal_ops?
-    @app.kamal? && @app.server.present?
-  end
+  # Kamal only when kamal can actually ANSWER. KamalOps exists to be asked — its
+  # #available? is the whole point, and skipping it broke every runner call for
+  # every kamal app in production: the deployed container carries no kamal
+  # checkout, so each call returned ok:false with empty output while the docker
+  # path beside it worked. Asking, then falling back, is the documented contract.
+  def kamal_ops? = @app.kamal? && @app.server.present? && kamal_ops.available?
+
+  def kamal_ops = @kamal_ops ||= KamalOps.new(@app)
 
   # Prefix an in-container command with container resolution + a NO_CONTAINER guard.
   def wrap(inner)

@@ -43,4 +43,51 @@ class RemoteRailsRunnerTest < ActiveSupport::TestCase
     res = RemoteRailsRunner::Result.new(ok: false, output: "NO_CONTAINER (service: myapp)", exit_code: 3)
     assert_nil res.payload
   end
+
+  # The regression this pair exists to prevent: routing every kamal app through the
+  # kamal harness WITHOUT asking whether it can answer. The deployed container holds
+  # no kamal checkout, so each call came back ok:false with empty output — while the
+  # docker path beside it worked — and that silence reached the whole fleet.
+  class FakeOps
+    Res = Struct.new(:ok, :output, :error, keyword_init: true) { def ok? = ok }
+
+    def initialize(available) = @available = available
+    def available? = @available
+    def unavailable_reason = @available ? nil : "no checkout"
+    def exec(_command) = Res.new(ok: true, output: "ran via kamal")
+  end
+
+  class RecordingSsh
+    attr_reader :command
+
+    def execute_with_status(command)
+      @command = command
+      { success: true, output: "ran via docker", exit_code: 0 }
+    end
+  end
+
+  test "falls back to the docker path when the kamal harness cannot answer" do
+    app = App.new(name: "MyApp", slug: "myapp", deploy_method: "kamal", server: Server.new(name: "box", ip_address: "203.0.113.10"))
+    ssh = RecordingSsh.new
+
+    KamalOps.stub(:new, FakeOps.new(false)) do
+      result = RemoteRailsRunner.new(app, ssh: ssh).run("puts 1")
+
+      assert result.ok?
+      assert_equal "ran via docker", result.output
+      assert_includes ssh.command, "docker exec"
+    end
+  end
+
+  test "uses the kamal harness when it can answer" do
+    app = App.new(name: "MyApp", slug: "myapp", deploy_method: "kamal", server: Server.new(name: "box", ip_address: "203.0.113.10"))
+    ssh = RecordingSsh.new
+
+    KamalOps.stub(:new, FakeOps.new(true)) do
+      result = RemoteRailsRunner.new(app, ssh: ssh).run("puts 1")
+
+      assert_equal "ran via kamal", result.output
+      assert_nil ssh.command, "the docker path must not also run"
+    end
+  end
 end
