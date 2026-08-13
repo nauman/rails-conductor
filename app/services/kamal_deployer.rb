@@ -12,8 +12,9 @@ require "digest"
 #   2. generate .kamal/secrets from the app's EnvVariables (Conductor = source of
 #      truth for secret values — see KamalEnvWriter)
 #   3. materialize the target server's SSH key so Kamal (net-ssh) can reach it
-#   4. run `kamal deploy` locally — it builds via the local docker daemon and
-#      SSHes to deploy_server.ip_address to boot the release
+#   4. run Kamal locally as the control process; the legacy deploy environment
+#      still routes BuildKit over SSH to the target, then Kamal SSHes there to
+#      boot the release (build/roll executor separation is the open replacement)
 #
 # Infra prerequisites (see docs/roadmap/plan-kamal-control-machine.html):
 #   - the `kamal` gem in Conductor's bundle
@@ -95,9 +96,10 @@ class KamalDeployer
       return false
     end
     note_self_deploy if app.self_managed?
-    caddy_cutover.prepare! if caddy_cutover
+    return false unless prepare_caddy_edge
+    return false unless build_before_fixed_port_stop
     return false unless stop_prior_container_if_fixed_port
-    unless run_kamal_deploy
+    unless run_kamal_deploy(prebuilt: fixed_port_app?)
       recover_after_stop_first
       return false
     end
@@ -395,10 +397,10 @@ class KamalDeployer
   # Proxy-less (host-Caddy) apps publish a FIXED host port, so kamal's normal roll
   # — boot the new container ALONGSIDE the old, health-check it, then retire the
   # old — can't bind: the old container still holds the port and `docker run` dies
-  # with "port is already allocated" (the deploy #182 failure). When the app is in
-  # that mode — a host-Caddy edge plus an explicit App#port — stop the prior
-  # container FIRST so the port frees before boot. Brief downtime, and only for
-  # fixed-port apps; kamal-proxy apps keep their zero-downtime roll.
+  # with "port is already allocated" (the deploy #182 failure). Build and push
+  # while the incumbent still serves, then stop it only for the prebuilt-image
+  # boot. A failed build must never turn into an outage. Kamal-proxy apps keep
+  # their normal zero-downtime roll.
   #
   # Advisory by design: `kamal app stop` is idempotent (a no-op on a first deploy),
   # skipped for self-managed apps (which would kill their own deploy job), and we
@@ -441,6 +443,14 @@ class KamalDeployer
     true
   rescue CaddyCutover::Error => e
     fail_with("Caddy edge reconciliation failed: #{e.message}")
+    false
+  end
+
+  def prepare_caddy_edge
+    caddy_cutover&.prepare!
+    true
+  rescue CaddyCutover::Error => e
+    fail_with("Caddy edge preflight failed: #{e.message}")
     false
   end
 
@@ -663,15 +673,28 @@ class KamalDeployer
   # longer deploy in-product at all — so restricting reclamation to
   # non-self-managed apps removes exactly the case where a live competing
   # deployer can exist, while keeping recovery for the ordinary killed-job case.
-  def run_kamal_deploy
-    log "Running: kamal deploy"
-    result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+  def build_before_fixed_port_stop
+    return true unless fixed_port_app?
+
+    log "=== building and pushing release before stopping the fixed-port incumbent ==="
+    result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    return true if result.success?
+
+    fail_with("kamal build push failed (exit #{result.exit_code}) — incumbent left running")
+    false
+  end
+
+  def run_kamal_deploy(prebuilt: false)
+    operation = prebuilt ? "kamal deploy --skip-push" : "kamal deploy"
+    command = kamal_command(prebuilt: prebuilt)
+    log "Running: #{operation}"
+    result = @shell.run(*command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
     if result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
       log "Stale kamal deploy lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
       @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
-      result = @shell.run(*kamal_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      result = @shell.run(*command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
       return true if result.success?
     end
 
@@ -684,26 +707,46 @@ class KamalDeployer
   def run_kamal_rollback(version)
     log "Running: kamal rollback #{version}"
     result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
-    return true if result.success?
 
-    if result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
+    if !result.success? && result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
       log "Stale kamal lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
       @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
       result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
-      return true if result.success?
     end
 
-    fail_with("kamal rollback failed (exit #{result.exit_code}) — the target version's image may no longer be retained on the host")
+    unless result.success?
+      fail_with("kamal rollback failed (exit #{result.exit_code}) — the target version's image may no longer be retained on the host")
+      return false
+    end
+
+    return true if rollback_version_running?(version)
+
+    fail_with("kamal rollback exited 0, but release #{version} is not running — refusing a false success")
     false
   end
 
   # `kamal deploy` from the checkout; prefer the bundled binstub.
-  def kamal_command
-    ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.deploy}"]
+  def kamal_command(prebuilt: false)
+    operation = prebuilt ? kamal_gateway.deploy_prebuilt : kamal_gateway.deploy
+    ["bash", "-lc", "#{kamal_bin} #{operation}"]
   end
+
+  def kamal_build_command = [ "bash", "-lc", "#{kamal_bin} #{kamal_gateway.build_release}" ]
 
   def kamal_rollback_command(version)
     ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.rollback(version)}"]
+  end
+
+  def rollback_version_running?(version)
+    command = [ "bash", "-lc", "#{kamal_bin} #{kamal_gateway.exec_live("true", version: version)}" ]
+    result = @shell.run(*command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    return true if result.success?
+
+    log "rollback postcondition failed: release #{version} could not be reused"
+    false
+  rescue StandardError => e
+    log "rollback postcondition failed: #{e.message}"
+    false
   end
 
   # A lock is only ours to reclaim when no other deployer can hold it. CI deploys

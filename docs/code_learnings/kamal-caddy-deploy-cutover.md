@@ -28,6 +28,19 @@
   is drift, not a cutover target. Fixed-port Caddy deploys do not change host
   ports between releases, so the pre-stop snapshot must refuse instead of
   rewriting the route after boot.
+- A fixed-port Caddy release must finish `kamal build push` before stopping the
+  incumbent, then boot with `kamal deploy --skip-push`. Build failure is a
+  pre-cutover failure: traffic stays on the incumbent and no recovery boot is
+  attempted. Building after stop turns ordinary BuildKit cancellation into an
+  outage and makes recovery depend on the same overloaded host.
+- Kamal's exit status is not a sufficient rollback postcondition. Kamal 2.10.1
+  can print that a requested container is unavailable and still exit zero.
+  Conductor must verify that the exact requested release container is running
+  before recording rollback success.
+- Build placement and roll placement are separate infrastructure decisions.
+  Never set the serving host as BuildKit merely because it runs the image; use
+  CI, the control machine, or a dedicated builder, push an immutable image, and
+  let the serving host pull and boot it.
 - `CADDY_PUBLISH_PORT` may remain as repo-specific ERB grammar, but
   `KamalDeployer` derives or removes it from the target edge and `App#port`.
   It is never an independent stored source of routing truth.
@@ -80,6 +93,9 @@
    app, including wildcard and alias routes, against the new live container.
 5. Compare the recorded `App#port` with both Docker's published binding and the
    effective Caddy upstream. Correct drift before authorizing a deploy.
+6. Confirm the image build completes before any fixed-port incumbent is stopped,
+   and verify a rollback by the exact running release rather than the CLI exit
+   status alone.
 
 ## Incident context
 
@@ -93,3 +109,11 @@ fixed-port ownership fails before the incumbent container is stopped. The
 follow-up fix removed the runtime-port fallback after production records with
 missing host ports would otherwise have reconciled healthy routes to unused
 `127.0.0.1:3000`.
+
+In one production incident, two consecutive fixed-port deploys stopped the
+incumbent before starting a remote BuildKit build on the shared serving host.
+Both builds were cancelled during context transfer under memory/swap pressure,
+so recovery depended on SSH to the same overloaded box. The following rollback
+then printed `Container not found` but exited zero and was recorded as
+succeeded. The safety release split fixed-port deployment into build-first and
+prebuilt-roll phases and added an exact running-release rollback postcondition.

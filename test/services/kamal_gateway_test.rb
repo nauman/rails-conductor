@@ -8,6 +8,10 @@ class KamalGatewayTest < ActiveSupport::TestCase
     assert_equal "app logs -n 20 -d production", gateway.logs(lines: 20)
     assert_equal "app maintenance --message planned -d production", gateway.maintenance(message: "planned")
     assert_equal "deploy -d production", gateway.deploy
+    assert_equal "build push -d production", gateway.build_release
+    assert_equal "deploy --skip-push -d production", gateway.deploy_prebuilt
+    assert_equal "app exec --reuse --version=c736669566ad true -d production",
+      gateway.exec_live("true", version: "c736669566ad")
   end
 
   test "enforces the minimum installed Kamal version contract" do

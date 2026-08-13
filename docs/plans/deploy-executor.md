@@ -23,8 +23,12 @@ Active — architecture rework, P1, effort L
   - `KamalDeployer#materialize_master_key` + committed-`.kamal/secrets` reuse for self-deploys.
   - `KamalDeployer` rebuilds `.kamal/secrets` from `EnvVariables` (`KamalEnvWriter`) for
     every non-self app.
-  - Build-over-SSH (`DOCKER_HOST=ssh://…`) requires seeding the real `~/.ssh`
-    (`setup_ssh_home`, `seed_known_hosts`) because ssh resolves `~` from passwd, not `$HOME`.
+- Build-over-SSH (`DOCKER_HOST=ssh://…`) requires seeding the real `~/.ssh`
+  (`setup_ssh_home`, `seed_known_hosts`) because ssh resolves `~` from passwd, not `$HOME`.
+- Image build placement is coupled to the roll target: `KamalDeployer` sets
+  `DOCKER_HOST` to the production server. A shared serving box therefore runs
+  BuildKit for every app it hosts. Fixed-port Caddy apps now build before stop,
+  but the build still needs to move off the serving host.
 - Deploy progress is **streamed to stdout / ActionCable** and only persisted as a single
   appended `log` text column. If the runner dies, in-flight structured state is lost — the
   "log says streaming but isn't" failure.
@@ -49,6 +53,9 @@ exclusion is a DB lease, secrets are pulled per-operation and never persisted.)
 ## Scope
 
 - A `DeployRunner` boundary that all deployers (kamal first, then docker + native) sit behind.
+- Independent build and roll executors. The build executor produces and pushes
+  the immutable image; the roll executor only pulls, boots, health-checks, and
+  cuts over on the target server.
 - A per-app **deploy lease** for one-at-a-time execution + crash recovery.
 - A `conductor-deployer` container image (kamal + docker CLI + git) and a Solid Queue job
   that spawns + supervises it as a one-off container on the host daemon.
@@ -123,6 +130,8 @@ alone, and externalizing the executor is the correct answer.
 5. Secrets are injected at spawn (or vault-resolved), never rebuilt from the DB or persisted.
 6. Each phase is check-then-act so a torn deploy is safely re-runnable.
 7. All three backends (kamal, docker, native) share the same `DeployRunner` boundary.
+8. A production serving host is never selected as its app's BuildKit executor;
+   builder identity and credentials are explicit and independently auditable.
 
 ## Acceptance Criteria
 
@@ -134,6 +143,8 @@ alone, and externalizing the executor is the correct answer.
   web container.
 - A crashed executor doesn't strand a deploy: its lease expires, the deploy is
   reclaimable/retryable, and status reflects DB-persisted progress (not lost stdout).
+- A resource audit during a rollout shows no BuildKit workload on the serving
+  host, and build failure leaves the incumbent container serving unchanged.
 
 ## Milestones
 

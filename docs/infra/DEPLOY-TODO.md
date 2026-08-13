@@ -125,6 +125,11 @@ assumes kamal-proxy.
   - Acceptance: routine deploys never set a remote Docker/BuildKit endpoint to
     the target serving host, and a resource audit proves no build workload runs
     there during rollout.
+  - Immediate safety landed after consecutive fixed-port build failures: Caddy
+    apps finish `kamal build push` before stopping the incumbent, then run
+    `kamal deploy --skip-push`; rollback verifies the exact requested container
+    is running. This prevents build failure becoming downtime but does not close
+    this item — BuildKit still needs a dedicated off-host executor.
 
 - [ ] **Make external release reporting verifiable and retryable.**
   - The signed `POST /webhooks/:app_id/deployment` receiver and operator UI

@@ -33,6 +33,18 @@ class KamalDeployerTest < ActiveSupport::TestCase
     end
   end
 
+  # Kamal 2.10.1 can return zero from rollback even when the requested release
+  # was unavailable. Model that false success, then fail the exact-version
+  # `app exec --reuse` postcondition that should catch it.
+  class MissingRollbackReleaseShell < FakeShell
+    def run(*command, chdir: nil, env: {})
+      result = super
+      return result unless command.last.to_s.include?("app exec")
+
+      LocalShell::Result.new(success: false, exit_code: 1, output: "container not found")
+    end
+  end
+
   # Records commands sent to the TARGET box and returns canned output.
   class FakeSsh
     attr_reader :commands
@@ -88,8 +100,8 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deployer
   end
 
-  def rollback_with(shell, version: "deadbeefcafe1234")
-    KamalDeployer.new(@app, @deployment, shell: shell).tap { |d| d.rollback!(version) }
+  def rollback_with(shell, version: "deadbeefcafe1234", ssh: FakeSsh.new)
+    KamalDeployer.new(@app, @deployment, shell: shell, ssh: ssh).tap { |d| d.rollback!(version) }
   end
 
   def with_env(vars)
@@ -128,17 +140,34 @@ class KamalDeployerTest < ActiveSupport::TestCase
   # Regression for deploy #182: a proxy-less (host-Caddy) app publishes a FIXED
   # host port, so kamal's boot-new-alongside-old roll dies with "port already
   # allocated". The host-Caddy edge plus the recorded App#port is that mode.
-  test "host-Caddy app with a recorded port stops the prior container before kamal deploy" do
+  test "host-Caddy app builds before stopping the incumbent and deploys the prebuilt image" do
     configure_caddy_fixed_port
     shell = FakeShell.new(success: true)
     deploy_with(shell, skip_caddy_cutover: true)
 
     cmds = shell.runs.map { |r| r[:command].last }
+    build_idx  = cmds.index { |c| c.include?("kamal build push") }
     stop_idx   = cmds.index { |c| c.include?("kamal app stop") }
-    deploy_idx = cmds.index { |c| c.include?("kamal deploy") }
+    deploy_idx = cmds.index { |c| c.include?("kamal deploy --skip-push") }
+    assert build_idx, "expected the image build to finish before any live container is stopped"
     assert stop_idx, "expected a 'kamal app stop' before boot for a fixed-port app"
-    assert deploy_idx, "expected a kamal deploy step"
-    assert stop_idx < deploy_idx, "stop must run BEFORE deploy so the fixed port is free"
+    assert deploy_idx, "expected a prebuilt-image deploy step"
+    assert build_idx < stop_idx, "a failed build must leave the incumbent serving"
+    assert stop_idx < deploy_idx, "stop must run before boot so the fixed port is free"
+  end
+
+  test "host-Caddy build failure never stops or reboots the incumbent" do
+    configure_caddy_fixed_port
+    shell = FailOnShell.new("kamal build push")
+
+    deploy_with(shell, skip_caddy_cutover: true)
+
+    cmds = shell.runs.map { |r| r[:command].last }
+    assert cmds.any? { |c| c.include?("kamal build push") }, "expected the build attempt"
+    refute cmds.any? { |c| c.include?("kamal app stop") }, "the incumbent must survive a failed build"
+    refute cmds.any? { |c| c.include?("kamal app boot") }, "nothing was stopped, so recovery must not disturb traffic"
+    refute cmds.any? { |c| c.include?("kamal deploy --skip-push") }, "a failed build must not enter the roll"
+    assert_equal "failed", @deployment.reload.status
   end
 
   # Safety net: stopping the old container first means a failed deploy would leave
@@ -200,6 +229,21 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert_equal "succeeded", @deployment.reload.status
   end
 
+  test "a Caddy ownership preflight failure refuses before building or stopping" do
+    configure_caddy_fixed_port
+    shell = FakeShell.new(success: true)
+    verifier = Object.new
+    verifier.define_singleton_method(:prepare!) { raise CaddyCutover::Error, "ambiguous hostname ownership" }
+    deployer = KamalDeployer.new(@app, @deployment, shell: shell, ssh: FakeSsh.new, allow_self_deploy: true)
+
+    deployer.stub(:caddy_cutover, verifier) { deployer.deploy! }
+
+    commands = shell.runs.map { |run| run[:command].last }
+    refute commands.any? { |command| command.include?("kamal build push") }
+    refute commands.any? { |command| command.include?("kamal app stop") }
+    assert_equal "failed", @deployment.reload.status
+  end
+
   test "kamal-proxy app (no CADDY_PUBLISH_PORT) does NOT stop first — keeps the zero-downtime roll" do
     shell = FakeShell.new(success: true)
     deploy_with(shell)
@@ -244,6 +288,16 @@ class KamalDeployerTest < ActiveSupport::TestCase
   test "rollback! fails loud when kamal rollback fails" do
     rollback_with(FailOnShell.new("kamal rollback"))
     assert_equal "failed", @deployment.reload.status
+  end
+
+  test "rollback! fails when Kamal exits zero but the requested release cannot be reused" do
+    shell = MissingRollbackReleaseShell.new(success: true)
+    rollback_with(shell, version: "c736669566ad")
+
+    assert_equal "failed", @deployment.reload.status
+    assert_match(/not running/i, @deployment.log.to_s)
+    probe = shell.runs.find { |run| run[:command].last.include?("app exec") }
+    assert_includes probe[:command].last, "--version=c736669566ad"
   end
 
   test "rollback! aborts before touching the host when no version is given" do

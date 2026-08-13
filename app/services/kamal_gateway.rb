@@ -7,7 +7,9 @@ class KamalGateway
     @commands = KamalCommand.new(destination: destination)
   end
 
-  def exec_live(command, interactive: false) = @commands.app_exec(command, interactive: interactive)
+  def exec_live(command, interactive: false, version: nil)
+    @commands.app_exec(command, interactive: interactive, version: version)
+  end
   def logs(lines:) = @commands.app_logs(lines: lines)
   def details = @commands.app_details
   def edge_proxy(action) = @commands.proxy(action)
@@ -16,6 +18,8 @@ class KamalGateway
   def boot = @commands.app_boot
   def stop = @commands.app_stop
   def deploy = @commands.deploy
+  def build_release = @commands.build_push
+  def deploy_prebuilt = @commands.deploy(skip_push: true)
   def rollback(version) = @commands.rollback(version)
   def release_lock = @commands.lock_release
 end

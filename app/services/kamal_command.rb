@@ -7,7 +7,8 @@ class KamalCommand
   # The floor is the GRAMMAR floor — the oldest CLI that answers every verb below.
   # Checked against the installed binary, not assumed: 2.10.1 supports `app exec`
   # with --reuse/--interactive, `app logs -n`, `app details`, `app maintenance
-  # --message`, `app live`, `boot`, `stop`, `deploy`, `rollback` and `lock release`.
+  # --message`, `app live`, `boot`, `stop`, `build push`, `deploy --skip-push`,
+  # `rollback` and `lock release`.
   #
   # It reads 2.10.1 rather than 2.12.0 because nothing here needs 2.12, and asking
   # for it is not free: 2.12 refuses to deploy against a kamal-proxy older than
@@ -30,10 +31,11 @@ class KamalCommand
     @destination = destination
   end
 
-  def app_exec(command, reuse: true, interactive: false)
+  def app_exec(command, reuse: true, interactive: false, version: nil)
     flags = []
     flags << "--interactive" if interactive
     flags << "--reuse" if reuse
+    flags << "--version=#{Shellwords.escape(version.to_s)}" if version.present?
     finish([ "app", "exec", *flags, Shellwords.escape(command) ].join(" "))
   end
 
@@ -53,7 +55,8 @@ class KamalCommand
   def app_live = finish("app live")
   def app_boot = finish("app boot")
   def app_stop = finish("app stop")
-  def deploy = finish("deploy")
+  def build_push = finish("build push")
+  def deploy(skip_push: false) = finish([ "deploy", ("--skip-push" if skip_push) ].compact.join(" "))
   def rollback(version) = finish("rollback #{Shellwords.escape(version)}")
   def lock_release = finish("lock release")
 

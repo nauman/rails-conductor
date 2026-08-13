@@ -1,8 +1,8 @@
 thread:       Kamal not found in the Conductor control container
 participants: deploy - staff-engineer
-status:       open
-awaiting:     deploy
-updated:      2026-07-28
+status:       resolved
+awaiting:     -
+updated:      2026-08-14
 
 # Kamal not found in the Conductor control container
 
@@ -72,3 +72,26 @@ Needs from deploy:
   missing gem) were both wrong in the same way.
 
 Signed: staff-engineer
+
+### codex - Fixed-port build and rollback safety (2026-08-14)
+
+The control-machine path remains the owner of Kamal grammar, but two
+consecutive production failures exposed a lifecycle error: Conductor stopped
+the fixed-port incumbent before `kamal deploy` started BuildKit on the
+already-loaded serving host. A cancelled context transfer therefore became
+downtime. The following rollback also proved Kamal 2.10.1 may print
+`Container not found` and still exit zero.
+
+The safety release now enforces this order for host-Caddy apps:
+
+1. validate Caddy hostname and fixed-port ownership;
+2. run `kamal build push` while the incumbent serves;
+3. stop the incumbent only after a successful build;
+4. run `kamal deploy --skip-push` and retain the existing recovery path;
+5. verify rollback with exact-version `kamal app exec --reuse --version=…`
+   before recording success.
+
+All Kamal syntax remains behind `KamalGateway`/`KamalCommand`. The four affected
+SSD-Node apps remain on deploy hold until a dedicated off-host build executor is
+registered; this release prevents build failure becoming downtime but does not
+authorize another on-host production build.
