@@ -9,6 +9,7 @@ class Server < ApplicationRecord
   # How long after a Conductor-initiated reboot we treat the box being unreachable
   # as expected (status stays "rebooting", no offline alert) rather than an outage.
   REBOOT_GRACE = 8.minutes
+  OFFLINE_FAILURE_THRESHOLD = 2
 
   belongs_to :organization, optional: true
   belongs_to :ssh_key, optional: true
@@ -185,6 +186,7 @@ class Server < ApplicationRecord
       status: "online",
       last_seen_at: Time.current,
       metrics_updated_at: Time.current,
+      metrics_failure_count: 0,
       rebooting_at: nil # the box answered — the reboot window is over
     }
     # Only when this probe actually read it. Absent = unknown = leave it alone.
@@ -201,6 +203,21 @@ class Server < ApplicationRecord
 
   # Within the grace window after a reboot we issued — being unreachable is expected.
   def rebooting_grace? = rebooting_at.present? && rebooting_at > REBOOT_GRACE.ago
+
+  # One failed poll is degraded reachability, not proof that the host is down.
+  # The next successful metrics sample resets status to online; only a second
+  # consecutive failed polling cycle crosses the offline/notification boundary.
+  def record_metrics_failure!
+    return if rebooting_grace?
+
+    with_lock do
+      return if status == "offline"
+
+      failure_count = metrics_failure_count + 1
+      update!(metrics_failure_count: failure_count, status: "degraded")
+      mark_offline! if failure_count >= OFFLINE_FAILURE_THRESHOLD
+    end
+  end
 
   def mark_offline!
     # Don't flip an intentional reboot to "offline" (or alert) while it's still

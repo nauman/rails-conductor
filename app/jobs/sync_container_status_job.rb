@@ -1,6 +1,15 @@
 class SyncContainerStatusJob < ApplicationJob
   queue_as :ops
 
+  limits_concurrency(
+    key: lambda { |app_id = nil|
+      server_id = App.where(id: app_id).pick(:server_id) if app_id
+      server_id ? "server:#{server_id}" : "status-fanout"
+    },
+    group: "ServerSshProbe",
+    duration: 2.minutes
+  )
+
   def perform(app_id = nil)
     if app_id
       sync_single_app(app_id)

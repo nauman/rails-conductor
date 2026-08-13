@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_12_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_13_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -604,6 +604,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_130000) do
     t.decimal "load_average", precision: 6, scale: 2
     t.integer "memory_total_mb", default: 0
     t.integer "memory_used_mb", default: 0
+    t.integer "metrics_failure_count", default: 0, null: false
     t.datetime "metrics_updated_at"
     t.string "name", null: false
     t.bigint "organization_id"
