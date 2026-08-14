@@ -43,6 +43,17 @@ class KamalConfigTest < ActiveSupport::TestCase
     assert_equal 3000, o["proxy"]["app_port"]
   end
 
+  # "Where is this built?" had no readable answer: kamal builds locally when no
+  # builder.remote is set, so the choice was expressed as a MISSING section. Two
+  # apps in this fleet do set it, one of them building on a box that serves
+  # production traffic — which is exactly why the default must be stated.
+  test "the overlay states where the image is built instead of relying on a default" do
+    builder = overlay["builder"]
+
+    assert_equal KamalConfig::BUILD_ARCH, builder["arch"]
+    refute builder.key?("remote"), "Conductor builds on the control machine and pushes; the target pulls"
+  end
+
   test "registry uses real username + a secret-list password reference" do
     o = overlay
     assert_equal "docker.io", o["registry"]["server"], "defaults to Kamal's default registry"

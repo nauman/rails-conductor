@@ -47,10 +47,29 @@ class FleetStatusTool
         # serves an app whose form matches it (a kamal-proxy box does not route a
         # plain-docker app published on a host port). Both are stored on apps;
         # withholding them forced agents to read free-text notes to learn them.
-        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, notes: a.notes, runbook: a.runbook_summary[:runbook].present?, checklist: a.runbook_summary[:checklist_progress] } }
+        # builds_on answers "where does this image get built?" — a question that
+        # previously had no readable answer anywhere. Conductor builds on the
+        # control machine and pushes; the target only pulls. That was already the
+        # behaviour, but it was expressed as the ABSENCE of a builder block, and an
+        # absence is not something an agent can read.
+        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, builds_on: build_location(a), notes: a.notes, runbook: a.runbook_summary[:runbook].present?, checklist: a.runbook_summary[:checklist_progress] } }
       }
     end
 
     Result.ok(data)
+  end
+
+  private
+
+  # A native app has no image at all, so "where is it built" is not a question
+  # about it. For everything else this is Conductor's policy, not an inspection of
+  # the app's repo: a repo that sets `builder.remote` in its own kamal config
+  # builds there instead, and this cannot see that without a checkout. Say which
+  # it is rather than implying certainty we do not have.
+  def build_location(app)
+    return nil if app.deploy_method.to_s == "native"
+
+    "control-machine (built and pushed by Conductor, target pulls) " \
+      "— unless the app's own kamal config sets builder.remote"
   end
 end

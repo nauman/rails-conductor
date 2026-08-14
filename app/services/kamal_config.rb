@@ -16,6 +16,11 @@ class KamalConfig
 
   DESTINATION = "production".freeze
 
+  # The fleet's boxes are x86_64, and the control machine may not be — an arm64
+  # laptop building without this produces an image the target cannot run. Naming
+  # it also makes the build a stated choice rather than a default.
+  BUILD_ARCH = "amd64".freeze
+
   # Keys that ARE the deploy coordinates — represented structurally below, so they
   # don't also leak into env.clear.
   DEPLOY_KEYS = %w[
@@ -49,6 +54,22 @@ class KamalConfig
   end
 
   # The real, literal destination overlay (config/deploy.production.yml).
+  # Where the image is built, written down instead of defaulted.
+  #
+  # Conductor builds on the CONTROL MACHINE and pushes to the registry; the target
+  # only ever pulls. That was already true, but it was true by ABSENCE — kamal
+  # builds locally when no `builder.remote` is set, so a config with no builder
+  # block says nothing, and "is this built here or on the box?" had no answer you
+  # could read. An agent had to open the file and correctly interpret a section
+  # that wasn't there.
+  #
+  # It matters beyond documentation: a local build keeps the target's CPU and disk
+  # out of the deploy, and it is why a fixed-port app can build BEFORE its
+  # incumbent is stopped rather than being down for the length of a build.
+  def builder_block
+    { "arch" => BUILD_ARCH }
+  end
+
   def deploy_overlay_yaml
     overlay = {
       "service" => service_name,
@@ -61,6 +82,7 @@ class KamalConfig
         "username" => registry_username,
         "password" => ["KAMAL_REGISTRY_PASSWORD"]
       },
+      "builder" => builder_block,
       "env" => env_block
     }.compact
 

@@ -84,6 +84,7 @@ class KamalDeployer
     materialize_master_key
     write_secrets_file
     write_self_describing_config if app.self_describing?
+    log_build_location
     log_ssh_diagnostics
     # Belt and braces with the webhook guard: a self-managed app must not deploy
     # itself from inside the container kamal is about to replace. The killed
@@ -297,6 +298,24 @@ class KamalDeployer
   # exact pinned @target_sha (deterministic) when we resolved one, else to the branch
   # head (legacy fallback). Resetting to a specific sha the fetch didn't deliver fails
   # loud — which is correct: better a failed deploy than a silently stale image.
+  # Say where this image is about to be built, from the checkout rather than from
+  # policy. Conductor builds on the control machine and pushes; the target pulls.
+  # But that is the DEFAULT, expressed as the absence of `builder.remote`, and two
+  # apps in this fleet legitimately set it — one of them builds on a box that also
+  # serves production traffic, which is a fact worth seeing in the deploy log
+  # rather than discovering from a CPU graph. Read-only, and never fatal: failing
+  # a deploy over a log line would be absurd.
+  def log_build_location
+    config = Dir[File.join(checkout_dir, "config", "deploy*.yml")].min
+    return unless config
+
+    remote = File.read(config)[/^\s*remote:\s*(\S+)/, 1]
+    log(remote ? "build host: REMOTE #{remote} (this app builds on another machine, not here)"
+               : "build host: control machine (built here, pushed to the registry; the target pulls)")
+  rescue StandardError => e
+    log("build host: could not be read from the checkout (#{e.class})")
+  end
+
   def sync_repo_command
     branch = app.branch.presence || "main"
     target = @target_sha.presence || "origin/#{branch}"
