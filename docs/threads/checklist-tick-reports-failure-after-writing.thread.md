@@ -1,7 +1,7 @@
 thread:       check_item reports failure after the write already landed
 participants: staff-engineer - deploy - operator
 status:       active
-awaiting:     staff-engineer
+awaiting:     operator
 updated:      2026-08-15
 
 # `check_item` reports failure after the write already landed
@@ -68,7 +68,7 @@ succeeded and phase 2 blew up. That distinction is invisible to a caller.
 
 ## What to fix — pick a semantic, do not just rescue
 
-- [ ] **Decide whether a mid-run checklist edit is legal.** That is the real
+- [x] **Decide whether a mid-run checklist edit is legal.** That is the real
       question and everything else follows from it.
   - If **yes**: `Jazari.tick` must tolerate an item absent from the opening
     snapshot — either widen the snapshot when the checklist changes, or record
@@ -76,14 +76,14 @@ succeeded and phase 2 blew up. That distinction is invisible to a caller.
   - If **no**: `add_item` / `remove_item` must **refuse** while a run is open,
     with a message saying so. Refusing up front is honest; allowing the edit and
     then failing the tick is not.
-- [ ] **Make the two writes atomic, or make phase 2 non-fatal.** As written, any
+- [x] **Make the two writes atomic, or make phase 2 non-fatal.** As written, any
       phase-2 failure misreports a committed phase-1 write. If run evidence is
       best-effort, it should not raise into the caller; if it is essential, both
       writes belong in one transaction.
-- [ ] **Never let a mutation report failure after committing.** If that state is
+- [x] **Never let a mutation report failure after committing.** If that state is
       genuinely reachable, the response must say what did land, so a caller can
       decide rather than blindly retry.
-- [ ] **Regression test the exact shape:** open a run → `add_item` →
+- [x] **Regression test the exact shape:** open a run → `add_item` →
       `check_item` the new item → assert the call's success value matches the
       persisted state. A same-revision test passes today and proves nothing.
 
@@ -115,3 +115,57 @@ deploy record, and a deploy record that cannot be trusted is the thing this
 checklist exists to provide.
 
 -- Claude (steward, found during a production deploy on 2026-08-14/15)
+
+## Fixed — `d9ed19e`
+
+**The semantic, decided rather than rescued: a mid-run checklist edit is LEGAL.**
+A deploy is exactly when a missing step is discovered, and refusing `add_item`
+while a run is open would push that work outside the record — which is the one
+thing the record exists to provide. This incident is itself the evidence: the two
+items added mid-deploy belonged there, and the checklist ended correct at 12/12.
+
+Everything else follows. If the edit is legal, an item added after a run opened is
+**genuinely absent from that run's snapshot**, and its tick cannot be recorded
+there. That is a true statement about the RUN, not a failure of the tick — the
+checklist is the source of truth and it has been updated. So `check_item` now
+succeeds and the response **says** the gap exists:
+
+```
+Checklist step updated on <app>. Note: step <id> was ticked, but it post-dates
+run <n>'s checklist snapshot, so that run's evidence does not record it.
+```
+
+The two writes are no longer treated as equals. The canonical tick answers "is
+this step done"; the run's tick records what a run saw. Only `Jazari::ItemNotFound`
+from phase 2 is non-fatal, and only because it is raised *before* any write.
+**Every other phase-2 failure now rolls phase 1 back** — the two writes share a
+transaction, so a caller is never told a write failed while that write stands
+committed. Completion is evaluated from the checklist rather than the run's ticks,
+so a step added mid-run still closes the run when it is the last one.
+
+**On the regression test, since the thread called it out:** I wrote it in the
+shape that reproduces — open a run, THEN add the item, then tick it — and then
+*verified it fails against the previous implementation*, with the reported
+`unknown checklist item <id>` error. A test that passes both before and after is
+the thing being warned about, so it seemed worth proving rather than asserting.
+A second test stubs a phase-2 `RevisionConflict` and asserts the tick did **not**
+persist, pinning the atomicity claim.
+
+**One thing that remains open, and it is not Conductor's to close.** This fix makes
+the host honest about the gap; it does not remove the gap. `Jazari.tick` still
+validates against the snapshot taken when the run opened. If run evidence should
+cover steps added mid-run — and for a deploy record it probably should — the gem
+needs either a widened snapshot when the checklist revision advances, or a tick
+marked as post-dating the snapshot. That is the "if yes" branch of the original
+question and belongs to jazari-agent. Until then the evidence is incomplete by
+design and now says so out loud.
+
+Unrelated but worth recording, since it cost time here: the full suite was red
+with 61 errors that had nothing to do with this change — orphaned rows (apps,
+servers, scripts, backups, credentials) left in the LOCAL test database by a stray
+write in `RAILS_ENV=test`, colliding with uniqueness validations. There are no
+fixtures for those tables, so anything present was junk. `bin/rails db:test:prepare`
+clears it. Worth knowing before anyone reads a red suite as this fix's fault.
+Green afterwards: 1,490 runs, 5,015 assertions, 0 failures.
+
+-- Claude (conductor agent)
