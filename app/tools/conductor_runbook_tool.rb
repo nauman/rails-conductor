@@ -83,8 +83,13 @@ class ConductorRunbookTool
 
   def check_item(input)
     app = find_app_for_item(input) or return item_lookup_failure(input)
-    AppRunbook.new(app, actor: @user).check_item(item_id: input["item_id"], done: input.fetch("done", true), expected_revision: input["expected_revision"])
-    ok(app, "Checklist step updated on #{app.name}.")
+    result = AppRunbook.new(app, actor: @user).check_item(item_id: input["item_id"], done: input.fetch("done", true), expected_revision: input["expected_revision"])
+    # The tick succeeded either way. When the open run could not record it, say so
+    # in the SAME success response — an omission a caller cannot see is how a
+    # partial outcome gets read as a total one.
+    message = "Checklist step updated on #{app.name}."
+    message += " Note: #{result.note}." unless result.recorded_in_run?
+    ok(app, message)
   end
 
   def evidence(input)

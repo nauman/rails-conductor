@@ -49,15 +49,55 @@ class AppRunbook
                        item_id: item_id.to_s)
   end
 
+  # What a caller gets back: the tick landed, and whether the open run's evidence
+  # could include it. `note` is present only when it could not, and says why.
+  CheckResult = Struct.new(:resolved, :recorded_in_run, :note, keyword_init: true) do
+    def recorded_in_run? = recorded_in_run
+  end
+
+  # Two writes that are NOT equals. The canonical tick is the checklist — it is the
+  # answer to "is this step done". The run's tick is evidence, and evidence is
+  # anchored to the checklist snapshot the run opened with. Treating a failure of
+  # the second as a failure of the first is how a committed tick came back to its
+  # caller as an error, whose natural response is to retry a half-applied write.
+  #
+  # A mid-run checklist edit is LEGAL, deliberately. A deploy is exactly when a
+  # missing step is discovered, and refusing the edit would push that work outside
+  # the record — which is the one thing the record exists to prevent. The
+  # consequence is that an item added after a run opened is genuinely absent from
+  # that run's snapshot, so its tick cannot be recorded there. That is a true
+  # statement about the RUN, not a failure of the tick: the checklist is the source
+  # of truth and it has been updated. So report success and SAY the evidence gap
+  # exists; do not swallow it, and do not re-report it as failure.
+  #
+  # Every other phase-2 failure is a real failure, so both writes share a
+  # transaction and it rolls back — a caller is never told a write failed while
+  # that write stands committed.
   def check_item(item_id:, done:, expected_revision: nil)
     resolved = resolve
-    result = Jazari.check_item(target: target, expected_revision: expected_revision || resolved.revision,
-                               item_id: item_id.to_s, done: done)
-    run = open_run
-    run = Jazari.tick(run: run, expected_revision: run.lock_version,
-                      item_id: item_id.to_s, done: done, actor_ref: @actor_ref)
-    close_if_complete(run, resolve)
-    result
+    recorded = true
+    note = nil
+
+    result = ActiveRecord::Base.transaction do
+      outcome = Jazari.check_item(target: target, expected_revision: expected_revision || resolved.revision,
+                                  item_id: item_id.to_s, done: done)
+      run = open_run
+      begin
+        run = Jazari.tick(run: run, expected_revision: run.lock_version,
+                          item_id: item_id.to_s, done: done, actor_ref: @actor_ref)
+      rescue Jazari::ItemNotFound
+        # Raised before any write, so nothing of phase 2 is pending here.
+        recorded = false
+        note = "step #{item_id} was ticked, but it post-dates run #{run.id}'s checklist " \
+               "snapshot, so that run's evidence does not record it"
+      end
+      # Completion is a property of the CHECKLIST, not of the run's ticks, so a
+      # step added mid-run still finishes the run when it is the last one.
+      close_if_complete(run, resolve)
+      outcome
+    end
+
+    CheckResult.new(resolved: result, recorded_in_run: recorded, note: note)
   end
 
   def attach_evidence(item_id:, kind:, value:)

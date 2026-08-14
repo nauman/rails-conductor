@@ -51,6 +51,48 @@ class ConductorRunbookTest < ActionDispatch::IntegrationTest
     assert_nil @app_a.deploy_checklist_items.reload.first
   end
 
+  # The reported defect: two check_item calls returned an error and had BOTH
+  # applied. A caller's natural response to a reported failure is to retry, and a
+  # retry against a half-applied two-phase write is how a double record happens.
+  #
+  # The shape matters — a same-revision tick passes today and proves nothing. The
+  # item must be added while a run is ALREADY OPEN, so it post-dates that run's
+  # checklist snapshot and Jazari.tick cannot record it.
+  test "ticking an item added mid-run succeeds and reports the evidence gap" do
+    call_tool(action: "add_item", app_name: "app-a", content: "opening step")
+    opening = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last
+    call_tool(action: "check_item", app_name: "app-a", item_id: opening[:id])
+    assert AppRunbook.new(@app_a).last_run_summary[:open], "a run must be open for this to test anything"
+
+    call_tool(action: "add_item", app_name: "app-a", content: "discovered mid-deploy")
+    late = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last
+
+    call_tool(action: "check_item", app_name: "app-a", item_id: late[:id])
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    persisted = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.find { |row| row[:id] == late[:id] }
+    assert persisted[:done], "the tick must persist"
+    # The reported outcome must match the persisted state, and the gap must be
+    # stated rather than left for the caller to discover by re-reading.
+    refute_includes body.to_s, "unknown checklist item"
+    assert_includes body.to_s, "post-dates"
+  end
+
+  test "a phase-two failure rolls the tick back so the reported failure is true" do
+    call_tool(action: "add_item", app_name: "app-a", content: "atomic step")
+    item = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last
+
+    Jazari.stub(:tick, ->(**) { raise Jazari::RevisionConflict, "expected 1, actual 2" }) do
+      assert_raises(Jazari::RevisionConflict) do
+        AppRunbook.new(@app_a).check_item(item_id: item[:id], done: true)
+      end
+    end
+
+    refute Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.find { |row| row[:id] == item[:id] }[:done],
+      "a reported failure must leave nothing committed"
+  end
+
   test "get returns the runbook + checklist snapshot" do
     call_tool(action: "set_runbook", app_name: "app-a", runbook: "steps")
     call_tool(action: "add_item", app_name: "app-a", content: "one")
