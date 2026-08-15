@@ -1,0 +1,53 @@
+# Known legacy↔Jazari differences, each with a reason. Read by LegacyRunbookAudit.
+#
+# Why this file exists: the legacy table has no concept of a RUN, and Jazari does.
+# `done` on a runbook is CURRENT STATE; a tick on a run is WHAT THAT RUN SAW. A tick
+# that was true inside a run that ended therefore looks like permanent drift to any
+# check that compares the two per item — and no amount of ticking closes it, because
+# the two models disagree about what `done` means.
+#
+# So the bar for green is "nothing UNEXPLAINED", not "nothing differs". A difference
+# listed here with a reason is accounted for; anything not listed still fails.
+#
+# It lives outside Jazari deliberately: `tick` and `attach_evidence` both refuse a
+# closed run, correctly, because back-writing into a closed run is how a record
+# starts lying. There is no gem-side way to say "these happened, in a run that has
+# since closed", so the exception is recorded here rather than forged there.
+#
+# Apps are identified by id, never by name — this repository is public.
+#
+# Each entry: app_id, field (description|checklist), optional items, reason, dates.
+
+- app_id: 7
+  field: checklist
+  items: [ "85", "86", "87" ]
+  reason: >-
+    Ticked in the legacy table on 2026-08-11, inside a run that was later abandoned.
+    The run open today was opened on 2026-08-13 and has NOT re-verified these steps.
+    Copying them into Jazari would assert they were verified in the current run on
+    evidence gathered in a superseded one, which is the exact failure the runbook
+    exists to prevent. The steps were genuinely ticked; the claim they support is
+    not current. Recorded rather than repaired.
+  superseded_run: 2
+  current_run: 17
+  recorded: 2026-08-15
+  recorded_by: conductor-agent
+
+- app_id: 13
+  field: description
+  reason: >-
+    A long pre-cutover operational note held in the legacy description. It is a fact
+    about 2026-08-10, not a divergence to reconcile. Anything in it an operator still
+    needs is a deliberate edit to the Jazari runbook, made on its own merits and
+    dated when made — not carried across by a migration.
+  recorded: 2026-08-15
+  recorded_by: conductor-agent
+
+- app_id: 13
+  field: checklist
+  reason: >-
+    Same cause as the description above: the legacy checklist predates the cutover
+    for this app, which is externally deployed and whose procedure moved with it.
+    Accounted for, not copied forward.
+  recorded: 2026-08-15
+  recorded_by: conductor-agent
