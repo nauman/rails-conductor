@@ -131,7 +131,12 @@ class KamalDeployerNativeHandoffTest < ActiveSupport::TestCase
 
     refute ssh.commands.any? { |command| command.include?("systemctl --user disable --now") }
     refute shell.runs.any? { |run| run[:command].last.to_s.include?("kamal deploy") }
-    assert_match(/32 hexadecimal/i, @deployment.reload.failure_reason)
+    # The value here is a 128-character SECRET_KEY_BASE — the mistake this guard
+    # exists to catch — and length alone catches it. Asserting on the LENGTH rather
+    # than on "hexadecimal" keeps the test pinned to the real rule: Rails checks
+    # length only, so requiring hex rejected valid keys a live app was running on.
+    assert_match(/exactly 32 characters/i, @deployment.reload.failure_reason)
+    assert_match(/128/, @deployment.failure_reason)
     assert_equal "failed", @deployment.status
   end
 
