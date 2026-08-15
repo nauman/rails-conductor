@@ -201,16 +201,32 @@ class KamalDeployer
     verify_managed_master_key
   end
 
-  # Rails encrypted credentials use an AES-128 key represented by exactly 32
-  # hexadecimal characters. Catching a SECRET_KEY_BASE pasted into this slot is
-  # important on a fixed-port adoption: otherwise the old native owner is stopped
-  # before Rails reports the malformed key during container boot.
+  # Rails checks the master key's LENGTH and nothing else:
+  # `ActiveSupport::EncryptedFile#check_key_length` raises only when the key is not
+  # exactly 32 characters, and the key is then used as `[key].pack("H*")`. A key
+  # outside 0-9a-f still unpacks deterministically, so it encrypts and decrypts
+  # perfectly well provided the same string is used for both.
+  #
+  # This guard used to require 32 HEX characters, which is stricter than Rails and
+  # rejected a key Rails accepts — a live app running happily on a 32-character
+  # non-hex key could not be deployed, two days after the rule landed, with an
+  # error telling the operator their correct key was wrong. A validator must not be
+  # stricter than the thing it is validating for.
+  #
+  # The purpose it was added for still holds and is preserved: a SECRET_KEY_BASE
+  # pasted into this slot is 128 characters, so length alone catches it. That
+  # matters on a fixed-port adoption, where the old owner is stopped before Rails
+  # would report a malformed key during container boot.
+  MASTER_KEY_LENGTH = 32
+
   def verify_managed_master_key
     key = app.deploy_env_pairs(server: deploy_server).to_h["RAILS_MASTER_KEY"]
-    return true if key.blank? || key.match?(/\A[0-9a-f]{32}\z/i)
+    return true if key.blank? || key.length == MASTER_KEY_LENGTH
 
-    fail_with("RAILS_MASTER_KEY must be exactly 32 hexadecimal characters. " \
-              "Verify the app's credentials key; do not substitute SECRET_KEY_BASE.")
+    # Report the length, never the value.
+    fail_with("RAILS_MASTER_KEY must be exactly #{MASTER_KEY_LENGTH} characters " \
+              "(Rails checks length, not hex) — this one is #{key.length}. " \
+              "A 128-character value is SECRET_KEY_BASE; do not substitute it.")
     false
   end
 

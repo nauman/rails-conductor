@@ -1015,4 +1015,31 @@ class KamalDeployerTest < ActiveSupport::TestCase
     refute ssh.commands.any? { |c| c.include?("docker rm") },
       "removing artifacts of a failed deploy destroys what an operator needs to diagnose it"
   end
+
+  # A validator must not be stricter than the thing it validates for. Rails checks
+  # the master key's LENGTH only (`check_key_length`), and uses it via
+  # `[key].pack("H*")`, so a non-hex 32-character key encrypts and decrypts fine.
+  # Requiring hex blocked a live app from deploying with the very key it was already
+  # running on. The guard's real purpose — catching a 128-character SECRET_KEY_BASE
+  # pasted into this slot — survives on length alone.
+  test "a 32-character non-hex master key is accepted, as Rails accepts it" do
+    deployer = KamalDeployer.new(@app, @deployment)
+    deployer.stub(:deploy_server, @server) do
+      @app.stub(:deploy_env_pairs, [ [ "RAILS_MASTER_KEY", "Zx9!Qw2@Lm4#Pt6$Rv8%Kd0^Nf3&Hg5*" ] ]) do
+        assert_equal 32, "Zx9!Qw2@Lm4#Pt6$Rv8%Kd0^Nf3&Hg5*".length
+        assert deployer.send(:verify_managed_master_key), "Rails accepts this key; so must we"
+      end
+    end
+  end
+
+  test "a SECRET_KEY_BASE in the master key slot is still refused, by length" do
+    deployer = KamalDeployer.new(@app, @deployment)
+    deployer.stub(:deploy_server, @server) do
+      @app.stub(:deploy_env_pairs, [ [ "RAILS_MASTER_KEY", "a" * 128 ] ]) do
+        refute deployer.send(:verify_managed_master_key)
+      end
+    end
+    assert_match(/128/, @deployment.reload.failure_reason.to_s)
+    refute_match(/aaaa/, @deployment.failure_reason.to_s, "the failure must never echo the value")
+  end
 end
