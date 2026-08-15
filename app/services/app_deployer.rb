@@ -214,7 +214,16 @@ class AppDeployer
   # `:latest` alone means every build destroys its predecessor's identity, which
   # is the entire reason docker apps had no rollback. :latest is kept alongside
   # as a convenience pointer for anything that still expects it.
+  # The docker path builds ON THE TARGET — `run` is SSH to the app's own server —
+  # so this build competes with whatever that box is already serving. Record it as
+  # the fact it is; a status read that says "control machine" for these is wrong.
+  def record_target_build
+    host = "target-server:#{app.server&.ip_address}"
+    app.update_columns(build_host: host) if app.build_host != host
+  end
+
   def build_image
+    record_target_build
     deployment.mark_deploying!
 
     dockerfile = app.dockerfile_path || "Dockerfile"

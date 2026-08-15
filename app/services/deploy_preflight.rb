@@ -28,10 +28,28 @@ class DeployPreflight
   def initialize(app) = @app = app
 
   def check
-    Result.new(checks: [ published_port_check, migrations_check, seeds_check, audit_check, threads_check, residue_check ])
+    Result.new(checks: [ published_port_check, migrations_check, seeds_check, build_check, audit_check, threads_check, residue_check ])
   end
 
   private
+
+  # Where the image gets built, BEFORE the click rather than in a log afterwards.
+  # Conductor does not decide this: kamal reads `builder.remote` from the app's own
+  # repo and the docker path builds over SSH on the target, so a UI user can start a
+  # build on a production box without ever choosing to. Warn, never block — it is
+  # often deliberate (avoiding arm64 emulation, say), and a gate on someone else's
+  # config would be a gate nobody can satisfy from here.
+  def build_check
+    summary = @app.build_location_summary
+    return skip(:build, "Build host", "native app — no image is built") if summary.nil?
+    # Never deployed is not a risk, it is an absence — the row still shows the
+    # sentence, but warning on it would make "clear" unreachable for every new app
+    # and train people to read past the warnings that mean something.
+    return skip(:build, "Build host", summary) if @app.build_host.blank?
+    return warn(:build, "Build host", summary) if @app.builds_on_a_serving_box?
+
+    ok(:build, "Build host", summary)
+  end
 
   def published_port_check
     caddy_container = @app.server&.edge_type == "caddy" && (@app.kamal? || @app.docker?)

@@ -35,6 +35,26 @@ class App < ApplicationRecord
 
   # Deploy runbook + checklist snapshot for MCP/API/views. Read this before
   # deploying — each app deploys differently.
+  # Does the build run on a machine that is also serving traffic? True for the
+  # docker path (docker build over SSH on the target, always) and for a kamal app
+  # whose repo sets `builder.remote`. Conductor does not choose this — kamal reads
+  # it from the app's own config — so the honest answer comes from what the last
+  # deploy RECORDED, and is nil until one has.
+  def builds_on_a_serving_box?
+    return nil if build_host.blank?
+
+    build_host != KamalDeployer::CONTROL_MACHINE
+  end
+
+  # A sentence for a human, or nil when there is no image to build.
+  def build_location_summary
+    return nil if deploy_method.to_s == "native"
+    return "not recorded yet — the next deploy will report it" if build_host.blank?
+    return "control machine (built by Conductor, pushed to the registry; the target pulls)" unless builds_on_a_serving_box?
+
+    "#{build_host} — this build runs on a server, competing with whatever it serves"
+  end
+
   def runbook_summary
     AppRunbook.new(self).summary
   end

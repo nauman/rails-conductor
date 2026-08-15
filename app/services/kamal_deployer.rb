@@ -23,6 +23,10 @@ require "digest"
 class KamalDeployer
   attr_reader :app, :deployment, :error
 
+  # Recorded in apps.build_host. A literal, not a description, so it can be
+  # compared — App#builds_on_a_serving_box? keys off it.
+  CONTROL_MACHINE = "control-machine".freeze
+
   # allow_self_deploy: escape hatch for the one legitimate in-product self-deploy
   # caller — a deliberate, supervised override. Every routine path (webhook,
   # job, MCP, UI) leaves it false so a self-managed app cannot deploy itself.
@@ -84,7 +88,7 @@ class KamalDeployer
     materialize_master_key
     write_secrets_file
     write_self_describing_config if app.self_describing?
-    log_build_location
+    record_build_location
     log_ssh_diagnostics
     # Belt and braces with the webhook guard: a self-managed app must not deploy
     # itself from inside the container kamal is about to replace. The killed
@@ -321,13 +325,18 @@ class KamalDeployer
   # serves production traffic, which is a fact worth seeing in the deploy log
   # rather than discovering from a CPU graph. Read-only, and never fatal: failing
   # a deploy over a log line would be absurd.
-  def log_build_location
+  def record_build_location
     config = Dir[File.join(checkout_dir, "config", "deploy*.yml")].min
     return unless config
 
     remote = File.read(config)[/^\s*remote:\s*(\S+)/, 1]
-    log(remote ? "build host: REMOTE #{remote} (this app builds on another machine, not here)"
+    host = remote.presence || CONTROL_MACHINE
+    log(remote ? "build host: REMOTE #{remote} — this app builds on another machine, and if that " \
+                 "machine also serves traffic the build competes with it"
                : "build host: control machine (built here, pushed to the registry; the target pulls)")
+    # Persist the observation so it can be reported and warned on BEFORE the next
+    # deploy, rather than discovered in a log after the build has already started.
+    app.update_columns(build_host: host) if app.build_host != host
   rescue StandardError => e
     log("build host: could not be read from the checkout (#{e.class})")
   end

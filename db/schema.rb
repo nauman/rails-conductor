@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_13_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_050401) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -53,6 +53,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_020000) do
   create_table "apps", force: :cascade do |t|
     t.boolean "auto_deploy", default: false, null: false
     t.string "branch", default: "main"
+    t.string "build_host"
     t.string "container_id"
     t.datetime "container_started_at"
     t.string "container_status", default: "unknown"

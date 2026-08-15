@@ -61,15 +61,9 @@ class FleetStatusTool
 
   private
 
-  # A native app has no image at all, so "where is it built" is not a question
-  # about it. For everything else this is Conductor's policy, not an inspection of
-  # the app's repo: a repo that sets `builder.remote` in its own kamal config
-  # builds there instead, and this cannot see that without a checkout. Say which
-  # it is rather than implying certainty we do not have.
-  def build_location(app)
-    return nil if app.deploy_method.to_s == "native"
+  # The RECORDED fact, not a policy. Reporting policy told operators every app
+  # built on the control machine, while the docker path builds on the target by
+  # construction and two kamal apps build on a box serving production traffic.
+  def build_location(app) = app.build_location_summary
 
-    "control-machine (built and pushed by Conductor, target pulls) " \
-      "— unless the app's own kamal config sets builder.remote"
-  end
 end

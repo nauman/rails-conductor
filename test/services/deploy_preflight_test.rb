@@ -129,4 +129,36 @@ class DeployPreflightTest < ActiveSupport::TestCase
     assert_equal :skip, row(r, :audit).status
     refute r.blocked?
   end
+
+  # Conductor does not choose where a build runs — kamal reads builder.remote from
+  # the app's own repo, and the docker path builds over SSH on the target. So a UI
+  # user can start a build on a production box without ever choosing to. This warns
+  # before the click; it must not block, because the setting is often deliberate
+  # and lives in a file this side does not own.
+  test "warns when the build runs on a server that also serves traffic" do
+    @app.update!(build_host: "ssh://deploy@203.0.113.5")
+
+    result = DeployPreflight.new(@app).check
+    check = result.checks.find { |c| c.key == :build }
+
+    assert_equal :warn, check.status
+    assert_match(/competing with whatever it serves/, check.detail)
+    refute result.blocked?, "a build host must inform, not gate"
+  end
+
+  test "is ok when the build runs on the control machine" do
+    @app.update!(build_host: KamalDeployer::CONTROL_MACHINE)
+
+    assert_equal :ok, DeployPreflight.new(@app).check.checks.find { |c| c.key == :build }.status
+  end
+
+  # An absence is not a risk: warning here would make "clear" unreachable for every
+  # app that has not deployed yet, which is how a warning stops being read.
+  test "an unrecorded build host states itself without warning" do
+    @app.update!(build_host: nil)
+
+    check = DeployPreflight.new(@app).check.checks.find { |c| c.key == :build }
+    assert_equal :skip, check.status
+    assert_match(/not recorded yet/, check.detail)
+  end
 end
