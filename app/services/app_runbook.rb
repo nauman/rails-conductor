@@ -61,14 +61,23 @@ class AppRunbook
   # the second as a failure of the first is how a committed tick came back to its
   # caller as an error, whose natural response is to retry a half-applied write.
   #
-  # A mid-run checklist edit is LEGAL, deliberately. A deploy is exactly when a
-  # missing step is discovered, and refusing the edit would push that work outside
-  # the record — which is the one thing the record exists to prevent. The
-  # consequence is that an item added after a run opened is genuinely absent from
-  # that run's snapshot, so its tick cannot be recorded there. That is a true
-  # statement about the RUN, not a failure of the tick: the checklist is the source
-  # of truth and it has been updated. So report success and SAY the evidence gap
-  # exists; do not swallow it, and do not re-report it as failure.
+  # A mid-run checklist edit is LEGAL, and since jazari 0.6.0 the RUN carries it:
+  # `tick` widens the run's snapshot for an item added to the subject's own runbook
+  # and marks both entries `post_snapshot: true`. So the ordinary case now records
+  # cleanly and this rescue does not fire.
+  #
+  # It is narrowed rather than deleted, because one honest gap remains: the snapshot
+  # widens from the SUBJECT's runbook only, never from the recipe — a recipe edited
+  # mid-run is someone else's change arriving uninvited into an in-flight run, and
+  # jazari refuses it by design. In that case phase 1 has still committed, and the
+  # rule holds regardless of which gap caused it: never report failure for a write
+  # that landed. Say what could not be recorded instead.
+  #
+  # The narrowing also fixes something the broad rescue got right only by luck.
+  # `ItemNotInSnapshot` subclasses `ItemNotFound`, so catching the parent also
+  # caught a genuinely unknown item — safe today only because phase 1 rejects those
+  # first. Catching the precise class means a typo fails loudly by contract rather
+  # than by call order.
   #
   # Every other phase-2 failure is a real failure, so both writes share a
   # transaction and it rolls back — a caller is never told a write failed while
@@ -85,11 +94,12 @@ class AppRunbook
       begin
         run = Jazari.tick(run: run, expected_revision: run.lock_version,
                           item_id: item_id.to_s, done: done, actor_ref: @actor_ref)
-      rescue Jazari::ItemNotFound
+      rescue Jazari::ItemNotInSnapshot
         # Raised before any write, so nothing of phase 2 is pending here.
         recorded = false
-        note = "step #{item_id} was ticked, but it post-dates run #{run.id}'s checklist " \
-               "snapshot, so that run's evidence does not record it"
+        note = "step #{item_id} was ticked, but run #{run.id}'s snapshot cannot take it " \
+               "(it comes from the recipe, not this subject's runbook), so that run's " \
+               "evidence does not record it"
       end
       # Completion is a property of the CHECKLIST, not of the run's ticks, so a
       # step added mid-run still finishes the run when it is the last one.

@@ -58,7 +58,7 @@ class ConductorRunbookTest < ActionDispatch::IntegrationTest
   # The shape matters — a same-revision tick passes today and proves nothing. The
   # item must be added while a run is ALREADY OPEN, so it post-dates that run's
   # checklist snapshot and Jazari.tick cannot record it.
-  test "ticking an item added mid-run succeeds and reports the evidence gap" do
+  test "ticking an item added mid-run succeeds and the run records it" do
     call_tool(action: "add_item", app_name: "app-a", content: "opening step")
     opening = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.last
     call_tool(action: "check_item", app_name: "app-a", item_id: opening[:id])
@@ -73,10 +73,15 @@ class ConductorRunbookTest < ActionDispatch::IntegrationTest
     body = JSON.parse(response.body)
     persisted = Jazari.resolve(target: FleetCanon.target_for(@app_a)).checklist.find { |row| row[:id] == late[:id] }
     assert persisted[:done], "the tick must persist"
-    # The reported outcome must match the persisted state, and the gap must be
-    # stated rather than left for the caller to discover by re-reading.
-    refute_includes body.to_s, "unknown checklist item"
-    assert_includes body.to_s, "post-dates"
+    refute_includes body.to_s, "unknown checklist item", "a committed tick must never be reported as failed"
+
+    # jazari 0.6.0 widens the run's snapshot for an item added to the SUBJECT's own
+    # runbook, so the evidence is complete rather than merely honest about a gap.
+    run = Jazari::Run.where(subject_type: "App", subject_id: @app_a.id).order(:id).last
+    tick = (run.ticks || []).find { |t| t["id"] == late[:id] }
+    assert tick, "the run must record a tick for an item added while it was open"
+    assert_equal true, tick["done"]
+    refute_includes body.to_s, "does not record it", "there is no gap to report once the snapshot widens"
   end
 
   test "a phase-two failure rolls the tick back so the reported failure is true" do
