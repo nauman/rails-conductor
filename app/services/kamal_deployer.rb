@@ -719,6 +719,7 @@ class KamalDeployer
   # deployer can exist, while keeping recovery for the ordinary killed-job case.
   def build_before_fixed_port_stop
     return true unless fixed_port_app?
+    return produce_image_elsewhere if elsewhere_build?
 
     log "=== building and pushing release before stopping the fixed-port incumbent ==="
     result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
@@ -726,6 +727,50 @@ class KamalDeployer
 
     fail_with("kamal build push failed (exit #{result.exit_code}) — incumbent left running")
     false
+  end
+
+  # Only when the app has explicitly opted in. Nil ci_build_workflow means every
+  # existing app keeps the exact path it has today — a build-venue change is not
+  # something to acquire by upgrading.
+  def elsewhere_build? = app.try(:ci_build_workflow).present? && @target_sha.present?
+
+  # Produce the image without using this machine: reuse what is already built, or
+  # build it in CI. A refusal here is never fatal — it falls back to building
+  # locally, which is what would have happened anyway.
+  def produce_image_elsewhere
+    existing = RegistryImage.new(app).check(@target_sha)
+    if existing.exists?
+      log "=== image already built for #{@target_sha[0, 7]} (#{existing.detail}) — skipping the build ==="
+      record_build_venue("registry-cache")
+      return true
+    end
+
+    log "=== building #{@target_sha[0, 7]} on CI (this machine stays out of it) ==="
+    outcome = GithubActionsBuild.new(app).build!(@target_sha)
+    if outcome.ok?
+      log "CI build succeeded#{" — #{outcome.run_url}" if outcome.run_url}"
+      record_build_venue("ci:github-actions")
+      return true
+    end
+
+    # A RED BUILD STOPS HERE. Rebuilding a broken commit on another machine reaches
+    # the same red, slower, having spent the venue the fallback exists to protect.
+    if outcome.status == :build_failed
+      fail_with("CI build failed for #{@target_sha[0, 7]} — the commit is broken, not the venue" \
+                "#{" (#{outcome.run_url})" if outcome.run_url}")
+      return false
+    end
+
+    log "CI could not take this build (#{outcome.reason}: #{outcome.detail}) — building here instead"
+    result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    return true if result.success?
+
+    fail_with("kamal build push failed (exit #{result.exit_code}) — incumbent left running")
+    false
+  end
+
+  def record_build_venue(venue)
+    app.update_columns(build_host: venue) if app.build_host != venue
   end
 
   def run_kamal_deploy(prebuilt: false)

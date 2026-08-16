@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_035637) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_16_152736) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -54,6 +54,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_035637) do
     t.boolean "auto_deploy", default: false, null: false
     t.string "branch", default: "main"
     t.string "build_host"
+    t.string "ci_build_workflow"
     t.string "container_id"
     t.datetime "container_started_at"
     t.string "container_status", default: "unknown"
