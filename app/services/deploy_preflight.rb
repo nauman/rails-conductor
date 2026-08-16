@@ -42,6 +42,14 @@ class DeployPreflight
   def build_check
     summary = @app.build_location_summary
     return skip(:build, "Build host", "native app — no image is built") if summary.nil?
+
+    # Where the NEXT build would be placed, beside where the last one ran. The two
+    # differ while an app's own repo still pins a builder, and seeing both is how an
+    # operator learns that Conductor's choice is not yet the one taking effect.
+    intended = BuildPlacement.new(@app).choose
+    if intended.venue != :control
+      return ok(:build, "Build host", "next build: #{intended} · last build: #{summary}")
+    end
     # Never deployed is not a risk, it is an absence — the row still shows the
     # sentence, but warning on it would make "clear" unreachable for every new app
     # and train people to read past the warnings that mean something.
