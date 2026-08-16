@@ -42,42 +42,70 @@ class RegistryImage
 
   private
 
+  # Kamal's image reference, rebuilt from the same inputs kamal uses: the registry
+  # server and username from the app's environment, and the image's own name. The
+  # stored image_name may already carry a namespace ("acme/app"), and the registry
+  # namespace is authoritative, so only the last segment is kept. Getting this wrong
+  # is invisible — every lookup simply says "not built" and every build runs — which
+  # is why it is derived rather than assumed.
   def image_name = @app.try(:image_name).presence || @app.slug
 
-  # GHCR and Docker Hub both speak the OCI distribution API; the difference is only
-  # how a token is obtained. HEAD on the manifest is the cheapest possible question.
+  def env = @env ||= (@app.respond_to?(:env_hash) ? @app.env_hash : {})
+
+  def registry_host = env["KAMAL_REGISTRY_SERVER"].presence || "ghcr.io"
+
+  def repository_path
+    namespace = env["KAMAL_REGISTRY_USERNAME"].to_s.strip
+    [ namespace, image_name.to_s.split("/").last ].reject(&:blank?).join("/")
+  end
+
+  # Docker Hub's API host differs from its registry name, and its token service is a
+  # separate host again. Everything else follows the OCI distribution spec.
+  def api_host
+    %w[docker.io index.docker.io].include?(registry_host) ? "registry-1.docker.io" : registry_host
+  end
+
+  def token_endpoint
+    if api_host == "registry-1.docker.io"
+      "https://auth.docker.io/token?service=registry.docker.io&scope=repository:#{repository_path}:pull"
+    else
+      "https://#{registry_host}/token?service=#{registry_host}&scope=repository:#{repository_path}:pull"
+    end
+  end
+
   def manifest_present?(sha)
-    host, path = registry_coordinates
-    uri = URI("https://#{host}/v2/#{path}/manifests/#{sha}")
+    uri = URI("https://#{api_host}/v2/#{repository_path}/manifests/#{sha}")
     req = Net::HTTP::Head.new(uri)
     req["Accept"] = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json"
-    token = registry_token(host, path)
+    token = pull_token
     req["Authorization"] = "Bearer #{token}" if token.present?
 
     res = (@http || Net::HTTP).start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 8) { |h| h.request(req) }
 
     if res.is_a?(Net::HTTPSuccess)
-      Result.new(exists: true, registry: host, reference: "#{path}:#{sha}", detail: "manifest present — no build needed")
+      Result.new(exists: true, registry: registry_host, reference: "#{repository_path}:#{sha}",
+                 detail: "manifest present — no build needed")
     else
-      not_found(sha, "registry answered #{res.code}")
+      not_found(sha, "#{registry_host} answered #{res.code} for #{repository_path}")
     end
   end
 
-  def registry_coordinates
-    server = @app.try(:registry_server).presence || "ghcr.io"
-    [ server, "#{registry_namespace}/#{image_name}".delete_prefix("/") ]
-  end
+  # These images are private, so an anonymous token is refused — the credential the
+  # app already deploys with is exchanged for a pull-scoped token. Basic auth is sent
+  # only to the registry's own token endpoint, never anywhere else, and the password
+  # never leaves this method.
+  def pull_token
+    uri = URI(token_endpoint)
+    req = Net::HTTP::Get.new(uri)
+    password = env["KAMAL_REGISTRY_PASSWORD"].to_s
+    username = env["KAMAL_REGISTRY_USERNAME"].to_s
+    req.basic_auth(username, password) if password.present? && username.present?
 
-  def registry_namespace = @app.try(:registry_username).presence || ""
+    res = (@http || Net::HTTP).start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 5) { |h| h.request(req) }
+    return nil unless res.is_a?(Net::HTTPSuccess)
 
-  # Anonymous pulls work for public images, which is the common case here. A private
-  # image without a token reads as "not built" — wrong, but it only costs a build.
-  def registry_token(host, path)
-    return @app.env_hash["KAMAL_REGISTRY_PASSWORD"] if host != "ghcr.io"
-
-    uri = URI("https://ghcr.io/token?scope=repository:#{path}:pull")
-    res = (@http || Net::HTTP).start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 5) { |h| h.request(Net::HTTP::Get.new(uri)) }
-    res.is_a?(Net::HTTPSuccess) ? JSON.parse(res.body)["token"] : nil
+    body = JSON.parse(res.body)
+    body["token"].presence || body["access_token"].presence
   rescue StandardError
     nil
   end
