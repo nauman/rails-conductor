@@ -158,6 +158,19 @@ class FleetSituation
                       detail: "#{recoveries} of the last #{App::RETRY_RECOVERY_WINDOW} checks failed their first probe and passed the retry — serving, but unstable",
                       checked_at: check&.checked_at&.iso8601)
       end
+
+      # DERIVED, not seeded. The obvious home for "adopt the CI build" is a checklist
+      # item on the recipe — but RecipeRegistry.seed! is create-if-missing, so a new
+      # item never reaches a runbook an operator has already customised, and this
+      # fleet's busiest apps are exactly the customised ones. A rule that silently
+      # skips the apps that need it most is worse than no rule. Computing it from
+      # state reaches every app, every time, and disappears by itself once the app
+      # stops building on a machine that serves.
+      if app.build_host.present? && app.builds_on_a_serving_box? && app.ci_build_workflow.blank?
+        items << attn("build_on_serving_host", app,
+                      detail: "builds on #{app.build_host} — a machine that also serves traffic, so a deploy competes with what it is serving",
+                      remedy: "add docs/templates/ci-build.yml to the repo and set ci_build_workflow, or point builder.remote at a box opted in with build_role")
+      end
     end
     servers.find_each do |s|
       items << { kind: "at_risk_server", server: s.name, detail: "last audit graded at_risk — resolve before deploying" } if s.last_audit_status == "at_risk"

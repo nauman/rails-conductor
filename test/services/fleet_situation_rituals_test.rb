@@ -114,4 +114,41 @@ class FleetSituationRitualsTest < ActiveSupport::TestCase
 
     assert subject_row[:diverged], "no origin means a human chose this"
   end
+
+  # The alert is DERIVED rather than seeded as a checklist item, because
+  # RecipeRegistry.seed! is create-if-missing: a new item never reaches a runbook an
+  # operator has already customised — and the customised runbooks here belong to the
+  # busiest apps. A rule that skips the apps that need it most is worse than none.
+  test "an app building on a machine that serves traffic is surfaced for attention" do
+    app = App.create!(name: "Builds Here", slug: "builds-here", organization: @org, server: @caddy,
+                      deploy_method: "kamal", build_host: "ssh://deploy@203.0.113.77")
+
+    items = snapshot[:needs_attention]
+    mine = items.find { |i| i[:kind] == "build_on_serving_host" && i[:app] == app.name }
+
+    assert mine, "an app building on a serving box must be surfaced"
+    assert_includes mine[:detail], "competes"
+    assert_includes mine[:remedy], "ci-build.yml"
+  end
+
+  test "the alert disappears once the app opts into CI — no stale nagging" do
+    App.create!(name: "Opted In", slug: "opted-in", organization: @org, server: @caddy,
+                deploy_method: "kamal", build_host: "ssh://deploy@203.0.113.78",
+                ci_build_workflow: "build.yml")
+
+    items = snapshot[:needs_attention]
+
+    refute items.any? { |i| i[:kind] == "build_on_serving_host" && i[:app] == "Opted In" }
+  end
+
+  # Never-deployed is an absence, not a finding — warning on it would fire for every
+  # new app and train people to read past the ones that mean something.
+  test "an app with no recorded build host is not nagged" do
+    App.create!(name: "Never Built", slug: "never-built", organization: @org, server: @caddy,
+                deploy_method: "kamal", build_host: nil)
+
+    items = snapshot[:needs_attention]
+
+    refute items.any? { |i| i[:kind] == "build_on_serving_host" && i[:app] == "Never Built" }
+  end
 end
