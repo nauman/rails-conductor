@@ -52,7 +52,7 @@ class FleetStatusTool
         # control machine and pushes; the target only pulls. That was already the
         # behaviour, but it was expressed as the ABSENCE of a builder block, and an
         # absence is not something an agent can read.
-        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, builds_on: build_location(a), notes: a.notes, runbook: a.runbook_summary[:runbook].present?, checklist: a.runbook_summary[:checklist_progress] } }
+        apps:        server.apps.map { |a| { name: a.name, status: a.status, domain: a.domain, deploy_method: a.deploy_method, port: a.port, builds_on: build_location(a), ci_build: a.ci_build_workflow, notes: a.notes, runbook: a.runbook_summary[:runbook].present?, checklist: a.runbook_summary[:checklist_progress] } }
       }
     end
 

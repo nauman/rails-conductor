@@ -32,7 +32,8 @@ class BuildPlacement
   # Reasons a VENUE cannot take the work. Anything not on this list — a failing
   # test, a bad Dockerfile, a missing gem — is the build's own failure and stops
   # the deploy where it stands.
-  PLACEMENT_FAILURES = %i[quota_exhausted no_runner no_workflow unreachable not_configured].freeze
+  PLACEMENT_FAILURES = %i[quota_exhausted no_runner no_workflow unreachable not_configured
+                          unsupported_deploy_method].freeze
 
   def initialize(app, ci: nil)
     @app = app
@@ -51,6 +52,13 @@ class BuildPlacement
   private
 
   def ci_choice
+    # HONEST LIMIT: the CI and registry-reuse path is wired into KamalDeployer only.
+    # A docker-method app builds via AppDeployer, which runs `docker build` over SSH on
+    # the target — so offering it CI here would describe coverage this does not have.
+    # Native apps have no image at all. Say unsupported rather than let the ladder
+    # imply a venue that cannot be reached.
+    return Choice.new(venue: :ci, reason: :unsupported_deploy_method) unless @app.deploy_method.to_s == "kamal"
+
     unless @app.repository_url.present?
       return Choice.new(venue: :ci, reason: :not_configured)
     end

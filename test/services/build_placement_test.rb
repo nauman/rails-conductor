@@ -76,4 +76,22 @@ class BuildPlacementTest < ActiveSupport::TestCase
       refute_includes BuildPlacement::PLACEMENT_FAILURES, not_a_venue_problem
     end
   end
+
+  # A limit stated is a limit an operator can plan around; a limit left silent reads
+  # as coverage. The CI and registry-reuse path is wired into KamalDeployer only, so a
+  # docker-method app cannot reach it — AppDeployer builds over SSH on the target.
+  test "a docker app is told CI is unsupported, not merely unavailable" do
+    @app.update!(deploy_method: "docker")
+
+    ci = placement({ blocked_by: nil }).ladder.find { |c| c.venue == :ci }
+
+    assert_equal :unsupported_deploy_method, ci.reason
+    assert_includes BuildPlacement::PLACEMENT_FAILURES, ci.reason
+  end
+
+  test "a native app has no image, so CI is unsupported there too" do
+    @app.update!(deploy_method: "native")
+
+    assert_equal :unsupported_deploy_method, placement({ blocked_by: nil }).ladder.find { |c| c.venue == :ci }.reason
+  end
 end
