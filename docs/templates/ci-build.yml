@@ -1,18 +1,22 @@
 # Build this app's image in CI, and do NOTHING else.
 #
-# Drop this into an app repo as .github/workflows/build.yml, then record the
-# filename on the app in Conductor (ci_build_workflow: "build.yml"). Conductor
-# dispatches it with the exact commit it intends to ship, waits for the image, and
-# then rolls it with `kamal deploy --skip-push`.
+# Drop this into an app repo as .github/workflows/build.yml, then record the filename
+# on the app in Conductor (ci_build_workflow: "build.yml"). Conductor dispatches it
+# with the exact commit it intends to ship, waits for the image, and rolls it with
+# `kamal deploy --skip-push`.
 #
-# WHY THE SPLIT: this job needs registry push and nothing more. No SSH key, no
-# master key, no database password — a compromised runner can push an image, not
-# reach production. Compare a workflow that runs the whole deploy, which must hold
-# every secret the app has.
+# WHY `kamal build push` RATHER THAN docker/build-push-action:
+# the image name, registry and labels are already declared in config/deploy.yml. A
+# hand-written buildx step has to restate them, and the first version of this template
+# did exactly that and got it wrong — it tagged `ghcr.io/${{ github.repository }}`,
+# which is the REPOSITORY name (nauman/rails-conductor), while kamal's image is
+# `<registry-username>/<app>` (nauman/conductor). CI would have pushed happily and the
+# roll would then have failed pulling an image that does not exist, after the minutes
+# were already spent. Letting kamal read its own config means the two cannot disagree.
 #
-# The image MUST be tagged with the commit sha. A mutable tag like `latest` means
-# the box cannot tell you what it runs, and Conductor's release identification has
-# to guess — which it gets wrong.
+# `kamal build push` never touches the app hosts — it builds and pushes only — so this
+# job needs registry credentials and nothing else. No SSH key, no master key, no
+# database password: a compromised runner can push an image, not reach production.
 
 name: Build image
 
@@ -28,32 +32,28 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write        # push to GHCR; drop if you push elsewhere
+      packages: write        # GHCR push; unnecessary if you push elsewhere
+
+    env:
+      # deploy.yml renders these at config time. They must match what Conductor
+      # deploys with, or the image lands under a name the roll will not look for.
+      KAMAL_REGISTRY_SERVER: ${{ vars.KAMAL_REGISTRY_SERVER }}
+      KAMAL_REGISTRY_USERNAME: ${{ vars.KAMAL_REGISTRY_USERNAME }}
+      KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.sha }}
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
       - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Registry cache, not local: a fresh runner has no layer cache, and mode=max
-      # keeps intermediate layers so the next run starts warm. This is what makes a
-      # CI build competitive with building on a machine you keep running.
+      # Tag, registry and labels all come from config/deploy.yml — the same file the
+      # roll reads. Kamal tags the image with the commit sha, which is what Conductor
+      # looks for in the registry before deciding whether a build is needed at all.
       - name: Build and push ${{ inputs.sha }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ghcr.io/${{ github.repository }}:${{ inputs.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
-          # Kamal matches containers by this label; without it `kamal app logs`,
-          # `exec` and `rollback` cannot find what they deployed.
-          labels: service=${{ github.event.repository.name }}
+        run: bundle exec kamal build push --version=${{ inputs.sha }}
