@@ -50,9 +50,26 @@ class RemoteRailsRunner
     wrap("docker exec \"$cid\" bin/rails #{task} 2>&1")
   end
 
+  # ALWAYS the docker path, never kamal — arbitrary Ruby is delivered by a PIPELINE,
+  # and kamal cannot carry one.
+  #
+  # `kamal app exec` renders `docker exec <container> <cmd>` and hands the whole
+  # string to a shell ON THE HOST, so the pipes split there: `echo` runs inside the
+  # container and `base64 -d | bin/rails runner -` runs on the host, where bin/rails
+  # does not exist. The failure is `bash: line 1: bin/rails: No such file or
+  # directory`, exit 127.
+  #
+  # The docker path builds the same pipeline the other way round — it pipes on the
+  # host INTO `docker exec -i`, so the script arrives on the container's stdin, which
+  # is correct and is what this ran on for months.
+  #
+  # This looked like a regression because eligibility, not the command, changed:
+  # KamalOps becomes available once a checkout exists, and a DEPLOY creates the
+  # checkout. So an app silently moved from the working path to the broken one the
+  # first time it was deployed from this container. `run_task` keeps the kamal path,
+  # because a bare `bin/rails <task>` carries no pipeline and genuinely benefits from
+  # kamal resolving the live release.
   def run(script)
-    return kamal_exec("echo #{Base64.strict_encode64(script)} | base64 -d | bin/rails runner -") if kamal_ops?
-
     exec(command(script))
   end
 

@@ -84,10 +84,52 @@ class RemoteRailsRunnerTest < ActiveSupport::TestCase
     ssh = RecordingSsh.new
 
     KamalOps.stub(:new, FakeOps.new(true)) do
-      result = RemoteRailsRunner.new(app, ssh: ssh).run("puts 1")
+      # A TASK, not arbitrary Ruby. This test previously asserted that `run` used
+      # kamal — which pinned the defect: a piped script cannot survive `kamal app
+      # exec`, because the pipeline is evaluated on the host. The harness is still
+      # the right home for a bare task, so that is what it now asserts.
+      result = RemoteRailsRunner.new(app, ssh: ssh).run_task("db:migrate")
 
       assert_equal "ran via kamal", result.output
       assert_nil ssh.command, "the docker path must not also run"
     end
+  end
+
+  # P0 regression reported from the field: every runner call failed with
+  # `bash: line 1: bin/rails: No such file or directory` (exit 127) after the app was
+  # deployed. `kamal app exec` renders `docker exec <c> <cmd>` into a HOST shell, so a
+  # pipeline splits there — echo runs in the container, bin/rails is looked for on the
+  # host. Arbitrary Ruby must therefore never go through kamal.
+  #
+  # It presented as a regression because ELIGIBILITY changed, not the command: a
+  # deploy creates the kamal checkout that makes KamalOps available, so apps moved
+  # onto the broken path the first time they were deployed from this container.
+  test "arbitrary Ruby never goes through kamal, because a pipeline cannot survive it" do
+    app = App.new(name: "MyApp", slug: "myapp", deploy_method: "kamal",
+                  server: Server.new(name: "box", ip_address: "203.0.113.10"))
+    ssh = RecordingSsh.new
+
+    # Available and eager — and still must not be used for a piped script.
+    KamalOps.stub(:new, FakeOps.new(true)) do
+      result = RemoteRailsRunner.new(app, ssh: ssh).run("puts 1")
+
+      assert_equal "ran via docker", result.output
+    end
+
+    assert_includes ssh.command, "docker exec -i", "the script must arrive on the container's stdin"
+    assert_includes ssh.command, "base64 -d | docker exec", "decode on the host, pipe INTO the container"
+    refute_match(/docker exec[^|]*\| base64/, ssh.command,
+      "a pipeline after docker exec would be evaluated on the host — the reported bug")
+  end
+
+  test "a bare rails task still uses kamal, where the live-release resolver earns its keep" do
+    app = App.new(name: "MyApp", slug: "myapp", deploy_method: "kamal",
+                  server: Server.new(name: "box", ip_address: "203.0.113.10"))
+    ssh = RecordingSsh.new
+
+    KamalOps.stub(:new, FakeOps.new(true)) do
+      assert_equal "ran via kamal", RemoteRailsRunner.new(app, ssh: ssh).run_task("db:migrate").output
+    end
+    assert_nil ssh.command
   end
 end
