@@ -143,7 +143,15 @@
           <%= rui_button_to("Reboot server", reboot_server_path(@server), method: :post,
                 variant: :outline, size: :sm, color: :danger,
                 data: { turbo_confirm: "Reboot #{@server.name}? Apps on it go down for the reboot, then Conductor auto-verifies and restarts them." }) %>
+          <%= rui_button_to("Reclaim swap", reclaim_swap_server_path(@server), method: :post,
+                variant: :outline, size: :sm,
+                data: { turbo_confirm: "Reclaim swap on #{@server.name}? Swapped-out pages are read back into RAM and swap comes up empty. Nothing restarts. Conductor refuses if there isn't room to hold them." }) %>
         </div>
+        <p class="mt-2 text-xs text-muted">
+          Swap reading high while memory is free is a record of past pressure, not current
+          pressure — Linux never pages swap back in on its own. Reclaiming it restores the
+          headroom for the next spike without touching a running app.
+        </p>
         <% if @server.last_recovery_at.present? %>
           <div class="mt-4 border-t border-border pt-3">
             <p class="font-mono text-2xs uppercase tracking-label text-muted">

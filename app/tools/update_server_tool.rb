@@ -5,7 +5,7 @@
 class UpdateServerTool
   include ActorScoped
 
-  UPDATABLE = %w[name ip_address ssh_user ssh_port provider region].freeze
+  UPDATABLE = %w[name ip_address ssh_user ssh_port provider region build_role].freeze
 
   def initialize(user:)
     @user = user
@@ -44,6 +44,7 @@ class UpdateServerTool
       ssh_key:       server.ssh_key&.name,
       provider:      server.provider,
       region:        server.region,
+      build_role:    server.build_role,
       message:       "Updated #{server.name}." + (attrs.key?("ssh_key_id") ? " Run action: test_connection to verify." : ""),
       _organization: server.organization
     })

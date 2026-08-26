@@ -26,8 +26,24 @@
 class BuildPlacement
   Choice = Struct.new(:venue, :target, :reason, keyword_init: true) do
     def ci? = venue == :ci
+    def available? = reason.nil?
     def to_s = "#{venue}#{" (#{target})" if target}"
+
+    # What picking this venue costs and buys, in the operator's terms. The trade
+    # is never "which is fastest" — it is what a failed build here can take down
+    # with it, which is the fact that is invisible until the day it matters.
+    def tradeoff = TRADEOFFS.fetch(venue)
   end
+
+  TRADEOFFS = {
+    ci:      "Free, and nowhere near production — a build that dies cannot touch a " \
+             "running app. Slowest cold start, and it stops when the minutes run out.",
+    builder: "Builds on a box you chose for it, so the machine serving traffic is left " \
+             "alone. Costs you a host to keep around.",
+    control: "No extra machine and the cache is warm, but Conductor's own box is serving " \
+             "live apps — a heavy build competes with what it is serving, and that is the " \
+             "case this ladder exists to stop being the default."
+  }.freeze
 
   # Reasons a VENUE cannot take the work. Anything not on this list — a failing
   # test, a bad Dockerfile, a missing gem — is the build's own failure and stops

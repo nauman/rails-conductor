@@ -13,6 +13,7 @@ class ConductorServerTool
     "run_script"      => RunScriptTool,
     "harden"          => HardenServerTool,
     "reboot"          => RebootServerTool,
+    "reclaim_swap"    => ReclaimSwapTool,
     "remove"          => RemoveServerTool
   }.freeze
 
@@ -27,12 +28,13 @@ class ConductorServerTool
       "deploy cannot do something, fix the provisioning (use action=harden, or the docker " \
       "group / ownership / a scoped sudo rule). Set `action` to one of: " \
       "register (add a host to the fleet — name, ip_address, ssh_user; optional ssh_key_id, provider), " \
-      "update (change an existing host — server_id/server_name + any of name, ip_address, ssh_user, ssh_port, provider, region, and attach an SSH key via ssh_key_id or ssh_key_name), " \
+      "update (change an existing host — server_id/server_name + any of name, ip_address, ssh_user, ssh_port, provider, region, build_role, and attach an SSH key via ssh_key_id or ssh_key_name), " \
       "add_ssh_key (generate a deploy keypair on the Conductor server — optional name; returns the PUBLIC key to add to your servers' authorized_keys, private key stays in Conductor), " \
       "test_connection (verify Conductor can SSH to a host and refresh its metrics — server_id/server_name; run this after attaching a key), " \
       "audit (read-only security/patch posture — server_id/server_name; firewall, SSH hardening, DB exposure, pending updates), " \
       "apply_updates (apply OS updates — server_id/server_name + scope security|all; with scope:all it REBOOTS when a kernel update leaves reboot-required, unless reboot:false — DISRUPTIVE, confirm first), " \
       "reboot (reboot a server now — server_id/server_name; via the vetted wrapper, scheduled so it returns cleanly. Use to activate a pending kernel. DISRUPTIVE — confirm), " \
+      "reclaim_swap (force swapped-out pages back into RAM and bring swap up empty — server_id/server_name. Use when swap reads high while RAM is free: Linux never pages swap back in on its own, so that is a record of PAST pressure, and a box with swap already full has no headroom for the next spike. Runs a root-owned wrapper that REFUSES unless free RAM is 2x what is in swap, because swapoff with nowhere to put the pages OOM-kills a live box. Non-disruptive when it runs), " \
       "install_packages (install OS packages — server_id/server_name + packages), " \
       "run_script (run a provisioning/deploy script on a server — server_id, script_name e.g. server-provision, ruby-install, app-setup), " \
       "harden (Hatchbox-style provision & harden — server_id/server_name; from root access Conductor creates a deploy+sudo user, enables ufw + fail2ban, disables SSH root/password login, closes an exposed host Postgres, and switches to managing the box as deploy. Never self-locks (root surrendered only after a live deploy+sudo check); idempotent. Turns an at-risk box green), " \
@@ -40,7 +42,7 @@ class ConductorServerTool
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[register update add_ssh_key test_connection audit apply_updates install_packages run_script harden reboot remove], description: "Which server operation" },
+        action:            { type: "string", enum: %w[register update add_ssh_key test_connection audit apply_updates install_packages run_script harden reboot reclaim_swap remove], description: "Which server operation" },
         force:             { type: "boolean", description: "remove: deregister even if apps are still attached (detaches them)" },
         scope:             { type: "string", enum: %w[security all], description: "apply_updates: which updates (default security)" },
         reboot:            { type: "boolean", description: "apply_updates: reboot after applying when reboot-required (default true for scope:all, false for security)" },
@@ -53,6 +55,7 @@ class ConductorServerTool
         ssh_key_name:      { type: "string",  description: "update: attach an SshKey by name (alternative to ssh_key_id)" },
         provider:          { type: "string",  description: "register/update: hetzner, digitalocean, linode, vultr, aws, gcp, azure" },
         region:            { type: "string",  description: "update: region label" },
+        build_role:        { type: "boolean", description: "update: opt this host in as a BUILD box. BuildPlacement prefers a build_role server (quietest one first) over building on a machine that serves traffic. Set it on a box you keep for quiet work, not on one fronting production." },
         server_id:         { type: "integer", description: "update/test_connection/run_script: target server id" },
         server_name:       { type: "string",  description: "update/test_connection: target server by name" },
         organization_slug: { type: "string",  description: "register: org slug (defaults to actor's first org)" },
