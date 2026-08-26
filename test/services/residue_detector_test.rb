@@ -54,6 +54,38 @@ class ResidueDetectorTest < ActiveSupport::TestCase
     assert_match(/docker stop/, orphan.remedy)
   end
 
+  # Codex's point: the fake answers on a substring, so the tests above prove the
+  # parsing and not the QUERY. Assert the command Conductor actually issues —
+  # both filters and the field order the parser depends on.
+  test "the candidate probe filters on service AND candidate, in the parsed field order" do
+    seen = []
+    ssh = Class.new do
+      define_method(:initialize) { |sink| @sink = sink }
+      define_method(:execute_with_status) do |cmd|
+        @sink << cmd
+        { success: true, output: "", stderr: "" }
+      end
+    end.new(seen)
+
+    ResidueDetector.new(@app, ssh: ssh).findings
+    probe = seen.find { |c| c.include?("conductor.candidate") }
+
+    assert probe, "expected a candidate probe to be issued"
+    assert_includes probe, %(--filter "label=service=#{@app.resource_key}")
+    assert_includes probe, %(--filter "label=conductor.candidate=true")
+    assert_includes probe, %({{.ID}}|{{.Names}}|{{.Label "conductor.candidate"}}|{{.State}}|{{.Label "conductor.release"}})
+  end
+
+  # A container whose release label is empty must not shift the other fields —
+  # the exact whitespace-collapse bug this file already warns about.
+  test "an empty release label does not corrupt the state field" do
+    found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-x|true|running|")
+
+    orphan = found.find { |f| f.kind == "live_candidate" }
+    assert orphan, "a running candidate with no release label is still an orphan"
+    assert_includes orphan.detail, "unknown"
+  end
+
   # An EXITED candidate is the normal end state of a finished cutover. Flagging it
   # would train an operator to ignore this finding, which is how the live one got
   # fifteen days of silence.

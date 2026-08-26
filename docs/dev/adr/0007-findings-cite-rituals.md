@@ -54,7 +54,13 @@ Three parts:
 
 ### 1. Findings carry `recipe_id`, not just `remedy`
 
-`attn(...)` gains a recipe pointer resolved from the finding kind. `remedy` stays
+`attn(...)` gains a recipe pointer resolved from the SPECIFIC cause, never the
+presentation kind. `blocked_deploy` and `release_drift` are umbrellas — a deploy
+blocks on holds, failed seeds, a missing port or an at-risk audit, and drift
+covers four release states including "the box could not be read". Mapping the
+umbrella would hand three of four readers a ritual for someone else's problem,
+which is the failure this ADR exists to prevent. An unmapped cause carries nil.
+`remedy` stays
 — it is the one-line summary — but it stops being the whole of what Conductor
 knows. An agent reading `situation` can then fetch the ritual and follow it
 without having met the problem before.
@@ -110,8 +116,10 @@ learn.
 |---|---|
 | Decision recorded | Done — this ADR |
 | `live_candidate` diagnostic recipe seeded | Done — `FleetRecipes` |
-| `attn(...)` carries `recipe_id` per finding kind | Not built |
-| Recipes for `release_drift`, `build_on_serving_host`, `deploy_hold` | Not built |
+| `attn(...)` carries `recipe_id` per finding | Done — resolved from the SPECIFIC cause, never the umbrella kind |
+| Recipes for release drift, build placement, deploy hold | Done — `FleetRecipes` |
+| Rituals for the other block causes (failed seed, missing port, at-risk audit) | Not built — those findings correctly carry no recipe |
+| Rituals for `mixed_release` and `unknown` release states | Not built — deliberately unmapped rather than pointed at the drift ritual |
 
 Related: ADR 0006 (the orphan this came from), ADR 0005 (host-side transactions),
 `FleetCanon` (shape → recipe, the machinery this extends to findings).

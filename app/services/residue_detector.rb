@@ -107,26 +107,40 @@ class ResidueDetector
   # a finished cutover, and flagging it would teach an operator to scroll past
   # this finding — which is exactly how the live one earned its silence.
   def check_live_candidate_containers
-    out = capture(
-      %(docker ps -a --filter "label=service=#{esc(@app.resource_key)}" ) +
-      %(--filter "label=conductor.candidate=true" ) +
-      %(--format '{{.ID}}|{{.Names}}|{{.Label "conductor.candidate"}}|{{.State}}|{{.Label "conductor.release"}}')
-    )
-    return if out.nil?
+    # Every service name this app answers to, not just the stable resource key —
+    # a candidate created before or beside the ADR 0004 naming carries the kamal
+    # service label instead, and looking only at the resource key would miss it
+    # for exactly the apps most likely to have one. #check_dead_boot_artifacts
+    # already widens this way; this check must not be narrower than the one that
+    # finds the harmless case.
+    services = ([ @app.resource_key ] + Array(@app.kamal_service_candidates)).compact.uniq
+    seen = {}
 
-    out.lines.map(&:strip).reject(&:empty?).each do |line|
-      id, name, candidate, state, release = line.split("|")
-      next unless candidate.to_s == "true"
-      next unless state.to_s.casecmp?("running")
-
-      @findings << Finding.new(
-        kind: "live_candidate",
-        detail: "#{name} (#{id}) is a RUNNING candidate at release #{release.presence || 'unknown'} — " \
-                "it takes no web traffic, so health checks stay green while it shares this app's " \
-                "queue and runs stale code",
-        remedy: "`docker stop #{esc_name(name)}` — an explicit stop is also what survives the next " \
-                "reboot, since a candidate left on `unless-stopped` comes back with the box"
+    services.each do |service|
+      out = capture(
+        %(docker ps -a --filter "label=service=#{esc(service)}" ) +
+        %(--filter "label=conductor.candidate=true" ) +
+        %(--format '{{.ID}}|{{.Names}}|{{.Label "conductor.candidate"}}|{{.State}}|{{.Label "conductor.release"}}')
       )
+      next if out.nil?
+
+      out.lines.map(&:strip).reject(&:empty?).each do |line|
+        id, name, candidate, state, release = line.split("|")
+        next if id.blank? || seen[id]
+        next unless candidate.to_s == "true"
+        next unless state.to_s.casecmp?("running")
+
+        seen[id] = true
+
+        @findings << Finding.new(
+          kind: "live_candidate",
+          detail: "#{name} (#{id}) is a RUNNING candidate at release #{release.presence || 'unknown'} — " \
+                  "it takes no web traffic, so health checks stay green while it shares this app's " \
+                  "queue and runs stale code",
+          remedy: "`docker stop #{esc_name(name)}` — an explicit stop is also what survives the next " \
+                  "reboot, since a candidate left on `unless-stopped` comes back with the box"
+        )
+      end
     end
   end
 

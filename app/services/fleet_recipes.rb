@@ -275,12 +275,20 @@ class FleetRecipes
   # Deliberately NOT a default: an unmapped finding must carry no recipe rather
   # than borrow a near-enough one. A wrong ritual is worse than none, because a
   # wrong ritual gets followed.
+  # Keys are the SPECIFIC cause, never the presentation kind. `blocked_deploy` and
+  # `release_drift` are both umbrellas — a deploy blocks on holds, failed seeds, a
+  # missing port or an at-risk audit, and drift covers four distinct release states
+  # including "the box was unreachable". Mapping the umbrella would hand three of
+  # four callers a ritual for someone else's problem.
   FINDING_RECIPES = {
     "live_candidate"        => "diagnose-live-orphan",
-    "release_drift"         => "diagnose-release-drift",
     "build_on_serving_host" => "diagnose-build-placement",
     "deploy_hold"           => "diagnose-deploy-hold",
-    "blocked_deploy"        => "diagnose-deploy-hold"
+    # Release sub-states. `unknown` means the detector could not look, and
+    # `mixed_release` means several releases at once — neither is what the drift
+    # ritual describes, so both are deliberately absent.
+    "drift"                 => "diagnose-release-drift",
+    "unrecorded"            => "diagnose-release-drift"
   }.freeze
 
   def self.recipe_for_finding(kind) = FINDING_RECIPES[kind.to_s]

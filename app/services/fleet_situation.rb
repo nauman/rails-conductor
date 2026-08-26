@@ -105,7 +105,13 @@ class FleetSituation
     apps.includes(:server, :deployments, :seed_applications).find_each do |app|
       last = app.deployments.order(created_at: :desc).first
       if last&.status == "blocked"
-        items << attn("blocked_deploy", app, deployment_id: last.id, blockers: last.preflight_blockers)
+        # A deploy blocks on holds, failed seeds, a missing port or an at-risk
+        # audit. Cite the hold ritual ONLY when a hold is actually the blocker —
+        # the others need their own, and a wrong ritual gets followed.
+        blockers = last.preflight_blockers
+        held = Array(blockers).any? { |b| b.is_a?(Hash) && b.values_at(:key, "key").compact.first.to_s == "threads" }
+        items << attn("blocked_deploy", app, deployment_id: last.id, blockers: blockers,
+                      recipe_id: held ? FleetRecipes.recipe_for_finding("deploy_hold") : nil)
       elsif last&.status == "failed"
         # Carry the reason inline so the agent gets the actionable "why" (e.g.
         # "Missing required env var(s): …") without a second read to parse the log.
@@ -123,6 +129,10 @@ class FleetSituation
       # served traffic. Reads the stored rollup only — never probes here.
       if app.release_drift?
         items << attn("release_drift", app,
+                      # Resolve from the release SUB-STATE. `unknown` (the box could
+                      # not be read) and `mixed_release` are not what the drift
+                      # ritual describes, and both correctly resolve to nil.
+                      recipe_id: FleetRecipes.recipe_for_finding(app.release_state[:status]),
                       detail: app.release_state[:detail],
                       remedy: app.release_state[:remedy],
                       checked_at: app.release_checked_at&.iso8601,
@@ -136,14 +146,16 @@ class FleetSituation
       if app.residue?
         kinds = app.residue.map { |f| f[:kind] }.tally
                    .map { |kind, n| n > 1 ? "#{kind} ×#{n}" : kind }.join(", ")
+        # "residue" is a container kind, so ONE row must speak for several findings.
+        # Lead with whichever has a ritual — and take detail, remedy and recipe from
+        # that SAME finding. Citing one finding's ritual beside another's detail
+        # sends the reader to a procedure for a problem they are not looking at.
+        lead = app.residue.find { |f| FleetRecipes.recipe_for_finding(f[:kind]) } || app.residue.first
         items << attn("residue", app,
-                      # "residue" is a container kind; the ritual belongs to the
-                      # specific finding inside it. Prefer whichever sub-kind has
-                      # one rather than the first, which may be the least useful.
-                      recipe_id: app.residue.filter_map { |f| FleetRecipes.recipe_for_finding(f[:kind]) }.first,
+                      recipe_id: FleetRecipes.recipe_for_finding(lead[:kind]),
                       count: app.residue.size,
-                      detail: "#{kinds} — #{app.residue.first[:detail]}",
-                      remedy: app.residue.first[:remedy],
+                      detail: "#{kinds} — #{lead[:detail]}",
+                      remedy: lead[:remedy],
                       stale: app.residue_stale?,
                       checked_at: app.residue_checked_at&.iso8601)
       end
