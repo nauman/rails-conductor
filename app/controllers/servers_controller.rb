@@ -177,13 +177,11 @@ class ServersController < ApplicationController
   # the wrapper refuses unless there is headroom to hold them, because swapoff on
   # a tight box OOM-kills what it is meant to be helping.
   def reclaim_swap
-    result = ServerSwapReclaim.new(@server).reclaim!
-    if result.success?
-      ServerMetrics.new(@server).fetch_and_update!
-      redirect_to @server, notice: result.message
-    else
-      redirect_to @server, alert: result.message
-    end
+    @server.update!(last_swap_reclaim_status: "running", last_swap_reclaim_log: nil,
+                    last_swap_reclaim_at: Time.current)
+    ReclaimSwapJob.perform_later(@server.id)
+    redirect_to @server, notice: "Reclaiming swap on #{@server.name}. Nothing restarts; the outcome " \
+                                 "appears here when it finishes."
   end
 
   # Live tail of the host's logs over SSH. Defaults to the systemd journal
