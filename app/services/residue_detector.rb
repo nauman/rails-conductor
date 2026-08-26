@@ -42,6 +42,7 @@ class ResidueDetector
     @findings = []
     @blind = []
     check_stale_revision_containers
+    check_live_candidate_containers
     check_dead_boot_artifacts
     check_duplicate_legacy_container
     check_foreign_method_containers
@@ -84,6 +85,47 @@ class ResidueDetector
         kind: "stale_revision_container",
         detail: "#{name} (#{id}) is from revision #{revision}; this app is at #{@app.infra_revision} [#{state}]",
         remedy: "verify nothing routes to it, then `docker rm -f #{name}`"
+      )
+    end
+  end
+
+  # A candidate container still RUNNING (ADR 0006).
+  #
+  # This is the gap that let one run production jobs for fifteen days. Revision
+  # arithmetic could not see it: the candidate carried the app's CURRENT
+  # infra_revision, so #check_stale_revision_containers skipped it by
+  # construction — `next if revision == @app.infra_revision.to_s`. But revision
+  # equality is not RELEASE equality. It was current-revision, twelve-day-old
+  # release, and `Up (healthy)` throughout.
+  #
+  # It never served a request either, because the edge pointed at the real
+  # release — so every external check stayed green while it shared the job queue
+  # and executed work on stale code against a forward-migrated schema. The
+  # dangerous residue is the kind that looks healthy.
+  #
+  # Only RUNNING candidates are flagged. An exited candidate is the normal end of
+  # a finished cutover, and flagging it would teach an operator to scroll past
+  # this finding — which is exactly how the live one earned its silence.
+  def check_live_candidate_containers
+    out = capture(
+      %(docker ps -a --filter "label=service=#{esc(@app.resource_key)}" ) +
+      %(--filter "label=conductor.candidate=true" ) +
+      %(--format '{{.ID}}|{{.Names}}|{{.Label "conductor.candidate"}}|{{.State}}|{{.Label "conductor.release"}}')
+    )
+    return if out.nil?
+
+    out.lines.map(&:strip).reject(&:empty?).each do |line|
+      id, name, candidate, state, release = line.split("|")
+      next unless candidate.to_s == "true"
+      next unless state.to_s.casecmp?("running")
+
+      @findings << Finding.new(
+        kind: "live_candidate",
+        detail: "#{name} (#{id}) is a RUNNING candidate at release #{release.presence || 'unknown'} — " \
+                "it takes no web traffic, so health checks stay green while it shares this app's " \
+                "queue and runs stale code",
+        remedy: "`docker stop #{esc_name(name)}` — an explicit stop is also what survives the next " \
+                "reboot, since a candidate left on `unless-stopped` comes back with the box"
       )
     end
   end

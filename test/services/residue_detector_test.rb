@@ -36,6 +36,46 @@ class ResidueDetectorTest < ActiveSupport::TestCase
     assert_empty found
   end
 
+  # THE FIFTEEN-DAY ORPHAN. A cutover experiment's candidate container ran
+  # production jobs for two weeks after the experiment was abandoned. Revision
+  # arithmetic could not see it: the candidate carried the app's CURRENT revision,
+  # so #check_stale_revision_containers skipped it by construction. Revision
+  # equality is not release equality — it was current-revision, twelve-day-old
+  # RELEASE, and healthy the whole time.
+  test "flags a running candidate container even at the current revision" do
+    found = findings(
+      "conductor.candidate" => "e12d|app-#{@app.id}-r3-oldsha|true|running|c736669566ad"
+    )
+
+    orphan = found.find { |f| f.kind == "live_candidate" }
+    assert orphan, "a running candidate is an orphan regardless of health: #{found.map(&:kind)}"
+    assert_includes orphan.detail, "app-#{@app.id}-r3-oldsha"
+    assert_includes orphan.detail, "c736669566ad"
+    assert_match(/docker stop/, orphan.remedy)
+  end
+
+  # An EXITED candidate is the normal end state of a finished cutover. Flagging it
+  # would train an operator to ignore this finding, which is how the live one got
+  # fifteen days of silence.
+  test "an exited candidate is not an orphan" do
+    found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-old|true|exited|c736669566ad")
+
+    assert_empty found.select { |f| f.kind == "live_candidate" }
+  end
+
+  test "a box with no candidates reports none" do
+    found = findings("conductor.candidate" => "")
+
+    assert_empty found.select { |f| f.kind == "live_candidate" }
+  end
+
+  # Being unable to look is not a clean result — the whole point of the blind list.
+  test "a failed candidate probe is reported as blindness, not health" do
+    found = findings("conductor.candidate" => :fail)
+
+    assert found.any? { |f| f.kind == "unknown" }, "expected blindness to be recorded"
+  end
+
   # The Starrrs shape: a container from a previous form still running, invisible
   # because nothing compared it to the app's current revision.
   test "flags a container left over from an older revision" do
