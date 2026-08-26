@@ -177,6 +177,10 @@ class ServersController < ApplicationController
   # the wrapper refuses unless there is headroom to hold them, because swapoff on
   # a tight box OOM-kills what it is meant to be helping.
   def reclaim_swap
+    if ServerSwapReclaim.in_flight?(@server)
+      return redirect_to @server, alert: "A swap reclaim is already running on #{@server.name}."
+    end
+
     @server.update!(last_swap_reclaim_status: "running", last_swap_reclaim_log: nil,
                     last_swap_reclaim_at: Time.current)
     ReclaimSwapJob.perform_later(@server.id)

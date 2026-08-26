@@ -15,6 +15,15 @@
 #
 # An interrupted deploy is retryable. An interrupted swapoff leaves a degraded
 # box. If anything belongs in a job, it is this.
+#
+# HONEST LIMIT, and it matters: a job REDUCES the exposure, it does not remove it.
+# The SSH channel is still owned by this worker process, so a worker killed
+# mid-`swapoff` severs the remote shell exactly as the 504 did. What actually
+# closes that hole is a host-side transaction that outlives the caller, and the
+# only piece of it here is the wrapper's `flock` — which prevents a SECOND reclaim
+# landing on a half-finished first, the way a device gets shed. Surviving the
+# caller's death entirely needs a root-owned systemd unit the job starts and polls.
+# See docs/dev/adr/0005-host-side-transactions-for-interruptible-ops.md.
 class ReclaimSwapJob < ApplicationJob
   queue_as :ops
 

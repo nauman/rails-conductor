@@ -21,6 +21,12 @@ class ReclaimSwapTool
     server = find_server(input)
     return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless server
 
+    if ServerSwapReclaim.in_flight?(server)
+      return Result.fail("A swap reclaim is already running on #{server.name} (started " \
+                         "#{server.last_swap_reclaim_at&.iso8601}). Read conductor_read action: server " \
+                         "for the outcome — a second swapoff over the first can shed a device.")
+    end
+
     server.update!(last_swap_reclaim_status: "running", last_swap_reclaim_log: nil,
                    last_swap_reclaim_at: Time.current)
     ReclaimSwapJob.perform_later(server.id)

@@ -48,7 +48,11 @@ module ServerSudo
       return Probe.new(status: :no_grant, missing: WRAPPERS, detail: stderr.presence || "sudo -n #{CHECK} failed")
     end
 
-    missing = missing_wrappers(ssh)
+    begin
+      missing = missing_wrappers(ssh)
+    rescue InventoryUnavailable => e
+      return Probe.new(status: :unreachable, missing: [], detail: "wrapper inventory failed: #{e.message}")
+    end
     return Probe.new(status: :ready, missing: [], detail: nil) if missing.empty?
 
     Probe.new(status: :wrappers_missing, missing: missing,
@@ -58,9 +62,14 @@ module ServerSudo
   # The grant is only as good as the wrappers it names. Checking CHECK alone
   # reported "ready" on a box missing four of the five, which is exactly how a
   # privileged op fails at the moment it is needed rather than when it is checked.
+  # Raises rather than returning [] on a failed probe: "the inventory did not run"
+  # and "nothing is missing" are opposite facts, and collapsing them meant a broken
+  # connection reported a healthy box.
+  class InventoryUnavailable < StandardError; end
+
   def missing_wrappers(ssh)
     listing = ssh.execute_with_status("for w in #{WRAPPERS.join(' ')}; do [ -x \"$w\" ] || echo \"$w\"; done")
-    return [] unless listing[:success]
+    raise InventoryUnavailable, listing[:stderr].to_s unless listing[:success]
 
     raw = listing[:stdout].presence || listing[:output]
     raw.to_s.split("\n").map(&:strip).select { |w| WRAPPERS.include?(w) }
@@ -100,8 +109,12 @@ module ServerSudo
   # them every time, so this doubles as drift repair.
   def repair!(server, ssh)
     res = ssh.execute_with_status(grant_command(server))
-    return true if res[:success] && missing_wrappers(ssh).empty?
+    return false unless res[:success]
 
+    # Verify by USING the grant, not by listing files. Executable paths prove
+    # nothing about whether sudo will accept them.
+    ssh.execute_with_status("sudo -n #{CHECK}")[:success] && missing_wrappers(ssh).empty?
+  rescue InventoryUnavailable
     false
   end
 
@@ -117,6 +130,10 @@ module ServerSudo
     raise UnsafeUser, "refusing to build a sudoers grant for #{user.inspect}" unless user.to_s.match?(SAFE_USER)
 
     <<~SH.strip
+      # Fail-closed. Without this a failed `visudo -cf` did not stop the `mv` that
+      # follows it, so the validation step this file advertises was decorative and
+      # an invalid sudoers file could still be installed.
+      set -e
       sudo install -d -m 0755 #{WRAPPER_DIR}
       sudo tee #{CHECK} >/dev/null <<'CONDUCTOR'
       #!/bin/sh
@@ -149,6 +166,13 @@ module ServerSudo
       # box. Requiring 2x headroom keeps a cosmetic metric from causing an outage,
       # and living here means no caller can pass a flag to skip it.
       set -e
+
+      # A host-side lock, because it is the only guard that survives the CALLER
+      # dying. Ruby-side checks cannot stop a second swapoff started by another
+      # worker, another Conductor instance, or a human on the box — and a second
+      # swapoff landing on top of the first is how a device gets shed.
+      exec 9>/var/lock/conductor-reclaim-swap.lock
+      flock -n 9 || { echo "another reclaim is already running on this host" >&2; exit 6; }
 
       # Read ONE snapshot and address rows by label. Row-number parsing silently
       # read the wrong line on older procps, and an unreadable `free` left both

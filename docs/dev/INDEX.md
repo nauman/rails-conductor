@@ -25,6 +25,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0002`](adr/0002-caddy-standard-edge.md) | **Rejected** | Caddy superseding kamal-proxy would force Conductor to rebuild kamal-proxy's zero-downtime deploy handoff — reinventing battle-tested functionality. kamal-proxy stays the edge; Caddy is *added* narrowly for dynamic subdomains, never a replacement |
 | [`0003`](adr/0003-one-deploy-path-kamal-as-contract.md) | **Superseded** | Historical one-path decision; current contract uses Kamal for Kamal artifacts on both Caddy and Kamal-proxy boxes, with edge-specific health/proxy behavior |
 | [`0004`](adr/0004-stable-resource-ids-and-infra-revisions.md) | **Proposed** | Identity is assigned, never derived: every app owns a stable `app-<id>` resource key, plus an `infra_revision` that versions *infrastructure shape* separately from code — making residue mechanically detectable |
+| [`0005`](adr/0005-host-side-transactions-for-interruptible-ops.md) | **Accepted** | Classify every privileged op by what an interruption leaves behind; ops that take a resource away before giving it back need a host-side transaction (lock, verified completion, an executor that outlives the caller), because neither a defensive script nor a background job survives its own process dying |
 
 ## Authoring Notes
 
