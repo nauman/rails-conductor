@@ -25,10 +25,15 @@ name: Deploy Conductor
 on:
   push:
     branches: [main]
-    # Docs/markdown-only changes don't ship code — skip the full rebuild + deploy.
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
+    # NO paths-ignore. It was here to skip rebuilds on docs-only pushes, and it
+    # silently skipped a REAL one: a PR whose branch had already merged main back
+    # into itself produces a merge commit whose combined diff against its first
+    # parent is EMPTY. Actions saw zero changed files, matched nothing outside the
+    # ignore list, and never ran — so main carried undeployed code with no error
+    # anywhere, and "merged" stopped implying "deployed".
+    #
+    # The asymmetry decides it: a wasted build on a docs push costs minutes, while
+    # a silently skipped deploy costs however long it takes someone to notice.
   workflow_dispatch:
 
 # Serializes GitHub Actions runs only. It does NOT prevent Conductor's in-product

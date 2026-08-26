@@ -107,12 +107,30 @@ class FleetSituationRecipesTest < ActiveSupport::TestCase
     assert_includes item[:remedy], "docker stop"
   end
 
-  # Every recipe a finding points at must actually exist, or MCP hands an agent a
-  # dangling id and the pointer is worse than the prose it replaced.
-  test "every finding recipe id resolves to a seeded recipe" do
+  # Every recipe a finding points at must be spelled correctly...
+  test "every finding recipe id matches a defined recipe" do
     ids = FleetRecipes.recipe_ids
     FleetRecipes::FINDING_RECIPES.each_value do |recipe_id|
-      assert_includes ids, recipe_id, "#{recipe_id} is referenced by a finding but never seeded"
+      assert_includes ids, recipe_id, "#{recipe_id} is referenced by a finding but not defined"
+    end
+  end
+
+  # ...and must actually EXIST as a record. This distinction is the whole bug:
+  # the constant lookup above passed while FleetRecipes.seed! had no caller, so
+  # every id pointed at a row that was never created. jazari then falls back to
+  # the empty recipe, silently, which reads as "this finding has no ritual" rather
+  # than as a missing seed — the same failure 20260811090000 was written to fix,
+  # one layer along.
+  test "every finding recipe id resolves to a SEEDED record, not just a constant" do
+    FleetRecipes.seed!
+
+    FleetRecipes::FINDING_RECIPES.each_value do |recipe_id|
+      recipe = begin
+        Jazari::RecipeRegistry.fetch(recipe_id)
+      rescue StandardError
+        nil
+      end
+      assert recipe, "#{recipe_id} is handed to agents by a finding but has no seeded recipe behind it"
     end
   end
 end
