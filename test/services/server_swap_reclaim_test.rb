@@ -12,6 +12,8 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
       @ran = []
     end
 
+    attr_accessor :replies
+
     def execute_with_status(cmd)
       @ran << cmd
       _, reply = @replies.find { |fragment, _| cmd.include?(fragment.to_s) }
@@ -53,14 +55,34 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
     assert_includes result.message, "900000K available"
   end
 
-  # The distinction that matters: a server granted before this wrapper shipped
-  # passes the readiness probe (which only exercises conductor-check) and then
-  # fails on the wrapper itself. That is a provisioning gap, not a swap problem,
-  # and the operator needs the re-grant command — not "command not found".
-  test "asks for a re-grant when the wrapper is not installed yet" do
-    ssh = ScriptedSsh.new(ServerSudo::RECLAIM_SWAP => {
-      success: false, exit_code: 1, stdout: "",
-      stderr: "sudo: #{ServerSudo::RECLAIM_SWAP}: command not found"
+  # THE POINT OF THE REPAIR PATH. A box provisioned before this wrapper existed
+  # must not send a human to a root login: HardenServer already granted the deploy
+  # user NOPASSWD:ALL, so Conductor installs the missing wrapper itself and carries
+  # on. Asking for root here was a design mistake, not a constraint.
+  test "installs a missing wrapper itself instead of asking for root" do
+    calls = 0
+    ssh = ScriptedSsh.new
+    # First inventory reports the wrapper missing; after the grant runs, it is there.
+    ssh.define_singleton_method(:execute_with_status) do |cmd|
+      @ran << cmd
+      if cmd.start_with?("for w in")
+        calls += 1
+        next { success: true, exit_code: 0, stdout: (calls == 1 ? "#{ServerSudo::RECLAIM_SWAP}\n" : ""), stderr: "" }
+      end
+      { success: true, exit_code: 0, stdout: "reclaimed 2096508K\n", stderr: "" }
+    end
+
+    result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
+
+    assert result.success?, result.message
+    assert ssh.ran.any? { |c| c.include?("/etc/sudoers.d/conductor") },
+           "expected Conductor to install the wrapper set itself"
+    assert ssh.ran.none? { |c| c.include?("root@") }, "must never reach for a root login"
+  end
+
+  test "falls back to the one-time grant only when self-repair fails" do
+    ssh = ScriptedSsh.new("for w in" => {
+      success: true, exit_code: 0, stdout: "#{ServerSudo::RECLAIM_SWAP}\n", stderr: ""
     })
 
     result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
@@ -68,6 +90,56 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_includes result.message, "conductor-reclaim-swap"
     assert_includes result.message, "sudoers", "expected the one-time grant remediation"
+  end
+
+  # A box that cannot be reached is not a box that needs re-provisioning. Sending
+  # an operator to a root setup block over a network blip is how a remediation
+  # message stops being read at all.
+  test "an unreachable host is not reported as a missing grant" do
+    ssh = ScriptedSsh.new(ServerSudo::CHECK => {
+      success: false, exit_code: 255, stdout: "", stderr: "ssh: connect to host 192.0.2.10 port 22: Connection timed out"
+    })
+
+    result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
+
+    assert_not result.success?
+    assert_includes result.message, "Cannot reach"
+    assert_not_includes result.message, "sudoers"
+  end
+
+  # The failure mode codex caught: swapoff succeeded, swap did not come back. The
+  # box is now WORSE off than before, and that must not read as a generic error.
+  test "shouts when swap was disabled and could not be restored" do
+    ssh = ScriptedSsh.new(ServerSudo::RECLAIM_SWAP => {
+      success: false, exit_code: ServerSwapReclaim::SWAP_LOST_EXIT_CODE, stdout: "",
+      stderr: "ERROR: swap is OFF after reclaim"
+    })
+
+    result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
+
+    assert_not result.success?
+    assert_includes result.message, "URGENT"
+    assert_includes result.message, "no swap at all"
+  end
+
+  # A safety check that cannot read the box must fail CLOSED. Empty free(1) output
+  # previously parsed as "0 in swap" and returned success having done nothing.
+  test "an unreadable memory snapshot fails closed, not as a no-op success" do
+    ssh = ScriptedSsh.new(ServerSudo::RECLAIM_SWAP => {
+      success: false, exit_code: ServerSwapReclaim::UNREADABLE_EXIT_CODE, stdout: "",
+      stderr: "unreadable memory figures from free(1)"
+    })
+
+    result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
+
+    assert_not result.success?
+    assert_includes result.message, "did not touch swap"
+  end
+
+  test "refuses to build a sudoers grant for an unsafe account name" do
+    @server.update_columns(ssh_user: "deploy\nroot ALL=(ALL) NOPASSWD:ALL")
+
+    assert_raises(ServerSudo::UnsafeUser) { ServerSudo.grant_command(@server) }
   end
 
   test "refuses before touching the box when sudo is not granted at all" do
@@ -97,6 +169,8 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
     assert_includes command, ServerSudo::RECLAIM_SWAP
     assert_includes command, "swapoff -a"
     assert_includes command, "swapon -a"
+    assert_includes command, "/proc/swaps", "must restore the devices that were actually active"
+    assert_includes command, "visudo -cf", "sudoers must be validated before it is installed"
     assert_match(/NOPASSWD:.*conductor-reclaim-swap/, command)
   end
 end

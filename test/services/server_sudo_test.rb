@@ -8,12 +8,30 @@ class ServerSudoTest < ActiveSupport::TestCase
   end
 
   test "readiness probes the no-op wrapper, not a general command" do
-    probed = nil
+    ran = []
     ssh = Object.new
-    ssh.define_singleton_method(:execute_with_status) { |cmd| probed = cmd; { success: true, exit_code: 0 } }
+    ssh.define_singleton_method(:execute_with_status) { |cmd| ran << cmd; { success: true, exit_code: 0, stdout: "" } }
     assert ServerSudo.ready?(ssh)
-    assert_equal "sudo -n #{ServerSudo::CHECK}", probed
-    refute_includes probed, "true", "must not fall back to a broad 'sudo -n true'"
+
+    grant_probe = ran.first
+    assert_equal "sudo -n #{ServerSudo::CHECK}", grant_probe
+    refute_includes grant_probe, "true", "must not fall back to a broad 'sudo -n true'"
+  end
+
+  # Readiness used to exercise conductor-check ALONE, so a box missing four of the
+  # five wrappers reported "ready" and then failed at the moment the op was needed.
+  test "readiness is not satisfied by conductor-check alone when wrappers are missing" do
+    ssh = Object.new
+    ssh.define_singleton_method(:execute_with_status) do |cmd|
+      next { success: true, exit_code: 0, stdout: "#{ServerSudo::RECLAIM_SWAP}\n" } if cmd.start_with?("for w in")
+
+      { success: true, exit_code: 0, stdout: "" }
+    end
+
+    probe = ServerSudo.probe(ssh)
+    assert_not probe.ready?
+    assert probe.repairable?, "a missing wrapper is repairable by the deploy user, not a root errand"
+    assert_equal [ ServerSudo::RECLAIM_SWAP ], probe.missing
   end
 
   test "grant installs root-owned wrappers + a NOPASSWD rule scoped to only those" do

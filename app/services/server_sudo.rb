@@ -5,7 +5,12 @@
 # the exact operation with no argument passthrough. The deploy user can trigger the
 # vetted actions but cannot inject flags or spawn a root shell.
 #
-# One-time root setup installs the wrappers + the sudoers rule (grant_command).
+# ROOT IS NEEDED ONCE, AT REGISTRATION, AND NEVER AGAIN. HardenServer's PROVISION
+# step grants `deploy ALL=(ALL) NOPASSWD:ALL`, so on any Conductor-provisioned box
+# the deploy user can already install these wrappers itself. That is what makes
+# #repair! possible: when Conductor gains a new privileged op, the boxes catch up
+# on their own instead of queueing a root SSH session for a human. Treating a
+# missing wrapper as "go log in as root" was a design mistake, not a constraint.
 module ServerSudo
   module_function
 
@@ -18,11 +23,63 @@ module ServerSudo
   WRAPPERS         = [ CHECK, SECURITY_UPDATES, ALL_UPDATES, REBOOT, RECLAIM_SWAP ].freeze
   SUDOERS_FILE     = "/etc/sudoers.d/conductor".freeze
 
-  # Ready when the SSH user can run the no-op wrapper via passwordless sudo — proves
-  # the grant is installed without running (or being able to run) anything else.
-  def ready?(ssh)
+  # A Unix account name. Validated because #grant_command interpolates it into a
+  # root-run shell command AND into a sudoers file: a quote or newline here turns
+  # an operator pasting the setup block into an injection, and a merely malformed
+  # value writes a sudoers file that locks every privileged op out.
+  SAFE_USER = /\A[a-z_][a-z0-9_-]{0,31}\z/
+
+  class UnsafeUser < StandardError; end
+
+  # Why a probe and not a boolean: "cannot reach the host", "sudo wants a password",
+  # and "the grant is fine but this wrapper was added after you provisioned" need
+  # three different answers. Collapsing them into false meant every SSH hiccup told
+  # the operator to go re-run a root setup block they did not need.
+  Probe = Struct.new(:status, :missing, :detail, keyword_init: true) do
+    def ready? = status == :ready
+    def repairable? = status == :wrappers_missing
+  end
+
+  def probe(ssh)
     res = ssh.execute_with_status("sudo -n #{CHECK}")
-    res[:success] && res[:exit_code].to_i.zero?
+    unless res[:success] && res[:exit_code].to_i.zero?
+      stderr = res[:stderr].to_s
+      return Probe.new(status: :unreachable, missing: [], detail: stderr.presence || "host did not answer") if unreachable?(stderr)
+      return Probe.new(status: :no_grant, missing: WRAPPERS, detail: stderr.presence || "sudo -n #{CHECK} failed")
+    end
+
+    missing = missing_wrappers(ssh)
+    return Probe.new(status: :ready, missing: [], detail: nil) if missing.empty?
+
+    Probe.new(status: :wrappers_missing, missing: missing,
+              detail: "installed before #{missing.join(', ')} existed")
+  end
+
+  # The grant is only as good as the wrappers it names. Checking CHECK alone
+  # reported "ready" on a box missing four of the five, which is exactly how a
+  # privileged op fails at the moment it is needed rather than when it is checked.
+  def missing_wrappers(ssh)
+    listing = ssh.execute_with_status("for w in #{WRAPPERS.join(' ')}; do [ -x \"$w\" ] || echo \"$w\"; done")
+    return [] unless listing[:success]
+
+    raw = listing[:stdout].presence || listing[:output]
+    raw.to_s.split("\n").map(&:strip).select { |w| WRAPPERS.include?(w) }
+  end
+
+  def ready?(ssh) = probe(ssh).ready?
+
+  # Bring a box's wrapper set up to date USING THE DEPLOY USER'S OWN SUDO. No root
+  # login, no human, no pasted block. Idempotent — grant_command rewrites all of
+  # them every time, so this doubles as drift repair.
+  def repair!(server, ssh)
+    res = ssh.execute_with_status(grant_command(server))
+    return true if res[:success] && missing_wrappers(ssh).empty?
+
+    false
+  end
+
+  def unreachable?(stderr)
+    stderr.match?(/Connection (refused|timed out|closed)|No route to host|Host key|Permission denied \(publickey|Could not resolve|No SSH key|No IP address/i)
   end
 
   # One-time, root-run setup: writes the wrapper scripts (root-owned, 0755 — not
@@ -30,6 +87,8 @@ module ServerSudo
   # those wrappers for this server's SSH user. No permanent root SSH; no shell escape.
   def grant_command(server, user: nil)
     user ||= server.ssh_user_or_default
+    raise UnsafeUser, "refusing to build a sudoers grant for #{user.inspect}" unless user.to_s.match?(SAFE_USER)
+
     <<~SH.strip
       sudo install -d -m 0755 #{WRAPPER_DIR}
       sudo tee #{CHECK} >/dev/null <<'CONDUCTOR'
@@ -56,28 +115,57 @@ module ServerSudo
       CONDUCTOR
       sudo tee #{RECLAIM_SWAP} >/dev/null <<'CONDUCTOR'
       #!/bin/sh
-      # Force swapped-out pages back into RAM, then bring swap up empty.
+      # Force swapped-out pages back into RAM, then put swap back exactly as it was.
       #
       # The guard is the point of this wrapper. swapoff must place every evacuated
       # page somewhere; run it when RAM is tight and the kernel OOM-kills a live
       # box. Requiring 2x headroom keeps a cosmetic metric from causing an outage,
       # and living here means no caller can pass a flag to skip it.
       set -e
-      avail=$(free -k | awk 'NR==2{print $7}')
-      used=$(free -k | awk 'NR==3{print $3}')
-      [ "${used:-0}" -eq 0 ] && { echo "swap already empty"; exit 0; }
-      if [ "${avail:-0}" -lt $(( used * 2 )) ]; then
+
+      # Read ONE snapshot and address rows by label. Row-number parsing silently
+      # read the wrong line on older procps, and an unreadable `free` left both
+      # values empty — which the guard then treated as "0 in swap, nothing to do"
+      # and reported as success. A safety check that fails open is not one.
+      snapshot=$(free -k 2>/dev/null) || { echo "cannot read memory state" >&2; exit 4; }
+      avail=$(echo "$snapshot" | awk '/^Mem:/  {print $7}')
+      used=$(echo  "$snapshot" | awk '/^Swap:/ {print $3}')
+      case "$avail" in ''|*[!0-9]*) echo "unreadable memory figures from free(1)" >&2; exit 4 ;; esac
+      case "$used"  in ''|*[!0-9]*) echo "unreadable swap figures from free(1)"   >&2; exit 4 ;; esac
+
+      if [ "$used" -eq 0 ]; then echo "swap already empty"; exit 0; fi
+      if [ "$avail" -lt $(( used * 2 )) ]; then
         echo "refusing: ${used}K in swap but only ${avail}K available RAM" >&2
         exit 3
       fi
+
+      # swapoff -a disables every ACTIVE device; swapon -a only restores what fstab
+      # lists. A zram, cloud-init, or hand-added device is not in fstab, so the naive
+      # pair silently leaves the box with LESS swap than it started with — the exact
+      # opposite of the point. Record what was active and put each one back.
+      devices=$(awk 'NR>1 {print $1}' /proc/swaps)
       swapoff -a
-      swapon -a
-      echo "reclaimed ${used}K"
+      swapon -a 2>/dev/null || true
+      for d in $devices; do
+        grep -qs "^${d}[[:space:]]" /proc/swaps || swapon "$d" 2>/dev/null || echo "warning: could not restore $d" >&2
+      done
+
+      active=$(awk 'NR>1' /proc/swaps | wc -l)
+      if [ "$active" -eq 0 ]; then
+        echo "ERROR: swap is OFF after reclaim - restore it before this box sees load" >&2
+        exit 5
+      fi
+      echo "reclaimed ${used}K; ${active} swap device(s) active"
       CONDUCTOR
       sudo chmod 0755 #{WRAPPERS.join(' ')}
       sudo chown root:root #{WRAPPERS.join(' ')}
-      echo '#{user} ALL=(root) NOPASSWD: #{WRAPPERS.join(', ')}' | sudo tee #{SUDOERS_FILE} >/dev/null
-      sudo chmod 0440 #{SUDOERS_FILE}
+      # Stage, validate, THEN install. An invalid sudoers file written in place locks
+      # every privileged op out of the box, and the way back in is the root login
+      # this whole design exists to avoid needing.
+      echo '#{user} ALL=(root) NOPASSWD: #{WRAPPERS.join(', ')}' | sudo tee #{SUDOERS_FILE}.new >/dev/null
+      sudo chmod 0440 #{SUDOERS_FILE}.new
+      sudo visudo -cf #{SUDOERS_FILE}.new >/dev/null
+      sudo mv #{SUDOERS_FILE}.new #{SUDOERS_FILE}
     SH
   end
 

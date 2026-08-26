@@ -46,7 +46,8 @@ class DeployPreflight
     # Where the NEXT build would be placed, beside where the last one ran. The two
     # differ while an app's own repo still pins a builder, and seeing both is how an
     # operator learns that Conductor's choice is not yet the one taking effect.
-    intended = BuildPlacement.new(@app).choose
+    ladder = BuildPlacement.new(@app).ladder
+    intended = ladder.find(&:available?) || ladder.last
     if intended.venue != :control
       return ok(:build, "Build host", "next build: #{intended} · last build: #{summary}")
     end
@@ -57,14 +58,17 @@ class DeployPreflight
     # Falling through to control means every other rung was unavailable. Say WHY
     # each one was passed over: "it builds on a production box" is a complaint,
     # "CI has no workflow and no host is opted in as a builder" is a next step.
-    return warn(:build, "Build host", "#{summary} · #{ladder_explanation}") if @app.builds_on_a_serving_box?
+    return warn(:build, "Build host", "#{summary} · #{ladder_explanation(ladder)}") if @app.builds_on_a_serving_box?
 
     ok(:build, "Build host", summary)
   end
 
   # The rungs that were rejected, with the reason each one could not take the work.
-  def ladder_explanation
-    rejected = BuildPlacement.new(@app).ladder.reject(&:available?)
+  # Takes the ALREADY-COMPUTED ladder. Rebuilding it here re-ran the GitHub billing
+  # probe — doubling the latency, and letting a transient answer contradict the
+  # very placement being explained.
+  def ladder_explanation(ladder)
+    rejected = ladder.reject(&:available?)
     return "no cheaper build venue is available" if rejected.empty?
 
     "unavailable: " + rejected.map { |c| "#{c.venue} (#{c.reason.to_s.tr('_', ' ')})" }.join(", ")
