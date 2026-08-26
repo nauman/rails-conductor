@@ -14,7 +14,8 @@ module ServerSudo
   SECURITY_UPDATES = "#{WRAPPER_DIR}/conductor-apply-security-updates".freeze
   ALL_UPDATES      = "#{WRAPPER_DIR}/conductor-apply-all-updates".freeze
   REBOOT           = "#{WRAPPER_DIR}/conductor-reboot".freeze
-  WRAPPERS         = [ CHECK, SECURITY_UPDATES, ALL_UPDATES, REBOOT ].freeze
+  RECLAIM_SWAP     = "#{WRAPPER_DIR}/conductor-reclaim-swap".freeze
+  WRAPPERS         = [ CHECK, SECURITY_UPDATES, ALL_UPDATES, REBOOT, RECLAIM_SWAP ].freeze
   SUDOERS_FILE     = "/etc/sudoers.d/conductor".freeze
 
   # Ready when the SSH user can run the no-op wrapper via passwordless sudo — proves
@@ -52,6 +53,26 @@ module ServerSudo
       # Schedule a few seconds out so the triggering SSH command returns cleanly
       # instead of dying with the connection as the box goes down.
       exec systemd-run --quiet --on-active=3s --timer-property=AccuracySec=100ms systemctl reboot
+      CONDUCTOR
+      sudo tee #{RECLAIM_SWAP} >/dev/null <<'CONDUCTOR'
+      #!/bin/sh
+      # Force swapped-out pages back into RAM, then bring swap up empty.
+      #
+      # The guard is the point of this wrapper. swapoff must place every evacuated
+      # page somewhere; run it when RAM is tight and the kernel OOM-kills a live
+      # box. Requiring 2x headroom keeps a cosmetic metric from causing an outage,
+      # and living here means no caller can pass a flag to skip it.
+      set -e
+      avail=$(free -k | awk 'NR==2{print $7}')
+      used=$(free -k | awk 'NR==3{print $3}')
+      [ "${used:-0}" -eq 0 ] && { echo "swap already empty"; exit 0; }
+      if [ "${avail:-0}" -lt $(( used * 2 )) ]; then
+        echo "refusing: ${used}K in swap but only ${avail}K available RAM" >&2
+        exit 3
+      fi
+      swapoff -a
+      swapon -a
+      echo "reclaimed ${used}K"
       CONDUCTOR
       sudo chmod 0755 #{WRAPPERS.join(' ')}
       sudo chown root:root #{WRAPPERS.join(' ')}

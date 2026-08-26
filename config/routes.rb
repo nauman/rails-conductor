@@ -138,6 +138,7 @@ Rails.application.routes.draw do
       get :storage
       get :sudo_check
       post :reboot
+      post :reclaim_swap
       post :install_packages
       post :apply_updates
     end

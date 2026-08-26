@@ -6,7 +6,7 @@ class ServersController < ApplicationController
   # provision runs a Script over the server's SSH identity; hardening and
   # package installation mutate the host as root. Ad-hoc execution, so owner-only.
   owner_only :execute, :provision, :install_packages
-  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :storage, :audit, :install_packages, :apply_updates, :sudo_check, :reboot ]
+  before_action :set_server, only: [ :show, :edit, :update, :destroy, :test_connection, :refresh_metrics, :provision, :logs, :health, :storage, :audit, :install_packages, :apply_updates, :sudo_check, :reboot, :reclaim_swap ]
 
   def index
     @servers = current_organization.servers.includes(:ssh_key, :apps).order(created_at: :desc)
@@ -167,6 +167,19 @@ class ServersController < ApplicationController
     if result.success?
       @server.mark_rebooting! # transitional state + grace window, so the UI shows "rebooting" now
       RebootRecoveryJob.set(wait: 60.seconds).perform_later(@server.id) # babysit apps back to health
+      redirect_to @server, notice: result.message
+    else
+      redirect_to @server, alert: result.message
+    end
+  end
+
+  # Force swapped-out pages back into RAM. Non-disruptive when it runs at all —
+  # the wrapper refuses unless there is headroom to hold them, because swapoff on
+  # a tight box OOM-kills what it is meant to be helping.
+  def reclaim_swap
+    result = ServerSwapReclaim.new(@server).reclaim!
+    if result.success?
+      ServerMetrics.new(@server).fetch_and_update!
       redirect_to @server, notice: result.message
     else
       redirect_to @server, alert: result.message

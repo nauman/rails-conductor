@@ -54,9 +54,20 @@ class DeployPreflight
     # sentence, but warning on it would make "clear" unreachable for every new app
     # and train people to read past the warnings that mean something.
     return skip(:build, "Build host", summary) if @app.build_host.blank?
-    return warn(:build, "Build host", summary) if @app.builds_on_a_serving_box?
+    # Falling through to control means every other rung was unavailable. Say WHY
+    # each one was passed over: "it builds on a production box" is a complaint,
+    # "CI has no workflow and no host is opted in as a builder" is a next step.
+    return warn(:build, "Build host", "#{summary} · #{ladder_explanation}") if @app.builds_on_a_serving_box?
 
     ok(:build, "Build host", summary)
+  end
+
+  # The rungs that were rejected, with the reason each one could not take the work.
+  def ladder_explanation
+    rejected = BuildPlacement.new(@app).ladder.reject(&:available?)
+    return "no cheaper build venue is available" if rejected.empty?
+
+    "unavailable: " + rejected.map { |c| "#{c.venue} (#{c.reason.to_s.tr('_', ' ')})" }.join(", ")
   end
 
   def published_port_check
