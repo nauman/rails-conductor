@@ -24,7 +24,7 @@ class AppDeployer
   ZERO_DOWNTIME_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
     start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
-    republish_edge_route promote_candidate drain_previous_container cleanup
+    promote_candidate republish_edge_route drain_previous_container cleanup
   ].freeze
 
   # The original order. Traffic is down from stop_old_container until the edge is
@@ -495,21 +495,27 @@ class AppDeployer
   end
 
   # The old container only goes once traffic is already on the candidate.
-  # THE EDGE SWAP IS THE PROMOTION BOUNDARY, which is why this runs immediately
-  # after it and BEFORE the drain. The moment the edge serves the candidate it is
-  # production, and production must survive a reboot — so any window where it is
-  # serving while still `--restart no` is a window where a host restart takes the
-  # app down and leaves nothing to come back.
+  # PROMOTE BEFORE THE EDGE MOVES. This took three attempts to place, and the two
+  # wrong ones are the argument for where it is now.
   #
-  # Ordering this after the drain, as the first version did, made that window wider
-  # in the worst possible way: by the time promotion was reached the incumbent had
-  # already been removed, so an interruption left production both ephemeral and
-  # irreplaceable.
+  # Promoting after the drain left the candidate serving as production while still
+  # `--restart no`, with the incumbent already deleted — an interruption there left
+  # production both ephemeral and irreplaceable. Promoting after the edge swap
+  # merely narrowed that window instead of closing it, and left a genuinely
+  # inconsistent terminal state on failure: edge on the candidate, deploy marked
+  # failed, nothing serving durably.
   #
-  # Failing here IS fatal, and it is safe to be fatal precisely because the drain
-  # has not run yet: the incumbent is still on the box, so stopping now leaves a
-  # rollback target. Continuing instead would drain the only durable container and
-  # leave a fragile one serving.
+  # Running BEFORE republish_edge_route removes the window entirely. The candidate
+  # has passed its health check but carries no traffic yet, so a failure here costs
+  # nothing: the edge has not moved, the incumbent is still serving, and the normal
+  # cutover compensation discards the candidate. There is never an instant where
+  # something serving production is `--restart no`.
+  #
+  # The cost is the mirror risk — a promoted candidate that never wins would survive
+  # a reboot as an orphan. That window is two steps wide and covered by
+  # #compensate_failed_cutover, and an orphan is now DETECTED by release comparison,
+  # while an ephemeral production container is an outage nobody is watching for.
+  # Given one of the two must exist, this is the one to keep.
   #
   # NOT a relabel. Docker labels are immutable after creation, so the container
   # cannot be re-badged and `conductor.candidate=true` stays on it for life. That is
@@ -525,10 +531,10 @@ class AppDeployer
       return true
     end
 
-    fail_step("#{@candidate_name} is serving but could not be promoted to " \
-              "`--restart unless-stopped`, so it would NOT come back after a reboot. The previous " \
-              "container has deliberately NOT been drained — it is still there as a rollback target. " \
-              "Fix with `docker update --restart unless-stopped #{@candidate_name}` on the box.")
+    # Nothing has moved yet, so this is an ordinary pre-cutover failure: discard the
+    # candidate and leave the incumbent serving, exactly as a failed health check does.
+    discard_candidate("#{@candidate_name} could not be promoted to `--restart unless-stopped`, " \
+                      "so it would not survive a reboot — refusing to move traffic onto it")
   end
 
   def drain_previous_container

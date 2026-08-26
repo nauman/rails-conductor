@@ -148,16 +148,26 @@ one thing that actually differs between an experiment and a release:
   stopped instead of resurrecting it (it is not removed — `no` only withholds the
   automatic restart, which is enough: a stopped container serves nothing and
   processes nothing)
-- `#promote_candidate` raises it to `unless-stopped` **the moment the edge starts
-  serving it**, and before the incumbent is drained
+- `#promote_candidate` raises it to `unless-stopped` **before the edge moves**
 
-**The edge swap is the promotion boundary, and the ordering is load-bearing.** The
-first implementation promoted after the drain, which left a window where the
-candidate was already production while still `--restart no` — and by then the
-incumbent was gone, so an interruption left production both ephemeral and
-irreplaceable. That is strictly worse than the behaviour being fixed. Promotion
-failure is therefore fatal, which is safe *because* the drain has not run: the
-incumbent is still on the box as a rollback target.
+**The ordering is load-bearing, and took three attempts.** Promoting after the
+drain left the candidate serving as production while still `--restart no`, with
+the incumbent already deleted — an interruption there left production both
+ephemeral and irreplaceable, strictly worse than the behaviour being fixed.
+Promoting after the edge swap only narrowed that window, and on failure left a
+genuinely inconsistent state: edge on the candidate, deploy marked failed, nothing
+serving durably.
+
+Promoting *before* the edge moves removes the window rather than narrowing it.
+**Nothing serving production is ever `--restart no`.** A failure at that point
+costs nothing — the edge has not moved, the incumbent is still serving, and the
+candidate is discarded like any failed health check.
+
+The accepted cost is the mirror risk: a promoted candidate that never wins would
+survive a reboot as an orphan. That window is two steps wide, is covered by the
+existing cutover compensation, and an orphan is now *detected* by release
+comparison — whereas an ephemeral production container is an outage nobody is
+watching for. One of the two risks must exist; this is the one to keep.
 
 The fifteen-day orphan becomes impossible at creation rather than merely findable
 afterwards, which was the point of Rule 1.

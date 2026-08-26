@@ -59,7 +59,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
         # Mirror the real pipeline: it aborts on the first failing step, so a
         # failed health check must never reach the swap or the drain.
         %i[start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
-           republish_edge_route promote_candidate drain_previous_container]
+           promote_candidate republish_edge_route drain_previous_container]
           .each_with_object({}) do |step, out|
             out[step] = @deployer.send(step)
             break out unless out[step]
@@ -87,32 +87,33 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     assert_not_includes run_cmd, "--restart unless-stopped"
   end
 
-  # THE EDGE SWAP IS THE PROMOTION BOUNDARY. The first version of this promoted
-  # AFTER the drain, which left a window where the candidate was already serving as
-  # production while still `--restart no` — and by then the incumbent was gone, so
-  # an interruption left production both ephemeral and irreplaceable.
-  test "the candidate is promoted before the drain, not after" do
+  # NOTHING SERVING IS EVER EPHEMERAL. Promotion runs before the edge moves, so
+  # there is no instant where production carries traffic on `--restart no`. Two
+  # earlier orderings — after the drain, then after the edge swap — only narrowed
+  # that window; this removes it.
+  test "the candidate is promoted before the edge swap, so production is never ephemeral" do
     ssh = FakeSsh.new
     cutover(ssh)
 
     promote = index_of(ssh, /docker update --restart unless-stopped/)
-    assert promote, "expected the candidate to be promoted once the edge serves it"
-    assert_operator promote, :<, index_of(ssh, /docker stop/),
-                    "promotion must precede the drain — production must never serve while ephemeral"
+    assert promote, "expected the candidate to be promoted"
+    edge = index_of(ssh, /kamal-proxy|caddy|deploy .*--target/i) || index_of(ssh, /docker stop/)
+    assert_operator promote, :<, edge,
+                    "promotion must precede anything that moves traffic onto the candidate"
   end
 
-  # Fatal here is SAFE precisely because the drain has not run: the incumbent is
-  # still on the box as a rollback target. Continuing would drain the only durable
-  # container and leave a fragile one serving.
-  test "a failed promotion stops the deploy while the incumbent is still there" do
+  # A failure here costs nothing: the edge has not moved and the incumbent is still
+  # serving, so it is an ordinary pre-cutover failure like a failed health check.
+  test "a candidate that cannot be promoted is discarded, and traffic never moves" do
     ssh = FakeSsh.new(fail_on: "docker update --restart")
 
     ok = @deployer.stub(:ssh, ssh) do
       @deployer.stub(:sleep, nil) { @deployer.send(:start_candidate) && @deployer.send(:promote_candidate) }
     end
 
-    assert_not ok, "a candidate that cannot be promoted must not be treated as a release"
-    assert_nil index_of(ssh, /docker stop/), "the incumbent must NOT be drained after a failed promotion"
+    assert_not ok, "refusing to move traffic onto a container that would not survive a reboot"
+    assert index_of(ssh, /docker rm -f/), "the unpromotable candidate must be discarded"
+    assert_nil index_of(ssh, /docker stop/), "the incumbent must keep serving"
   end
 
   test "a kamal-proxy app with a domain uses the zero-downtime path" do
