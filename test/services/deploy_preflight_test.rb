@@ -162,3 +162,21 @@ class DeployPreflightTest < ActiveSupport::TestCase
     assert_match(/not recorded yet/, check.detail)
   end
 end
+
+class DeployPreflightBuildTradeoffTest < ActiveSupport::TestCase
+  # Copilot caught TRADEOFFS as dead code, and it was right: the ladder explained
+  # which venues were unavailable but never what the chosen one costs. The whole
+  # point of surfacing placement is letting an operator weigh it.
+  test "a build on a serving box states what that placement costs" do
+    user = User.create!(email: "tradeoff@example.com")
+    org = Organization.create_for(user, name: "Acme")
+    server = org.servers.create!(name: "box", status: "online", ip_address: "192.0.2.9")
+    app = org.apps.create!(name: "shop", deploy_method: "kamal", server: server,
+                           build_host: "ssh://deploy@192.0.2.9")
+
+    check = DeployPreflight.new(app).check.checks.find { |c| c.key == :build }
+
+    assert_equal :warn, check.status
+    assert_includes check.detail, "competes with what it is serving"
+  end
+end
