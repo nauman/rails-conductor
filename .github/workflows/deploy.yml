@@ -79,22 +79,51 @@ jobs:
       CONDUCTOR_MCP_TOKEN: ${{ secrets.CONDUCTOR_MCP_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need history to tell "older than" from "newer than"
+
+      # NEVER DEPLOY BACKWARDS.
+      #
+      # `concurrency` serializes runs; it does not stop a stale one from winning.
+      # Each run deploys the sha it was triggered FOR, so a delayed push event can
+      # start after a newer deploy has finished and quietly roll production back to
+      # an older commit. That happened: a run for an older commit landed four
+      # minutes after a newer one and reverted a fix, with both runs green and
+      # nothing anywhere reporting a rollback.
+      #
+      # Green runs that leave production on the wrong commit are the worst shape of
+      # this failure, because the dashboard agrees with you.
+      - name: Refuse to deploy a superseded commit
+        id: freshness
+        run: |
+          git fetch --quiet origin main
+          head="$(git rev-parse origin/main)"
+          if [ "$GITHUB_SHA" = "$head" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping: $GITHUB_SHA is not origin/main HEAD ($head). A newer commit exists, and deploying this one would move production backwards."
+          fi
 
       - uses: ruby/setup-ruby@v1
+        if: steps.freshness.outputs.current == 'true'
         with:
           bundler-cache: true
 
       - name: Set up Docker Buildx
+        if: steps.freshness.outputs.current == 'true'
         uses: docker/setup-buildx-action@v4
 
       # The committed .kamal/secrets reads RAILS_MASTER_KEY via `$(cat config/master.key)`,
       # which is gitignored — materialize it from the secret.
       - name: Materialize master key
+        if: steps.freshness.outputs.current == 'true'
         run: |
           install -m 600 /dev/null config/master.key
           printf '%s' "$RAILS_MASTER_KEY" > config/master.key
 
       - name: kamal deploy
+        if: steps.freshness.outputs.current == 'true'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
@@ -132,6 +161,7 @@ jobs:
           bin/kamal app exec --reuse "bin/rails db:abort_if_pending_migrations"
 
       - name: Verify /version
+        if: steps.freshness.outputs.current == 'true'
         run: |
           sleep 10
           for i in $(seq 1 20); do
