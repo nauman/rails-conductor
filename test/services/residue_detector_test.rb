@@ -76,6 +76,41 @@ class ResidueDetectorTest < ActiveSupport::TestCase
     assert_includes probe, %({{.ID}}|{{.Names}}|{{.Label "conductor.candidate"}}|{{.State}}|{{.Label "conductor.release"}})
   end
 
+  # Codex's remaining point: the test above proves ONE probe is issued, not that
+  # the alias widening happens. The widening is the whole fix for an orphan
+  # carrying a kamal service name instead of the stable resource key, so it needs
+  # its own assertion rather than trust.
+  test "the candidate probe is issued for every service name this app answers to" do
+    seen = []
+    ssh = Class.new do
+      define_method(:initialize) { |sink| @sink = sink }
+      define_method(:execute_with_status) do |cmd|
+        @sink << cmd
+        { success: true, output: "", stderr: "" }
+      end
+    end.new(seen)
+
+    ResidueDetector.new(@app, ssh: ssh).findings
+    probed = seen.select { |c| c.include?("conductor.candidate") }
+
+    services = ([ @app.resource_key ] + @app.kamal_service_candidates).uniq
+    services.each do |service|
+      assert probed.any? { |c| c.include?(%(label=service=#{service})) },
+             "expected a candidate probe for service #{service}, got #{probed.size} probe(s)"
+    end
+  end
+
+  # The same container answering under two service names must be ONE finding. A
+  # detector that reports the same orphan twice teaches an operator to discount
+  # the count, and the count is how they judge severity.
+  test "one container found under two service names is reported once" do
+    row = "e12d|app-#{@app.id}-r3-old|true|running|c736669566ad"
+    found = findings("conductor.candidate" => row)
+
+    assert_equal 1, found.count { |f| f.kind == "live_candidate" },
+                 "expected the shared container id to dedupe across alias probes"
+  end
+
   # A container whose release label is empty must not shift the other fields —
   # the exact whitespace-collapse bug this file already warns about.
   test "an empty release label does not corrupt the state field" do
