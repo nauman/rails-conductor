@@ -43,6 +43,8 @@ class ResidueDetectorTest < ActiveSupport::TestCase
   # equality is not release equality — it was current-revision, twelve-day-old
   # RELEASE, and healthy the whole time.
   test "flags a running candidate container even at the current revision" do
+    @app.deployments.create!(status: "succeeded", commit_sha: "9c2361595feb2ebea326cede2970a6bc50598c1e",
+                             user: @org.users.first)
     found = findings(
       "conductor.candidate" => "e12d|app-#{@app.id}-r3-oldsha|true|running|c736669566ad"
     )
@@ -104,6 +106,8 @@ class ResidueDetectorTest < ActiveSupport::TestCase
   # detector that reports the same orphan twice teaches an operator to discount
   # the count, and the count is how they judge severity.
   test "one container found under two service names is reported once" do
+    @app.deployments.create!(status: "succeeded", commit_sha: "9c2361595feb2ebea326cede2970a6bc50598c1e",
+                             user: @org.users.first)
     row = "e12d|app-#{@app.id}-r3-old|true|running|c736669566ad"
     found = findings("conductor.candidate" => row)
 
@@ -113,12 +117,47 @@ class ResidueDetectorTest < ActiveSupport::TestCase
 
   # A container whose release label is empty must not shift the other fields —
   # the exact whitespace-collapse bug this file already warns about.
-  test "an empty release label does not corrupt the state field" do
+  test "an empty release label is left alone rather than guessed at" do
+    @app.deployments.create!(status: "succeeded", commit_sha: "9c2361595feb2ebea326cede2970a6bc50598c1e",
+                             user: @org.users.first)
     found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-x|true|running|")
 
+    assert_empty found.select { |f| f.kind == "live_candidate" },
+                 "no release label means no comparison, and no comparison means no accusation"
+  end
+
+  # THE FALSE POSITIVE THAT NEARLY TOOK A SITE DOWN. Conductor's own deploy path
+  # leaves the winning container labelled `conductor.candidate=true` — it is never
+  # relabelled once the deploy succeeds. So on one app the ONLY container serving
+  # production was a "candidate", and the first version of this check handed an
+  # operator `docker stop` for it. A finding whose remedy takes production down is
+  # far worse than no finding.
+  test "a candidate at the app's CURRENT release is the live container, not an orphan" do
+    @app.deployments.create!(status: "succeeded", commit_sha: "305e31e93897aaaabbbbccccddddeeeeffff0000",
+                             user: @org.users.first)
+
+    found = findings("conductor.candidate" => "5b0f|app-#{@app.id}-r1-d380-305e31e|true|running|305e31e93897")
+
+    assert_empty found.select { |f| f.kind == "live_candidate" },
+                 "the container running the current release is serving the app, not superseding it"
+  end
+
+  # No recorded release means "superseded" is a guess, and the cost of guessing
+  # wrong is telling someone to stop the container serving the site.
+  test "with no recorded release, a running candidate is left alone" do
+    found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-x|true|running|c736669566ad")
+
+    assert_empty found.select { |f| f.kind == "live_candidate" }, "must fail safe without a comparison"
+  end
+
+  test "the remedy tells the operator to verify it serves nothing before stopping" do
+    @app.deployments.create!(status: "succeeded", commit_sha: "9c2361595feb2ebea326cede2970a6bc50598c1e",
+                             user: @org.users.first)
+    found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-old|true|running|c736669566ad")
+
     orphan = found.find { |f| f.kind == "live_candidate" }
-    assert orphan, "a running candidate with no release label is still an orphan"
-    assert_includes orphan.detail, "unknown"
+    assert_match(/VERIFY IT SERVES NOTHING FIRST/, orphan.remedy)
+    assert_not_includes orphan.detail, "takes no web traffic", "the detector cannot know that from labels"
   end
 
   # An EXITED candidate is the normal end state of a finished cutover. Flagging it

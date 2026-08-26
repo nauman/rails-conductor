@@ -89,23 +89,31 @@ class ResidueDetector
     end
   end
 
-  # A candidate container still RUNNING (ADR 0006).
+  # A candidate container still running an OLD release (ADR 0006).
   #
-  # This is the gap that let one run production jobs for fifteen days. Revision
-  # arithmetic could not see it: the candidate carried the app's CURRENT
+  # THE RELEASE COMPARISON IS THE WHOLE CHECK, and the first version of this
+  # method shipped without it. It flagged every running candidate, which caught
+  # the real orphan and also caught a live production container that was simply
+  # never relabelled after its own deploy succeeded — and handed an operator
+  # `docker stop` for the container serving the site. A finding whose remedy
+  # takes production down is far worse than no finding.
+  #
+  # The original check compared REVISIONS and missed this class because the
+  # revision had not changed. Replacing that with no comparison at all was not a
+  # fix, it was the same mistake with the guard removed. Compare RELEASES:
+  # different release => genuinely superseded; same release => this is the live
+  # container wearing a stale label, which is a labelling bug, not an orphan.
+  #
+  # The case this exists for: a candidate at a superseded release, running for
+  # fifteen days, sharing the app's job queue and executing work on stale code
+  # against a forward-migrated schema while every external check stayed green.
+  # Revision arithmetic could not see it — it carried the app's CURRENT
   # infra_revision, so #check_stale_revision_containers skipped it by
-  # construction — `next if revision == @app.infra_revision.to_s`. But revision
-  # equality is not RELEASE equality. It was current-revision, twelve-day-old
-  # release, and `Up (healthy)` throughout.
+  # construction. Revision equality is not release equality.
   #
-  # It never served a request either, because the edge pointed at the real
-  # release — so every external check stayed green while it shared the job queue
-  # and executed work on stale code against a forward-migrated schema. The
-  # dangerous residue is the kind that looks healthy.
-  #
-  # Only RUNNING candidates are flagged. An exited candidate is the normal end of
-  # a finished cutover, and flagging it would teach an operator to scroll past
-  # this finding — which is exactly how the live one earned its silence.
+  # Only RUNNING candidates at a DIFFERENT release are flagged. An exited
+  # candidate is the normal end of a finished cutover, and a candidate at the
+  # current release is the live container, mislabelled.
   def check_live_candidate_containers
     # Every service name this app answers to, not just the stable resource key —
     # a candidate created before or beside the ADR 0004 naming carries the kamal
@@ -129,16 +137,23 @@ class ResidueDetector
         next if id.blank? || seen[id]
         next unless candidate.to_s == "true"
         next unless state.to_s.casecmp?("running")
+        # Fail SAFE on an unknown release. Without a recorded release to compare
+        # against, "superseded" is a guess, and the cost of guessing wrong here is
+        # telling someone to stop the container serving the site.
+        next if current_release.blank? || release.blank?
+        next if release.to_s.start_with?(current_release.to_s) || current_release.to_s.start_with?(release.to_s)
 
         seen[id] = true
 
         @findings << Finding.new(
           kind: "live_candidate",
-          detail: "#{name} (#{id}) is a RUNNING candidate at release #{release.presence || 'unknown'} — " \
-                  "it takes no web traffic, so health checks stay green while it shares this app's " \
-                  "queue and runs stale code",
-          remedy: "`docker stop #{esc_name(name)}` — an explicit stop is also what survives the next " \
-                  "reboot, since a candidate left on `unless-stopped` comes back with the box"
+          detail: "#{name} (#{id}) is a RUNNING candidate at release #{release} — this app's current " \
+                  "release is #{current_release}, so it is superseded code that is still executing. It " \
+                  "may take no web traffic while still sharing this app's queue, which is how one ran " \
+                  "for fifteen days behind green health checks",
+          remedy: "Follow `diagnose-live-orphan`. VERIFY IT SERVES NOTHING FIRST — confirm another " \
+                  "container is serving this app and check this one's logs for requests — then " \
+                  "`docker stop #{esc_name(name)}`, which is also what survives the next reboot"
         )
       end
     end
@@ -363,6 +378,16 @@ class ResidueDetector
     yield
   ensure
     @ssh = original
+  end
+
+  # The release Conductor recorded for this app's last successful deploy. Same
+  # source ReleaseDriftDetector uses, so the two cannot disagree about what
+  # "current" means.
+  def current_release
+    return @current_release if defined?(@current_release)
+
+    @current_release = @app.deployments.where(status: "succeeded").where.not(commit_sha: [ nil, "" ])
+                           .order(created_at: :desc).first&.commit_sha
   end
 
   def capture(command)
