@@ -25,3 +25,4 @@ Canonical convention: [`docs/dev/THREADS.md`](../dev/THREADS.md) (mirrors
 | Thread | Participants | Awaiting |
 | --- | --- | --- |
 | [`self-describing-deploys`](self-describing-deploys.thread.md) | deploy ↔ staff-engineer | staff-engineer |
+| [`stale-deploy-hold-reasons`](stale-deploy-hold-reasons.thread.md) | claude ↔ operator ↔ deploy | operator |

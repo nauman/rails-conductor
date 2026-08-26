@@ -14,9 +14,15 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
 
     attr_accessor :replies
 
+    # Match the EXACT privileged invocation for wrapper keys. Substring matching
+    # also caught the wrapper inventory (which lists every wrapper path), so a
+    # reply meant for one command was answering two.
     def execute_with_status(cmd)
       @ran << cmd
-      _, reply = @replies.find { |fragment, _| cmd.include?(fragment.to_s) }
+      _, reply = @replies.find do |fragment, _|
+        f = fragment.to_s
+        f.start_with?("/usr/local/sbin/") ? cmd == "sudo -n #{f}" : cmd.include?(f)
+      end
       reply || { success: true, exit_code: 0, stdout: "", stderr: "" }
     end
   end
@@ -134,6 +140,48 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_includes result.message, "did not touch swap"
+  end
+
+  # The host lock is the only guard that survives the caller dying, so a refusal
+  # from it is a correct outcome and must read as one — not as a generic failure
+  # an operator would retry, which is precisely how a device gets shed.
+  test "a concurrent reclaim is reported as a refusal, not a failure to retry" do
+    ssh = ScriptedSsh.new(ServerSudo::RECLAIM_SWAP => {
+      success: false, exit_code: ServerSwapReclaim::LOCKED_EXIT_CODE, stdout: "",
+      stderr: "another reclaim is already running on this host"
+    })
+
+    result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
+
+    assert_not result.success?
+    assert_includes result.message, "already running"
+    assert_includes result.message, "shed"
+  end
+
+  test "an in-flight reclaim blocks a second enqueue until it goes stale" do
+    @server.update!(last_swap_reclaim_status: "running", last_swap_reclaim_at: Time.current)
+    assert ServerSwapReclaim.in_flight?(@server)
+
+    # A worker that died mid-job must not wedge the control forever.
+    @server.update!(last_swap_reclaim_at: 20.minutes.ago)
+    assert_not ServerSwapReclaim.in_flight?(@server)
+  end
+
+  # "The inventory did not run" and "nothing is missing" are opposite facts.
+  test "a failed wrapper inventory is not read as a healthy box" do
+    ssh = ScriptedSsh.new("for w in" => { success: false, exit_code: 255, stdout: "", stderr: "Connection timed out" })
+
+    result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
+
+    assert_not result.success?
+    assert_includes result.message, "Cannot reach"
+  end
+
+  test "the wrapper takes a host lock before it touches swap" do
+    command = ServerSudo.grant_command(@server)
+
+    assert_includes command, "flock -n 9", "a Ruby-side check cannot stop another worker or a human on the box"
+    assert_match(/set -e.*visudo -cf/m, command, "a failed visudo must stop the install that follows it")
   end
 
   test "refuses to build a sudoers grant for an unsafe account name" do

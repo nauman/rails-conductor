@@ -44,6 +44,11 @@ class ServerDetailTool
       audit:   { last_status: server.last_audit_status, last_at: ts(server.last_audit_at) },
       updates: { last_status: server.last_update_status, last_scope: server.last_update_scope, last_at: ts(server.last_update_at) },
       harden:  { last_status: server.last_harden_status, last_at: ts(server.last_harden_at) },
+      # Swap reclaim runs as a job, so its outcome is a stored rollup like the rest.
+      # `running` means one is in flight — re-issuing over it can shed a device.
+      swap_reclaim: { last_status: server.last_swap_reclaim_status,
+                      last_at: ts(server.last_swap_reclaim_at),
+                      detail: server.last_swap_reclaim_log.presence },
       # Post-reboot babysit-recovery outcome (RebootRecoveryJob): what it verified
       # + remediated once the box came back. nil until a reboot has been recovered.
       recovery: { last_at: ts(server.last_recovery_at), report: server.last_recovery_report.presence },

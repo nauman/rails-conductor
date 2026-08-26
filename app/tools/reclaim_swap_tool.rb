@@ -1,10 +1,15 @@
-# Reclaim a server's swap through Conductor's vetted wrapper (ServerSwapReclaim).
+# Reclaim a server's swap through Conductor's vetted wrapper. Enqueues the job
+# and returns immediately; the result lands on the server record and page.
 #
 # A first-class action so this never has to be a hand-run `sudo swapoff -a &&
 # sudo swapon -a` over SSH. That command is safe exactly when there is RAM to
-# hold the evacuated pages and OOM-kills a live box when there isn't — which is
-# the kind of judgement that belongs in a guard the caller cannot skip, and in a
-# record of who ran it, rather than in whoever is typing.
+# hold the evacuated pages and OOM-kills a live box when there isn't — the kind
+# of judgement that belongs in a guard the caller cannot skip, and in a record of
+# who ran it, rather than in whoever is typing.
+#
+# It returns rather than waits for a second reason, learned the hard way: running
+# this synchronously let a proxy timeout sever the SSH mid-swapoff and leave a box
+# with less swap than it started with. See ReclaimSwapJob.
 class ReclaimSwapTool
   include ActorScoped
 
@@ -16,21 +21,23 @@ class ReclaimSwapTool
     server = find_server(input)
     return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless server
 
-    result = ServerSwapReclaim.new(server).reclaim!
-    return Result.fail(result.message) unless result.success?
-
-    # Swap moved, so the stored health rollup is now stale in the operator's
-    # favour. Refresh it rather than letting the next read report the number this
-    # action just changed.
-    begin
-      ServerMetrics.new(server).fetch_and_update!
-    rescue StandardError
-      nil
+    if ServerSwapReclaim.in_flight?(server)
+      return Result.fail("A swap reclaim is already running on #{server.name} (started " \
+                         "#{server.last_swap_reclaim_at&.iso8601}). Read conductor_read action: server " \
+                         "for the outcome — a second swapoff over the first can shed a device.")
     end
+
+    server.update!(last_swap_reclaim_status: "running", last_swap_reclaim_log: nil,
+                   last_swap_reclaim_at: Time.current)
+    ReclaimSwapJob.perform_later(server.id)
 
     Result.ok({
       server:        server.name,
-      message:       result.message,
+      status:        "running",
+      message:       "Reclaiming swap on #{server.name} in the background. Nothing restarts, and " \
+                     "Conductor refuses if there isn't RAM to hold the evacuated pages. " \
+                     "Read conductor_read action: server to see the outcome — do NOT re-issue " \
+                     "this while it runs: a second swapoff over the first can shed a device.",
       _organization: server.organization
     })
   end

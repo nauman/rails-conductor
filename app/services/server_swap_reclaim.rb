@@ -24,6 +24,19 @@ class ServerSwapReclaim
   UNREADABLE_EXIT_CODE = 4
   # swapoff succeeded and swap could not be brought back. The box is now worse off.
   SWAP_LOST_EXIT_CODE = 5
+  # Another reclaim already holds the host lock. Not an error — a correct refusal.
+  LOCKED_EXIT_CODE = 6
+
+  # A run that never reported back is treated as finished after this, so a worker
+  # that died mid-job cannot wedge the button forever. The host `flock` is what
+  # actually prevents an overlap, which is why this can be a plain timeout.
+  STALE_AFTER = 15.minutes
+
+  def self.in_flight?(server)
+    server.last_swap_reclaim_status == "running" &&
+      server.last_swap_reclaim_at.present? &&
+      server.last_swap_reclaim_at > STALE_AFTER.ago
+  end
 
   Result = Struct.new(:success, :message, keyword_init: true) do
     def success? = success
@@ -77,6 +90,9 @@ class ServerSwapReclaim
     # The dangerous one, and the reason the wrapper verifies instead of assuming:
     # swap went off and did not come back. Say so loudly — this box is now WORSE
     # off than before the action, and that must never read as a generic failure.
+    return "A reclaim is already running on #{@server.name}; this one did nothing. Wait for it " \
+           "to finish — a second swapoff over the first is how a swap device gets shed." if result[:exit_code].to_i == LOCKED_EXIT_CODE
+
     return "URGENT: swap is OFF on #{@server.name} after a reclaim — it was disabled and could not " \
            "be restored. The box has no swap at all until this is fixed. #{stderr}" if result[:exit_code].to_i == SWAP_LOST_EXIT_CODE
 

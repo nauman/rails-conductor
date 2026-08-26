@@ -49,7 +49,7 @@ class DeployPreflight
     ladder = BuildPlacement.new(@app).ladder
     intended = ladder.find(&:available?) || ladder.last
     if intended.venue != :control
-      return ok(:build, "Build host", "next build: #{intended} · last build: #{summary}")
+      return ok(:build, "Build host", "next build: #{intended} · #{intended.tradeoff} · last build: #{summary}")
     end
     # Never deployed is not a risk, it is an absence — the row still shows the
     # sentence, but warning on it would make "clear" unreachable for every new app
@@ -58,7 +58,11 @@ class DeployPreflight
     # Falling through to control means every other rung was unavailable. Say WHY
     # each one was passed over: "it builds on a production box" is a complaint,
     # "CI has no workflow and no host is opted in as a builder" is a next step.
-    return warn(:build, "Build host", "#{summary} · #{ladder_explanation(ladder)}") if @app.builds_on_a_serving_box?
+    # Say what THIS placement costs, not just that the others were unavailable.
+    # "it builds on a production box" plus the trade-off is a decision; the bare
+    # fact is trivia the operator has to already understand to act on.
+    return warn(:build, "Build host",
+                "#{summary} · #{intended.tradeoff} · #{ladder_explanation(ladder)}") if @app.builds_on_a_serving_box?
 
     ok(:build, "Build host", summary)
   end

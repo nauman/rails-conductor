@@ -58,9 +58,11 @@ class RootIsRegistrationOnlyTest < ActiveSupport::TestCase
     ssh = Object.new
     ssh.define_singleton_method(:execute_with_status) do |cmd|
       ran << cmd
-      # conductor-check fails (scoped grant absent), everything else succeeds —
-      # exactly a box that still has 90-deploy but not /etc/sudoers.d/conductor.
-      next { success: false, exit_code: 1, stdout: "", stderr: "sudo: a password is required" } if cmd == "sudo -n /usr/local/sbin/conductor-check"
+      # conductor-check fails UNTIL the grant is installed — exactly a box that
+      # still has 90-deploy but not /etc/sudoers.d/conductor. After repair it
+      # works, which is what repair! now verifies rather than assuming.
+      granted = ran.any? { |c| c.include?("/etc/sudoers.d/conductor") }
+      next { success: false, exit_code: 1, stdout: "", stderr: "sudo: a password is required" } if cmd == "sudo -n /usr/local/sbin/conductor-check" && !granted
 
       { success: true, exit_code: 0, stdout: "", stderr: "" }
     end
