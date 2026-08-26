@@ -26,6 +26,8 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0003`](adr/0003-one-deploy-path-kamal-as-contract.md) | **Superseded** | Historical one-path decision; current contract uses Kamal for Kamal artifacts on both Caddy and Kamal-proxy boxes, with edge-specific health/proxy behavior |
 | [`0004`](adr/0004-stable-resource-ids-and-infra-revisions.md) | **Proposed** | Identity is assigned, never derived: every app owns a stable `app-<id>` resource key, plus an `infra_revision` that versions *infrastructure shape* separately from code — making residue mechanically detectable |
 | [`0005`](adr/0005-host-side-transactions-for-interruptible-ops.md) | **Accepted** | Classify every privileged op by what an interruption leaves behind; ops that take a resource away before giving it back need a host-side transaction (lock, verified completion, an executor that outlives the caller), because neither a defensive script nor a background job survives its own process dying |
+| [`0006`](adr/0006-a-running-container-must-be-nameable.md) | **Accepted** | Temporary containers get temporary lifecycles (candidates never `unless-stopped`), and Conductor must be able to say why every running container is running — a live orphan looks healthy and is the dangerous kind; more than one distinct hostname in `solid_queue_processes` is the cheapest detector |
+| [`0007`](adr/0007-findings-cite-rituals.md) | **Accepted** | A finding must cite the jazari ritual that resolves it — a one-line `remedy` cannot carry ordering or what a check rules out, so diagnostic knowledge belongs in a recipe, written when the incident is resolved, not left in a session transcript |
 
 ## Authoring Notes
 

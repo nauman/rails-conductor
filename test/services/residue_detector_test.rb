@@ -36,6 +36,113 @@ class ResidueDetectorTest < ActiveSupport::TestCase
     assert_empty found
   end
 
+  # THE FIFTEEN-DAY ORPHAN. A cutover experiment's candidate container ran
+  # production jobs for two weeks after the experiment was abandoned. Revision
+  # arithmetic could not see it: the candidate carried the app's CURRENT revision,
+  # so #check_stale_revision_containers skipped it by construction. Revision
+  # equality is not release equality — it was current-revision, twelve-day-old
+  # RELEASE, and healthy the whole time.
+  test "flags a running candidate container even at the current revision" do
+    found = findings(
+      "conductor.candidate" => "e12d|app-#{@app.id}-r3-oldsha|true|running|c736669566ad"
+    )
+
+    orphan = found.find { |f| f.kind == "live_candidate" }
+    assert orphan, "a running candidate is an orphan regardless of health: #{found.map(&:kind)}"
+    assert_includes orphan.detail, "app-#{@app.id}-r3-oldsha"
+    assert_includes orphan.detail, "c736669566ad"
+    assert_match(/docker stop/, orphan.remedy)
+  end
+
+  # Codex's point: the fake answers on a substring, so the tests above prove the
+  # parsing and not the QUERY. Assert the command Conductor actually issues —
+  # both filters and the field order the parser depends on.
+  test "the candidate probe filters on service AND candidate, in the parsed field order" do
+    seen = []
+    ssh = Class.new do
+      define_method(:initialize) { |sink| @sink = sink }
+      define_method(:execute_with_status) do |cmd|
+        @sink << cmd
+        { success: true, output: "", stderr: "" }
+      end
+    end.new(seen)
+
+    ResidueDetector.new(@app, ssh: ssh).findings
+    probe = seen.find { |c| c.include?("conductor.candidate") }
+
+    assert probe, "expected a candidate probe to be issued"
+    assert_includes probe, %(--filter "label=service=#{@app.resource_key}")
+    assert_includes probe, %(--filter "label=conductor.candidate=true")
+    assert_includes probe, %({{.ID}}|{{.Names}}|{{.Label "conductor.candidate"}}|{{.State}}|{{.Label "conductor.release"}})
+  end
+
+  # Codex's remaining point: the test above proves ONE probe is issued, not that
+  # the alias widening happens. The widening is the whole fix for an orphan
+  # carrying a kamal service name instead of the stable resource key, so it needs
+  # its own assertion rather than trust.
+  test "the candidate probe is issued for every service name this app answers to" do
+    seen = []
+    ssh = Class.new do
+      define_method(:initialize) { |sink| @sink = sink }
+      define_method(:execute_with_status) do |cmd|
+        @sink << cmd
+        { success: true, output: "", stderr: "" }
+      end
+    end.new(seen)
+
+    ResidueDetector.new(@app, ssh: ssh).findings
+    probed = seen.select { |c| c.include?("conductor.candidate") }
+
+    services = ([ @app.resource_key ] + @app.kamal_service_candidates).uniq
+    services.each do |service|
+      assert probed.any? { |c| c.include?(%(label=service=#{service})) },
+             "expected a candidate probe for service #{service}, got #{probed.size} probe(s)"
+    end
+  end
+
+  # The same container answering under two service names must be ONE finding. A
+  # detector that reports the same orphan twice teaches an operator to discount
+  # the count, and the count is how they judge severity.
+  test "one container found under two service names is reported once" do
+    row = "e12d|app-#{@app.id}-r3-old|true|running|c736669566ad"
+    found = findings("conductor.candidate" => row)
+
+    assert_equal 1, found.count { |f| f.kind == "live_candidate" },
+                 "expected the shared container id to dedupe across alias probes"
+  end
+
+  # A container whose release label is empty must not shift the other fields —
+  # the exact whitespace-collapse bug this file already warns about.
+  test "an empty release label does not corrupt the state field" do
+    found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-x|true|running|")
+
+    orphan = found.find { |f| f.kind == "live_candidate" }
+    assert orphan, "a running candidate with no release label is still an orphan"
+    assert_includes orphan.detail, "unknown"
+  end
+
+  # An EXITED candidate is the normal end state of a finished cutover. Flagging it
+  # would train an operator to ignore this finding, which is how the live one got
+  # fifteen days of silence.
+  test "an exited candidate is not an orphan" do
+    found = findings("conductor.candidate" => "e12d|app-#{@app.id}-r3-old|true|exited|c736669566ad")
+
+    assert_empty found.select { |f| f.kind == "live_candidate" }
+  end
+
+  test "a box with no candidates reports none" do
+    found = findings("conductor.candidate" => "")
+
+    assert_empty found.select { |f| f.kind == "live_candidate" }
+  end
+
+  # Being unable to look is not a clean result — the whole point of the blind list.
+  test "a failed candidate probe is reported as blindness, not health" do
+    found = findings("conductor.candidate" => :fail)
+
+    assert found.any? { |f| f.kind == "unknown" }, "expected blindness to be recorded"
+  end
+
   # The Starrrs shape: a container from a previous form still running, invisible
   # because nothing compared it to the app's current revision.
   test "flags a container left over from an older revision" do
