@@ -24,7 +24,7 @@ class AppDeployer
   ZERO_DOWNTIME_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
     start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
-    republish_edge_route drain_previous_container promote_candidate cleanup
+    republish_edge_route promote_candidate drain_previous_container cleanup
   ].freeze
 
   # The original order. Traffic is down from stop_old_container until the edge is
@@ -400,8 +400,9 @@ class AppDeployer
       # human explicitly stopped you" — which nobody does to a deploy that failed
       # halfway. One candidate created this way outlived its abandoned cutover by
       # fifteen days, returning with every reboot and executing production jobs on
-      # stale code. `--restart no` makes the next reboot reap it instead, and
-      # #promote_candidate raises it to unless-stopped once it is actually serving.
+      # stale code. `--restart no` means the next reboot leaves it stopped instead
+      # of resurrecting it, and #promote_candidate raises it to unless-stopped the
+      # moment the edge starts serving it.
       "--restart no",
       *candidate_placement,
       "--label service=#{Shellwords.escape(app.resource_key)}",
@@ -494,10 +495,21 @@ class AppDeployer
   end
 
   # The old container only goes once traffic is already on the candidate.
-  # The candidate has survived its health check, the edge points at it, and the
-  # previous container is drained — it is the release now. Raise its restart policy
-  # so it comes back with the box, which is the one lifecycle difference between a
-  # release and an experiment.
+  # THE EDGE SWAP IS THE PROMOTION BOUNDARY, which is why this runs immediately
+  # after it and BEFORE the drain. The moment the edge serves the candidate it is
+  # production, and production must survive a reboot — so any window where it is
+  # serving while still `--restart no` is a window where a host restart takes the
+  # app down and leaves nothing to come back.
+  #
+  # Ordering this after the drain, as the first version did, made that window wider
+  # in the worst possible way: by the time promotion was reached the incumbent had
+  # already been removed, so an interruption left production both ephemeral and
+  # irreplaceable.
+  #
+  # Failing here IS fatal, and it is safe to be fatal precisely because the drain
+  # has not run yet: the incumbent is still on the box, so stopping now leaves a
+  # rollback target. Continuing instead would drain the only durable container and
+  # leave a fragile one serving.
   #
   # NOT a relabel. Docker labels are immutable after creation, so the container
   # cannot be re-badged and `conductor.candidate=true` stays on it for life. That is
@@ -505,21 +517,18 @@ class AppDeployer
   # Conductor's own last successful deployment, never by trusting the label — see
   # ResidueDetector#check_live_candidate_containers, which reported a live release as
   # an orphan back when it trusted it.
-  #
-  # Never fatal. Traffic is already here; a container that serves correctly but
-  # would not return after a reboot is a real problem and not an outage, so it is
-  # said loudly and the deploy is allowed to succeed.
   def promote_candidate
     return true if @candidate_container.blank?
 
     if run("docker update --restart unless-stopped #{Shellwords.escape(@candidate_container)}")
       log "Promoted #{@candidate_name} to a release: restart policy is now unless-stopped"
-    else
-      log "WARNING: #{@candidate_name} is serving but could not be promoted to " \
-          "`--restart unless-stopped`. It will NOT come back after a reboot — run " \
-          "`docker update --restart unless-stopped #{@candidate_name}` on the box."
+      return true
     end
-    true
+
+    fail_step("#{@candidate_name} is serving but could not be promoted to " \
+              "`--restart unless-stopped`, so it would NOT come back after a reboot. The previous " \
+              "container has deliberately NOT been drained — it is still there as a rollback target. " \
+              "Fix with `docker update --restart unless-stopped #{@candidate_name}` on the box.")
   end
 
   def drain_previous_container

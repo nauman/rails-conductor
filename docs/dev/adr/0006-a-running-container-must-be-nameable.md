@@ -144,10 +144,20 @@ What *is* mutable is the **restart policy** — `docker update --restart` works 
 running container. That turns out to be the better lever anyway, because it is the
 one thing that actually differs between an experiment and a release:
 
-- a candidate is created `--restart no`, so an abandoned one is reaped by the next
-  reboot instead of resurrected by it
-- `#promote_candidate` raises it to `unless-stopped` after the edge has swapped and
-  the previous container has drained
+- a candidate is created `--restart no`, so a reboot leaves an abandoned one
+  stopped instead of resurrecting it (it is not removed — `no` only withholds the
+  automatic restart, which is enough: a stopped container serves nothing and
+  processes nothing)
+- `#promote_candidate` raises it to `unless-stopped` **the moment the edge starts
+  serving it**, and before the incumbent is drained
+
+**The edge swap is the promotion boundary, and the ordering is load-bearing.** The
+first implementation promoted after the drain, which left a window where the
+candidate was already production while still `--restart no` — and by then the
+incumbent was gone, so an interruption left production both ephemeral and
+irreplaceable. That is strictly worse than the behaviour being fixed. Promotion
+failure is therefore fatal, which is safe *because* the drain has not run: the
+incumbent is still on the box as a rollback target.
 
 The fifteen-day orphan becomes impossible at creation rather than merely findable
 afterwards, which was the point of Rule 1.
