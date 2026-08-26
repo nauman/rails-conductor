@@ -24,7 +24,7 @@ class AppDeployer
   ZERO_DOWNTIME_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
     start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
-    republish_edge_route drain_previous_container cleanup
+    republish_edge_route drain_previous_container promote_candidate cleanup
   ].freeze
 
   # The original order. Traffic is down from stop_old_container until the edge is
@@ -395,7 +395,14 @@ class AppDeployer
     prefix = [
       "docker run -d",
       "--name #{Shellwords.escape(name)}",
-      "--restart unless-stopped",
+      # BORN EPHEMERAL, PROMOTED LATER (ADR 0006). A candidate is a thing that has
+      # not won yet, and `unless-stopped` means "come back on daemon start unless a
+      # human explicitly stopped you" — which nobody does to a deploy that failed
+      # halfway. One candidate created this way outlived its abandoned cutover by
+      # fifteen days, returning with every reboot and executing production jobs on
+      # stale code. `--restart no` makes the next reboot reap it instead, and
+      # #promote_candidate raises it to unless-stopped once it is actually serving.
+      "--restart no",
       *candidate_placement,
       "--label service=#{Shellwords.escape(app.resource_key)}",
       "--label role=web",
@@ -487,6 +494,34 @@ class AppDeployer
   end
 
   # The old container only goes once traffic is already on the candidate.
+  # The candidate has survived its health check, the edge points at it, and the
+  # previous container is drained — it is the release now. Raise its restart policy
+  # so it comes back with the box, which is the one lifecycle difference between a
+  # release and an experiment.
+  #
+  # NOT a relabel. Docker labels are immutable after creation, so the container
+  # cannot be re-badged and `conductor.candidate=true` stays on it for life. That is
+  # why identity is decided by comparing the container's `conductor.release` against
+  # Conductor's own last successful deployment, never by trusting the label — see
+  # ResidueDetector#check_live_candidate_containers, which reported a live release as
+  # an orphan back when it trusted it.
+  #
+  # Never fatal. Traffic is already here; a container that serves correctly but
+  # would not return after a reboot is a real problem and not an outage, so it is
+  # said loudly and the deploy is allowed to succeed.
+  def promote_candidate
+    return true if @candidate_container.blank?
+
+    if run("docker update --restart unless-stopped #{Shellwords.escape(@candidate_container)}")
+      log "Promoted #{@candidate_name} to a release: restart policy is now unless-stopped"
+    else
+      log "WARNING: #{@candidate_name} is serving but could not be promoted to " \
+          "`--restart unless-stopped`. It will NOT come back after a reboot — run " \
+          "`docker update --restart unless-stopped #{@candidate_name}` on the box."
+    end
+    true
+  end
+
   def drain_previous_container
     return true if @previous_container.blank?
     return true if @previous_container == @candidate_container

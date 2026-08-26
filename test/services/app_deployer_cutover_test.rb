@@ -59,7 +59,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
         # Mirror the real pipeline: it aborts on the first failing step, so a
         # failed health check must never reach the swap or the drain.
         %i[start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
-           republish_edge_route drain_previous_container]
+           republish_edge_route drain_previous_container promote_candidate]
           .each_with_object({}) do |step, out|
             out[step] = @deployer.send(step)
             break out unless out[step]
@@ -70,6 +70,41 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
 
   def index_of(ssh, pattern)
     ssh.commands.index { |c| c.match?(pattern) }
+  end
+
+  # ADR 0006. A candidate is a thing that has not won yet, so it must not be
+  # granted the lifecycle of a thing that has. `unless-stopped` means "come back on
+  # daemon start unless a human explicitly stopped you", and nobody stops a deploy
+  # that was abandoned halfway — one such candidate returned with every reboot and
+  # ran production jobs on stale code for fifteen days.
+  test "a candidate is born ephemeral so an abandoned one dies at the next reboot" do
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    run_cmd = ssh.commands.find { |c| c.start_with?("docker run -d") }
+    assert run_cmd, "expected the candidate to be started"
+    assert_includes run_cmd, "--restart no"
+    assert_not_includes run_cmd, "--restart unless-stopped"
+  end
+
+  # ...and is raised to a release lifecycle only once it is actually serving.
+  test "a candidate is promoted to unless-stopped after the drain, not before" do
+    ssh = FakeSsh.new
+    cutover(ssh)
+
+    promote = index_of(ssh, /docker update --restart unless-stopped/)
+    assert promote, "expected the candidate to be promoted once it is the release"
+    assert_operator promote, :>, index_of(ssh, /docker stop/),
+                    "promotion must follow the drain — a container that has not won is not a release"
+  end
+
+  # Traffic is already on it. A container that serves correctly but would not
+  # return after a reboot is a real problem and not an outage.
+  test "a failed promotion warns loudly but does not fail the deploy" do
+    ssh = FakeSsh.new(fail_on: "docker update --restart")
+
+    assert @deployer.stub(:ssh, ssh) { @deployer.stub(:sleep, nil) { @deployer.send(:start_candidate) && @deployer.send(:promote_candidate) } },
+           "promotion failure must not fail a deploy whose traffic already moved"
   end
 
   test "a kamal-proxy app with a domain uses the zero-downtime path" do

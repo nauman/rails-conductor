@@ -4,8 +4,9 @@ Date: 2026-08-26
 
 ## Status
 
-**Accepted (2026-08-26).** Not yet implemented — this records the decision and the
-order of work. See status below.
+**Accepted (2026-08-26), amended 2026-08-27.** Rule 1 is implemented. Rule 2 was
+amended after implementation proved one of its assumptions false — see
+*Amendment* below.
 
 ## Context
 
@@ -122,12 +123,44 @@ SELECT COUNT(DISTINCT hostname) FROM solid_queue_processes;  -- > 1 ⇒ orphan
 - *Rely on the operator to clean up experiments.* Fifteen days of evidence says
   otherwise, and an operator cannot clean up what nothing reports.
 
+## Amendment (2026-08-27): a label cannot be the source of truth
+
+Implementing Rule 2 surfaced a fact that invalidates the obvious version of it:
+**Docker labels are immutable after container creation.** A candidate that wins a
+cutover cannot be re-badged, so `conductor.candidate=true` stays on the container
+serving production for the rest of its life. There is no "promote by relabelling".
+
+This is not a detail — a detector that trusted the label reported a live release as
+an orphan and recommended stopping it. See
+`docs/learnings/a-findings-remedy-is-a-production-action.md`.
+
+So identity is decided by **comparison, not by the label**:
+
+> A container is the release when its `conductor.release` equals the app's last
+> successful deployment commit. Different release ⇒ superseded. The
+> `conductor.candidate` label narrows the search; it never settles the question.
+
+What *is* mutable is the **restart policy** — `docker update --restart` works on a
+running container. That turns out to be the better lever anyway, because it is the
+one thing that actually differs between an experiment and a release:
+
+- a candidate is created `--restart no`, so an abandoned one is reaped by the next
+  reboot instead of resurrected by it
+- `#promote_candidate` raises it to `unless-stopped` after the edge has swapped and
+  the previous container has drained
+
+The fifteen-day orphan becomes impossible at creation rather than merely findable
+afterwards, which was the point of Rule 1.
+
 ## Status detail
 
 | Step | State |
 |---|---|
 | Decision recorded | Done — this ADR |
-| `restart: no` + `conductor.expires_at` on candidate containers | Not built |
+| Candidates created `--restart no`; promoted after the drain | **Done** — `AppDeployer` |
+| Identity by release comparison, not by label | **Done** — `ResidueDetector` |
+| ~~Relabel the winner~~ | **Impossible** — Docker labels are immutable; superseded by the amendment |
+| `conductor.expires_at` on candidates | Not built — reboot reaping now covers the main case |
 | Orphan reconciliation (containers-on-box vs expected set) | Not built |
 | SolidQueue distinct-hostname check as a fleet finding | Not built |
 | Reap candidates + report orphans in `RebootRecoveryJob` | Not built |
