@@ -37,16 +37,12 @@ class ServerSwapReclaim
   def reclaim!
     return failure("SSH not configured for this server.") unless @server.ssh_configured?
 
-    probe = ServerSudo.probe(@ssh)
-    return failure("Cannot reach #{@server.name}: #{probe.detail}") if probe.status == :unreachable
-    return failure(ServerSudo.remediation(@server)) if probe.status == :no_grant
-
-    # This box was provisioned before the swap wrapper existed. It does NOT need a
-    # human with a root login — the deploy user's own sudo can install it. Repair
-    # and carry on; a fleet that heals itself is the whole point of the grant.
-    if probe.repairable?
-      return failure(repair_failed_message(probe)) unless ServerSudo.repair!(@server, @ssh)
-    end
+    # One door for every privileged op. It tries the deploy user's own sudo before
+    # anyone is asked for a credential, so a box provisioned before this wrapper
+    # existed heals itself instead of queueing a root errand for a human.
+    elevation = ServerSudo.ensure!(@server, @ssh)
+    return failure("Cannot reach #{@server.name}: #{elevation.detail}") if elevation.status == :unreachable
+    return failure(elevation.detail) unless elevation.usable?
 
     result = @ssh.execute_with_status("sudo -n #{ServerSudo::RECLAIM_SWAP}")
     return Result.new(success: true, message: success_message(result)) if result[:success]
@@ -85,11 +81,6 @@ class ServerSwapReclaim
            "be restored. The box has no swap at all until this is fixed. #{stderr}" if result[:exit_code].to_i == SWAP_LOST_EXIT_CODE
 
     "Could not reclaim swap on #{@server.name}: #{stderr.presence || "exit #{result[:exit_code]}"}"
-  end
-
-  def repair_failed_message(probe)
-    "#{@server.name} is missing #{probe.missing.join(', ')} and Conductor could not install " \
-    "them with the deploy user's sudo.\n\n#{ServerSudo.remediation(@server)}"
   end
 
   def failure(message) = Result.new(success: false, message: message)

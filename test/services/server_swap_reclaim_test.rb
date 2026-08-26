@@ -142,14 +142,17 @@ class ServerSwapReclaimTest < ActiveSupport::TestCase
     assert_raises(ServerSudo::UnsafeUser) { ServerSudo.grant_command(@server) }
   end
 
-  test "refuses before touching the box when sudo is not granted at all" do
-    ssh = ScriptedSsh.new(ServerSudo::CHECK => { success: false, exit_code: 1, stdout: "", stderr: "sudo: a password is required" })
+  # A missing grant is no longer a dead end: Conductor installs it with the deploy
+  # user's own sudo and carries on. What must NOT happen is running the wrapper
+  # when that repair failed — that would be a privileged op fired blind.
+  test "does not run the wrapper when the grant is missing and cannot be repaired" do
+    ssh = ScriptedSsh.new("" => { success: false, exit_code: 1, stdout: "", stderr: "sudo: a password is required" })
 
     result = ServerSwapReclaim.new(@server, ssh: ssh).reclaim!
 
     assert_not result.success?
-    assert_not ssh.ran.any? { |c| c.include?(ServerSudo::RECLAIM_SWAP) },
-               "must not attempt the wrapper without a grant"
+    assert_not ssh.ran.any? { |c| c == "sudo -n #{ServerSudo::RECLAIM_SWAP}" },
+               "must not fire a privileged op after repair failed"
   end
 
   test "reports the no-op honestly when swap is already empty" do

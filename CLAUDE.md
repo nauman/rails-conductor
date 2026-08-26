@@ -9,8 +9,20 @@
 ## Operating on Fleet Servers
 
 - **Use the `deploy` user for anything app-level** — `docker exec`, logs, dumps,
-  editing app files. Use `root` only for provisioning, hardening, OS updates, and
-  installing packages.
+  editing app files.
+- **Root is a REGISTRATION-ONLY credential.** It is permitted only while no deploy
+  user with sudo exists yet — i.e. `register` and `harden`. After that,
+  `/etc/sudoers.d/90-deploy` grants `deploy ALL=(ALL) NOPASSWD:ALL`, so there is no
+  privileged op the deploy user cannot do, and no honest reason to ask for root.
+  The older wording ("root for provisioning, OS updates, packages") required
+  classifying the work, and anything can be argued into "provisioning" — which is
+  exactly how a manual root errand got queued for a wrapper `deploy` could install
+  itself. See `docs/learnings/root-is-a-registration-only-credential.md`.
+- **Never hand a human a privileged command without first proving the automated
+  identity failed.** Route escalation through `ServerSudo.ensure!`, which repairs
+  as the SSH user before anyone is asked for a credential. An un-attempted
+  automated path is a skipped step, not a fallback;
+  `test/services/root_is_registration_only_test.rb` fails the build on regressions.
 - Root-run commands create `root:root` files that the container and the `deploy`
   user can never write or `chown` back. The breakage surfaces at the *next*
   deploy or backup, far from the command that caused it. See

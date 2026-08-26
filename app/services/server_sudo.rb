@@ -68,6 +68,33 @@ module ServerSudo
 
   def ready?(ssh) = probe(ssh).ready?
 
+  # THE ONE DOOR. Every privileged op goes through here, and it exists so that no
+  # caller can decide on its own to send a human to a root prompt.
+  #
+  # The mistake it prevents is specific and was made in this file: `no_grant` reads
+  # like "this box needs root", and it does not. It means the SCOPED sudoers file
+  # is missing — while /etc/sudoers.d/90-deploy from provisioning may still grant
+  # the deploy user everything. So the escalation is always attempted with the
+  # identity Conductor already holds BEFORE anyone is asked for a credential. A
+  # human is the last resort, reached only after the automated path has actually
+  # been tried and actually failed.
+  Elevation = Struct.new(:status, :detail, keyword_init: true) do
+    def usable? = %i[ready repaired].include?(status)
+    def needs_operator? = status == :needs_operator
+  end
+
+  def ensure!(server, ssh)
+    probe = probe(ssh)
+    return Elevation.new(status: :ready) if probe.ready?
+    return Elevation.new(status: :unreachable, detail: probe.detail) if probe.status == :unreachable
+
+    # Both :wrappers_missing and :no_grant are repairable with the deploy user's
+    # own sudo. Try, then report — never the other way round.
+    return Elevation.new(status: :repaired, detail: "installed #{probe.missing.join(', ')}") if repair!(server, ssh)
+
+    Elevation.new(status: :needs_operator, detail: remediation(server))
+  end
+
   # Bring a box's wrapper set up to date USING THE DEPLOY USER'S OWN SUDO. No root
   # login, no human, no pasted block. Idempotent — grant_command rewrites all of
   # them every time, so this doubles as drift repair.
@@ -171,8 +198,9 @@ module ServerSudo
 
   def remediation(server)
     user = server.ssh_user_or_default
-    "Conductor needs passwordless sudo to run privileged ops as '#{user}', but this " \
-    "server isn't set up yet (sudo: a password is required).\n\n" \
+    "Conductor needs passwordless sudo to run privileged ops as '#{user}'. It ALREADY " \
+    "TRIED to set this up itself using that user's existing sudo, and could not — so this " \
+    "box has no working automated path and a human has to open it once.\n\n" \
     "Run this once as root (or a sudo user) on the server. It installs a few root-owned " \
     "wrapper scripts and grants passwordless sudo ONLY on those — no blanket sudo, no " \
     "shell escape, no permanent root SSH:\n\n" \
