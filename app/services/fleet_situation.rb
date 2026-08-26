@@ -137,6 +137,10 @@ class FleetSituation
         kinds = app.residue.map { |f| f[:kind] }.tally
                    .map { |kind, n| n > 1 ? "#{kind} ×#{n}" : kind }.join(", ")
         items << attn("residue", app,
+                      # "residue" is a container kind; the ritual belongs to the
+                      # specific finding inside it. Prefer whichever sub-kind has
+                      # one rather than the first, which may be the least useful.
+                      recipe_id: app.residue.filter_map { |f| FleetRecipes.recipe_for_finding(f[:kind]) }.first,
                       count: app.residue.size,
                       detail: "#{kinds} — #{app.residue.first[:detail]}",
                       remedy: app.residue.first[:remedy],
@@ -225,9 +229,15 @@ class FleetSituation
     end
   end
 
+  # ADR 0007: a finding cites the ritual that resolves it. `remedy` stays as the
+  # one-line summary, but it stops being the whole of what Conductor knows — an
+  # agent holding this finding can fetch the recipe and follow it without ever
+  # having met the problem. nil when nothing is mapped, never a near-enough guess.
   def attn(kind, app, **extra)
-    { kind: kind, app: app.name, app_id: app.id,
-      runbook: app.runbook_summary[:runbook].present?,
-      checklist: app.runbook_summary[:checklist_progress] }.merge(extra)
+    base = { kind: kind, app: app.name, app_id: app.id,
+             runbook: app.runbook_summary[:runbook].present?,
+             checklist: app.runbook_summary[:checklist_progress] }
+    recipe = extra.key?(:recipe_id) ? extra[:recipe_id] : FleetRecipes.recipe_for_finding(kind)
+    base.merge(extra).merge(recipe_id: recipe)
   end
 end

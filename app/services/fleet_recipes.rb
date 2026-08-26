@@ -164,6 +164,100 @@ class FleetRecipes
         { id: "sweep-fleet", text: "Check the rest of the box for siblings: `docker ps -a --filter label=conductor.candidate=true`. One experiment usually touched more than one app", required: false },
         { id: "remove", text: "Remove the container once nothing is needed from its logs — stopping is reversible, removing is not", required: false }
       ]
+    },
+    {
+      id: "diagnose-release-drift",
+      topic: "DIAGNOSE: Conductor's record disagrees with the box",
+      description: <<~MD,
+        ## Symptom
+        A `release_drift` finding: the running commit cannot be identified, or the box
+        runs something Conductor has no successful deployment for.
+
+        ## Hidden truth
+        Drift has two causes that look identical and need opposite responses.
+
+        **Incident residue.** A failed deploy's recovery path calls `kamal app boot`,
+        which falls back to the mutable `latest` tag. The app then serves an
+        unidentifiable commit indefinitely and reports as drift — but nothing is
+        misconfigured, and ONE clean deploy clears it. On this fleet an app served a
+        recovery container on `latest` for thirteen days while being triaged as a
+        config problem.
+
+        **A genuinely external deploy path.** Something other than Conductor ships this
+        app, so the record is frozen and will drift again after every fix. The answer is
+        to make that path report in, not to redeploy.
+
+        Until either is resolved Conductor cannot offer a rollback: there is no
+        identifiable release to roll back TO.
+      MD
+      checklist: [
+        { id: "read-tag", text: "Look at the running container's NAME and image tag. A `latest` or otherwise mutable tag is the recovery-residue shape; a sha tag that Conductor does not know is the external-path shape" },
+        { id: "read-last-deploy", text: "Read the last deployment's log and look for a recovery step (`kamal app boot`, `best-effort rebooting`). If present, the mutable tag came from recovery and this is residue, not drift" },
+        { id: "check-driver", text: "Confirm who actually deploys this app — FleetCanon's driver axis, plus whether the repo carries its own deploy script. An `external` driver means the record will re-drift after any fix" },
+        { id: "resolve", text: "Residue: deploy once through Conductor and confirm the container is sha-named. External: wire that path to Conductor's deploy webhook or record the release; do NOT redeploy to paper over it" },
+        { id: "verify", text: "Confirm the running container is sha-named and the finding clears on the next sweep — a mutable tag means the box cannot tell you what it runs, and that is NOT a clean result" }
+      ]
+    },
+    {
+      id: "diagnose-build-placement",
+      topic: "DIAGNOSE: this app builds on a machine that serves traffic",
+      description: <<~MD,
+        ## Symptom
+        A `build_on_serving_host` finding.
+
+        ## Hidden truth
+        Two independent problems hide behind this one finding, and moving the build
+        fixes only the first.
+
+        **Competition.** A build consumes memory and CPU on a box that is also serving.
+        On this fleet a build ran while memory and swap both sat at 96%, and BuildKit's
+        context transfer was cancelled.
+
+        **Ordering.** On the fixed-port Caddy path a failed build could leave the app
+        DOWN, because the incumbent was stopped before the build finished. That is the
+        part that turns a slow build into an outage, and it is independent of where the
+        build runs — a bigger box makes it rarer, never safer. Fixed in KamalDeployer:
+        the release is built and pushed BEFORE the incumbent is stopped.
+
+        Note that Conductor reads placement from the app repo's `builder.remote`. An
+        app with no `remote:` builds on the control machine, whatever the ladder says
+        it would prefer — the builder rung is currently advisory.
+      MD
+      checklist: [
+        { id: "read-truth", text: "Read the app repo's `config/deploy*.yml` builder block. NO `remote:` means it builds on the control machine — the finding may be naming a host this app does not actually use" },
+        { id: "confirm-ordering", text: "Confirm the build-before-stop path is live for this app's shape. This is the outage risk, and it matters more than which box builds" },
+        { id: "choose-venue", text: "Pick a venue deliberately: CI (free, nowhere near production, needs a workflow), a `build_role` box (quiet machine, costs a host), or the control machine (warm cache, competes with what it serves)" },
+        { id: "apply", text: "Add the CI workflow and set `ci_build_workflow`, or point `builder.remote` at the chosen box. The finding clears itself once builds_on stops naming a serving machine" },
+        { id: "verify", text: "Deploy once and confirm the recorded build host changed — placement is only real when a deploy reports it", required: false }
+      ]
+    },
+    {
+      id: "diagnose-deploy-hold",
+      topic: "DIAGNOSE: this app is held, and the reason may be stale",
+      description: <<~MD,
+        ## Symptom
+        A `deploy_hold` finding, or a deploy returning `blocked` with a threads blocker.
+
+        ## Hidden truth
+        A hold reason is free text written at the moment of an incident, when the cause
+        is still a hypothesis. Nothing re-checks it, so it hardens into the record and
+        the next reader takes a hypothesis for a finding.
+
+        On this fleet one hold blocked an app for nine days past the fix it was waiting
+        for, blamed a build host the app's repo does not configure, and never mentioned
+        the thing that was actually still wrong. Two sibling apps carried the same text
+        copied across, with no incident of their own.
+
+        **Verify a hold before enforcing it.** If the reason cites a commit, a release
+        condition, or a config fact, check that it is still true.
+      MD
+      checklist: [
+        { id: "read-reason", text: "Read the hold reason and extract every factual claim it makes — a shipped fix, a build host, a config setting" },
+        { id: "verify-claims", text: "Check each claim against reality: `git log -S` for the commit that satisfies a cited fix, the app repo for a cited config, Conductor's own record for a cited host. A hold citing an already-shipped fix is stale" },
+        { id: "check-copied", text: "Check whether sibling apps carry the identical reason. Copied text is weaker evidence than a reason written from this app's own incident" },
+        { id: "rewrite-or-clear", text: "If the reason is wrong, REWRITE it before deciding — clearing a hold whose reason you have not corrected loses the real remaining risk. If it is genuinely resolved, clear it" },
+        { id: "record", text: "Record what was verified in a thread or the app's runbook, so the next reader does not re-derive it" }
+      ]
     }
   ].freeze
 
@@ -174,4 +268,20 @@ class FleetRecipes
   end
 
   def self.recipe_ids = RECIPES.map { |r| r[:id] }
+
+  # Finding kind => the ritual that resolves it (ADR 0007). A finding without one
+  # is a notification, and notifications train people to scroll.
+  #
+  # Deliberately NOT a default: an unmapped finding must carry no recipe rather
+  # than borrow a near-enough one. A wrong ritual is worse than none, because a
+  # wrong ritual gets followed.
+  FINDING_RECIPES = {
+    "live_candidate"        => "diagnose-live-orphan",
+    "release_drift"         => "diagnose-release-drift",
+    "build_on_serving_host" => "diagnose-build-placement",
+    "deploy_hold"           => "diagnose-deploy-hold",
+    "blocked_deploy"        => "diagnose-deploy-hold"
+  }.freeze
+
+  def self.recipe_for_finding(kind) = FINDING_RECIPES[kind.to_s]
 end
