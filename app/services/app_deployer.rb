@@ -536,11 +536,23 @@ class AppDeployer
       return true
     end
 
-    # Nothing has moved yet, so this is an ordinary pre-cutover failure: discard the
-    # candidate and leave the incumbent serving, exactly as a failed health check
-    # does. Restore the recorded container first — leaving container_id pointing at
-    # a container about to be removed is how the record starts lying about the box.
-    app.update!(container_id: @previous_container.presence) if @previous_container != @candidate_container
+    # THE CANDIDATE MAY BE THE INCUMBENT. The reuse branch adopts a container that is
+    # already carrying traffic, and discarding it here would `docker rm -f` the live
+    # site to fix a restart policy. Fail loudly and touch nothing: a container that
+    # serves but would not survive a reboot is a problem to repair by hand, not an
+    # outage to cause on purpose.
+    if @candidate_container == @previous_container
+      return fail_step("#{@candidate_name} is ALREADY SERVING and could not be promoted to " \
+                       "`--restart unless-stopped`. It has deliberately NOT been removed — it is the " \
+                       "live container. It will not come back after a reboot until you run " \
+                       "`docker update --restart unless-stopped #{@candidate_name}` on the box.")
+    end
+
+    # Otherwise nothing has moved yet, so this is an ordinary pre-cutover failure:
+    # discard the candidate and leave the incumbent serving, exactly as a failed
+    # health check does. Restore the recorded container first — leaving container_id
+    # pointing at a container about to be removed is how the record starts lying.
+    app.update!(container_id: @previous_container.presence)
     discard_candidate("#{@candidate_name} could not be promoted to `--restart unless-stopped`, " \
                       "so it would not survive a reboot — refusing to move traffic onto it")
   end

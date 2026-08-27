@@ -43,6 +43,11 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     @org = Organization.create!(name: "Acme")
     @server = @org.servers.create!(name: "box", status: "online", ip_address: "10.0.0.1",
                                    edge_type: "kamal_proxy")
+    # NOTE on the fixture: real traffic through AppDeployer is deploy_method
+    # "docker" — DeployAppJob sends kamal apps to KamalDeployer. It says "kamal"
+    # here because the migration and seed GATES this file also exercises are
+    # kamal-only by validation, and the cutover logic under test is
+    # method-agnostic. Worth knowing when reading an assertion about dispatch.
     @app = @org.apps.create!(name: "Shop", slug: "shop", server: @server, deploy_method: "kamal",
                              port: 3000, image_name: "shop", domain: "shop.example.com",
                              health_check_path: "/up", repository_url: "https://github.com/x/y.git")
@@ -54,10 +59,10 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
   def cutover(ssh)
     @deployer.stub(:ssh, ssh) do
       @deployer.stub(:sleep, nil) do
-        # Mirror the real pipeline: it aborts on the first failing step, so a
-        # failed health check must never reach the swap or the drain.
-        %i[start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
-           promote_candidate republish_edge_route drain_previous_container]
+        # Drive the REAL step list, not a copy of it. A duplicated list lets the
+        # production order and the tested order drift apart silently, which is
+        # exactly the kind of gap that makes an ordering test worthless.
+        (AppDeployer::ZERO_DOWNTIME_STEPS - %i[ensure_docker prepare_repository_access clone_or_pull_repo build_image cleanup])
           .each_with_object({}) do |step, out|
             out[step] = @deployer.send(step)
             break out unless out[step]
@@ -136,6 +141,24 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
 
     assert_equal "oldcid999", @app.reload.container_id,
                  "the record must follow the container that is still serving"
+  end
+
+  # The outage this nearly caused: in the reuse branch the candidate IS the
+  # incumbent, so the container_id guard is skipped — and discarding would then
+  # `docker rm -f` the container currently serving the site, to fix a restart policy.
+  test "a failed promotion never removes a candidate that is already serving" do
+    ssh = FakeSsh.new(fail_on: "docker update --restart")
+
+    ok = @deployer.stub(:ssh, ssh) do
+      @deployer.instance_variable_set(:@previous_container, "samecid777")
+      @deployer.instance_variable_set(:@candidate_container, "samecid777")
+      @deployer.instance_variable_set(:@candidate_name, "app-x")
+      @deployer.send(:promote_candidate)
+    end
+
+    assert_not ok, "an unpromotable serving container must fail the deploy"
+    assert ssh.commands.none? { |c| c.match?(/docker rm -f/) },
+           "must NEVER remove the live serving container to fix a restart policy"
   end
 
   # A failure here costs nothing: the edge has not moved and the incumbent is still
