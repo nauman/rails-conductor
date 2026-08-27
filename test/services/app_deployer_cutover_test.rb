@@ -26,8 +26,6 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
       true
     end
 
-    private
-
     def output_for(cmd)
       @last_output =
         if cmd.include?("label=service=")     then "oldcid999"
@@ -100,6 +98,44 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     edge = index_of(ssh, /kamal-proxy|caddy|deploy .*--target/i) || index_of(ssh, /docker stop/)
     assert_operator promote, :<, edge,
                     "promotion must precede anything that moves traffic onto the candidate"
+  end
+
+  # A survivor of an earlier attempt can already be serving on `--restart no`.
+  # Every step between adopting it and promoting it is a chance for the process to
+  # die and leave production unable to come back, so repair it on adoption.
+  test "a reused serving candidate has its restart policy repaired immediately" do
+    # The reuse branch is only taken when the SERVING container and the container
+    # under the candidate's name are the same one — i.e. a previous attempt died
+    # after publishing the edge. This fake makes both lookups agree.
+    same = Class.new(FakeSsh) do
+      def output_for(_cmd) = (@last_output = "samecid777")
+    end.new
+
+    @deployer.stub(:ssh, same) { @deployer.stub(:sleep, nil) { @deployer.send(:start_candidate) } }
+
+    assert same.commands.any? { |c| c.match?(/docker ps -q -f name=/) }, "expected the reuse probe"
+    assert same.commands.any? { |c| c.match?(/docker update --restart unless-stopped samecid777/) },
+           "a candidate adopted while already serving must not be left ephemeral: #{same.commands.last(3)}"
+    assert same.commands.none? { |c| c.start_with?("docker run -d") },
+           "the serving container must be reused, not replaced"
+  end
+
+  # The record must never point at a container that is about to be removed.
+  test "a failed promotion restores the recorded container to the incumbent" do
+    ssh = FakeSsh.new(fail_on: "docker update --restart")
+    @app.update_columns(container_id: "newcid111")
+
+    @deployer.stub(:ssh, ssh) do
+      @deployer.stub(:sleep, nil) do
+        @deployer.instance_variable_set(:@previous_container, "oldcid999")
+        @deployer.instance_variable_set(:@candidate_container, "newcid111")
+        @deployer.instance_variable_set(:@candidate_name, "app-x")
+        @deployer.send(:promote_candidate)
+      end
+    end
+
+    assert_equal "oldcid999", @app.reload.container_id,
+                 "the record must follow the container that is still serving"
   end
 
   # A failure here costs nothing: the edge has not moved and the incumbent is still

@@ -388,6 +388,11 @@ class AppDeployer
       log "Candidate #{name} is the current serving container — reusing it rather than replacing"
       @candidate_name = name
       @candidate_container = @previous_container
+      # A survivor of an earlier attempt may still be `--restart no` while already
+      # serving. Repair that here rather than waiting for the promotion step: this
+      # container is carrying traffic NOW, and every step between here and promotion
+      # is a chance for the process to die and leave it unable to come back.
+      run("docker update --restart unless-stopped #{Shellwords.escape(@candidate_container)}")
       return true
     end
     run("docker rm -f #{Shellwords.escape(name)} 2>/dev/null || true")
@@ -532,7 +537,10 @@ class AppDeployer
     end
 
     # Nothing has moved yet, so this is an ordinary pre-cutover failure: discard the
-    # candidate and leave the incumbent serving, exactly as a failed health check does.
+    # candidate and leave the incumbent serving, exactly as a failed health check
+    # does. Restore the recorded container first — leaving container_id pointing at
+    # a container about to be removed is how the record starts lying about the box.
+    app.update!(container_id: @previous_container.presence) if @previous_container != @candidate_container
     discard_candidate("#{@candidate_name} could not be promoted to `--restart unless-stopped`, " \
                       "so it would not survive a reboot — refusing to move traffic onto it")
   end
