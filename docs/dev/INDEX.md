@@ -29,6 +29,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0006`](adr/0006-a-running-container-must-be-nameable.md) | **Accepted** | Temporary containers get temporary lifecycles (candidates never `unless-stopped`), and Conductor must be able to say why every running container is running — a live orphan looks healthy and is the dangerous kind; more than one distinct hostname in `solid_queue_processes` is the cheapest detector |
 | [`0007`](adr/0007-findings-cite-rituals.md) | **Accepted** | A finding must cite the jazari ritual that resolves it — a one-line `remedy` cannot carry ordering or what a check rules out, so diagnostic knowledge belongs in a recipe, written when the incident is resolved, not left in a session transcript |
 | [`0008`](adr/0008-observe-the-channels-you-configure.md) | **Accepted** | A channel Conductor configures is one it must be able to observe — it verifies SES credentials and then goes blind to bounces, complaints and suppression, so an app can fail to deliver every message while every surface stays green |
+| [`0009`](adr/0009-the-cutover-is-not-atomic.md) | **Proposed** | The cutover reports success in states where it has not succeeded — `drain_previous_container`'s failure branch is unreachable because both commands end in `\|\| true`, and edge publication is a loop whose compensation assumes it was atomic |
 
 ## Authoring Notes
 
