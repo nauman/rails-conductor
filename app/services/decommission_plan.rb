@@ -91,8 +91,21 @@ class DecommissionPlan
 
   # --- probes ----------------------------------------------------------------
 
+  # LOOK FOR EVERY FORM THIS APP HAS EVER TAKEN, stable label first.
+  #
+  # `service=app-<id>` is the ASSIGNED identity (ADR 0004) that AppDeployer stamps
+  # on every container it starts, and it was missing here — the filters covered the
+  # kamal service label and two guessed NAMES, none of which a stable-named
+  # container matches. An app on that scheme could therefore be "decommissioned"
+  # while its containers kept running, and a retire that leaves the thing running
+  # is worse than one that fails, because nobody goes back to check.
+  #
+  # The older lookups stay. Containers predating the labels are still on boxes, and
+  # discovery for a retire should over-match rather than miss: every candidate is
+  # shown to an operator before anything is removed.
   def discover_containers
-    filters = app.kamal_service_candidates.map { |s| "label=service=#{s}" }
+    filters = [ "label=service=#{app.resource_key}" ]
+    filters += app.kamal_service_candidates.map { |s| "label=service=#{s}" }
     filters << "name=#{app.container_name}"
     filters << "name=#{app.slug}"
 
