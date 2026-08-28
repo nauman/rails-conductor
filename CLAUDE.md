@@ -33,6 +33,23 @@
   `conductor_server action=install_packages`) over hand-run SSH: they target the
   live container by construction and are recorded.
 
+## Browser Automation
+
+- **Manual UI audits: `agent-browser` 0.26+**, which drives Chrome over direct CDP.
+  No Playwright or Puppeteer dependency, and no `--native` flag — direct CDP is the
+  default in 0.26. Verify with `agent-browser --version` and `agent-browser doctor`;
+  read `agent-browser skills get core --full` before the first command in a session.
+- **Automated coverage stays in the existing Capybara/Selenium system tests.** A UI
+  audit is for looking; a regression belongs in `test/system`. Do not reach for a
+  browser CLI to assert something a system test should own.
+- **Playwright only** where a repo already owns Playwright coverage, or as a
+  fallback. This repo owns none — do not introduce it.
+- **Always `--session <name>`, and close it when done** (`agent-browser --session
+  <name> close`). A session is a live Chrome context; an unclosed one outlives the
+  task that created it, and this machine has accumulated sixteen. `close --all`
+  exists but is unsafe on a shared machine — other agents' sessions are
+  indistinguishable from stale ones, since nothing reports idle time.
+
 ## Git Commits
 
 - Do not include AI attributions or disclaimers in commit messages.
