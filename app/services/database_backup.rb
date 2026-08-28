@@ -237,13 +237,37 @@ class DatabaseBackup
   # A shell expression resolving to the app's running container id, or nil for a
   # native app. Kamal containers are per-release (found by label); non-kamal
   # docker apps have the fixed name conductor-<slug>.
+  # FIND THE CONTAINER BY LABEL, NEVER BY NAME.
+  #
+  # The docker branch used to return the fixed name `conductor-<slug>`, and that is
+  # how a verified backup silently stopped backing anything up. The app moved onto
+  # the ADR 0004 stable resource names on an ordinary deploy, the fixed name matched
+  # nothing, `docker exec` found no container, DATABASE_URL resolved to nil, and
+  # pg_dump fell back to a local unix socket that does not exist:
+  #
+  #   pg_dump: error: connection to server on socket "…/.s.PGSQL.5432" failed
+  #
+  # It had passed a real restore verification five days earlier. The backup did not
+  # break; the app moved out from under it, and three nights failed before anyone
+  # asked why. The kamal branch never had this problem because it has always
+  # resolved by label — this makes the docker branch behave the same way.
+  #
+  # Identity is ASSIGNED (ADR 0004): `app-<id>` survives a rename, a redeploy, and a
+  # change of naming scheme. A derived name survives none of them.
+  #
+  # The old name stays as a FALLBACK for containers that predate the labels, chosen
+  # only when the label matches nothing — a backup that cannot find its container
+  # must exhaust every way of looking before it dumps nothing.
   def dump_source_container(app)
     return nil unless app
+
     if app.kamal?
       svc = esc(app.kamal_service_candidates.first.to_s)
       "$(docker ps -q --filter label=service=#{svc} --filter label=role=web | head -1)"
     elsif app.deploy_method == "docker"
-      esc(app.container_name)
+      by_label = "docker ps -q --filter label=service=#{esc(app.resource_key)} --filter label=role=web | head -1"
+      by_name  = "docker ps -q --filter name=^#{esc(app.container_name)}$ | head -1"
+      "$(c=$(#{by_label}); [ -n \"$c\" ] || c=$(#{by_name}); echo \"$c\")"
     end
   end
 
