@@ -47,6 +47,24 @@ class KamalOps
 
   # nil when kamal can answer; otherwise a sentence a reader can act on.
   def unavailable_reason
+    # ASK THE DRIVER QUESTION, NOT THE ARTIFACT ONE.
+    #
+    # `app.kamal?` reads deploy_method, which is the ARTIFACT contract — how the
+    # image is built and addressed. Whether kamal can operate this app is the
+    # DRIVER axis, and FleetCanon already splits the two precisely because
+    # deploy_method conflates them.
+    #
+    # An externally-driven app legitimately keeps deploy_method "kamal": it really
+    # is a kamal-built image, and something else performs the roll. Its repo config
+    # can therefore point deliberately nowhere. Trusting the artifact answer here
+    # meant attempting kamal anyway, waiting out a DNS failure against a host that
+    # was never meant to resolve, and reporting THAT — while the operator's actual
+    # question, "then what does deploy it", went unanswered.
+    if FleetCanon.shape_for(@app)[:driver] == "external"
+      return "#{@app.name} does not deploy via kamal — Conductor is not its driver. " \
+             "Its recorded path: #{@app.deploy_hold_reason.to_s.strip.presence || 'see the app notes'}"
+    end
+
     return "#{@app.name} does not deploy via kamal (deploy_method: #{@app.deploy_method})" unless @app.kamal?
     if @app.self_describing? && !File.exist?(deploy_config_path)
       materialize_ops_config
