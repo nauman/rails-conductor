@@ -77,6 +77,16 @@ env:
 
     # Set number of cores available to the application on each server.
     WEB_CONCURRENCY: 2
+    # Paired with proxy.response_timeout. puma.rb applies worker_timeout only when
+    # WEB_CONCURRENCY > 0, which it is here, so the default 30s was a SECOND budget
+    # sitting behind the proxy's — raising one without the other just converts a 504
+    # into a longer wait and then a 502.
+    #
+    # Honest uncertainty: Puma heartbeats from a separate thread, so a long REQUEST
+    # may not trip worker_timeout at all. This is cheap insurance to remove it as a
+    # suspect, not a diagnosis. The cost is slower detection of a genuinely wedged
+    # worker.
+    WORKER_TIMEOUT: 120
 
     # Database connection (points at the Postgres accessory container below)
     DATABASE_HOST: <%= ENV["DATABASE_HOST"].presence || "conductor-postgres" %>
