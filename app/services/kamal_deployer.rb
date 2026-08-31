@@ -1191,11 +1191,23 @@ class KamalDeployer
 
   def esc(value) = Shellwords.escape(value.to_s)
 
+  # SCRUB BEFORE ANYTHING PERSISTS OR LEAVES THE PROCESS.
+  #
+  # This method stored a live OAuth client secret in plaintext. kamal prints the
+  # full `docker run` line, including inline values for anything the app declared
+  # under `env: clear:`, and this captured that stdout verbatim — into the
+  # database, into the ActionCable broadcast, and into the Rails log.
+  #
+  # One redaction point for all three, because three call sites is three chances
+  # to add a fourth that forgets.
   def log(message)
-    deployment.append_log(message)
-    broadcast(message)
-    Rails.logger.info "[KamalDeploy:#{app.slug}] #{message}"
+    clean = scrubber.scrub(message.to_s)
+    deployment.append_log(clean)
+    broadcast(clean)
+    Rails.logger.info "[KamalDeploy:#{app.slug}] #{clean}"
   end
+
+  def scrubber = @scrubber ||= SecretScrubber.new(app)
 
   def broadcast(message)
     timestamp = Time.current.strftime("%H:%M:%S")
