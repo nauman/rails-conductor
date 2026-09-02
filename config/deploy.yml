@@ -44,8 +44,17 @@ proxy:
   # here, and the box lost a swap device (ADR 0005).
   #
   # Raising this is mitigation, not the fix — the fix is that a long operation
-  # returns a job id instead of holding a request open. The cost of the raise is
-  # that a genuinely hung request now occupies a proxy connection for longer.
+  # returns a job id instead of holding a request open.
+  #
+  # The cost is worse than "a hung request holds a connection longer", and an audit
+  # named it: this runs 2 puma workers x 3 threads = SIX request slots, and every
+  # synchronous runner call holds one for up to two minutes. A small burst can
+  # starve /up, the UI, MCP and webhooks together. Raising the budget made the
+  # failure rarer and its blast radius wider, on a control plane.
+  #
+  # Also caps any future move behind Cloudflare: its default origin read timeout is
+  # 125s, so 120 leaves ~5s of headroom before a 524. This host is not proxied
+  # today (no cf-ray), but Conductor is listed as proxyable.
   response_timeout: 120
   healthcheck:
     path: /up
@@ -77,16 +86,15 @@ env:
 
     # Set number of cores available to the application on each server.
     WEB_CONCURRENCY: 2
-    # Paired with proxy.response_timeout. puma.rb applies worker_timeout only when
-    # WEB_CONCURRENCY > 0, which it is here, so the default 30s was a SECOND budget
-    # sitting behind the proxy's — raising one without the other just converts a 504
-    # into a longer wait and then a 502.
+    # NOTE: WORKER_TIMEOUT is deliberately NOT set here. It was raised to 120 on the
+    # theory that puma's worker_timeout was a second request budget behind the
+    # proxy's. It is not — it is a HEARTBEAT timeout, and a long request keeps
+    # heartbeating from a separate thread, so it never bounded these calls and
+    # raising it could not have helped. It only delayed recovery from a genuinely
+    # wedged worker, fourfold, with two workers to lose.
     #
-    # Honest uncertainty: Puma heartbeats from a separate thread, so a long REQUEST
-    # may not trip worker_timeout at all. This is cheap insurance to remove it as a
-    # suspect, not a diagnosis. The cost is slower detection of a genuinely wedged
-    # worker.
-    WORKER_TIMEOUT: 120
+    # Set it only if production logs actually show puma "failed to check in"
+    # terminations. Absent that evidence, the default is right.
 
     # Database connection (points at the Postgres accessory container below)
     DATABASE_HOST: <%= ENV["DATABASE_HOST"].presence || "conductor-postgres" %>
