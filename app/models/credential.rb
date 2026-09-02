@@ -149,6 +149,17 @@ class Credential < ApplicationRecord
     z = client.zones
     return z.error unless z.ok?
 
+    # REFUSE TO EMPTY A POPULATED CACHE. A token whose scope was narrowed returns
+    # SUCCESS with an empty list, and writing that erases every zone — after which
+    # Conductor reports the account as owning nothing, which is indistinguishable
+    # from an account that genuinely owns nothing. Stale is recoverable; silently
+    # empty is not, and a scheduled refresh would do it unattended.
+    if z.data.empty? && zones_list.any?
+      return "Cloudflare returned zero zones while #{zones_list.length} are cached — refusing to " \
+             "overwrite. This usually means the token's zone scope was narrowed. The cached list is " \
+             "kept; re-verify after fixing the token's Zone Resources."
+    end
+
     update!(account_id: z.data.first&.dig("account_id"), zones: z.data.to_json, verified_at: Time.current)
     nil
   end

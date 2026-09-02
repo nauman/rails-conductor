@@ -52,6 +52,18 @@ development:
     queue: ops
     schedule: every hour at minute 40
 
+  # Conductor answers "which account owns this domain" from a cached zone list that
+  # verify_cloudflare! writes and nothing else refreshed. Two of them sat 34 days
+  # old, reporting a real domain as absent and a deleted one as present. Making the
+  # staleness visible was not enough — a flag still needs a human to read it.
+  #
+  # Offset from the other sweeps so the three do not all reach out at once. Cheap:
+  # one GET per credential, and a failure leaves the previous list in place.
+  sweep_cloudflare_zones:
+    command: "RefreshCloudflareZonesJob.sweep"
+    queue: default
+    schedule: every 6 hours at minute 20
+
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
   # fleet at once is the same stampede that took backups down on 08-01. The
@@ -112,6 +124,18 @@ production:
     command: "ReleaseDriftCheckJob.sweep"
     queue: ops
     schedule: every hour at minute 40
+
+  # Conductor answers "which account owns this domain" from a cached zone list that
+  # verify_cloudflare! writes and nothing else refreshed. Two sat 34 days old, reporting
+  # a real domain as absent and a deleted one as present. Making the staleness visible
+  # was not enough — a flag still needs a human to read it.
+  #
+  # Offset from the other sweeps so the three do not reach out at once. Cheap: one GET
+  # per credential, and a failure leaves the previous list in place.
+  sweep_cloudflare_zones:
+    command: "RefreshCloudflareZonesJob.sweep"
+    queue: default
+    schedule: every 6 hours at minute 20
 
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
