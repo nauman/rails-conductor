@@ -17,7 +17,7 @@ class CloudflareClientTest < ActiveSupport::TestCase
   test "verify surfaces the Cloudflare error when neither the token endpoint nor zones work" do
     http = FakeHttp.new(
       "/user/tokens/verify" => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] },
-      "/zones?per_page=50"  => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] }
+      "/zones?per_page=50&page=1"  => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] }
     )
     res = CloudflareClient.new("bad", http: http).verify
     refute res.ok?
@@ -30,7 +30,7 @@ class CloudflareClientTest < ActiveSupport::TestCase
   test "verify falls back to a zones probe for an account-owned token" do
     http = FakeHttp.new(
       "/user/tokens/verify" => { "success" => false, "errors" => [ { "message" => "Invalid API Token" } ] },
-      "/zones?per_page=50"  => { "success" => true, "result" => [ { "id" => "z1", "name" => "rubyonrails.link", "account" => { "id" => "acct1" } } ] }
+      "/zones?per_page=50&page=1"  => { "success" => true, "result" => [ { "id" => "z1", "name" => "rubyonrails.link", "account" => { "id" => "acct1" } } ] }
     )
     res = CloudflareClient.new("account-token", http: http).verify
     assert res.ok?, "an account token that can list zones must verify as live"
@@ -39,7 +39,7 @@ class CloudflareClientTest < ActiveSupport::TestCase
   end
 
   test "zones returns id/name/account_id triples" do
-    http = FakeHttp.new("/zones?per_page=50" => {
+    http = FakeHttp.new("/zones?per_page=50&page=1" => {
       "success" => true,
       "result" => [ { "id" => "z1", "name" => "calm.page", "account" => { "id" => "acct1" } } ]
     })
@@ -200,5 +200,47 @@ class CloudflareClientR2Test < ActiveSupport::TestCase
     res = CloudflareClient.new("t", http: failing).put_r2_cors(ACCT, "b", [])
     refute res.ok?
     assert_match(/Authentication error/, res.error)
+  end
+
+  # PAGINATION. `?per_page=50` with no page walk silently truncates at 50 zones, and
+  # a truncated list is indistinguishable from a complete one — the same shape as
+  # the stale cache this pairs with: Conductor reports a zone as absent when it is
+  # merely unseen. One account was already at 28 of 50.
+  test "zones walks every page, not just the first" do
+    page1 = { "success" => true,
+              "result" => (1..50).map { |i| { "id" => "z#{i}", "name" => "z#{i}.test", "account" => { "id" => "acct" } } },
+              "result_info" => { "page" => 1, "total_pages" => 2 } }
+    page2 = { "success" => true,
+              "result" => [ { "id" => "z51", "name" => "late-addition.test", "account" => { "id" => "acct" } } ],
+              "result_info" => { "page" => 2, "total_pages" => 2 } }
+    http = FakeHttp.new("/zones?per_page=50&page=1" => page1, "/zones?per_page=50&page=2" => page2)
+
+    res = CloudflareClient.new("tok", http: http).zones
+
+    assert res.ok?
+    assert_equal 51, res.data.length
+    assert_includes res.data.map { |z| z["name"] }, "late-addition.test",
+                    "a zone past the first page must not be invisible"
+  end
+
+  test "a single page stops after one request" do
+    body = { "success" => true,
+             "result" => [ { "id" => "z1", "name" => "only.test", "account" => { "id" => "acct" } } ],
+             "result_info" => { "page" => 1, "total_pages" => 1 } }
+    http = FakeHttp.new("/zones?per_page=50&page=1" => body)
+
+    res = CloudflareClient.new("tok", http: http).zones
+
+    assert res.ok?
+    assert_equal [ "only.test" ], res.data.map { |z| z["name"] }
+  end
+
+  # Cloudflare omits result_info on some responses. Missing pagination metadata must
+  # mean "one page", never an unbounded loop against a live API.
+  test "absent pagination metadata is treated as a single page" do
+    body = { "success" => true, "result" => [ { "id" => "z1", "name" => "a.test", "account" => { "id" => "x" } } ] }
+    http = FakeHttp.new("/zones?per_page=50&page=1" => body)
+
+    assert_equal 1, CloudflareClient.new("tok", http: http).zones.data.length
   end
 end

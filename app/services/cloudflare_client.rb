@@ -31,12 +31,36 @@ class CloudflareClient
     failure(body)
   end
 
-  # GET /zones — [{id, name, account_id}], first 50 (enough for our fleets).
-  def zones
-    body = get("/zones?per_page=50")
-    return failure(body) unless body["success"]
+  # GET /zones — [{id, name, account_id}], every page.
+  #
+  # This used to fetch `?per_page=50` and stop. A truncated zone list is
+  # indistinguishable from a complete one, so past 50 zones Conductor would report
+  # a domain as absent when it was merely unseen — the same failure as the stale
+  # cache this pairs with, and harder to spot because re-verifying does not fix it.
+  # One connected account was already at 28.
+  #
+  # PAGE_LIMIT is a stop against an API that keeps claiming another page. Walking
+  # forever against a live endpoint is worse than returning what we have.
+  PAGE_LIMIT = 20
 
-    Result.new(ok: true, data: body["result"].map { |z| { "id" => z["id"], "name" => z["name"], "account_id" => z.dig("account", "id") } })
+  def zones
+    collected = []
+    page = 1
+
+    loop do
+      body = get("/zones?per_page=50&page=#{page}")
+      return failure(body) unless body["success"]
+
+      collected.concat(Array(body["result"]))
+
+      # Missing result_info means one page, never an unbounded loop.
+      total = body.dig("result_info", "total_pages").to_i
+      break if total <= page || page >= PAGE_LIMIT
+
+      page += 1
+    end
+
+    Result.new(ok: true, data: collected.map { |z| { "id" => z["id"], "name" => z["name"], "account_id" => z.dig("account", "id") } })
   end
 
   # --- P2: put behind Cloudflare (proxy the DNS record + set SSL mode) ---
