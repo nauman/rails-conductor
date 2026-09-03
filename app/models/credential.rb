@@ -144,7 +144,7 @@ class Credential < ApplicationRecord
   # are perfectly valid for zone operations.) Caches account id + zones so Conductor
   # can resolve which connected account owns a domain. Returns nil on success, else
   # an error string.
-  def verify_cloudflare!(client: nil)
+  def verify_cloudflare!(client: nil, allow_empty: false)
     client ||= CloudflareClient.new(api_key)
     z = client.zones
     return z.error unless z.ok?
@@ -163,18 +163,30 @@ class Credential < ApplicationRecord
     # So: the first empty is refused and reported, the second consecutive one is
     # believed. Any non-empty result clears the count, so two empties months apart
     # never add up to a wipe.
-    if z.data.empty? && zones_list.any?
-      if consecutive_empty_zone_reads.to_i.zero?
-        update_columns(consecutive_empty_zone_reads: 1)
-        return "Cloudflare returned zero zones while #{zones_list.length} are cached — refusing to " \
-               "overwrite on a single observation. This usually means the token's zone scope was " \
-               "narrowed. The cached list is kept. If the zones really are gone, verify again and the " \
-               "second empty result will be applied."
-      end
+    # A POPULATED→EMPTY TRANSITION IS NEVER APPLIED AUTOMATICALLY.
+    #
+    # A narrowed token returns SUCCESS with zero zones — and it will do so on every
+    # scheduled refresh, so counting observations does not distinguish "the zones are
+    # gone" from "we can no longer see them". Two-strikes only delayed the wipe by one
+    # cycle; the ambiguity is not resolvable by repetition, because the signal is
+    # identical either way.
+    #
+    # So an automated refresh may only ever ADD or CHANGE zones, never empty the list.
+    # A human clears it deliberately (`allow_empty: true`), which is the one thing a
+    # narrowed token cannot do on its own. Stale is recoverable; silently empty is not,
+    # and "eventually empty" is just silently empty with a delay.
+    if z.data.empty? && zones_list.any? && !allow_empty
+      count = consecutive_empty_zone_reads.to_i + 1
+      update_columns(consecutive_empty_zone_reads: count)
+      return "Cloudflare returned zero zones while #{zones_list.length} are cached (#{count} time#{'s' if count > 1} " \
+             "in a row). Refusing to empty the list automatically — a narrowed token scope and a genuinely " \
+             "emptied account look identical from here, and only one of them is recoverable. The cached list " \
+             "is kept. Check the token's Zone Resources; if the zones really are gone, verify with " \
+             "allow_empty to clear it deliberately."
     end
 
     update!(account_id: z.data.first&.dig("account_id"), zones: z.data.to_json, verified_at: Time.current)
-    update_columns(consecutive_empty_zone_reads: z.data.empty? ? 1 : 0)
+    update_columns(consecutive_empty_zone_reads: 0)
     nil
   end
 

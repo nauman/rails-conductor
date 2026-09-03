@@ -19,11 +19,13 @@ class ServerAuditCompletenessTest < ActiveSupport::TestCase
 
   def grade(lines) = ServerAudit.new(@server, ssh: nil).grade_output(lines.join("\n"))
 
-  SECURE = [
-    "SUDO:yes", "UFW:active", "FAIL2BAN:active", "SSH_ROOT:no", "SSH_PASSWORD:no",
+  TOOLS = [ "HAS_UFW:yes", "HAS_SS:yes", "HAS_APT:yes", "HAS_SYSTEMCTL:yes", "HAS_SSHD:yes" ].freeze
+
+  SECURE = ([ "SUDO:yes" ] + TOOLS + [
+    "UFW:active", "FAIL2BAN:active", "SSH_ROOT:no", "SSH_PASSWORD:no",
     "SEC_UPDATES:0", "UPDATES:0", "REBOOT:no", "AUTOUPGRADE:active", "DB_PUBLIC:",
     "PROBE_END:ok"
-  ].freeze
+  ]).freeze
 
   test "a complete secure probe still grades secure" do
     assert_equal :secure, grade(SECURE).status
@@ -38,9 +40,7 @@ class ServerAuditCompletenessTest < ActiveSupport::TestCase
   # THE BUG. Without sudo, every privileged value is blank — and blank read as
   # "firewall off, root login on, database public".
   test "no passwordless sudo is inconclusive, never at_risk" do
-    result = grade([ "SUDO:no", "FAIL2BAN:active", "UFW:", "SSH_ROOT:", "SSH_PASSWORD:",
-                     "SEC_UPDATES:0", "UPDATES:0", "REBOOT:no", "AUTOUPGRADE:active",
-                     "DB_PUBLIC:", "PROBE_END:ok" ])
+    result = grade(SECURE.map { |l| l.start_with?("SUDO:") ? "SUDO:no" : l })
 
     assert_nil result.status, "an unreadable box has no grade"
     assert result.error.present?, "and must say why"
@@ -49,10 +49,30 @@ class ServerAuditCompletenessTest < ActiveSupport::TestCase
 
   # Truncated output — a dropped connection mid-probe — must not be graded either.
   test "a truncated probe is inconclusive" do
-    result = grade([ "SUDO:yes", "UFW:active", "FAIL2BAN:active" ])
+    result = grade([ "SUDO:yes", "HAS_UFW:yes", "UFW:active" ])
 
     assert_nil result.status
     assert_match(/incomplete/i, result.error)
+  end
+
+  # FALSE SAFETY IS THE WORSE DIRECTION. A missing tool used to read as a clean
+  # result: no apt-get meant "zero pending updates", no ss meant "no public
+  # database". An absent tool is unknown — never a pass.
+  test "a missing tool is unknown, not a pass" do
+    lines = SECURE.map { |l| l.start_with?("HAS_SS:") ? "HAS_SS:no" : l }
+
+    db = grade(lines).checks.find { |c| c.key == :db_exposure }
+    assert_equal :info, db.status, "no ss must not read as 'not internet-facing'"
+    assert_match(/unknown/i, db.detail)
+  end
+
+  # And if every check that can BLOCK is unknown, there is no posture at all.
+  test "a host where no blocking check can be read is inconclusive, not secure" do
+    lines = SECURE.map do |l|
+      %w[HAS_UFW: HAS_SS: HAS_SSHD:].any? { |t| l.start_with?(t) } ? l.sub(":yes", ":no") : l
+    end
+
+    assert_nil grade(lines).status, "grading secure off the checks that survived would be reassurance by accident"
   end
 
   # The job already refuses to write a statusless result, so inconclusive degrades

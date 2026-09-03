@@ -160,17 +160,21 @@ class DeployPreflight
     server = @app.server
     return skip(:audit, "Server audit", "no server attached") unless server
 
-    # FRESHNESS IS WEIGHED BEFORE THE GRADE, not only inside `secure`.
+    # STALENESS DOWNGRADES REASSURANCE, NEVER A WARNING.
     #
-    # An old grade is evidence about the past, and that cuts both ways. Weighing it
-    # only for `secure` meant a stale at_risk blocked deploys FOREVER — a box fixed
-    # months ago stayed blocked, with no way to clear it but an audit nobody was
-    # scheduled to run — while a stale `attention` was reported as current.
+    # An old grade is weak evidence, and the correct response depends on which way it
+    # points. A stale `secure` or `attention` should stop reassuring — it is a claim
+    # about the past. A stale `at_risk` must KEEP BLOCKING: nothing about time passing
+    # is evidence that exposure was fixed, and an unreachable host, a stopped
+    # scheduler or repeated failed audits would otherwise clear a security gate by
+    # doing nothing at all.
     #
-    # A stale grade warns whatever it says: loud enough to re-run, not a gate held
-    # shut by a finding no one can refresh. Only a FRESH at_risk blocks, because only
-    # a fresh one is a claim about today.
-    if server.last_audit_status.present? && !server.audit_fresh?
+    # The first version of this check ran before the whole case and downgraded every
+    # stale grade, which turned "a stale at_risk blocks forever" into "a stale at_risk
+    # blocks nothing". The original was annoying; that was unsafe. Only a COMPLETED
+    # audit may lower an at_risk, and `force: true` remains the operator's escape
+    # hatch for when they know better.
+    if server.last_audit_status.present? && server.last_audit_status != "at_risk" && !server.audit_fresh?
       return warn(:audit, "Server audit",
                   "#{server.name}'s last audit graded '#{server.last_audit_status}' on " \
                   "#{server.last_audit_at&.to_date || 'an unknown date'} and is stale — that is evidence " \
@@ -181,7 +185,8 @@ class DeployPreflight
     when nil, ""
       warn(:audit, "Server audit", "#{server.name} has never been audited — run an audit before shipping")
     when "at_risk"
-      fail_row(:audit, "Server audit", "#{server.name} is at risk — resolve findings before deploying")
+      age = server.audit_fresh? ? "" : " (graded #{server.last_audit_at&.to_date}; stale, and time is not evidence of a fix)"
+      fail_row(:audit, "Server audit", "#{server.name} is at risk#{age} — resolve findings before deploying")
     when "attention"
       warn(:audit, "Server audit", "#{server.name} needs attention (see last audit)")
     when "secure"

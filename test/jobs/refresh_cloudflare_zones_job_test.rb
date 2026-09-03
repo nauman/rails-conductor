@@ -67,25 +67,27 @@ class RefreshCloudflareZonesJobTest < ActiveJob::TestCase
   # because every later verification would be refused too, while the stale list kept
   # driving proxyable_apps. Two consecutive empties is the confirmation: one is
   # suspicious, twice in a row is the world.
-  test "a second consecutive empty response is accepted" do
-    first = @cred.verify_cloudflare!(client: FakeClient.new(ok_with([])))
-    assert first, "the first empty must still be refused"
-    assert_equal [ "old.test" ], @cred.reload.zones_list.map { |z| z["name"] }
+  # REPETITION IS NOT EVIDENCE HERE. A narrowed token returns empty on EVERY refresh,
+  # so counting observations cannot separate "the zones are gone" from "we can no
+  # longer see them" — two-strikes only delayed the wipe by one cycle.
+  test "repeated empty responses never empty the cache automatically" do
+    5.times { @cred.verify_cloudflare!(client: FakeClient.new(ok_with([]))) }
 
-    second = @cred.verify_cloudflare!(client: FakeClient.new(ok_with([])))
-    assert_nil second, "a confirmed empty must be applied, not vetoed forever"
+    assert_equal [ "old.test" ], @cred.reload.zones_list.map { |z| z["name"] },
+                 "an automated refresh may add or change zones, never empty them"
+  end
+
+  # The escape hatch is the one thing a narrowed token cannot do: a human asking.
+  test "a human can clear the list deliberately" do
+    assert_nil @cred.verify_cloudflare!(client: FakeClient.new(ok_with([])), allow_empty: true)
     assert_empty @cred.reload.zones_list
   end
 
-  # A non-empty result in between clears the suspicion, so two empties months apart
-  # do not silently add up to a wipe.
-  test "a populated response between two empties resets the count" do
+  test "the refusal reports how many times it has seen empty" do
     @cred.verify_cloudflare!(client: FakeClient.new(ok_with([])))
-    @cred.verify_cloudflare!(client: FakeClient.new(ok_with([ "back.test" ])))
+    message = @cred.verify_cloudflare!(client: FakeClient.new(ok_with([])))
 
-    assert @cred.verify_cloudflare!(client: FakeClient.new(ok_with([]))),
-           "the next empty is a first empty again"
-    assert_equal [ "back.test" ], @cred.reload.zones_list.map { |z| z["name"] }
+    assert_match(/2 times in a row/, message)
   end
 
   test "a real change is applied" do

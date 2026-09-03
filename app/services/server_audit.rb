@@ -19,6 +19,14 @@ class ServerAudit
   # DeployPreflight blocks on that.
   PROBE = <<~BASH.freeze
     echo "SUDO:$(sudo -n true 2>/dev/null && echo yes || echo no)"
+    # Which tools EXIST. Without these, a missing tool is indistinguishable from a
+    # clean result: no apt-get reads as "zero pending updates", no ss reads as "no
+    # public database". Both are false SAFETY, which is worse than a false alarm.
+    echo "HAS_UFW:$(command -v ufw >/dev/null 2>&1 && echo yes || echo no)"
+    echo "HAS_SS:$(command -v ss >/dev/null 2>&1 && echo yes || echo no)"
+    echo "HAS_APT:$(command -v apt-get >/dev/null 2>&1 && echo yes || echo no)"
+    echo "HAS_SYSTEMCTL:$(command -v systemctl >/dev/null 2>&1 && echo yes || echo no)"
+    echo "HAS_SSHD:$(command -v sshd >/dev/null 2>&1 && echo yes || echo no)"
     SSHD=$(sudo -n sshd -T 2>/dev/null)
     echo "UFW:$(sudo -n ufw status 2>/dev/null | awk 'NR==1{print $2}')"
     echo "FAIL2BAN:$(systemctl is-active fail2ban 2>/dev/null)"
@@ -35,6 +43,15 @@ class ServerAudit
   # Values that are only knowable with passwordless sudo. If sudo is unavailable
   # these are blank for a reason that has nothing to do with the host's posture.
   PRIVILEGED_KEYS = %w[UFW SSH_ROOT SSH_PASSWORD DB_PUBLIC].freeze
+
+  # A check is only meaningful when the tool it reads exists. Absent the tool the
+  # value is unknown — never a pass and never a fail.
+  REQUIRES_TOOL = {
+    firewall: "HAS_UFW", db_exposure: "HAS_SS",
+    security_updates: "HAS_APT", updates: "HAS_APT",
+    fail2ban: "HAS_SYSTEMCTL", auto_upgrades: "HAS_SYSTEMCTL",
+    ssh_root: "HAS_SSHD", ssh_password: "HAS_SSHD"
+  }.freeze
 
   attr_reader :server, :error
 
@@ -96,6 +113,24 @@ class ServerAudit
       check(:reboot,       "Reboot",                p["REBOOT"].to_s.strip != "yes", "not required", "required", level: :warn),
       info(:updates,       "Other updates",         "#{p['UPDATES'].to_i} upgradable")
     ]
+
+    # A check whose tool is missing is UNKNOWN, not passed. Reporting it as `info`
+    # keeps it visible without letting an absent tool manufacture reassurance.
+    checks = checks.map do |c|
+      tool = REQUIRES_TOOL[c.key]
+      next c if tool.nil? || p[tool] != "no"
+
+      Check.new(key: c.key, label: c.label, status: :info,
+                detail: "unknown — this host has no #{tool.sub('HAS_', '').downcase}")
+    end
+
+    # If every check that can BLOCK is unknown, there is no posture to report. Say so
+    # rather than grade `secure` off the checks that happened to survive.
+    blocking = %i[firewall ssh_root ssh_password db_exposure]
+    if blocking.all? { |k| checks.find { |c| c.key == k }&.status == :info }
+      return inconclusive("none of the blocking checks (#{blocking.join(', ')}) could be read on this host — " \
+                          "posture is unknown, not secure")
+    end
 
     rollup = if checks.any? { |c| c.status == :fail } then :at_risk
     elsif checks.any? { |c| c.status == :warn } then :attention

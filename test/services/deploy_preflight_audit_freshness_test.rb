@@ -25,11 +25,15 @@ class DeployPreflightAuditFreshnessTest < ActiveSupport::TestCase
     assert_equal :fail, audit_row("at_risk", 1.day.ago).status
   end
 
-  test "a stale at_risk warns instead of blocking forever" do
+  # THE REGRESSION THIS FILE ONCE ENCODED. Downgrading a stale at_risk to a warning
+  # meant an unreachable host, a stopped scheduler, or repeated failed audits cleared
+  # a security gate by doing nothing for a week. Time passing is not evidence that
+  # exposure was fixed — only a COMPLETED audit may lower this grade.
+  test "a stale at_risk STILL blocks — ageing is not a fix" do
     row = audit_row("at_risk", 90.days.ago)
 
-    assert_equal :warn, row.status, "a 90-day-old finding is not evidence about today"
-    assert_match(/stale|re-?run|old/i, row.detail)
+    assert_equal :fail, row.status, "known exposure must not expire into a deploy"
+    assert_match(/stale/i, row.detail, "but the reader should know the finding is old")
   end
 
   test "a fresh secure clears" do
