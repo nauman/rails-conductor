@@ -47,6 +47,7 @@ knowledge and is otherwise lost.
 
 | Value | Refresh | Threshold | Notes |
 |---|---|---|---|
+| `servers.last_audit_status` | `ServerAuditCheckJob.sweep`, daily 03:15 | 7d (`audit_fresh?`) | The freshness check and the preflight's use of it already existed; only the refresh was missing |
 | `apps.residue_findings` | `ResidueCheckJob.sweep`, hourly :25 | 12h | Findings carry `checked_at` + `stale` into `situation` |
 | `apps.release_state` | `ReleaseDriftCheckJob.sweep`, hourly :40 | 12h | Offset from residue so they do not SSH the same boxes together |
 | `credentials.zones` | `RefreshCloudflareZonesJob.sweep`, 6h :20 | 1d | Added after the 34-day incident |
@@ -70,17 +71,21 @@ They are the same shape as the Cloudflare cache before it was swept.
 
 | Value | Written by | Risk |
 |---|---|---|
-| `servers.last_audit_status` / `_at` | `conductor_server action=audit` | Security posture. An `attention` grade from July still reads as the current state; the box may have been fixed or got worse |
 | `servers.last_update_status` / `_scope` / `_at` | `apply_updates` | "Security updates: none pending" ages badly and reads as reassurance |
 | `servers.last_harden_*` | `harden` | A hardening result from provisioning day, presented as current |
 | `servers.last_swap_reclaim_*` | `reclaim_swap` | On-demand by design; still undated at the point of reading |
 | `servers.edge_checked_at` | edge detection | Column exists; nothing sweeps it |
 | `apps.build_host` | recorded by a deploy | Only changes on deploy, so it is *accurate*, but it is silently absent until the first deploy reports it — "not recorded yet" is honest and rare in this table |
 
-`last_audit_status` is the one worth doing next. It is the value most likely to be
-read as a safety claim, and the deploy preflight blocks on it: an audit graded
-`at_risk` months ago blocks deploys today, and one graded `ok` months ago clears
-them. Both directions are wrong for the same reason.
+`last_update_status` is now the one worth doing next: "security updates: none
+pending" is read as reassurance and ages badly, and unlike the audit grade nothing
+downgrades it with time.
+
+The audit grade was the previous entry here and is now swept. It is worth noting
+what that fix actually was: `audit_fresh?` and the preflight's handling of a stale
+`secure` were already correct. Only the refresh was missing, so freshness could
+only decay. The lesson generalises — a staleness check without a refresh is half a
+mechanism, and the half that does nothing.
 
 ## Failure modes of the refresh itself
 

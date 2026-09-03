@@ -4,8 +4,8 @@ Date: 2026-09-03
 
 ## Status
 
-**Accepted (2026-09-03).** Partially implemented — three of Conductor's derived
-facts now satisfy it, the server rollups do not. Full inventory and gap analysis in
+**Accepted (2026-09-03).** Partially implemented — four of Conductor's derived
+facts now satisfy it; the remaining server rollups do not. Full inventory and gap analysis in
 [`docs/architecture/derived-state.md`](../../architecture/derived-state.md).
 
 ## Context
@@ -95,7 +95,7 @@ Visibility is the diagnostic half; the refresh is the fix.
 | `apps.residue_findings` | `sweep_residue`, hourly | yes | 12h |
 | `apps.release_state` | `sweep_release_drift`, hourly | yes | 12h |
 | `credentials.zones` | `sweep_cloudflare_zones`, 6h | yes | 1d |
-| `servers.last_audit_status` | **none** | partial | **none** |
+| `servers.last_audit_status` | `sweep_server_audits`, daily | partial | 7d (`audit_fresh?`) |
 | `servers.last_update_status` | **none** | partial | **none** |
 | `servers.last_swap_reclaim_*` | **none** (on demand) | partial | **none** |
 | `servers.edge_checked_at` | **none** | partial | **none** |

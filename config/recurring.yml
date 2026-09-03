@@ -64,6 +64,18 @@ development:
     queue: default
     schedule: every 6 hours at minute 20
 
+  # Server security grades were written by an operator-run audit and refreshed by
+  # nothing, so Server#audit_fresh? could only ever decay. One grade sat five weeks
+  # old while DeployPreflight gated deploys on it — an at_risk from July blocking a
+  # box since fixed, a secure from July clearing one since rotted (ADR 0010).
+  #
+  # Daily, well inside the 7-day freshness window, so a box can be unreachable for
+  # several days before its grade is treated as stale. Read-only over SSH.
+  sweep_server_audits:
+    command: "ServerAuditCheckJob.sweep"
+    queue: ops
+    schedule: every day at 3:15am
+
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
   # fleet at once is the same stampede that took backups down on 08-01. The
@@ -136,6 +148,18 @@ production:
     command: "RefreshCloudflareZonesJob.sweep"
     queue: default
     schedule: every 6 hours at minute 20
+
+  # Server security grades were written by an operator-run audit and refreshed by
+  # nothing, so Server#audit_fresh? could only ever decay. One grade sat five weeks
+  # old while DeployPreflight gated deploys on it — an at_risk from July blocking a
+  # box since fixed, a secure from July clearing one since rotted (ADR 0010).
+  #
+  # Daily, well inside the 7-day freshness window, so a box can be unreachable for
+  # several days before its grade is treated as stale. Read-only over SSH.
+  sweep_server_audits:
+    command: "ServerAuditCheckJob.sweep"
+    queue: ops
+    schedule: every day at 3:15am
 
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
