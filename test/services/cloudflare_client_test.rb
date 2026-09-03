@@ -243,4 +243,36 @@ class CloudflareClientR2Test < ActiveSupport::TestCase
 
     assert_equal 1, CloudflareClient.new("tok", http: http).zones.data.length
   end
+
+  # PAGE_LIMIT returning SUCCESS at the cap is the original truncation bug moved to a
+  # bigger number: a partial list is indistinguishable from a complete one, and it
+  # would then be cached over a good one. Hitting the cap must FAIL so the previous
+  # cache survives.
+  test "hitting the page limit fails rather than caching a partial list" do
+    responses = {}
+    (1..CloudflareClient::PAGE_LIMIT).each do |n|
+      responses["/zones?per_page=50&page=#{n}"] = {
+        "success" => true,
+        "result" => [ { "id" => "z#{n}", "name" => "z#{n}.test", "account" => { "id" => "a" } } ],
+        "result_info" => { "page" => n, "total_pages" => CloudflareClient::PAGE_LIMIT + 5 }
+      }
+    end
+
+    res = CloudflareClient.new("tok", http: FakeHttp.new(responses)).zones
+
+    assert_not res.ok?, "a truncated walk must not look like a complete one"
+    assert_match(/page/i, res.error)
+  end
+
+  # Cloudflare can repeat or shift pages while zones are being added. Duplicates
+  # would inflate the count and could mask a removal.
+  test "zones are de-duplicated by id across pages" do
+    dup = { "id" => "same", "name" => "same.test", "account" => { "id" => "a" } }
+    http = FakeHttp.new(
+      "/zones?per_page=50&page=1" => { "success" => true, "result" => [ dup ], "result_info" => { "page" => 1, "total_pages" => 2 } },
+      "/zones?per_page=50&page=2" => { "success" => true, "result" => [ dup ], "result_info" => { "page" => 2, "total_pages" => 2 } }
+    )
+
+    assert_equal 1, CloudflareClient.new("tok", http: http).zones.data.length
+  end
 end

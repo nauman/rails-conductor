@@ -39,8 +39,11 @@ class CloudflareClient
   # cache this pairs with, and harder to spot because re-verifying does not fix it.
   # One connected account was already at 28.
   #
-  # PAGE_LIMIT is a stop against an API that keeps claiming another page. Walking
-  # forever against a live endpoint is worse than returning what we have.
+  # PAGE_LIMIT stops a walk against an API that keeps claiming another page. Reaching
+  # it FAILS rather than returning what we have: a partial list is indistinguishable
+  # from a complete one, so succeeding at the cap would be the original truncation
+  # bug moved to a bigger number — and it would then be cached over a good list.
+  # Failing means the previous cache survives and goes stale, which is visible.
   PAGE_LIMIT = 20
 
   def zones
@@ -55,12 +58,21 @@ class CloudflareClient
 
       # Missing result_info means one page, never an unbounded loop.
       total = body.dig("result_info", "total_pages").to_i
-      break if total <= page || page >= PAGE_LIMIT
+      break if total <= page
+
+      if page >= PAGE_LIMIT
+        return Result.new(ok: false,
+                          error: "zone list exceeds #{PAGE_LIMIT} pages (#{total} reported) — refusing to " \
+                                 "return a truncated list. Raise PAGE_LIMIT rather than cache a partial view.")
+      end
 
       page += 1
     end
 
-    Result.new(ok: true, data: collected.map { |z| { "id" => z["id"], "name" => z["name"], "account_id" => z.dig("account", "id") } })
+    # De-duplicate by zone id: pages can repeat or shift while zones are being added,
+    # and a duplicate would inflate the count and could mask a removal.
+    unique = collected.uniq { |z| z["id"] }
+    Result.new(ok: true, data: unique.map { |z| { "id" => z["id"], "name" => z["name"], "account_id" => z.dig("account", "id") } })
   end
 
   # --- P2: put behind Cloudflare (proxy the DNS record + set SSL mode) ---

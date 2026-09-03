@@ -149,18 +149,32 @@ class Credential < ApplicationRecord
     z = client.zones
     return z.error unless z.ok?
 
-    # REFUSE TO EMPTY A POPULATED CACHE. A token whose scope was narrowed returns
-    # SUCCESS with an empty list, and writing that erases every zone — after which
-    # Conductor reports the account as owning nothing, which is indistinguishable
-    # from an account that genuinely owns nothing. Stale is recoverable; silently
-    # empty is not, and a scheduled refresh would do it unattended.
+    # AN EMPTY RESULT IS SUSPICIOUS ONCE, AND THE WORLD TWICE.
+    #
+    # A token whose scope was narrowed returns SUCCESS with an empty list, and writing
+    # that erases every zone into a state indistinguishable from an account that owns
+    # nothing — unattended, on a schedule.
+    #
+    # But refusing it unconditionally was worse in the other direction: an account
+    # whose zones really were all deleted or transferred could NEVER re-verify, and
+    # its stale list went on driving proxyable_apps with no way out but recreating the
+    # credential. A permanent veto is not a safety property, it is a wedge.
+    #
+    # So: the first empty is refused and reported, the second consecutive one is
+    # believed. Any non-empty result clears the count, so two empties months apart
+    # never add up to a wipe.
     if z.data.empty? && zones_list.any?
-      return "Cloudflare returned zero zones while #{zones_list.length} are cached — refusing to " \
-             "overwrite. This usually means the token's zone scope was narrowed. The cached list is " \
-             "kept; re-verify after fixing the token's Zone Resources."
+      if consecutive_empty_zone_reads.to_i.zero?
+        update_columns(consecutive_empty_zone_reads: 1)
+        return "Cloudflare returned zero zones while #{zones_list.length} are cached — refusing to " \
+               "overwrite on a single observation. This usually means the token's zone scope was " \
+               "narrowed. The cached list is kept. If the zones really are gone, verify again and the " \
+               "second empty result will be applied."
+      end
     end
 
     update!(account_id: z.data.first&.dig("account_id"), zones: z.data.to_json, verified_at: Time.current)
+    update_columns(consecutive_empty_zone_reads: z.data.empty? ? 1 : 0)
     nil
   end
 

@@ -110,10 +110,23 @@ human notices a weird result and a cron job does not.
 
 **Failing toward empty.** A narrowed Cloudflare token returns **zero zones with a
 200**. Written verbatim, that erases the list into a state indistinguishable from
-"this account owns nothing", every six hours, unattended. `verify_cloudflare!`
-therefore refuses to overwrite a populated value with an empty successful result
-and reports why. Generalised: *a successful-but-empty response is a suspicious
-response.* Stale is recoverable; silently empty is not.
+"this account owns nothing", every six hours, unattended.
+
+The first fix refused an empty overwrite outright, and that was wrong in the other
+direction: an account whose zones really *were* all deleted or transferred could
+never re-verify, while its stale list kept driving `proxyable_apps`. **A permanent
+veto is not a safety property, it is a wedge.** The rule is now two-strikes — the
+first empty is refused and reported, the second consecutive one is believed, and
+any non-empty result resets the count so two empties months apart never add up to a
+wipe. Generalised: *a successful-but-empty response is suspicious once and true
+twice.*
+
+**Failing toward truncated.** A paginated fetch that stops at a page cap and returns
+`success` caches a partial list as though it were complete — the original
+truncation bug at a larger number. Reaching the cap now returns failure, so the
+previous good cache survives and goes visibly stale instead of being quietly
+replaced by a shorter one. Results are de-duplicated by id, since pages can repeat
+while the underlying list changes.
 
 **Failing toward blank on error.** A refresh that raises must leave the previous
 value untouched and let staleness accrue. A network blip should degrade the answer
