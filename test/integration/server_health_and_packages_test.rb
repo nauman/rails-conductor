@@ -65,7 +65,7 @@ class ServerHealthAndPackagesTest < ActionDispatch::IntegrationTest
   end
 
   test "audit renders a graded security panel" do
-    probe = "UFW:active\nFAIL2BAN:active\nSSH_ROOT:no\nSSH_PASSWORD:no\nSEC_UPDATES:0\nUPDATES:2\nREBOOT:no\nAUTOUPGRADE:active\nDB_PUBLIC:\n"
+    probe = "SUDO:yes\nUFW:active\nFAIL2BAN:active\nSSH_ROOT:no\nSSH_PASSWORD:no\nSEC_UPDATES:0\nUPDATES:2\nREBOOT:no\nAUTOUPGRADE:active\nDB_PUBLIC:\nPROBE_END:ok\n"
     SshConnection.stub(:new, FakeSsh.new(probe)) { get audit_server_path(@server) }
 
     assert_response :success

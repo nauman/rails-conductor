@@ -18,7 +18,7 @@ class ServerAuditTest < ActiveSupport::TestCase
                                    ssh_key: @key, ssh_user: "deploy")
   end
 
-  SECURE = "UFW:active\nFAIL2BAN:active\nSSH_ROOT:no\nSSH_PASSWORD:no\nSEC_UPDATES:0\nUPDATES:5\nREBOOT:no\nAUTOUPGRADE:active\nDB_PUBLIC:\n"
+  SECURE = "SUDO:yes\nUFW:active\nFAIL2BAN:active\nSSH_ROOT:no\nSSH_PASSWORD:no\nSEC_UPDATES:0\nUPDATES:5\nREBOOT:no\nAUTOUPGRADE:active\nDB_PUBLIC:\nPROBE_END:ok\n"
 
   def audit(probe, **o) = ServerAudit.new(@server, ssh: FakeSsh.new(output: probe, **o)).audit
 

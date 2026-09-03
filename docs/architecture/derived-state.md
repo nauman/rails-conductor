@@ -47,7 +47,7 @@ knowledge and is otherwise lost.
 
 | Value | Refresh | Threshold | Notes |
 |---|---|---|---|
-| `servers.last_audit_status` | `ServerAuditCheckJob.sweep`, daily 03:15 | 7d (`audit_fresh?`) | The freshness check and the preflight's use of it already existed; only the refresh was missing |
+| `servers.last_audit_status` | `ServerAuditCheckJob.sweep`, daily 05:40 | 7d (`audit_fresh?`) | Weighed BEFORE the grade, so a stale finding warns rather than blocking forever |
 | `apps.residue_findings` | `ResidueCheckJob.sweep`, hourly :25 | 12h | Findings carry `checked_at` + `stale` into `situation` |
 | `apps.release_state` | `ReleaseDriftCheckJob.sweep`, hourly :40 | 12h | Offset from residue so they do not SSH the same boxes together |
 | `credentials.zones` | `RefreshCloudflareZonesJob.sweep`, 6h :20 | 1d | Added after the 34-day incident |
@@ -81,11 +81,27 @@ They are the same shape as the Cloudflare cache before it was swept.
 pending" is read as reassurance and ages badly, and unlike the audit grade nothing
 downgrades it with time.
 
-The audit grade was the previous entry here and is now swept. It is worth noting
-what that fix actually was: `audit_fresh?` and the preflight's handling of a stale
-`secure` were already correct. Only the refresh was missing, so freshness could
-only decay. The lesson generalises — a staleness check without a refresh is half a
-mechanism, and the half that does nothing.
+The audit grade was the previous entry here and is now swept — but automating a
+writer to a **gate** exposed two things a manual run had hidden, and both are worth
+carrying forward:
+
+**A probe that cannot look must not grade.** Every privileged line in `ServerAudit::PROBE`
+uses `sudo -n` and degrades to blank, and blank was graded as the insecure answer.
+A box without passwordless sudo therefore graded `at_risk` identically to a box
+with its firewall off. Run by hand that is a confusing result; run on a schedule it
+silently blocks deploys. The probe now emits `SUDO` and a `PROBE_END` sentinel, and
+an incomplete probe returns **no status at all** — which routes through the same
+path as an SSH failure, so the old grade stands and staleness accrues visibly.
+
+**Freshness must be weighed before the grade, not inside one branch of it.** The
+preflight checked `audit_fresh?` only for `secure`, so a stale `secure` correctly
+warned while a stale `at_risk` blocked deploys *forever* — a box fixed months ago
+stayed blocked with no way to clear it. An old grade is evidence about the past
+whichever way it points.
+
+And the original lesson still holds: `audit_fresh?` existed and was correct, but
+nothing could make an audit fresh *again*. **A staleness check without a refresh is
+half a mechanism, and the half that does nothing.**
 
 ## Failure modes of the refresh itself
 

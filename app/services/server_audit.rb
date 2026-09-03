@@ -12,7 +12,13 @@ class ServerAudit
 
   # One SSH round-trip. Privileged probes use `sudo -n` (fails closed to blank
   # rather than hanging); each degrades to an empty/unknown value.
+  # SUDO and PROBE_END exist so a probe that could not LOOK is distinguishable from
+  # one that looked and found something. Every privileged line below degrades to
+  # blank, and blank used to grade as the insecure answer — so a box without
+  # passwordless sudo graded `at_risk` exactly like a box with its firewall off, and
+  # DeployPreflight blocks on that.
   PROBE = <<~BASH.freeze
+    echo "SUDO:$(sudo -n true 2>/dev/null && echo yes || echo no)"
     SSHD=$(sudo -n sshd -T 2>/dev/null)
     echo "UFW:$(sudo -n ufw status 2>/dev/null | awk 'NR==1{print $2}')"
     echo "FAIL2BAN:$(systemctl is-active fail2ban 2>/dev/null)"
@@ -23,7 +29,12 @@ class ServerAudit
     echo "REBOOT:$([ -f /var/run/reboot-required ] && echo yes || echo no)"
     echo "AUTOUPGRADE:$(systemctl is-active unattended-upgrades 2>/dev/null)"
     echo "DB_PUBLIC:$(sudo -n ss -tlnH 2>/dev/null | awk '{print $4}' | grep -oE '0\\.0\\.0\\.0:(5432|3306|6379)' | head -1)"
+    echo "PROBE_END:ok"
   BASH
+
+  # Values that are only knowable with passwordless sudo. If sudo is unavailable
+  # these are blank for a reason that has nothing to do with the host's posture.
+  PRIVILEGED_KEYS = %w[UFW SSH_ROOT SSH_PASSWORD DB_PUBLIC].freeze
 
   attr_reader :server, :error
 
@@ -55,7 +66,20 @@ class ServerAudit
     end
   end
 
+  # INCONCLUSIVE IS NOT A GRADE. Returning a statusless Result routes through the
+  # same path as an SSH failure: ServerAuditCheckJob refuses to write it, so the
+  # previous grade and timestamp stand and staleness is allowed to accrue visibly
+  # (ADR 0010 — fail toward stale, never toward a fresh wrong answer).
+  def inconclusive(reason) = Result.new(status: nil, checks: [], error: reason)
+
   def grade(p)
+    return inconclusive("audit probe incomplete — output ended early, so posture is unknown") if p["PROBE_END"] != "ok"
+
+    if p["SUDO"] == "no"
+      return inconclusive("no passwordless sudo on this host, so #{PRIVILEGED_KEYS.join(', ')} could not be read — " \
+                          "posture is unknown, not insecure. Run conductor_server action=harden to grant the scoped sudo.")
+    end
+
     checks = [
       check(:firewall,     "Firewall (ufw)",        p["UFW"] == "active",         "active", (p["UFW"].presence || "inactive")),
       check(:fail2ban,     "fail2ban",              p["FAIL2BAN"] == "active",    "active", "not running", level: :warn),

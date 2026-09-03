@@ -160,6 +160,23 @@ class DeployPreflight
     server = @app.server
     return skip(:audit, "Server audit", "no server attached") unless server
 
+    # FRESHNESS IS WEIGHED BEFORE THE GRADE, not only inside `secure`.
+    #
+    # An old grade is evidence about the past, and that cuts both ways. Weighing it
+    # only for `secure` meant a stale at_risk blocked deploys FOREVER — a box fixed
+    # months ago stayed blocked, with no way to clear it but an audit nobody was
+    # scheduled to run — while a stale `attention` was reported as current.
+    #
+    # A stale grade warns whatever it says: loud enough to re-run, not a gate held
+    # shut by a finding no one can refresh. Only a FRESH at_risk blocks, because only
+    # a fresh one is a claim about today.
+    if server.last_audit_status.present? && !server.audit_fresh?
+      return warn(:audit, "Server audit",
+                  "#{server.name}'s last audit graded '#{server.last_audit_status}' on " \
+                  "#{server.last_audit_at&.to_date || 'an unknown date'} and is stale — that is evidence " \
+                  "about the past, not today. Re-run the audit to get a current posture.")
+    end
+
     case server.last_audit_status
     when nil, ""
       warn(:audit, "Server audit", "#{server.name} has never been audited — run an audit before shipping")
@@ -168,11 +185,7 @@ class DeployPreflight
     when "attention"
       warn(:audit, "Server audit", "#{server.name} needs attention (see last audit)")
     when "secure"
-      if server.audit_fresh?
-        ok(:audit, "Server audit", "#{server.name} secure (audited #{server.last_audit_at.to_date})")
-      else
-        warn(:audit, "Server audit", "audit is stale (#{server.last_audit_at&.to_date || "never"}) — re-run to confirm posture")
-      end
+      ok(:audit, "Server audit", "#{server.name} secure (audited #{server.last_audit_at.to_date})")
     else
       warn(:audit, "Server audit",
            "#{server.name} audit state '#{server.last_audit_status}' is unrecognized — re-run the audit (not assuming secure)")

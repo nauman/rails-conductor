@@ -77,13 +77,18 @@ development:
   # persists as a FRESH at_risk and blocks deploys that previously succeeded, with
   # "could not look" indistinguishable from "found a problem".
   #
-  # Re-enable once the probe reports completeness and the preflight weighs freshness
-  # BEFORE the grade — today it only does so for `secure`, so a stale at_risk blocks
-  # forever.
-  # sweep_server_audits:
-  #   command: "ServerAuditCheckJob.sweep"
-  #   queue: ops
-  #   schedule: every day at 3:15am
+  # Re-enabled: the probe now reports completeness (SUDO + PROBE_END) so an
+  # unreadable box is inconclusive rather than at_risk, and the preflight weighs
+  # freshness BEFORE the grade so a stale finding warns instead of blocking forever.
+  #
+  # Moved off 03:15, which collided with the daily backups at 03:00 and the
+  # five-minute metrics sweep. The job also joins the ServerSshProbe concurrency
+  # group, so an audit cannot open SSH to a host that a metrics or status probe is
+  # already talking to.
+  sweep_server_audits:
+    command: "ServerAuditCheckJob.sweep"
+    queue: ops
+    schedule: every day at 5:40am
 
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
@@ -171,13 +176,18 @@ production:
   # persists as a FRESH at_risk and blocks deploys that previously succeeded, with
   # "could not look" indistinguishable from "found a problem".
   #
-  # Re-enable once the probe reports completeness and the preflight weighs freshness
-  # BEFORE the grade — today it only does so for `secure`, so a stale at_risk blocks
-  # forever.
-  # sweep_server_audits:
-  #   command: "ServerAuditCheckJob.sweep"
-  #   queue: ops
-  #   schedule: every day at 3:15am
+  # Re-enabled: the probe now reports completeness (SUDO + PROBE_END) so an
+  # unreadable box is inconclusive rather than at_risk, and the preflight weighs
+  # freshness BEFORE the grade so a stale finding warns instead of blocking forever.
+  #
+  # Moved off 03:15, which collided with the daily backups at 03:00 and the
+  # five-minute metrics sweep. The job also joins the ServerSshProbe concurrency
+  # group, so an audit cannot open SSH to a host that a metrics or status probe is
+  # already talking to.
+  sweep_server_audits:
+    command: "ServerAuditCheckJob.sweep"
+    queue: ops
+    schedule: every day at 5:40am
 
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole

@@ -15,6 +15,17 @@
 class ServerAuditCheckJob < ApplicationJob
   queue_as :ops
 
+  # Join the SAME per-server group RefreshServerMetricsJob uses. Without it an
+  # audit, a metrics probe, a container-status probe and a backup can open SSH to
+  # one host at once — global worker threads bound total concurrency but do nothing
+  # about contention on a single box. Keyed per server so different hosts still run
+  # in parallel.
+  limits_concurrency(
+    key: ->(server_id = nil, **) { server_id ? "server:#{server_id}" : "audit-fanout" },
+    group: "ServerSshProbe",
+    duration: 5.minutes
+  )
+
   # `auditor:` is injectable so a test can drive the outcomes without a box.
   def perform(server_id, auditor: nil)
     server = Server.find_by(id: server_id)
