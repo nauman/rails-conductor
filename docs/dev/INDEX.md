@@ -30,6 +30,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0007`](adr/0007-findings-cite-rituals.md) | **Accepted** | A finding must cite the jazari ritual that resolves it — a one-line `remedy` cannot carry ordering or what a check rules out, so diagnostic knowledge belongs in a recipe, written when the incident is resolved, not left in a session transcript |
 | [`0008`](adr/0008-observe-the-channels-you-configure.md) | **Accepted** | A channel Conductor configures is one it must be able to observe — it verifies SES credentials and then goes blind to bounces, complaints and suppression, so an app can fail to deliver every message while every surface stays green |
 | [`0009`](adr/0009-the-cutover-is-not-atomic.md) | **Proposed** | The cutover reports success in states where it has not succeeded — `drain_previous_container`'s failure branch is unreachable because both commands end in `\|\| true`, and edge publication is a loop whose compensation assumes it was atomic |
+| [`0010`](adr/0010-derived-state-declares-its-refresh.md) | **Accepted** | Anything Conductor derives from an external source and stores must declare a refresh, an age surfaced with the value, and a staleness threshold — and must fail toward stale, never toward empty. A flag is not a fix |
 
 ## Authoring Notes
 
