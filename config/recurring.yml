@@ -71,10 +71,19 @@ development:
   #
   # Daily, well inside the 7-day freshness window, so a box can be unreachable for
   # several days before its grade is treated as stale. Read-only over SSH.
-  sweep_server_audits:
-    command: "ServerAuditCheckJob.sweep"
-    queue: ops
-    schedule: every day at 3:15am
+  # DISABLED. An audit writes a grade DeployPreflight BLOCKS on, and ServerAudit
+  # suppresses individual command failures — a missing ufw/systemctl/ss, or an
+  # unsupported OS, yields blank probe values that grade `at_risk`. Automated, that
+  # persists as a FRESH at_risk and blocks deploys that previously succeeded, with
+  # "could not look" indistinguishable from "found a problem".
+  #
+  # Re-enable once the probe reports completeness and the preflight weighs freshness
+  # BEFORE the grade — today it only does so for `secure`, so a stale at_risk blocks
+  # forever.
+  # sweep_server_audits:
+  #   command: "ServerAuditCheckJob.sweep"
+  #   queue: ops
+  #   schedule: every day at 3:15am
 
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
@@ -156,10 +165,19 @@ production:
   #
   # Daily, well inside the 7-day freshness window, so a box can be unreachable for
   # several days before its grade is treated as stale. Read-only over SSH.
-  sweep_server_audits:
-    command: "ServerAuditCheckJob.sweep"
-    queue: ops
-    schedule: every day at 3:15am
+  # DISABLED. An audit writes a grade DeployPreflight BLOCKS on, and ServerAudit
+  # suppresses individual command failures — a missing ufw/systemctl/ss, or an
+  # unsupported OS, yields blank probe values that grade `at_risk`. Automated, that
+  # persists as a FRESH at_risk and blocks deploys that previously succeeded, with
+  # "could not look" indistinguishable from "found a problem".
+  #
+  # Re-enable once the probe reports completeness and the preflight weighs freshness
+  # BEFORE the grade — today it only does so for `secure`, so a stale at_risk blocks
+  # forever.
+  # sweep_server_audits:
+  #   command: "ServerAuditCheckJob.sweep"
+  #   queue: ops
+  #   schedule: every day at 3:15am
 
   # Prove a backup actually restores. Nightly, and ONE per night: each restore
   # downloads a full dump and runs a postgres container, so verifying the whole
