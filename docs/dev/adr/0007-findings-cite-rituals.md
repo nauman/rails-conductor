@@ -120,6 +120,32 @@ learn.
 | Recipes for release drift, build placement, deploy hold | Done — `FleetRecipes` |
 | Rituals for the other block causes (failed seed, missing port, at-risk audit) | Not built — those findings correctly carry no recipe |
 | Rituals for `mixed_release` and `unknown` release states | Not built — deliberately unmapped rather than pointed at the drift ritual |
+| **MCP can FETCH a cited ritual** | **Not built — this makes the ADR half-done; see below** |
+| A ritual for onboarding a NEW app | Not built — every recipe assumes the app already exists |
+| Any surface (UI/CLI) that lists the library | Not built — reading it requires a Ruby console |
+
+## Amendment (2026-09-03): a citation nobody can follow
+
+Implementing this ADR built the pointer and not the lookup. Findings now carry
+`recipe_id`, and **there is no MCP tool that lists recipes or fetches one** —
+`conductor_runbook` addresses an app's own checklist, not the library. An agent
+receives an identifier it cannot resolve through the channel that handed it over.
+
+That is the same failure this ADR was written against, one level up. A one-line
+`remedy` was insufficient because it could not carry ordering or what a check rules
+out; a `recipe_id` that cannot be dereferenced carries even less, while looking
+more official.
+
+Two related absences surfaced with it. **No ritual covers standing up a new app** —
+all nine assume the app exists — which is the highest-traffic procedure and the one
+most often run by someone doing it for the first time; they get the tool-surface
+skill instead, which answers *what can I call* and never *in what order, and what
+is easy to get wrong*. And **nothing reads the library outside a Ruby console**, so
+neither an operator nor an agent can ask which rituals exist or which have been
+customised.
+
+Full inventory and the shape of the fix: `docs/architecture/rituals.md`.
 
 Related: ADR 0006 (the orphan this came from), ADR 0005 (host-side transactions),
-`FleetCanon` (shape → recipe, the machinery this extends to findings).
+ADR 0010 (derived state declares its refresh — the same "half-built mechanism"
+pattern), `FleetCanon` (shape → recipe, the machinery this extends to findings).
