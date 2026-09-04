@@ -18,10 +18,16 @@ class DatabasesController < ApplicationController
     begin
       PostgresClusterClient.new(cluster).drop_database(name: database.name, username: database.username)
     rescue PostgresClusterClient::Error => e
-      flash[:alert] = "Dropped the record, but the cluster reported: #{e.message}"
+      # KEEP THE RECORD. Destroying it after a failed drop leaves a live database
+      # nothing tracks — it stops appearing in Conductor, keeps its disk and its
+      # credentials, and the next provision under the same name fails for a reason
+      # no longer visible anywhere.
+      return redirect_to cluster,
+                         alert: "Kept the record — the cluster refused to drop it: #{e.message}"
     end
+
     database.destroy
-    redirect_to cluster, notice: flash[:alert] ? nil : "Database '#{database.name}' removed."
+    redirect_to cluster, notice: "Database '#{database.name}' removed."
   end
 
   private
