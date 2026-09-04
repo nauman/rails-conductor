@@ -38,6 +38,7 @@
 | Analysis | `docs/analysis/pillars-audit-2026-03-19.md` | Historical March 2026 baseline; not current status |
 | Sessions | `docs/sessions/INDEX.md` | Session-level implementation history and current handoff docs |
 | Scripts | `docs/scripts/agent-thread-status.sh` | Read-only report of thread obligations (OWED BY ME / WAITING ON OTHERS) |
+| Scripts | `docs/scripts/reap-browser-sessions.sh` | Close agent-browser sessions nobody closed — reaps on socket mtime, dry run by default |
 | Scripts | `docs/scripts/ralph-doc-loop.md` | Minimal doc update loop |
 | Scripts | `docs/scripts/ralph-doc-prompt.sh` | Emits a compact prompt for doc updates |
 | Scripts | `docs/scripts/ralph-doc-check.sh` | Sanity checks for required docs |

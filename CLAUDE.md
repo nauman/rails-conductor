@@ -49,6 +49,10 @@
   task that created it, and this machine has accumulated sixteen. `close --all`
   exists but is unsafe on a shared machine — other agents' sessions are
   indistinguishable from stale ones, since nothing reports idle time.
+- **To clear the backlog, `docs/scripts/reap-browser-sessions.sh`** (dry run by
+  default; `--close` to act). It reaps on socket mtime, not PID liveness — these
+  processes never exit, so every session reads as alive however long it has been
+  idle. It never touches the current session or `default`.
 
 ## Git Commits
 
