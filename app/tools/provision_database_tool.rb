@@ -9,8 +9,8 @@ class ProvisionDatabaseTool
       properties: {
         cluster_id:        { type: 'integer', description: 'Cluster id to provision on (or use cluster_name)' },
         cluster_name:      { type: 'string',  description: 'Cluster name to provision on (or use cluster_id)' },
-        name:              { type: 'string',  description: 'Database name. OMIT IT and pass app_id to follow the convention: <app>_production with a matching role. Pass it only to adopt a database that already exists under another name.' },
-        username:          { type: 'string',  description: 'Optional role name. Defaults to the app convention, else the database name.' },
+        name:              { type: 'string',  description: 'Database name. OMIT IT and pass app_id to follow the convention: <app>_production with a matching role. Pass it only to CREATE a database under a different name — this always runs CREATE ROLE + CREATE DATABASE and fails if either already exists; it does not adopt.' },
+        username:          { type: 'string',  description: 'Optional role name. With app_id and no name, defaults to the app convention; with an explicit name, defaults to that name (the role follows the database being created, not the app).' },
         app_id:            { type: 'integer', description: 'Optional app id to link the database to' },
         organization_slug: { type: 'string',  description: 'Optional org slug; defaults to the actor\'s first org' },
         organization_id:   { type: 'integer', description: 'Optional org id (overrides organization_slug)' }
@@ -38,9 +38,22 @@ class ProvisionDatabaseTool
     app = org.apps.find_by(id: input['app_id']) if input['app_id'].present?
     return Result.fail("App not found: #{input['app_id']}") if input['app_id'].present? && app.nil?
 
-    database = cluster.provision_database!(
-      name: input['name'], username: input['username'].presence, app: app
-    )
+    # THE CONVENTION HAS TO LIVE HERE, not only in the schema text. This tool is the
+    # path an agent takes to give a brand-new app its database, so passing `name`
+    # straight through meant the caller most likely to have no name to pass was the
+    # one with no default — and a nil name reached CREATE DATABASE as a validation
+    # error rather than a database.
+    name     = input['name'].presence || app&.database_name
+    username = input['username'].presence || (input['name'].blank? ? app&.database_username : nil)
+
+    unless name
+      return Result.fail(
+        'Provide app_id to follow the naming convention (<app>_production with a ' \
+        'matching role), or name to create one under a different name.'
+      )
+    end
+
+    database = cluster.provision_database!(name: name, username: username, app: app)
 
     Result.ok({
       id:            database.id,

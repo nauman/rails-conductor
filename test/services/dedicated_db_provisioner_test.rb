@@ -53,9 +53,10 @@ class DedicatedDbProvisionerTest < ActiveSupport::TestCase
     assert cc.spec[:admin_password].present?
 
     assert_equal "active", db.status
-    assert_equal "appone", db.name
+    assert_equal "appone_production", db.name
+    assert_equal "appone", db.username
     assert_equal @app, db.app
-    assert_match %r{@#{@app.dedicated_db_container_name}:5432/appone\z}, db.database_url
+    assert_match %r{@#{@app.dedicated_db_container_name}:5432/appone_production\z}, db.database_url
   end
 
   test "refuses a shared-mode app" do

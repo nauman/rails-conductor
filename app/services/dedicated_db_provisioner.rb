@@ -32,7 +32,12 @@ class DedicatedDbProvisioner
     # A non-active record is a prior failed/pending attempt — discard it so a
     # retry reconciles instead of piling up duplicate Database rows.
     existing&.destroy
-    cluster.provision_database!(name: @app.database_base_name, app: @app, client: @sql_client)
+    # Both, explicitly: provision_database! defaults the username to the name, which
+    # would have created the role `<base>` owning a database also called `<base>` —
+    # not the `<base>_production` every other path expects.
+    cluster.provision_database!(name: @app.database_name(server: @server),
+                                username: @app.database_username(server: @server),
+                                app: @app, client: @sql_client)
   end
 
   private
@@ -60,6 +65,10 @@ class DedicatedDbProvisioner
       server: @server, container_name: @app.dedicated_db_container_name
     ) do |c|
       c.name = @app.dedicated_db_container_name
+      # DECLARE IT. Conductor assigned this container's name, so the cluster never
+      # needs the alias — but only if that fact is recorded rather than inferred
+      # from how the name happens to look or from who its tenants happen to be.
+      c.kind = "dedicated"
       c.admin_username = ADMIN_USERNAME
       c.admin_password = SecureRandom.hex(24)
       c.port = 5432

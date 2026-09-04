@@ -71,16 +71,110 @@ class App < ApplicationRecord
   # derivation has to produce a legal identifier BY CONSTRUCTION, not by luck:
   # everything outside [a-z0-9_] collapses to an underscore, and a leading digit is
   # prefixed because postgres will not accept one unquoted.
+  # Postgres truncates identifiers at 63 bytes, so the suffix has to fit inside the
+  # budget rather than be appended past it — otherwise a long slug silently loses
+  # `_production` and two apps collide on a name neither of them chose.
+  MAX_IDENTIFIER_BYTES = 63
+  DATABASE_SUFFIX = "_production".freeze
+  BASE_NAME_LIMIT = MAX_IDENTIFIER_BYTES - DATABASE_SUFFIX.bytesize
+
+  # Names the derivation must not CHOOSE: postgres owns them, or they would need
+  # quoting to survive interpolation. Deliberately NOT a general-purpose blocklist —
+  # `users`, `admin` and `root` are legal identifiers and an app may have them.
+  #
+  # `conductor` is here for a different reason than the rest: it is the admin role
+  # DedicatedDbProvisioner creates on every cluster it stands up. The client checks
+  # that contextually against the actual cluster, which is the correct check — but
+  # the derivation runs before a cluster is chosen, so avoiding the default here
+  # turns a provisioning failure into a name that just works.
+  UNAVAILABLE_BASE_NAMES = (
+    PostgresClusterClient::UNUSABLE_IDENTIFIERS + PostgresClusterClient::RESERVED_WORDS +
+    [ DedicatedDbProvisioner::ADMIN_USERNAME ]
+  ).freeze
+
+  # NOT MEMOIZED. The result depends on this app's slug, name and id AND on every
+  # older sibling's normalized name — so any cache key short of "the whole
+  # organization" is a stale-derivation bug waiting to happen, which is the exact
+  # class of defect this work exists to remove. The scan is one query on a small
+  # table, and it runs when provisioning, not on the deploy path.
   def database_base_name
-    raw = (slug.presence || name).to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "")
-    raw = "app_#{raw}" unless raw.match?(/\A[a-z_]/)
-    raw.presence || "app"
+    derived_database_base_name || assigned_database_base_name
   end
 
   # The database and role an app gets when Conductor provisions for it. Callers use
   # these rather than composing their own, so every path agrees.
-  def database_name = "#{database_base_name}_production"
-  def database_username = database_base_name
+  #
+  # ONCE A DATABASE EXISTS, THE RECORD IS THE FACT AND THE DERIVATION IS SPENT
+  # (ADR 0010). Re-deriving after a slug edit — or after this list of unavailable
+  # names grows — would aim a re-provision at a NEW, empty database while the app's
+  # data stayed in the old one, and nothing would report an error.
+  # SERVER-SCOPED, like #dedicated_database and for the same reason: during a
+  # transfer an app has a database on the source AND one on the target, and the
+  # question "what is this app's database called" only has an answer once you say
+  # where. An unscoped lookup would answer with the source while provisioning the
+  # target.
+  def database_name(server: self.server)
+    provisioned_database(server: server)&.name || "#{database_base_name}#{DATABASE_SUFFIX}"
+  end
+
+  def database_username(server: self.server)
+    provisioned_database(server: server)&.username || database_base_name
+  end
+
+  # ONE active database means there is nothing to disambiguate, wherever it lives —
+  # a shared cluster on a separate DB host is the ordinary case, and scoping it away
+  # made the app's own database invisible, so a rename re-derived a NEW name.
+  # The server only decides between several, which is the transfer case it exists for.
+  def provisioned_database(server: self.server)
+    actives = databases.includes(:database_cluster).select { |d| d.status == "active" }
+    return actives.first if actives.one?
+
+    actives.select { |d| d.database_cluster&.server_id == server&.id }.min_by(&:id)
+  end
+
+  # `app_<id>` in the spirit of ADR 0004: when a name cannot be trusted to be legal
+  # or unique, stop deriving and use the identity that was assigned.
+  def assigned_database_base_name = "app_#{id}"
+
+  # nil means "the derived name is not usable" — reserved, empty, or already claimed
+  # by an older app. Every one of those is a case where deriving harder would only
+  # produce a name that looks right and points at someone else's database.
+  def derived_database_base_name
+    raw = normalized_database_base_name
+    return nil if raw.blank? || UNAVAILABLE_BASE_NAMES.include?(raw)
+    return nil unless id # nothing to fall back to yet, and nothing to collide with
+    return nil if database_base_name_claimed_by_older_app?(raw)
+
+    raw
+  end
+
+  # `app_<digits>` is the assigned namespace. A slug of `app-102` normalizes into it
+  # and would squat on app 102's fallback, so a derivation that lands there is
+  # treated as unusable — the app takes its OWN assigned name, which is unique by
+  # construction. A fallback that can be derived is not a fallback.
+  ASSIGNED_NAMESPACE = /\Aapp_\d+\z/
+
+  def normalized_database_base_name
+    raw = (slug.presence || name).to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "")
+    raw = "app_#{raw}" if raw.present? && !raw.match?(/\A[a-z_]/)
+    return nil if raw.match?(ASSIGNED_NAMESPACE)
+    # Truncating alone would manufacture the collision this method exists to avoid,
+    # so a shortened name carries the assigned id and stops being a pure derivation.
+    return raw if raw.bytesize <= BASE_NAME_LIMIT
+
+    suffix = "_#{id}"
+    raw.byteslice(0, BASE_NAME_LIMIT - suffix.bytesize).sub(/_+\z/, "") + suffix
+  end
+
+  # Distinct slugs collapse to one base — `foo-bar`, `foo_bar` and `foo.bar` all
+  # become `foo_bar`. The older app keeps the plain name so its database never moves
+  # under it; the newcomer is the one that gives way.
+  def database_base_name_claimed_by_older_app?(raw)
+    return false unless organization # nothing to collide with, and never a crash
+
+    organization.apps.where.not(id: id).where(id: ...id)
+                .any? { |other| other.normalized_database_base_name == raw }
+  end
 
   # --- DB placement axes (spec 26) -------------------------------------------
   def dedicated_db? = database_mode == "dedicated"

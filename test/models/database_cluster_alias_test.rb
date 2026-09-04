@@ -44,7 +44,7 @@ class DatabaseClusterAliasTest < ActiveSupport::TestCase
   end
 
   test "a SHARED cluster's URL uses the assigned alias, not the typed name" do
-    @cluster.alias_attached!
+    @cluster.alias_attached!(network: "kamal", client: FakeDocker.new([ @cluster.resource_key ]))
     url = database.reload.database_url
 
     assert_includes url, "@cluster-#{@cluster.id}:"
@@ -71,7 +71,7 @@ class DatabaseClusterAliasTest < ActiveSupport::TestCase
   end
 
   test "the URL survives a container rename unchanged" do
-    @cluster.alias_attached!
+    @cluster.alias_attached!(network: "kamal", client: FakeDocker.new([ @cluster.resource_key ]))
     db = database
     before = db.database_url
     @cluster.update!(container_name: "something-else")
@@ -85,5 +85,14 @@ class DatabaseClusterAliasTest < ActiveSupport::TestCase
   test "the alias flag is what registration attaches" do
     assert_includes @cluster.network_alias_args, "--alias"
     assert_includes @cluster.network_alias_args, @cluster.resource_key
+  end
+
+  class FakeDocker
+    attr_reader :asked
+    def initialize(aliases) = (@aliases = aliases)
+    def network_aliases(container_name:, network:)
+      @asked = [ container_name, network ]
+      @aliases
+    end
   end
 end

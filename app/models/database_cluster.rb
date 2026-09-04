@@ -38,14 +38,42 @@ class DatabaseCluster < ApplicationRecord
   # attaches it, the typed name is still the only thing Docker DNS answers — and
   # switching first would break every app on a shared cluster at its next deploy,
   # all at once, which is worse than the rename this prevents.
-  def connect_host
+  # `network:` is the network the CALLER will resolve from — an app's deploy
+  # network. An alias observed on some other network is not reachable from here, so
+  # the recorded network has to match; without that the timestamp certified the
+  # hostname globally and every app got a name Docker could not resolve.
+  def connect_host(network: nil)
     return container_name if assigned_container_name?
     return container_name unless network_alias_attached_at?
+    return container_name if network.present? && network_alias_network.to_s != network.to_s
 
     resource_key
   end
 
-  def alias_attached! = update!(network_alias_attached_at: Time.current)
+  class AliasNotAttached < StandardError; end
+
+  # RECORDING IS NOT ATTACHING. Setting this timestamp is what switches connect_host
+  # to the alias, so recording it speculatively re-hosts every app on the cluster onto
+  # a name Docker cannot resolve — and the breakage surfaces at each app's NEXT
+  # deploy, far from here.
+  #
+  # So this OBSERVES, and there is no way to tell it otherwise. An earlier version
+  # accepted the aliases as an argument, which only moved the assertion up one frame:
+  # a caller could still certify a hostname by passing a list it had made up. The
+  # container is the only thing that knows, so the container is asked. `client:` is
+  # the seam for tests and it must still answer the same question.
+  def alias_attached!(network:, client: nil)
+    observed = (client || PostgresContainerClient.new(server))
+               .network_aliases(container_name: container_name, network: network)
+
+    unless Array(observed).map(&:to_s).include?(resource_key)
+      raise AliasNotAttached,
+            "#{resource_key} is not among the aliases on #{container_name} on network " \
+            "#{network}; attach it to the container before recording it"
+    end
+
+    update!(network_alias_attached_at: Time.current, network_alias_network: network.to_s)
+  end
 
   # ASK, DO NOT PATTERN-MATCH. The first version tested the container name against
   # /app-\d+-db/, which missed the legacy `<slug>-db` spelling and would have aliased
@@ -55,11 +83,21 @@ class DatabaseCluster < ApplicationRecord
   # App#dedicated_db_container_candidates already answers this authoritatively — it
   # lists both spellings precisely so callers can FIND a dedicated container without
   # knowing which era created it.
+  # ONE app, and that app claims the name. Asking only the first database's app read
+  # a SHARED cluster as dedicated whenever any one of its tenants happened to be the
+  # app the operator named it after — and a shared cluster is exactly the case this
+  # method exists to catch.
+  # A DECLARED KIND WINS. A one-tenant shared cluster is indistinguishable from a
+  # dedicated one by inference alone, and inference is what this whole ADR is trying
+  # to get out of. `kind` is NULL for clusters registered before it existed, so they
+  # keep the inferred answer rather than being reclassified by a migration.
   def assigned_container_name?
-    app = databases.includes(:app).map(&:app).compact.first
-    return false unless app
+    return kind == "dedicated" if kind.present?
 
-    app.dedicated_db_container_candidates.include?(container_name)
+    apps = databases.includes(:app).filter_map(&:app).uniq
+    return false unless apps.one?
+
+    apps.first.dedicated_db_container_candidates.include?(container_name)
   end
 
   # What `docker network connect` needs to make the assigned identity resolvable.

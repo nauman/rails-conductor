@@ -36,6 +36,24 @@ class PostgresContainerClient
     { "container" => container_name, "action" => already ? "exists" : "created" }
   end
 
+  # The aliases Docker has actually attached, read off the container. Recording an
+  # alias without this is recording a hostname nothing resolves.
+  def network_aliases(container_name:, network:)
+    validate_name!(container_name)
+    validate_name!(network)
+
+    # SCOPED TO THE NETWORK ASKED ABOUT. Aggregating across every attached network
+    # would certify a hostname the app cannot resolve — the alias has to be on the
+    # network the app is actually on, or it resolves for someone else.
+    # The network is a GO TEMPLATE string literal, not a shell word — the whole -f
+    # value is already single-quoted for the shell, so shell-escaping it first and
+    # then quoting would embed the backslashes in the lookup key. validate_name!
+    # above is what makes the raw value safe to interpolate here.
+    raw = run("docker inspect -f '{{with index .NetworkSettings.Networks #{network.to_s.inspect}}}" \
+              "{{range .Aliases}}{{.}} {{end}}{{end}}' #{esc(container_name)}")
+    raw.to_s.split(/\s+/).map(&:strip).reject(&:empty?)
+  end
+
   private
 
   def container_exists?(name)

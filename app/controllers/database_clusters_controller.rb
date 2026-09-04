@@ -16,7 +16,12 @@ class DatabaseClustersController < ApplicationController
   end
 
   def create
-    @cluster = current_organization.database_clusters.new(cluster_params)
+    # `kind` is set here, not permitted from the form. Registering means the
+    # container already existed and a human typed its name — the case whose name is
+    # editable and must not be the hostname apps resolve (ADR 0011). Letting the
+    # form supply it would let a caller claim "dedicated" for a container Conductor
+    # never assigned, which is the inference this column exists to replace.
+    @cluster = current_organization.database_clusters.new(cluster_params.merge(kind: "shared"))
 
     if @cluster.save
       redirect_to @cluster, notice: "Database cluster registered."

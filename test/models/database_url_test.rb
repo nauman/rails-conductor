@@ -16,7 +16,7 @@ class DatabaseUrlTest < ActiveSupport::TestCase
   # register_cluster and is editable — so it is exactly the case where a rename used
   # to silently break the next deploy of every app on it.
   test "database_url uses the shared cluster's assigned alias once it is attached" do
-    @cluster.alias_attached!
+    @cluster.alias_attached!(network: "kamal", client: FakeDocker.new([ @cluster.resource_key ]))
     db = @org.databases.create!(database_cluster: @cluster, name: "appone_production",
                                 username: "appone", password: "secret", status: "active")
 
@@ -35,5 +35,14 @@ class DatabaseUrlTest < ActiveSupport::TestCase
   test "App#database_base_name sanitizes the app name to a valid identifier" do
     app = @org.apps.create!(name: "App.two", server: @server, status: "stopped")
     assert_equal "app_two", app.database_base_name
+  end
+
+  class FakeDocker
+    attr_reader :asked
+    def initialize(aliases) = (@aliases = aliases)
+    def network_aliases(container_name:, network:)
+      @asked = [ container_name, network ]
+      @aliases
+    end
   end
 end

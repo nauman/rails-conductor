@@ -39,6 +39,10 @@ class RegisterDatabaseClusterTool
 
     cluster = org.database_clusters.new(
       server:         server,
+      # REGISTERING means the container already existed and a human typed its name —
+      # which is exactly the case whose name is editable and must not be the hostname
+      # apps resolve. Recording it here is what stops that being re-inferred later.
+      kind:           'shared',
       name:           input['name'],
       container_name: input['container_name'],
       admin_username: input['admin_username'],

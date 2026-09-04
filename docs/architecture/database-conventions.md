@@ -29,6 +29,12 @@ some.site    →    some_site_production     some_site
 79-thing     →    app_79_thing_production  app_79_thing
 ```
 
+Once a database has been provisioned, **the recorded name wins**: `database_name`
+returns the `Database` row's own name and only derives when there is nothing to
+return. A derivation that keeps running after it has produced a fact will
+eventually disagree with it — a slug edit would aim the next provision at a new,
+empty database while the app's data stayed behind, and nothing compares the two.
+
 Rules, and why each exists:
 
 - **Everything outside `[a-z0-9_]` collapses to `_`.** These names reach
@@ -39,6 +45,17 @@ Rules, and why each exists:
   identifier starting with a digit, and quoting it would make every later reference
   case-sensitive.
 - **The role matches the database's base name.** One app, one role, one database.
+- **63 bytes, including the suffix.** Postgres truncates identifiers there, so the
+  budget is `63 - len("_production")` and a name that needs shortening carries the
+  app's id — truncating alone would manufacture the collision the limit exposes.
+- **A name that cannot be trusted falls back to `app_<id>`.** Reserved keywords
+  (`select`, `order`), the administrative roles that already exist on every cluster
+  (`postgres`, `conductor`), an empty derivation, or a base another app claimed
+  first. Deriving harder would only produce a name that looks right and points at
+  someone else's database.
+- **On a collision, the older app keeps the plain name.** Its database already
+  exists; the newcomer gives way. This is what makes the name stable rather than
+  dependent on who asks.
 
 ### The bug this fixed
 
@@ -48,7 +65,10 @@ provision a brand-new app — an agent — was the one with no convention**, and
 databases by hand.
 
 A convention only one caller follows is a preference. The MCP tool now defaults from
-`app_id`, and an explicit `name` means only "adopt a database that already exists".
+`app_id`, and an explicit `name` means only "create it under a different name" —
+provisioning always runs `CREATE ROLE` and `CREATE DATABASE`, so it cannot adopt
+something that already exists, and saying otherwise would send a caller down a path
+that fails.
 
 ## Reachability
 

@@ -300,7 +300,12 @@ class AppsController < ApplicationController
 
     # Composed here AND in the MCP tool, which is how the two paths drifted apart.
     # App owns the convention now; every caller asks it (ADR 0011).
-    cluster.provision_database!(name: @app.database_name, username: @app.database_username, app: @app)
+    # Scoped to the CLUSTER's server, not the app's — an operator can provision on a
+    # box the app does not run on, and asking "what is this app's database called"
+    # without saying where is what the transfer case showed to be ambiguous.
+    cluster.provision_database!(name: @app.database_name(server: cluster.server),
+                                username: @app.database_username(server: cluster.server),
+                                app: @app)
     redirect_to @app, notice: "Database provisioned for #{@app.name}."
   rescue PostgresClusterClient::Error, ActiveRecord::RecordInvalid => e
     redirect_to @app, alert: "Could not provision database: #{e.message}"
