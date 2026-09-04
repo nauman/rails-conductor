@@ -75,6 +75,7 @@
                     <%= nav_menu_link "Databases", database_clusters_path, active: request.path.start_with?('/database_clusters') %>
                     <%= nav_menu_link "Pulls", database_pulls_path, active: request.path.start_with?('/database_pulls') %>
                   <% end %>
+                  <%= nav_link "Rituals", rituals_path, active: request.path.start_with?('/rituals') %>
                   <%= nav_link "Chat", conversations_path, active: request.path.start_with?('/conversations') %>
                   <%= nav_group "Settings", active: settings_active do %>
                     <%= nav_menu_link "Members", members_path, active: request.path.start_with?('/members') %>

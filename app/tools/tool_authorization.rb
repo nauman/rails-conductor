@@ -30,7 +30,7 @@ module ToolAuthorization
     # open SSH and persist (metrics, edge detection, an audit rollup), so a
     # read-scoped token must not reach them.
     "conductor_cron"     => %w[list],
-    "conductor_runbook"  => %w[get],
+    "conductor_runbook"  => %w[get list_rituals get_ritual],
     "conductor_storage"  => %w[audit configure]
   }.freeze
 

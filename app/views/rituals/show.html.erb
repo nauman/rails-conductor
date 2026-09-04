@@ -1,0 +1,36 @@
+<% content_for :title, @recipe.topic %>
+
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <p class="text-sm text-neutral-500"><%= link_to "← Rituals", rituals_path, class: "hover:underline" %></p>
+  <h1 class="text-2xl font-medium mt-2"><%= @recipe.topic %></h1>
+  <p class="text-sm text-neutral-500 font-mono mt-1"><%= @recipe.recipe_id %></p>
+
+  <% if @custom %>
+    <p class="mt-4 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 px-3 py-2 text-sm">
+      <strong>Customised.</strong> This ritual has been edited and no longer matches what
+      Conductor ships. Reseeding will not overwrite it — the edit is the truth now.
+    </p>
+  <% end %>
+
+  <%# The description carries the reasoning. A checklist that explains itself
+      survives an operator who disagrees with it; one that does not gets ignored
+      rather than corrected — so it is rendered above the steps, not below them. %>
+  <div class="prose prose-neutral dark:prose-invert max-w-none mt-6">
+    <%= raw Kramdown::Document.new(@recipe.description.to_s).to_html %>
+  </div>
+
+  <h2 class="text-lg font-medium mt-8 mb-3">Steps</h2>
+  <ol class="space-y-3">
+    <% @recipe.checklist.each_with_index do |item, i| %>
+      <li class="flex gap-3">
+        <span class="shrink-0 text-sm text-neutral-400 tabular-nums"><%= i + 1 %>.</span>
+        <div>
+          <p><%= item["text"] %></p>
+          <p class="text-xs text-neutral-500 font-mono mt-1">
+            <%= item["id"] %><%= " · optional" unless item["required"] %>
+          </p>
+        </div>
+      </li>
+    <% end %>
+  </ol>
+</div>

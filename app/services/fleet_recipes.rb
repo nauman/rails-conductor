@@ -14,6 +14,50 @@
 class FleetRecipes
   RECIPES = [
     {
+      id: "onboard-new-app",
+      topic: "Stand up a NEW app on the fleet, end to end",
+      description: <<~MD,
+        ## Purpose
+        The highest-traffic procedure Conductor has, and the one most likely to be run
+        by someone who has never run it. Every other recipe assumes the app already
+        exists.
+
+        ## Hidden truth
+        The tool surface answers *what can I call*. It cannot tell you the order, or
+        which steps are irreversible, and four things here are routinely got wrong:
+
+        **The edge is independent of the artifact.** A kamal app can sit behind
+        kamal-proxy OR behind host Caddy; the box decides, not the deploy method. Pick
+        the wrong one and the first deploy appears to succeed while nothing routes.
+
+        **A secret belongs in the secret list, not the clear one.** Conductor generates
+        the kamal config from its own env vars, so a value marked secret becomes
+        `env: secret:` with a git-safe pointer. Put it in clear and kamal inlines it
+        into the `docker run` line, where it reaches logs and `docker inspect`. A live
+        OAuth credential leaked exactly that way. Note the flag is only structural on
+        the kamal path — on docker and native it currently affects log redaction only.
+
+        **Let the database name itself.** Provision with `app_id` and OMIT `name`, and
+        you get `<app>_production` with a matching role. Passing a name by hand is how
+        two apps end up fighting over one database.
+
+        **`build_host` is recorded by the first deploy, not by setup.** Until then it
+        reads "not recorded yet", which is not the same as "builds on the app server".
+      MD
+      checklist: [
+        { id: "create-app", text: "Create the app and confirm its assigned identity (`app-<id>`) — never depend on the slug, which is editable" },
+        { id: "pick-edge", text: "Decide the edge from the SERVER, not the deploy method: is this box running kamal-proxy or a host Caddy? Ask Conductor rather than assuming" },
+        { id: "provision-db", text: "Provision the database with app_id and NO name, so it follows the convention. Confirm the returned name is `<app>_production` and the role is `<app>`" },
+        { id: "env-clear", text: "Add non-secret env vars (RAILS_ENV, host, port) through Conductor's env UI — it is the source of truth for all three deploy paths" },
+        { id: "env-secret", text: "Add every credential as a SECRET, not a clear var. Verify none appears in the generated deploy config before deploying" },
+        { id: "domain-dns", text: "Register the domain and confirm DNS resolves to this box BEFORE the first deploy — a certificate attempt against wrong DNS rate-limits" },
+        { id: "first-deploy", text: "Run the first deploy through Conductor and record the deployment id + commit sha" },
+        { id: "verify-origin", text: "Verify the origin answers on its port AND the public host answers over TLS — the second can fail while the first succeeds" },
+        { id: "verify-release", text: "Confirm Conductor's recorded release matches the running container, and that `build_host` is now recorded" },
+        { id: "runbook", text: "Copy the shape recipe for this app's form into its own runbook, so the next deploy is not re-derived", required: false }
+      ]
+    },
+    {
       id: "caddy-mode-app",
       topic: "Deploy a kamal app behind host Caddy (proxy off, fixed port)",
       description: <<~MD,
@@ -268,6 +312,33 @@ class FleetRecipes
   end
 
   def self.recipe_ids = RECIPES.map { |r| r[:id] }
+
+  def self.canon = @canon ||= RECIPES.index_by { |r| r[:id].to_s }
+
+  # THE LIBRARY IS THE CANON LIST, not "whatever is in the table". jazari's recipes
+  # table is shared, so serving an arbitrary id would hand back rows this repo never
+  # shipped and does not describe.
+  def self.canonical?(recipe_id) = canon.key?(recipe_id.to_s)
+
+  # Seeding is create-if-missing, so an edited recipe no longer tracks what this
+  # repo ships and every reader should be told. Compares EVERYTHING a reader acts
+  # on — an earlier version checked only the prose and the step text, so renaming
+  # the topic, reordering ids, or flipping a step to optional all read as canonical.
+  def self.diverged?(record)
+    entry = canon[record.recipe_id.to_s]
+    return false unless entry
+
+    record.topic.to_s != entry[:topic].to_s ||
+      record.description.to_s != entry[:description].to_s ||
+      normalize_steps(record.checklist) != normalize_steps(entry[:checklist])
+  end
+
+  def self.normalize_steps(items)
+    Array(items).map do |item|
+      h = item.respond_to?(:symbolize_keys) ? item.symbolize_keys : item.to_h.transform_keys(&:to_sym)
+      [ h[:id].to_s, h[:text].to_s, h.fetch(:required, true) == true ]
+    end
+  end
 
   # Finding kind => the ritual that resolves it (ADR 0007). A finding without one
   # is a notification, and notifications train people to scroll.

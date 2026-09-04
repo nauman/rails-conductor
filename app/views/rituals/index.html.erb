@@ -1,0 +1,38 @@
+<% content_for :title, "Rituals" %>
+
+<%= render partial: "shared/page_head",
+      locals: {
+        title: "#{pluralize(@rituals.size, "ritual")} the fleet operates by.",
+        lede: "A ritual is a procedure with its reasoning attached — the hidden truth of a shape, or what an incident taught. Findings cite these, and agents fetch them mid-diagnosis. Read-only here.",
+        stats: [
+          { value: @rituals.size, label: "rituals" },
+          { value: @rituals.count { |r| r[:custom] }, label: "customised" }
+        ]
+      } %>
+
+<div class="max-w-5xl mx-auto px-4 py-8">
+  <ul class="divide-y divide-neutral-200 dark:divide-neutral-800">
+    <% @rituals.each do |row| %>
+      <% record = row[:record] %>
+      <li class="py-4">
+        <div class="flex items-baseline justify-between gap-4">
+          <div class="min-w-0">
+            <%= link_to ritual_path(record.recipe_id), class: "font-medium hover:underline" do %>
+              <%= record.topic %>
+            <% end %>
+            <p class="text-sm text-neutral-500 font-mono mt-1"><%= record.recipe_id %></p>
+          </div>
+          <div class="shrink-0 text-sm text-neutral-500 text-right">
+            <%= pluralize(record.checklist.size, "step") %>
+            <% if row[:custom] %>
+              <%# Seeding is create-if-missing, so an edited ritual no longer tracks
+                  what this repo ships — and someone reading it should know that
+                  before following it. %>
+              <span class="ml-2 rounded px-2 py-0.5 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">customised</span>
+            <% end %>
+          </div>
+        </div>
+      </li>
+    <% end %>
+  </ul>
+</div>

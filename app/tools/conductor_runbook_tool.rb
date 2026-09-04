@@ -15,11 +15,13 @@ class ConductorRunbookTool
       "remove_item (delete a step — app + item_id), " \
       "check_item (mark a step done or not — app + item_id, optional done=true), " \
       "evidence (attach execution evidence — app + item_id, kind, value), " \
-      "reset (clear every done flag, e.g. before a new deploy — app_id/app_name).",
+      "reset (clear every done flag, e.g. before a new deploy — app_id/app_name), " \
+      "list_rituals (the shared ritual library — the shapes and diagnostics findings cite; no app), " \
+      "get_ritual (one ritual with its reasoning and steps — recipe_id, e.g. the recipe_id a finding gave you).",
     input_schema: {
       type: "object",
       properties: {
-        action:   { type: "string", enum: %w[get set_runbook add_item remove_item check_item evidence reset], description: "Which runbook operation" },
+        action:   { type: "string", enum: %w[get set_runbook add_item remove_item check_item evidence reset list_rituals get_ritual], description: "Which runbook operation" },
         app_id:   { type: "integer", description: "target app by id" },
         app_name: { type: "string",  description: "target app by name" },
         runbook:  { type: "string",  description: "set_runbook: the full markdown runbook body" },
@@ -29,6 +31,7 @@ class ConductorRunbookTool
         done:     { type: "boolean", description: "check_item: mark done (default true) or undone (false)" },
         kind:     { type: "string", description: "evidence: one of output, url, sha, count, or note" },
         value:    { type: "string", description: "evidence: the reference, URL, commit, or note" },
+        recipe_id: { type: "string", description: "get_ritual: the ritual to fetch — this is the recipe_id a finding cites" },
         expected_revision: { type: "string", description: "Revision returned by get; optional during the compatibility window" }
       },
       required: %w[action]
@@ -48,12 +51,48 @@ class ConductorRunbookTool
     when "check_item"  then check_item(input)
     when "evidence"    then evidence(input)
     when "reset"       then reset(input)
+    when "list_rituals" then list_rituals
+    when "get_ritual"  then get_ritual(input)
     else
-      Result.fail("Missing or unknown action '#{input['action']}'. Set action to one of: get, set_runbook, add_item, remove_item, check_item, evidence, reset.")
+      Result.fail("Missing or unknown action '#{input['action']}'. Set action to one of: get, set_runbook, add_item, remove_item, check_item, evidence, reset, list_rituals, get_ritual.")
     end
   end
 
   private
+
+  # THE OTHER HALF OF ADR 0007. A finding hands an agent `recipe_id` over MCP; until
+  # now nothing on that channel could dereference it. These two actions live on the
+  # runbook tool because a ritual and a runbook are the same kind of thing at
+  # different scopes — the library procedure, and this app's copy of one.
+  def list_rituals
+    rituals = Jazari::RecipeRecord.where(recipe_id: FleetRecipes.recipe_ids).order(:recipe_id).map do |record|
+      { id: record.recipe_id, topic: record.topic, steps: record.checklist.size,
+        custom: FleetRecipes.diverged?(record) }
+    end
+
+    Result.ok({ rituals: rituals, count: rituals.size })
+  end
+
+  def get_ritual(input)
+    recipe_id = input["recipe_id"].to_s
+    return Result.fail("Provide recipe_id — the id a finding cites, or one from list_rituals.") if recipe_id.blank?
+
+    # Canon first: the recipes table is shared with anything else jazari stores, so
+    # looking up an arbitrary id would serve rows this repo never shipped.
+    record = FleetRecipes.canonical?(recipe_id) && Jazari::RecipeRecord.find_by(recipe_id: recipe_id)
+    # jazari answers an unknown id with a content-free EMPTY recipe rather than
+    # raising. Passing that through would answer a typo with a valid-looking empty
+    # ritual, which is worse than saying no.
+    unless record
+      return Result.fail("No ritual #{recipe_id.inspect}. Call list_rituals to see what exists.")
+    end
+
+    Result.ok({
+      id: record.recipe_id, topic: record.topic, description: record.description,
+      custom: FleetRecipes.diverged?(record),
+      checklist: record.checklist.map { |item| item.symbolize_keys.slice(:id, :text, :required) }
+    })
+  end
 
   def show(input)
     app = find_app(input) or return app_not_found(input)

@@ -235,6 +235,9 @@ Rails.application.routes.draw do
   get "/docs/:slug", to: "guides#show", as: :guide, constraints: { slug: /[a-z0-9][a-z0-9-]*/ }
 
   # Public landing page at "/"; the authenticated app dashboard at /dashboard.
+  # Read-only: the shared ritual library, which MCP could read and a person could not.
+  resources :rituals, only: [ :index, :show ], id: /[a-z0-9][a-z0-9-]*/
+
   get "dashboard", to: "dashboard#index", as: :dashboard
   root "landing#index"
 end
