@@ -89,7 +89,35 @@ What remains open is the operator half: `rake database_naming:audit` reports whi
 existing apps a naming rule reclassified, and it has to be run against production —
 locally it finds one, self-managed, holding no Conductor-provisioned database.
 
+## The one thing that was reverted
+
+An implementation of ADR 0013 (one "sensitive" flag, one guarantee, on every deploy
+path) was written, audited, and **reverted unshipped**. It is worth reading the ADR
+before attempting it again, because the failure is instructive:
+
+The change moved sensitive values off the `docker run` command line into an env
+file — written with a heredoc. **The heredoc is the SSH command string.** So the
+value stayed in the remote shell's argv, which is exactly the exposure the change
+existed to remove. The same mistake was made twice; a test caught it on the native
+path and missed it on the docker path, because that test asserted the value was
+absent from `docker run` rather than from the whole command sent over SSH. A test
+written by the same hand as the fix inherits the fix's blind spot — this is the
+second time that pattern appears in this session.
+
+It would also have destroyed operator-maintained config: provisioning creates the
+native `.env` as a placeholder for a human to fill in, and the deploy script
+`source`s it as shell, so Conductor writing values into it is both data loss and a
+path from a stored string to remote execution.
+
+And the premise was wrong. "Kamal is already compliant" came from reading
+`KamalConfig` (pointers) and not `KamalEnvWriter` (raw values).
+
 ## Notes for Next Time
+
+Two constraints in that work were found by RUNNING rather than reading:
+`docker run --env-file` silently truncates a multiline value to its first line, and
+it hides nothing from `docker inspect`. Neither is discoverable by inspection, and
+both would have shipped as a silently corrupted credential.
 
 `codex exec` earned its place: it returned *not safe* three times on work whose
 tests were green, twice catching regressions introduced by the previous fix. Tests
