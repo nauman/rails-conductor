@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_03_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -206,6 +206,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_03_000001) do
     t.string "container_name", null: false
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.datetime "network_alias_attached_at"
     t.bigint "organization_id", null: false
     t.integer "port", default: 5432
     t.bigint "server_id", null: false

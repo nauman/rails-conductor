@@ -60,11 +60,27 @@ class App < ApplicationRecord
   end
 
   # A valid Postgres identifier base derived from the app, e.g. "calm_page".
+  # THE DATABASE NAMING CONVENTION, in one place because it was previously in two.
+  #
+  # The UI derived `<base>_production` / `<base>` from the app; the MCP tool took a
+  # caller-supplied name and username with no default. So the path most likely to
+  # provision a brand-new app — an agent — had no convention at all, and named
+  # databases by hand. A convention only one caller follows is a preference.
+  #
+  # These names reach `CREATE DATABASE` and `CREATE ROLE` as interpolated SQL, so the
+  # derivation has to produce a legal identifier BY CONSTRUCTION, not by luck:
+  # everything outside [a-z0-9_] collapses to an underscore, and a leading digit is
+  # prefixed because postgres will not accept one unquoted.
   def database_base_name
     raw = (slug.presence || name).to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "")
     raw = "app_#{raw}" unless raw.match?(/\A[a-z_]/)
     raw.presence || "app"
   end
+
+  # The database and role an app gets when Conductor provisions for it. Callers use
+  # these rather than composing their own, so every path agrees.
+  def database_name = "#{database_base_name}_production"
+  def database_username = database_base_name
 
   # --- DB placement axes (spec 26) -------------------------------------------
   def dedicated_db? = database_mode == "dedicated"

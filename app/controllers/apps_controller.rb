@@ -298,8 +298,9 @@ class AppsController < ApplicationController
       return redirect_to @app, alert: "No database cluster registered. Add one under Databases first."
     end
 
-    base = @app.database_base_name
-    cluster.provision_database!(name: "#{base}_production", username: base, app: @app)
+    # Composed here AND in the MCP tool, which is how the two paths drifted apart.
+    # App owns the convention now; every caller asks it (ADR 0011).
+    cluster.provision_database!(name: @app.database_name, username: @app.database_username, app: @app)
     redirect_to @app, notice: "Database provisioned for #{@app.name}."
   rescue PostgresClusterClient::Error, ActiveRecord::RecordInvalid => e
     redirect_to @app, alert: "Could not provision database: #{e.message}"

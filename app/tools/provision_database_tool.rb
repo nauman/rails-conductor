@@ -9,13 +9,13 @@ class ProvisionDatabaseTool
       properties: {
         cluster_id:        { type: 'integer', description: 'Cluster id to provision on (or use cluster_name)' },
         cluster_name:      { type: 'string',  description: 'Cluster name to provision on (or use cluster_id)' },
-        name:              { type: 'string',  description: 'Database name' },
-        username:          { type: 'string',  description: 'Optional role name (defaults to the database name)' },
+        name:              { type: 'string',  description: 'Database name. OMIT IT and pass app_id to follow the convention: <app>_production with a matching role. Pass it only to adopt a database that already exists under another name.' },
+        username:          { type: 'string',  description: 'Optional role name. Defaults to the app convention, else the database name.' },
         app_id:            { type: 'integer', description: 'Optional app id to link the database to' },
         organization_slug: { type: 'string',  description: 'Optional org slug; defaults to the actor\'s first org' },
         organization_id:   { type: 'integer', description: 'Optional org id (overrides organization_slug)' }
       },
-      required: [ 'name' ]
+      required: []
     }
   }.freeze
 

@@ -31,6 +31,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0008`](adr/0008-observe-the-channels-you-configure.md) | **Accepted** | A channel Conductor configures is one it must be able to observe — it verifies SES credentials and then goes blind to bounces, complaints and suppression, so an app can fail to deliver every message while every surface stays green |
 | [`0009`](adr/0009-the-cutover-is-not-atomic.md) | **Proposed** | The cutover reports success in states where it has not succeeded — `drain_previous_container`'s failure branch is unreachable because both commands end in `\|\| true`, and edge publication is a loop whose compensation assumes it was atomic |
 | [`0010`](adr/0010-derived-state-declares-its-refresh.md) | **Accepted** | Anything Conductor derives from an external source and stores must declare a refresh, an age surfaced with the value, and a staleness threshold — and must fail toward stale, never toward empty. A flag is not a fix |
+| [`0011`](adr/0011-a-database-is-reached-by-an-assigned-alias.md) | **Accepted** | One database naming convention used by every provisioning path, and a shared cluster is reached by an assigned `cluster-<id>` alias rather than the container name an operator typed — dedicated clusters were already assigned and are left alone |
 
 ## Authoring Notes
 
