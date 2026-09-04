@@ -33,6 +33,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0010`](adr/0010-derived-state-declares-its-refresh.md) | **Accepted** | Anything Conductor derives from an external source and stores must declare a refresh, an age surfaced with the value, and a staleness threshold — and must fail toward stale, never toward empty. A flag is not a fix |
 | [`0011`](adr/0011-a-database-is-reached-by-an-assigned-alias.md) | **Accepted** | One database naming convention used by every provisioning path, and a shared cluster is reached by an assigned `cluster-<id>` alias rather than the container name an operator typed — dedicated clusters were already assigned and are left alone |
 | [`0012`](adr/0012-a-creation-policy-must-not-govern-deletion.md) | **Accepted** | A guard that decides which names may be *created* must not run on the delete path — applied there it made existing databases undroppable while the controller destroyed the record anyway, leaving a live database nothing tracked |
+| [`0013`](adr/0013-one-flag-one-guarantee.md) | **Proposed** | One "sensitive" flag should mean one guarantee on every deploy path; today it means log redaction on two of them. A first implementation was audited and reverted unshipped — the findings, including two constraints found only by testing, are recorded in the ADR |
 
 ## Authoring Notes
 
