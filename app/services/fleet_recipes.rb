@@ -14,6 +14,40 @@
 class FleetRecipes
   RECIPES = [
     {
+      id: "migrate-to-self-describing",
+      topic: "Move a grandfathered kamal app onto the generated deploy contract",
+      description: <<~MD,
+        ## Purpose
+        A kamal app that predates ADR 0003 still has Conductor write `.kamal/secrets`
+        with RAW VALUES. Self-describing apps get a generated overlay plus git-safe
+        pointers instead. This moves one app across.
+
+        ## Hidden truth
+        **The generated overlay replaces what the app's own repo declares.** That is
+        the point of ADR 0001 — Conductor becomes the source of truth for the deploy
+        config — but it means the first deploy after the switch can differ from every
+        deploy before it, and the difference is in a file you did not read.
+
+        Do these ONE AT A TIME. A shape change nobody is watching is how this fleet
+        has been bitten repeatedly: the change looks fine, and the deploy that breaks
+        is a later one, for a reason no longer in anyone's memory.
+
+        The switch also changes which file kamal reads. `.kamal/secrets.production`
+        supersedes `.kamal/secrets` for `-d production`, so a key present in the old
+        file and missing from the app's env in Conductor will simply be absent — and
+        the app will boot without it rather than fail to deploy.
+      MD
+      checklist: [
+        { id: "inventory", text: "List the app's current secret keys and compare them against `.kamal/secrets` in its repo — anything the repo declares that Conductor does not hold will silently disappear" },
+        { id: "add-missing", text: "Add every missing key to Conductor's env for this app, marked sensitive" },
+        { id: "preview", text: "Generate the config WITHOUT deploying and read both files: the overlay and the pointer secrets. Confirm no raw value appears in either" },
+        { id: "flip", text: "Set self_describing on the app" },
+        { id: "deploy", text: "Deploy, and watch it — do not queue another app's migration behind this one" },
+        { id: "verify-env", text: "Confirm the running container has every expected variable, not just that the deploy went green. A missing secret boots fine and fails later" },
+        { id: "verify-secrets-gone", text: "Confirm `.kamal/secrets` is no longer written in the checkout — the raw-value file is what this migration exists to remove" }
+      ]
+    },
+    {
       id: "onboard-new-app",
       topic: "Stand up a NEW app on the fleet, end to end",
       description: <<~MD,

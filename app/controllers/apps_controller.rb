@@ -200,10 +200,21 @@ class AppsController < ApplicationController
     redirect_to app_path(@app, anchor: "runbook"), notice: "Deploy runbook saved."
   end
 
+  # ONE-WAY. Self-describing is compulsory for kamal apps (ADR 0003), so this is
+  # how a grandfathered app adopts the contract — not a switch with two positions.
+  # Leaving it as a toggle would offer an operator a move the model refuses, and the
+  # refusal would surface as a validation error on a button that looks like it works.
   def toggle_self_describing
-    @app.update!(self_describing: !@app.self_describing)
-    state = @app.self_describing? ? "enabled" : "disabled"
-    redirect_to deploy_config_app_path(@app), notice: "Self-describing deploy #{state} for #{@app.name}."
+    if @app.self_describing?
+      return redirect_to deploy_config_app_path(@app),
+                         notice: "#{@app.name} already generates its own deploy config. " \
+                                 "A kamal app cannot go back to hand-written secrets."
+    end
+
+    @app.update!(self_describing: true)
+    redirect_to deploy_config_app_path(@app),
+                notice: "#{@app.name} now generates its own deploy config and git-safe secrets. " \
+                        "Deploy it and verify the release before migrating another app."
   end
 
   def stop

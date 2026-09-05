@@ -97,6 +97,21 @@ class App < ApplicationRecord
   # organization" is a stale-derivation bug waiting to happen, which is the exact
   # class of defect this work exists to remove. The scan is one query on a small
   # table, and it runs when provisioning, not on the deploy path.
+  # Set rather than demanded: a caller should not have to know the rule to satisfy
+  # it. The validation exists for the case someone turns it off on purpose.
+  def adopt_kamal_contract
+    self.self_describing = true if kamal? && (new_record? || will_save_change_to_deploy_method?)
+  end
+
+  def kamal_apps_are_self_describing
+    return if self_describing?
+
+    errors.add(:self_describing,
+               "must be true for a kamal app — Conductor generates its deploy overlay and " \
+               "git-safe secrets pointers (ADR 0001/0003). Turning it off writes raw secret " \
+               "values into .kamal/secrets instead.")
+  end
+
   def database_base_name
     derived_database_base_name || assigned_database_base_name
   end
@@ -169,6 +184,21 @@ class App < ApplicationRecord
   # Distinct slugs collapse to one base — `foo-bar`, `foo_bar` and `foo.bar` all
   # become `foo_bar`. The older app keeps the plain name so its database never moves
   # under it; the newcomer is the one that gives way.
+  # Set rather than demanded: a caller should not have to know the rule to satisfy
+  # it. The validation exists for the case someone turns it off on purpose.
+  def adopt_kamal_contract
+    self.self_describing = true if kamal? && (new_record? || will_save_change_to_deploy_method?)
+  end
+
+  def kamal_apps_are_self_describing
+    return if self_describing?
+
+    errors.add(:self_describing,
+               "must be true for a kamal app — Conductor generates its deploy overlay and " \
+               "git-safe secrets pointers (ADR 0001/0003). Turning it off writes raw secret " \
+               "values into .kamal/secrets instead.")
+  end
+
   def database_base_name_claimed_by_older_app?(raw)
     return false unless organization # nothing to collide with, and never a crash
 
@@ -296,6 +326,16 @@ class App < ApplicationRecord
                       message: "may contain only lowercase letters, digits, dots, dashes and underscores" }
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
+  # ADR 0003: one deploy path, and Kamal is the contract. A kamal app that is not
+  # self-describing does not honour it — Conductor writes `.kamal/secrets` with raw
+  # values instead of the generated overlay and git-safe pointers, so marking a
+  # variable sensitive buys nothing on the one path where it could mean something.
+  #
+  # Enforced on CHANGE, not on every save: eight apps predate this rule and flipping
+  # their generated config all at once is a change nobody is watching. They stay
+  # valid, `rake kamal:self_describing_audit` lists them, and each is migrated with
+  # someone looking. What is refused is going backwards, or arriving non-compliant.
+  validate :kamal_apps_are_self_describing, if: -> { kamal? && will_save_change_to_self_describing? || (kamal? && new_record?) }
 
   # These all reach REMOTE SHELL COMMANDS on fleet servers (git clone, docker
   # build, curl). Deploy-path interpolation escapes them, but validating the
@@ -377,6 +417,7 @@ class App < ApplicationRecord
   }
   scope :with_server_ssh, -> { joins(:server).merge(Server.with_ssh) }
 
+  before_validation :adopt_kamal_contract
   before_validation :adopt_stable_names, on: :create
   before_validation :generate_slug, on: :create
   before_validation :generate_image_name, on: :create

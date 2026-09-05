@@ -341,7 +341,10 @@ class KamalDeployerTest < ActiveSupport::TestCase
     refute @app.reload.seed_on_next_deploy?, "the flag is cleared even on failure (no loop)"
   end
 
-  test "generates .kamal/secrets from the app's env vars (Conductor = source of truth)" do
+  # A grandfathered app still gets the raw-value file — that is exactly what
+  # `rake kamal:self_describing_audit` exists to make visible and finite.
+  test "a grandfathered app generates .kamal/secrets from the app's env vars" do
+    @app.update_columns(self_describing: false)
     deploy_with(FakeShell.new(success: true))
 
     secrets = File.read(File.join(@workspace, "appone", ".kamal", "secrets"))
@@ -537,7 +540,9 @@ class KamalDeployerTest < ActiveSupport::TestCase
       script = command.last.to_s
       @commands << script
       yield "…output…" if block_given?
-      if script.end_with?("kamal deploy")
+      # `-d <destination>` now trails the verb for a self-describing app, so the
+      # deploy command no longer ENDS with "kamal deploy".
+      if script.match?(/kamal deploy( -d \S+)?\z/)
         @deploys += 1
         if @deploys == 1
           yield "ERROR (Kamal::Cli::LockError): Deploy lock found" if block_given?
@@ -558,8 +563,10 @@ class KamalDeployerTest < ActiveSupport::TestCase
     end
 
     assert_equal "succeeded", @deployment.reload.status, "should recover after releasing the lock"
-    assert shell.commands.any? { |c| c.end_with?("lock release") }, "expected a kamal lock release"
-    assert_equal 2, shell.commands.count { |c| c.end_with?("kamal deploy") }, "expected deploy retried once"
+    # `end_with?` no longer works: a self-describing app's kamal commands carry
+    # `-d production`, so the destination is the last token, not the verb.
+    assert shell.commands.any? { |c| c.include?("lock release") }, "expected a kamal lock release"
+    assert_equal 2, shell.commands.count { |c| c.match?(/kamal deploy( -d \S+)?\z/) }, "expected deploy retried once"
     assert_match(/Stale kamal deploy lock/i, @deployment.log.to_s)
   end
 
@@ -570,8 +577,8 @@ class KamalDeployerTest < ActiveSupport::TestCase
     deploy_with(shell)
 
     assert_equal "succeeded", @deployment.reload.status, "should recover after releasing the stale lock"
-    assert shell.commands.any? { |c| c.end_with?("lock release") }, "expected a kamal lock release"
-    assert_equal 2, shell.commands.count { |c| c.end_with?("kamal deploy") }, "expected deploy retried once"
+    assert shell.commands.any? { |c| c.include?("lock release") }, "expected a kamal lock release"
+    assert_equal 2, shell.commands.count { |c| c.match?(/kamal deploy( -d \S+)?\z/) }, "expected deploy retried once"
   end
 
   test "a self-describing app writes the overlay + secrets and deploys with -d production" do
@@ -587,7 +594,12 @@ class KamalDeployerTest < ActiveSupport::TestCase
     assert deploy_cmds.any? { |c| c.include?("-d production") }, "kamal deploy must use the production destination"
   end
 
-  test "a default (non-self-describing) app deploys unchanged: no overlay, no destination" do
+  # GRANDFATHERED, not "default". Every new kamal app is self-describing now
+  # (ADR 0003 made it compulsory); the only non-compliant apps are ones that predate
+  # the rule, and they must keep deploying exactly as they did until someone migrates
+  # them deliberately. That is the whole promise of the grandfather clause.
+  test "a grandfathered app deploys unchanged: no overlay, no destination" do
+    @app.update_columns(self_describing: false)
     shell = FakeShell.new
     with_env("RAILS_MASTER_KEY" => "k") { deploy_with(shell) }
 

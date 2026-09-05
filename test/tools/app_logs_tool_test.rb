@@ -10,7 +10,12 @@ class AppLogsToolTest < ActiveSupport::TestCase
     @org = Organization.create_for(@user, name: "Logs Co")
     @server = Server.create!(name: "log-box", status: "online", organization: @org,
                              ip_address: "10.0.0.9", ssh_user: "deploy")
-    @app = @org.apps.create!(name: "Logged", slug: "logged", server: @server, deploy_method: "kamal")
+    # DOCKER, deliberately. These tests are about the tail bound and the redaction,
+    # which live on the direct `docker logs` path. A kamal app now always prefers
+    # KamalOps (every kamal app is self-describing since ADR 0003 was made
+    # compulsory), so using one here would exercise the kamal branch and assert
+    # nothing about redaction.
+    @app = @org.apps.create!(name: "Logged", slug: "logged", server: @server, deploy_method: "docker")
   end
 
   # The fake stands in for the container lookup + `docker logs` call.

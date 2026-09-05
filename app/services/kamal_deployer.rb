@@ -1117,6 +1117,14 @@ class KamalDeployer
   # via deploy_env). For other apps Conductor is the source of truth, so we
   # generate the file from the app's EnvVariables as before.
   def write_secrets_file
+    # A SELF-DESCRIBING APP DOES NOT GET THIS FILE. It receives
+    # `.kamal/secrets.<destination>` instead — git-safe pointers that resolve from
+    # the deploy env — and kamal prefers the destination file when invoked with
+    # `-d <destination>`. Writing both meant every self-describing app also got a
+    # plaintext credential file on disk that no deploy ever read: the whole cost of
+    # the exposure, none of the benefit. See ADR 0001 and ADR 0013.
+    return if app.self_describing?
+
     secrets_path = File.join(checkout_dir, ".kamal", "secrets")
     return if app.self_managed? && File.exist?(secrets_path)
 

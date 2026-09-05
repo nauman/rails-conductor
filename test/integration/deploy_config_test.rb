@@ -37,11 +37,17 @@ class DeployConfigTest < ActionDispatch::IntegrationTest
     assert_redirected_to app_path(@application)
   end
 
-  test "toggling self_describing flips the flag (default off)" do
-    refute @application.self_describing?
+  # ONE-WAY, because the rule is compulsory. A grandfathered app adopts the
+  # contract; nothing takes it back. A two-position toggle would offer a move the
+  # model refuses, and the refusal would land as a validation error on a button
+  # that looked like it worked.
+  test "adopting the contract is one-way" do
+    @application.update_columns(self_describing: false)
+
     patch toggle_self_describing_app_path(@application)
     assert @application.reload.self_describing?
+
     patch toggle_self_describing_app_path(@application)
-    refute @application.reload.self_describing?
+    assert @application.reload.self_describing?, "a kamal app must not be able to go back"
   end
 end

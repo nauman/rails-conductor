@@ -186,7 +186,11 @@ class KamalOpsTest < ActiveSupport::TestCase
     assert_nil ops.unavailable_reason
   end
 
+  # GRANDFATHERED. A self-describing app can never be "missing its config" —
+  # Conductor generates it on demand, which is the point of ADR 0001. This failure
+  # mode now belongs only to apps that predate the compulsory rule.
   test "the reason distinguishes a missing config from a deploy-blocked one" do
+    @app.update_columns(self_describing: false)
     ops = KamalOps.new(@app, shell: FakeShell.new)
 
     refute ops.available?
