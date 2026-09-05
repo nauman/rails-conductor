@@ -75,9 +75,19 @@ class GithubActionsBuild
         sleep POLL_INTERVAL
       when "success"
         return Outcome.new(status: :ok, run_url: run["html_url"], detail: "CI built and pushed #{sha[0, 7]}")
-      when "cancelled", "skipped", "stale"
+      when "cancelled", "skipped", "stale", "action_required", "neutral"
         # Nobody decided this commit is bad — the venue simply did not do the work.
         return refuse(:no_runner, "run #{run['conclusion']}", run["html_url"])
+      when "startup_failure"
+        # THE RUN NEVER STARTED. This is what GitHub reports when the minutes run
+        # out mid-period: the dispatch is accepted, then the run is killed before a
+        # single job executes. No job ran, so nothing was learned about the commit —
+        # and calling it broken stopped the deploy with "the commit is broken, not
+        # the venue" when the commit was fine and the bill was the problem.
+        return refuse(:quota_exhausted,
+                      "run failed to start (quota, billing, or an unusable workflow file) — " \
+                      "no job executed, so this says nothing about the commit",
+                      run["html_url"])
       else
         # failure / timed_out: the build itself is red. This must NOT fall through.
         return Outcome.new(status: :build_failed, reason: :build_failed, run_url: run["html_url"],
