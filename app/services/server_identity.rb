@@ -106,8 +106,15 @@ class ServerIdentity
     # another copy of it. Not a security hole, but idempotency lost and a file that
     # grows without bound.
     #
-    # The trailing-newline guard matters too: appending to a file whose last line has
-    # no newline splices the new key onto it and breaks both entries.
+    # THE TRAILING-NEWLINE GUARD MUST NOT FAIL OPEN. Appending to a file whose last
+    # line has no newline splices the new key onto it, invalidating the existing
+    # credential AND failing to install the new one — with no rollback, and
+    # verification only noticing after access is already broken.
+    #
+    # `[ -n "$(tail -c 1 F)" ]` treated a FAILED tail (missing binary, unreadable
+    # file) as "already ends in a newline" and skipped the separator, which is
+    # exactly the case that breaks the file. tail's status is now checked, and every
+    # write is checked, so a failure stops before it can splice.
     script = <<~SH
       set -e
       install -d -m 700 -o #{owner} -g #{owner} #{dir} 2>/dev/null || install -d -m 700 #{dir}
@@ -126,14 +133,24 @@ class ServerIdentity
       flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'{ gsub(/\r/, "") } $1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == k && $(i-1) ~ /^(ssh-|ecdsa-|sk-)/) f = 1 } END { exit !f }'"'"' #{path}; then
         echo CONDUCTOR_KEY_PRESENT
       else
-        if [ -s #{path} ] && [ -n "$(tail -c 1 #{path})" ]; then echo >> #{path}; fi
-        printf "%s\\n" #{escaped_line} >> #{path}
+        last=$(tail -c 1 #{path}); tail_rc=$?
+        [ $tail_rc -eq 0 ] || { echo CONDUCTOR_TAIL_FAILED >&2; exit 1; }
+        if [ -s #{path} ] && [ -n "$last" ]; then
+          echo >> #{path} || { echo CONDUCTOR_APPEND_FAILED >&2; exit 1; }
+        fi
+        printf "%s\\n" #{escaped_line} >> #{path} || { echo CONDUCTOR_APPEND_FAILED >&2; exit 1; }
         echo CONDUCTOR_KEY_ADDED
       fi'
     SH
 
     result = @ssh.execute_with_status(script)
     unless result[:success]
+      if result[:stderr].to_s.match?(/CONDUCTOR_(TAIL|APPEND)_FAILED/)
+        return [ nil, "could not safely append to #{authorized_keys_path} on #{@server.name} — " \
+                      "stopped without writing, because appending to a file whose last line has no " \
+                      "newline would splice the new key onto the existing one and break both" ]
+      end
+
       if result[:stderr].to_s.include?("CONDUCTOR_CHOWN_FAILED")
         return [ nil, "could not take ownership of #{authorized_keys_path} on #{@server.name} for " \
                       "#{@target_user} — stopped without changing its permissions, because " \
