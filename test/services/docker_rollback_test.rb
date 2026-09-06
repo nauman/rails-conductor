@@ -193,4 +193,29 @@ class DockerRollbackTest < ActiveSupport::TestCase
            "cleanup must cover the upload failure, not just the run"
   end
 
+  # THE ENSURE MUST NOT ABANDON THE ROLLBACK. Reporting a cleanup problem runs inside
+  # an ensure, so an exception escaping there skips everything after — a successful
+  # swap would never reach republish_edge and traffic would point at a container that
+  # no longer exists. Tidying up is not worth an outage.
+  test "a rollback survives cleanup reporting that itself fails" do
+    @app.env_variables.create!(key: "API_TOKEN", value: "s3cr3t", secret: true)
+    ssh = FakeSsh.new
+    def ssh.execute_with_status(cmd)
+      return { success: false, output: "", stderr: "rm denied" } if cmd.to_s.include?("rm -rf")
+
+      super
+    end
+
+    r = DockerRollback.new(@app.reload, @deployment, ssh: ssh)
+    # Only the CLEANUP report fails, so this exercises the ensure rather than
+    # breaking every other message the rollback emits.
+    def r.log(msg)
+      raise "logging is down" if msg.to_s.include?("environment file")
+
+      super
+    end
+
+    assert_nothing_raised { r.rollback!("abc1234") }
+  end
+
 end

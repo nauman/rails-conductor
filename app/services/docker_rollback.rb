@@ -73,6 +73,10 @@ class DockerRollback
   def swap_to(version)
     swap_to!(version)
   ensure
+    # REPORTING MUST NOT BECOME THE FAILURE. This runs in an ensure, so an exception
+    # escaping here abandons the rest of the rollback — a successful container swap
+    # would never reach republish_edge, leaving traffic pointed at a container that
+    # no longer exists. Tidying up is not worth an outage.
     begin
       # A false return means the file is STILL THERE — credentials left on the host.
       # Ignoring it made a failed cleanup indistinguishable from a clean one.
@@ -81,7 +85,11 @@ class DockerRollback
             "it holds this app's sensitive values and should be deleted by hand")
       end
     rescue StandardError => e
-      log("WARNING: could not remove the environment file: #{e.message}")
+      begin
+        log("WARNING: could not remove the environment file: #{e.message}")
+      rescue StandardError
+        Rails.logger.warn("[docker-rollback] could not remove #{deploy_env.file_path}") rescue nil
+      end
     end
   end
 

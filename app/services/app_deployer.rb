@@ -316,7 +316,16 @@ class AppDeployer
     detail = error ? ": #{error.message}" : " — it may still hold sensitive values"
     log "WARNING: could not remove the #{what}#{detail}"
   rescue StandardError
-    Rails.logger.warn("[Deploy:#{app.slug}] could not remove the #{what}#{detail}")
+    # THE FALLBACK MUST NOT RAISE EITHER. A logger can be misconfigured, its device
+    # can be full or closed, and this runs in an ensure — so an exception here would
+    # replace the deployment's real error with a logging failure, or escape the
+    # ensure entirely and skip the cleanup that follows. Nothing about tidying up is
+    # worth losing the actual outcome over.
+    begin
+      Rails.logger.warn("[Deploy:#{app.slug}] could not remove the #{what}#{detail}")
+    rescue StandardError
+      nil
+    end
   end
 
   # Stop whatever is actually serving, resolved by label — not just the fixed

@@ -100,6 +100,12 @@ class ServerIdentity
     # install that was needed. Requiring the preceding field to be a key type pins
     # the match to the position sshd actually reads.
     #
+    # CR is stripped first. A file with CRLF endings — one edited on Windows, or
+    # pasted through something that converted them — leaves \r attached to the LAST
+    # field, so a key with no comment read as absent and every repair appended
+    # another copy of it. Not a security hole, but idempotency lost and a file that
+    # grows without bound.
+    #
     # The trailing-newline guard matters too: appending to a file whose last line has
     # no newline splices the new key onto it and breaks both entries.
     script = <<~SH
@@ -108,7 +114,7 @@ class ServerIdentity
       touch #{path}
       chown #{owner}:#{owner} #{path} 2>/dev/null || true
       chmod 600 #{path}
-      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'$1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == k && $(i-1) ~ /^(ssh-|ecdsa-|sk-)/) f = 1 } END { exit !f }'"'"' #{path}; then
+      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'{ gsub(/\r/, "") } $1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == k && $(i-1) ~ /^(ssh-|ecdsa-|sk-)/) f = 1 } END { exit !f }'"'"' #{path}; then
         echo CONDUCTOR_KEY_PRESENT
       else
         if [ -s #{path} ] && [ -n "$(tail -c 1 #{path})" ]; then echo >> #{path}; fi
