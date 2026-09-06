@@ -116,4 +116,5 @@ Read-only is the useful minimum; editing can follow.
 - [ADR 0007](../dev/adr/0007-findings-cite-rituals.md) — a finding must cite its ritual
 - [ADR 0010](../dev/adr/0010-derived-state-declares-its-refresh.md) — derived state declares its refresh
 - [`derived-state.md`](derived-state.md) — the sibling inventory
+- [`01-builder.md`](01-builder.md) — where an image is built, and who decides
 - `docs/skills/conductor/SKILL.md` — the tool surface, which is not a ritual
