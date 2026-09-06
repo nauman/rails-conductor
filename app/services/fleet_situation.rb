@@ -187,6 +187,18 @@ class FleetSituation
                       detail: "builds on #{app.build_host} — a machine that also serves traffic, so a deploy competes with what it is serving",
                       remedy: "add docs/templates/ci-build.yml to the repo and set ci_build_workflow, or point builder.remote at a box opted in with build_role")
       end
+
+      # A CI refusal is not a failure — the build falls back and the deploy goes
+      # green. Which is exactly why a PERMANENT one hides: an invalid workflow file
+      # never resolves itself, and nothing else would ever mention it again.
+      if app.ci_refusal_persistent?
+        items << attn("ci_venue_refusing", app,
+                      detail: "CI has refused every build since #{app.ci_refused_at.to_date} " \
+                              "(#{app.ci_refused_reason}) — deploys are succeeding by falling back, " \
+                              "so nothing else reports this",
+                      remedy: "check the workflow file and the Actions quota. A quota clears on its own; " \
+                              "an invalid workflow does not, and a fallback is not a cure.")
+      end
     end
     servers.find_each do |s|
       items << { kind: "at_risk_server", server: s.name, detail: "last audit graded at_risk — resolve before deploying" } if s.last_audit_status == "at_risk"

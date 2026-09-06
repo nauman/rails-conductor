@@ -183,9 +183,17 @@ class CaddyClient
 
     existing_endpoint = automation.dig("on_demand", "permission", "endpoint").to_s
     if existing_endpoint.present? && existing_endpoint != ask_url && !repoint_shared_gate
-      dependents = Array(automation["policies"])
-                   .flat_map { |p| Array(p["subjects"]) }
-                   .reject { |s| s.to_s.downcase == subject }
+      # Only ON-DEMAND policies depend on this gate, and a policy with NO subjects
+      # is a catch-all that depends on it for every name — the first version listed
+      # policies with on_demand false, dropped the catch-all entirely, and always
+      # excluded the requested subject even when that subject was itself relying on
+      # the existing endpoint. A wrong list is worse than none here: it is read as
+      # "these are the zones I would break".
+      on_demand_policies = Array(automation["policies"]).select { |p| p["on_demand"] }
+      dependents = on_demand_policies.flat_map do |p|
+        subjects = Array(p["subjects"])
+        subjects.empty? ? [ "(catch-all policy: every name)" ] : subjects
+      end
       raise Error,
             "#{server.name} already gates on-demand TLS through #{existing_endpoint}" \
             "#{" for #{dependents.join(', ')}" if dependents.any?}. Caddy has ONE permission " \

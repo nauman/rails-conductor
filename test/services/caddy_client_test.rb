@@ -218,6 +218,32 @@ class CaddyClientTest < ActiveSupport::TestCase
     assert_equal 1, ssh.commands.size, "nothing may be written when the call is refused"
   end
 
+  # The list is read as "these are the zones I would break", so a wrong one is worse
+  # than none: a policy that is not on-demand does not use this gate, and a policy
+  # with no subjects is a catch-all that uses it for everything.
+  def test_dependent_zone_list_counts_only_on_demand_policies_and_catch_alls
+    existing = {
+      "apps" => { "tls" => { "automation" => {
+        "on_demand" => { "permission" => { "module" => "http", "endpoint" => "http://127.0.0.1:9080/caddy/ask" } },
+        "policies" => [
+          { "subjects" => [ "*.not-on-demand.example" ] },
+          { "subjects" => [ "*.zone-a.example" ], "on_demand" => true },
+          { "on_demand" => true }
+        ]
+      } } }
+    }
+    ssh = FakeSsh.new([ { stdout: JSON.generate(existing) } ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    error = assert_raises(CaddyClient::Error) do
+      client.enable_on_demand_tls(subject: "*.new.example", ask_url: "http://127.0.0.1:9070/caddy/ask")
+    end
+
+    assert_includes error.message, "*.zone-a.example"
+    assert_includes error.message, "catch-all"
+    refute_includes error.message, "not-on-demand", "a policy that is not on-demand does not use this gate"
+  end
+
   # Re-running for the SAME endpoint is still idempotent — that is the ordinary case
   # and must not start failing.
   def test_enable_on_demand_tls_allows_a_second_zone_on_the_same_gate

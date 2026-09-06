@@ -749,6 +749,7 @@ class KamalDeployer
     outcome = GithubActionsBuild.new(app).build!(@target_sha)
     if outcome.ok?
       log "CI build succeeded#{" — #{outcome.run_url}" if outcome.run_url}"
+      app.clear_ci_refusal!
       record_build_venue("ci:github-actions")
       return true
     end
@@ -761,7 +762,13 @@ class KamalDeployer
       return false
     end
 
+    # RECORD IT, don't just log it. startup_failure means the run never started —
+    # usually an exhausted quota, but equally an invalid workflow file, and that one
+    # never resolves on its own. Falling back is still right; falling back silently
+    # forever is not.
+    app.record_ci_refusal!(outcome.reason, outcome.detail)
     log "CI could not take this build (#{outcome.reason}: #{outcome.detail}) — building here instead"
+    log "Recorded as a CI fault. If it persists, the venue needs fixing — a fallback is not a cure."
     result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
@@ -1123,9 +1130,24 @@ class KamalDeployer
     # `-d <destination>`. Writing both meant every self-describing app also got a
     # plaintext credential file on disk that no deploy ever read: the whole cost of
     # the exposure, none of the benefit. See ADR 0001 and ADR 0013.
-    return if app.self_describing?
-
     secrets_path = File.join(checkout_dir, ".kamal", "secrets")
+
+    if app.self_describing?
+      # AND REMOVE ONE CONDUCTOR LEFT BEHIND. Declining to write it is not the same
+      # as removing it: a checkout predating the rule already holds this file,
+      # `git reset --hard` preserves it because it is untracked, and cleanup deletes
+      # keys rather than this. Without the unlink an app reads as compliant while old
+      # plaintext credentials sit on disk.
+      #
+      # BUT ONLY IF IT IS OURS. A repo may COMMIT its own .kamal/secrets — Conductor's
+      # own does, holding pointers like $(cat config/master.key) — and deleting a
+      # tracked file is editing someone else's repository, not clearing our residue.
+      # Tracked-or-not is the only honest way to ask whose file this is; the name
+      # cannot tell you, and guessing from the contents would be worse.
+      remove_generated_secrets_file(secrets_path)
+      return
+    end
+
     return if app.self_managed? && File.exist?(secrets_path)
 
     content = KamalEnvWriter.secrets_content(app, server: deploy_server)
@@ -1133,6 +1155,21 @@ class KamalDeployer
 
     FileUtils.mkdir_p(File.dirname(secrets_path))
     File.write(secrets_path, content)
+  end
+
+  # Untracked means Conductor wrote it; tracked means the repo owns it. On any doubt
+  # — no git, an unreadable checkout — LEAVE IT. Failing to clear our own residue is
+  # a smaller harm than deleting a file an app committed.
+  def remove_generated_secrets_file(path)
+    return unless File.exist?(path)
+
+    tracked = @shell.run("git", "ls-files", "--error-unmatch", ".kamal/secrets", chdir: checkout_dir)
+    return if tracked.success?
+
+    File.delete(path)
+    log "Removed a stale .kamal/secrets left by an earlier deploy (this app uses generated pointers)"
+  rescue StandardError => e
+    log "Left .kamal/secrets in place — could not determine whether the repo owns it (#{e.message})"
   end
 
   # ADR 0001: write the generated self-describing artifact into the checkout — the
