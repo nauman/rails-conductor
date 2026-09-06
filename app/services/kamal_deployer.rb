@@ -53,6 +53,9 @@ class KamalDeployer
 
     return fail_with("App has no repository_url") if app.repository_url.blank?
     return fail_with("App has no target host") if deploy_server&.ip_address.blank?
+    # Before any work: a venue that cannot take the build is a policy problem, and
+    # discovering it after a clone buries it under whatever else went wrong first.
+    return false unless verify_build_venue
 
     deployment.mark_deploying!
     FileUtils.mkdir_p(workspace)
@@ -188,6 +191,19 @@ class KamalDeployer
   # A secret is satisfied if it's an app env var, OR — for a self-managed deploy —
   # already present in Conductor's own container env (its deploy.yml injects the
   # same secrets), OR it's RAILS_MASTER_KEY we can materialize from that env.
+  # FAIL, DO NOT SUBSTITUTE. A venue that cannot take the build stops the deploy and
+  # names the reason. Quietly building somewhere else would make the choice
+  # decorative — and relocating a build is exactly how an app ends up compiling on
+  # the machine it serves from, which is the thing the choice exists to prevent.
+  def verify_build_venue
+    reason = app.build_venue_unavailable_reason
+    return true if reason.nil?
+
+    fail_with("build venue '#{app.build_venue}' cannot take this build: #{reason}. " \
+              "Change the app's build venue deliberately rather than having the deploy pick one.")
+    false
+  end
+
   def verify_required_secrets
     # Include derived secrets (e.g. a dedicated app's DATABASE_URL) so preflight
     # doesn't demand a key Conductor already injects — deploy_env_pairs is the
@@ -983,7 +999,12 @@ class KamalDeployer
       # into this container). The host key + identity live in the real ~/.ssh that
       # docker's ssh connhelper reads — NOT an env $HOME, which ssh ignores (it
       # resolves ~ from the passwd database, not $HOME).
-      env["DOCKER_HOST"] = "ssh://#{deploy_server.ssh_user_or_default}@#{deploy_server.ip_address}"
+      # ONLY WHEN THE TARGET IS THE CHOSEN VENUE. This line was the real build-venue
+      # decision all along, and nobody was making it: it fired whenever the server
+      # had a stored key, so an app built on the target or on the control machine
+      # according to something nobody chose. An app with no chosen venue keeps this
+      # behaviour, so nothing relocates on a deploy nobody is watching.
+      env["DOCKER_HOST"] = "ssh://#{deploy_server.ssh_user_or_default}@#{deploy_server.ip_address}" unless app.build_venue == "control"
       # Isolate buildx state PER TARGET HOST. Kamal's builder name is a constant
       # (`kamal-local-docker-container`), but its endpoint is baked in from the
       # DOCKER_HOST of whichever deploy created it. With one shared buildx config,

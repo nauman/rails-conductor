@@ -97,6 +97,52 @@ class App < ApplicationRecord
   # organization" is a stale-derivation bug waiting to happen, which is the exact
   # class of defect this work exists to remove. The scan is one query on a small
   # table, and it runs when provisioning, not on the deploy path.
+  # WHERE THIS APP'S IMAGE IS BUILT — chosen, not inherited.
+  #
+  # Until now the venue was an accident: KamalDeployer points DOCKER_HOST at the
+  # deploy target, but only when that server has a stored SSH key, so an app built on
+  # the target or on the control machine according to something nobody decided. And
+  # BuildPlacement, which ranks venues, is consulted only by preflight — it advises,
+  # it never routed anything.
+  #
+  # `control` is Conductor's own box: bigger, and a failed build there cannot touch
+  # the machine serving the app. `target` is the app's own server, which is what most
+  # apps do today and what makes a build compete with the traffic it serves.
+  BUILD_VENUES = %w[control target].freeze
+  DEFAULT_BUILD_VENUE = "control"
+
+  # nil means the app predates the choice. It keeps today's behaviour rather than
+  # silently changing where a live app builds on a deploy nobody is watching.
+  def build_venue_inherited? = build_venue.blank?
+
+  # The box Conductor itself runs on, when it is registered — used for REPORTING
+  # only ("built on <name>"), never to decide whether a build may proceed. Asking
+  # the self-managed app is the only non-guessing way to name it, and it is
+  # legitimately nil on a fleet that has not registered Conductor as an app.
+  def control_machine = organization.apps.find_by(self_managed: true)&.server
+
+  # NO SUBSTITUTION. A venue that cannot take the build stops the deploy and says
+  # why; it does not quietly build somewhere else, because the point of choosing is
+  # that the choice holds. Returns nil when the venue is usable.
+  # `control` is ALWAYS available: it means "do not hand the build to a remote
+  # daemon", and Conductor is by definition running where it is running. An earlier
+  # version required a registered self-managed app to identify the box and refused
+  # the deploy without one — which is every fresh install and every fleet that has
+  # not registered Conductor as one of its own apps. A venue check that fails for
+  # anyone who has not done unrelated bookkeeping is not a check, it is an outage.
+  def build_venue_unavailable_reason
+    case build_venue
+    when "control"
+      nil
+    when "target"
+      return "#{slug} has no server" if server.nil?
+      return "the target (#{server.name}) is #{server.status}" unless server.status == "online"
+      return "the target (#{server.name}) has no SSH key Conductor can build with" if server.ssh_key.blank?
+
+      nil
+    end
+  end
+
   # A CI venue refusing the work is not an error — the build falls back and the
   # deploy succeeds. But a refusal that KEEPS happening (an invalid workflow file,
   # Actions disabled) repeats forever behind green deploys, visible only in a log
@@ -129,6 +175,12 @@ class App < ApplicationRecord
 
   # Set rather than demanded: a caller should not have to know the rule to satisfy
   # it. The validation exists for the case someone turns it off on purpose.
+  # Chosen for new apps so the venue is explicit from the start; existing apps are
+  # left alone (see build_venue_inherited?).
+  def adopt_build_venue
+    self.build_venue = DEFAULT_BUILD_VENUE if new_record? && build_venue.blank?
+  end
+
   def adopt_kamal_contract
     self.self_describing = true if kamal? && (new_record? || will_save_change_to_deploy_method?)
   end
@@ -216,6 +268,12 @@ class App < ApplicationRecord
   # under it; the newcomer is the one that gives way.
   # Set rather than demanded: a caller should not have to know the rule to satisfy
   # it. The validation exists for the case someone turns it off on purpose.
+  # Chosen for new apps so the venue is explicit from the start; existing apps are
+  # left alone (see build_venue_inherited?).
+  def adopt_build_venue
+    self.build_venue = DEFAULT_BUILD_VENUE if new_record? && build_venue.blank?
+  end
+
   def adopt_kamal_contract
     self.self_describing = true if kamal? && (new_record? || will_save_change_to_deploy_method?)
   end
@@ -356,6 +414,7 @@ class App < ApplicationRecord
                       message: "may contain only lowercase letters, digits, dots, dashes and underscores" }
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
+  validates :build_venue, inclusion: { in: BUILD_VENUES }, allow_blank: true
   # ADR 0003: one deploy path, and Kamal is the contract. A kamal app that is not
   # self-describing does not honour it — Conductor writes `.kamal/secrets` with raw
   # values instead of the generated overlay and git-safe pointers, so marking a
@@ -447,6 +506,7 @@ class App < ApplicationRecord
   }
   scope :with_server_ssh, -> { joins(:server).merge(Server.with_ssh) }
 
+  before_validation :adopt_build_venue
   before_validation :adopt_kamal_contract
   before_validation :adopt_stable_names, on: :create
   before_validation :generate_slug, on: :create

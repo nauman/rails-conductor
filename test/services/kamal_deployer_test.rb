@@ -696,7 +696,12 @@ class KamalDeployerTest < ActiveSupport::TestCase
       "a stale Caddy selector must not disable kamal-proxy after an app moves boxes"
   end
 
-  test "builds over SSH (DOCKER_HOST), no docker.sock, and pins HOME for the Net::SSH roll" do
+  # THE TARGET VENUE, stated explicitly. This was the implicit default until the
+  # build venue became a choice — DOCKER_HOST fired whenever the server had a key,
+  # so where an app built was an accident of configuration. The mechanism it
+  # documents is unchanged and still matters whenever `target` is chosen.
+  test "the target venue builds over SSH (DOCKER_HOST), no docker.sock, and pins HOME for the Net::SSH roll" do
+    @app.update!(build_venue: "target")
     shell = FakeShell.new(success: true)
     KamalDeployer.new(@app, @deployment, shell: shell).deploy!
 
