@@ -146,9 +146,13 @@ class ServerIdentity
     result = @ssh.execute_with_status(script)
     unless result[:success]
       if result[:stderr].to_s.match?(/CONDUCTOR_(TAIL|APPEND)_FAILED/)
-        return [ nil, "could not safely append to #{authorized_keys_path} on #{@server.name} — " \
-                      "stopped without writing, because appending to a file whose last line has no " \
-                      "newline would splice the new key onto the existing one and break both" ]
+        # NOT "nothing was written": a separator, or a partial key, may have landed
+        # before the failure. Existing entries are intact either way — a partial key
+        # occupies its own line — but claiming the file is untouched would send
+        # someone to look in the wrong place.
+        return [ nil, "could not finish appending to #{authorized_keys_path} on #{@server.name}. " \
+                      "Existing keys are intact; an incomplete entry may have been added on its " \
+                      "own line and can be removed. Conductor's key is NOT installed." ]
       end
 
       if result[:stderr].to_s.include?("CONDUCTOR_CHOWN_FAILED")
