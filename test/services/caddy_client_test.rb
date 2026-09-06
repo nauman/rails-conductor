@@ -133,10 +133,10 @@ class CaddyClientTest < ActiveSupport::TestCase
   # differ so adding *.domain doesn't overwrite the apex route (and vice versa).
   def test_apex_and_wildcard_get_distinct_route_ids
     client = CaddyClient.new(build_server)
-    apex = client.send(:route_id_for, "calm.page")
-    wild = client.send(:route_id_for, "*.calm.page")
+    apex = client.send(:route_id_for, "zone-a.example")
+    wild = client.send(:route_id_for, "*.zone-a.example")
 
-    assert_equal "conductor-route-calm-page", apex
+    assert_equal "conductor-route-zone-a-example", apex
     refute_equal apex, wild, "apex and wildcard must not collide into one route id"
     assert_includes wild, "wildcard"
   end
@@ -180,9 +180,9 @@ class CaddyClientTest < ActiveSupport::TestCase
     ])
     client = CaddyClient.new(build_server, ssh_connection: ssh)
 
-    res = client.enable_on_demand_tls(subject: "*.calm.page", ask_url: "http://127.0.0.1:9080/caddy/ask")
+    res = client.enable_on_demand_tls(subject: "*.zone-a.example", ask_url: "http://127.0.0.1:9080/caddy/ask")
 
-    assert_equal "*.calm.page", res["subject"]
+    assert_equal "*.zone-a.example", res["subject"]
     assert res["on_demand"]
     assert_equal 2, ssh.commands.size
     loaded = ssh.commands.last
@@ -192,14 +192,74 @@ class CaddyClientTest < ActiveSupport::TestCase
     assert_includes loaded, "module"
     assert_includes loaded, "127.0.0.1:9080/caddy/ask"
     assert_includes loaded, "on_demand"
-    assert_includes loaded, ".calm.page" # `*` is shell-escaped, the zone tail is not
+    assert_includes loaded, ".zone-a.example" # `*` is shell-escaped, the zone tail is not
+  end
+
+  # THE PERMISSION ENDPOINT IS GLOBAL, and only the POLICIES are per-zone. Enabling
+  # on-demand TLS for a second zone silently re-pointed the first zone's issuance
+  # gate at the second zone's app, which then answered 404/EOF for every name — so
+  # every subdomain certificate was refused, on a zone nobody had touched.
+  def test_enable_on_demand_tls_refuses_to_repoint_another_zones_gate
+    existing = {
+      "apps" => { "tls" => { "automation" => {
+        "on_demand" => { "permission" => { "module" => "http", "endpoint" => "http://127.0.0.1:9080/caddy/ask" } },
+        "policies" => [ { "subjects" => [ "*.zone-a.example" ], "on_demand" => true } ]
+      } } }
+    }
+    ssh = FakeSsh.new([ { stdout: JSON.generate(existing) } ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    error = assert_raises(CaddyClient::Error) do
+      client.enable_on_demand_tls(subject: "*.other.example", ask_url: "http://127.0.0.1:9070/caddy/ask")
+    end
+
+    assert_match(/9080/, error.message, "the message must name the endpoint already in use")
+    assert_match(/zone-a\.example/, error.message, "and the zone that depends on it")
+    assert_equal 1, ssh.commands.size, "nothing may be written when the call is refused"
+  end
+
+  # Re-running for the SAME endpoint is still idempotent — that is the ordinary case
+  # and must not start failing.
+  def test_enable_on_demand_tls_allows_a_second_zone_on_the_same_gate
+    existing = {
+      "apps" => { "tls" => { "automation" => {
+        "on_demand" => { "permission" => { "module" => "http", "endpoint" => "http://127.0.0.1:9080/caddy/ask" } },
+        "policies" => [ { "subjects" => [ "*.zone-a.example" ], "on_demand" => true } ]
+      } } }
+    }
+    ssh = FakeSsh.new([ { stdout: JSON.generate(existing) }, { stdout: "" } ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    res = client.enable_on_demand_tls(subject: "*.other.example", ask_url: "http://127.0.0.1:9080/caddy/ask")
+
+    assert res["on_demand"]
+    assert_includes ssh.commands.last, ".zone-a.example", "the existing zone's policy must survive"
+  end
+
+  # The escape hatch exists for the case the operator IS re-pointing deliberately —
+  # repairing a gate that a previous overwrite already broke, for instance.
+  def test_enable_on_demand_tls_can_repoint_when_asked_explicitly
+    existing = {
+      "apps" => { "tls" => { "automation" => {
+        "on_demand" => { "permission" => { "module" => "http", "endpoint" => "http://127.0.0.1:9070/caddy/ask" } },
+        "policies" => [ { "subjects" => [ "*.zone-a.example" ], "on_demand" => true } ]
+      } } }
+    }
+    ssh = FakeSsh.new([ { stdout: JSON.generate(existing) }, { stdout: "" } ])
+    client = CaddyClient.new(build_server, ssh_connection: ssh)
+
+    res = client.enable_on_demand_tls(subject: "*.zone-a.example", ask_url: "http://127.0.0.1:9080/caddy/ask",
+                                      repoint_shared_gate: true)
+
+    assert_equal "http://127.0.0.1:9080/caddy/ask", res["ask_url"]
+    assert_includes ssh.commands.last, "9080"
   end
 
   def test_enable_on_demand_tls_is_idempotent_and_keeps_other_zones
     existing = {
       "apps" => { "tls" => { "automation" => { "policies" => [
         { "subjects" => [ "*.other.com" ], "on_demand" => true },
-        { "subjects" => [ "*.calm.page" ], "on_demand" => true }
+        { "subjects" => [ "*.zone-a.example" ], "on_demand" => true }
       ] } } }
     }
     ssh = FakeSsh.new([
@@ -208,17 +268,17 @@ class CaddyClientTest < ActiveSupport::TestCase
     ])
     client = CaddyClient.new(build_server, ssh_connection: ssh)
 
-    client.enable_on_demand_tls(subject: "*.calm.page", ask_url: "http://127.0.0.1:9080/caddy/ask")
+    client.enable_on_demand_tls(subject: "*.zone-a.example", ask_url: "http://127.0.0.1:9080/caddy/ask")
 
     loaded = ssh.commands.last
     assert_includes loaded, ".other.com" # a different app's policy is preserved
-    assert_equal 1, loaded.scan(".calm.page").size, "the same-subject policy must be replaced, not duplicated"
+    assert_equal 1, loaded.scan(".zone-a.example").size, "the same-subject policy must be replaced, not duplicated"
   end
 
   def test_enable_on_demand_tls_rejects_a_non_http_ask_url
     client = CaddyClient.new(build_server, ssh_connection: FakeSsh.new([]))
     assert_raises(CaddyClient::Error) do
-      client.enable_on_demand_tls(subject: "*.calm.page", ask_url: "not-a-url")
+      client.enable_on_demand_tls(subject: "*.zone-a.example", ask_url: "not-a-url")
     end
   end
 

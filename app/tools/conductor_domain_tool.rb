@@ -32,6 +32,7 @@ class ConductorDomainTool
         confirm:   { type: "boolean", description: "remove_stray_proxy: required to remove; without it returns the inspection report only" },
         server_name:  { type: "string",  description: "enable_on_demand_tls: host-Caddy server by name (or server_id)" },
         ask_upstream: { type: "string",  description: "enable_on_demand_tls: host:port serving the ask endpoint (app loopback publish, e.g. 127.0.0.1:9080)" },
+        repoint_shared_gate: { type: "boolean", description: "enable_on_demand_tls: Caddy has ONE permission endpoint per instance. Pass true only to move it deliberately (e.g. repairing a gate a previous enable overwrote) — otherwise a differing endpoint is refused, because moving it stops every other zone issuing certificates" },
         ask_path:     { type: "string",  description: "enable_on_demand_tls: ask endpoint path (default /caddy/ask)" },
         subject:      { type: "string",  description: "enable_on_demand_tls: override the on-demand subject (default *.<domain>)" },
         server_id: { type: "integer", description: "add/remove: server where Caddy runs" },

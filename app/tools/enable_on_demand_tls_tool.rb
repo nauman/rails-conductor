@@ -11,6 +11,7 @@ class EnableOnDemandTlsTool
         server_name:  { type: "string",  description: "The host-Caddy server by name (or server_id)" },
         domain:       { type: "string",  description: "The zone whose subdomains go on-demand, e.g. my-app.com (the on-demand subject becomes *.my-app.com)" },
         ask_upstream: { type: "string",  description: "host:port that serves the ask endpoint — the app's loopback publish, e.g. 127.0.0.1:9080" },
+        repoint_shared_gate: { type: "boolean", description: "Caddy has ONE permission endpoint per instance. Pass true only to deliberately move it — e.g. repairing a gate a previous enable overwrote. Without it, a differing endpoint is refused rather than silently re-pointed, because moving it stops every other zone issuing certificates." },
         ask_path:     { type: "string",  description: "Path of the ask endpoint (default /caddy/ask)" },
         subject:      { type: "string",  description: "Override the on-demand subject directly (default *.<domain>)" }
       },
@@ -37,7 +38,10 @@ class EnableOnDemandTlsTool
     path    = "/#{path}" unless path.start_with?("/")
     ask_url = "http://#{ask_upstream}#{path}"
 
-    result = CaddyClient.new(server).enable_on_demand_tls(subject: subject, ask_url: ask_url)
+    result = CaddyClient.new(server).enable_on_demand_tls(
+      subject: subject, ask_url: ask_url,
+      repoint_shared_gate: input["repoint_shared_gate"] == true
+    )
 
     Result.ok(result.merge(
       "server" => server.name,

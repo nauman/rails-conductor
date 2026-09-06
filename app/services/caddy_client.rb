@@ -155,7 +155,20 @@ class CaddyClient
   #
   # Idempotent: re-running replaces this subject's policy rather than stacking a
   # duplicate, and preserves any OTHER apps' policies already on the box.
-  def enable_on_demand_tls(subject:, ask_url:)
+  #
+  # BUT THE PERMISSION ENDPOINT IS GLOBAL AND THE POLICIES ARE NOT. Caddy has one
+  # `on_demand.permission.endpoint` for the whole instance, so writing it for a new
+  # zone re-points the issuance gate of every zone already using it. That happened:
+  # enabling on-demand for a second zone silently pointed *.zone-a.example's gate at
+  # another app's port, which answered 404/EOF for every name, and every subdomain
+  # certificate was refused on a zone nobody had touched — weeks later, with the
+  # previous certs still on disk making it look like it had always worked.
+  #
+  # So a differing endpoint is REFUSED rather than overwritten. `repoint_shared_gate`
+  # is the deliberate escape hatch, for repairing a gate a previous overwrite broke.
+  # The real fix is one ask endpoint that knows every zone; until that exists, the
+  # honest behaviour is to say the box cannot serve two.
+  def enable_on_demand_tls(subject:, ask_url:, repoint_shared_gate: false)
     subject = subject.to_s.strip.downcase
     ask_url = ask_url.to_s.strip
     raise Error, "Subject is required" if subject.blank?
@@ -167,6 +180,19 @@ class CaddyClient
     config["apps"] ||= {}
     tls = (config["apps"]["tls"] ||= {})
     automation = (tls["automation"] ||= {})
+
+    existing_endpoint = automation.dig("on_demand", "permission", "endpoint").to_s
+    if existing_endpoint.present? && existing_endpoint != ask_url && !repoint_shared_gate
+      dependents = Array(automation["policies"])
+                   .flat_map { |p| Array(p["subjects"]) }
+                   .reject { |s| s.to_s.downcase == subject }
+      raise Error,
+            "#{server.name} already gates on-demand TLS through #{existing_endpoint}" \
+            "#{" for #{dependents.join(', ')}" if dependents.any?}. Caddy has ONE permission " \
+            "endpoint for the whole instance, so pointing it at #{ask_url} would stop those " \
+            "zones issuing certificates. Serve every zone from one ask endpoint, or pass " \
+            "repoint_shared_gate to move it deliberately."
+    end
 
     automation["on_demand"] = {
       "permission" => { "module" => "http", "endpoint" => ask_url }
