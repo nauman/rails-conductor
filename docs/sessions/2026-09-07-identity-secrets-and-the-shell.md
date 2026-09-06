@@ -63,6 +63,41 @@ Conductor's own was absent: a verification that succeeds exactly when it should 
 The same principle appears in `ServerAudit`, ADR 0010, and the residue detector.
 It keeps having to be re-learned in each new place.
 
+## The lockout question, and why the harden integration was pulled
+
+The SSH work was audited seven times. The last round asked one question — *can any
+path leave a real server where Conductor or the operator cannot log in?* — and the
+answer was **yes**, five ways. Four had already been found and fixed during the
+night:
+
+| | |
+|---|---|
+| `cp` overwriting deploy's `authorized_keys` | deletes Conductor's own key on a re-run |
+| identity installed *after* root was disabled | failure strands the box |
+| UFW allowing only port 22 | cuts a box listening elsewhere |
+| `chmod 600` after a silently failed `chown` | makes a working file unreadable |
+
+Every one is the same shape: **a step that is correct in isolation, ordered so that
+its failure lands after the thing it would have protected.**
+
+The fifth is structural and is why installing the key during hardening was pulled:
+
+> The identity-before-hardening gate is real, but it neither makes preceding changes
+> transactional nor verifies access under the final SSH configuration.
+
+Hardening is a sequence of non-transactional mutations. Verifying access before the
+last one does not prove access survives it — `SSH_HARDEN` can disable an
+authentication method the verified connection relied on, an existing UFW deny rule
+still outranks the allow added after it, and an interruption between the sshd reload
+and `ssh_user` being persisted leaves Conductor configured for a user it can no
+longer use. Adding a new failure mode into that sequence makes those paths more
+reachable, not less.
+
+So `ServerIdentity` ships as `conductor_server action: repair_identity`: an explicit
+action, on a box that is still reachable, that can be recovered if it goes wrong.
+Doing it during registration needs **post-hardening verification with automatic
+rollback**, which is a design change and not a step.
+
 ## Deliberately not done
 
 - **The native secrets path.** Rewriting its `EnvironmentFile` destroys

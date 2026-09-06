@@ -62,12 +62,12 @@ class HardenServerTest < ActiveSupport::TestCase
     assert_equal :secure, result.audit_status
     assert_equal "deploy", @server.reload.ssh_user, "Conductor now manages the box as deploy"
     names = result.steps.map { |s| s[:step] }
-    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db identity ssh_harden], names
-    # THE ORDER IS THE LOCKOUT GUARD. Conductor's own key must be installed and
-    # proven while root is still reachable; doing it after ssh_harden would leave a
-    # failure with root disabled and Conductor holding a key that may not authorize.
-    assert names.index("identity") < names.index("ssh_harden"),
-           "root is the only way back, so it is the last thing surrendered"
+    # No `identity` step: installing Conductor's key during hardening adds a failure
+    # mode to a sequence of non-transactional mutations whose LATER steps can break
+    # access on their own (an existing UFW deny rule, an auth method SSH_HARDEN
+    # removes). Verifying before the last mutation does not prove access survives it,
+    # so the install is a separate, recoverable operator action.
+    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db ssh_harden], names
   end
 
   # The OpenSSH ufw profile only covers 22. Enabling ufw on a box that listens

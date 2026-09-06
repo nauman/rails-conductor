@@ -176,21 +176,29 @@ class HardenServer
     run_root("firewall", firewall_script) or return failed_result
     run_root("close_db",  CLOSE_DB)  or return failed_result
 
-    # ESTABLISH CONDUCTOR'S OWN IDENTITY *BEFORE* ROOT IS SURRENDERED, and refuse to
-    # surrender it if that fails. Installing afterwards meant a failure left the box
-    # with root disabled and Conductor holding a key that may not authorize — the
-    # lockout this whole routine is otherwise careful to avoid. Root is the only way
-    # back, so it is the last thing to give up.
-    # Writer is the PRIVILEGED connection (root is still up); verifier connects as
-    # the deploy user with only the stored key, so success means that key works.
-    identity = ServerIdentity.new(@server, ssh: privileged_ssh, verifier: @deploy_ssh,
-                                  target_user: DEPLOY_USER).ensure!
-    @steps << { step: "identity", ok: identity.ok?, detail: identity.ok? ? "Conductor's key #{identity.action} for #{DEPLOY_USER}" : identity.reason }
-    unless identity.ok?
-      return fail!("could not establish Conductor's own key on #{@server.name} (#{identity.reason}) — " \
-                   "root left enabled rather than surrendering the only way back in")
-    end
-
+    # CONDUCTOR'S OWN KEY IS *NOT* INSTALLED HERE, deliberately.
+    #
+    # It belongs here in principle — registration is the one moment Conductor
+    # legitimately holds root — and an earlier version did it, ordered before
+    # ssh_harden so a failure would leave root enabled. That gate is real but it is
+    # not sufficient, and an audit walked out why:
+    #
+    #   * hardening is a SEQUENCE OF NON-TRANSACTIONAL MUTATIONS. Verifying access
+    #     before the last one does not prove access survives it. SSH_HARDEN can
+    #     disable an authentication method the verified connection was relying on,
+    #     and nothing re-verifies after the reload.
+    #   * UFW is enabled BEFORE that verification, and an existing deny rule for the
+    #     SSH port still wins over the allow added after it.
+    #   * an interruption between the reload and `ssh_user` being persisted leaves
+    #     Conductor configured for a user it can no longer use.
+    #
+    # Adding a new failure mode into that sequence makes those paths more reachable,
+    # not less. So the install is an explicit operator action instead —
+    # `conductor_server action: repair_identity` — run on a box that is still
+    # reachable and can be recovered if it goes wrong.
+    #
+    # Doing it here needs post-hardening verification with automatic rollback, which
+    # is a design change rather than a step. See the session log.
     run_root("ssh_harden", SSH_HARDEN) or return failed_result
 
     @server.update!(ssh_user: DEPLOY_USER)
