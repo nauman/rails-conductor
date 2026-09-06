@@ -74,7 +74,12 @@ class DockerRollback
     swap_to!(version)
   ensure
     begin
-      deploy_env.remove!(@ssh)
+      # A false return means the file is STILL THERE — credentials left on the host.
+      # Ignoring it made a failed cleanup indistinguishable from a clean one.
+      unless deploy_env.remove!(@ssh)
+        log("WARNING: the environment file at #{deploy_env.file_path} could not be removed — " \
+            "it holds this app's sensitive values and should be deleted by hand")
+      end
     rescue StandardError => e
       log("WARNING: could not remove the environment file: #{e.message}")
     end

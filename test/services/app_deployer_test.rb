@@ -159,4 +159,24 @@ class AppDeployerTest < ActiveSupport::TestCase
     assert_equal "kamal", mk.("kamal").deploy_network
     assert_nil mk.("native").deploy_network
   end
+  # Asserts the GUARANTEE, not the structure: the repository key is cleaned up even
+  # when the env cleanup raises and reporting that failure raises too. (`log`
+  # persists and broadcasts, and both can fail exactly when a deploy is already going
+  # wrong.) Mutation-checked — it does not depend on which of the two guards happens
+  # to be doing the work, which is the point of testing behaviour.
+  test "a raising cleanup, and a raising report of it, do not skip the other cleanup" do
+    ssh = FakeSsh.new { |_| result(success: false, exit_code: 1, stderr: "stop here") }
+    d = deployer_with(ssh)
+    repository_cleaned = false
+
+    d.define_singleton_method(:remove_env_file!) { raise "env cleanup exploded" }
+    d.define_singleton_method(:log) { |_| raise "and logging exploded" }
+    d.define_singleton_method(:cleanup_repository_access) { repository_cleaned = true }
+
+    assert_nothing_raised { d.deploy! }
+
+    assert repository_cleaned,
+           "the repository key must be cleaned even when the env cleanup and its report both raise"
+  end
+
 end

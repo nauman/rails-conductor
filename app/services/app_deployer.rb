@@ -67,20 +67,28 @@ class AppDeployer
   rescue => e
     fail_with("Unexpected error: #{e.message}")
   ensure
-    # INDEPENDENTLY PROTECTED. Two cleanups in one ensure means the first one raising
-    # skips the second — and the first reads the app's env, so an env failure would
-    # strand the repository key. Each credential's cleanup gets its own rescue; a
-    # failure to tidy is reported, never allowed to suppress the next tidy.
+    # Two cleanups side by side means the first one raising skips the second — and
+    # the first reads the app's env, so an env failure would strand the repository
+    # key.
+    #
+    # The guarantee is actually held by report_cleanup_failure, which rescues its own
+    # logging: `log` persists and broadcasts, and both can fail exactly when a deploy
+    # is already going wrong. The enclosing `ensure` is a second line of defence for
+    # the day someone adds a cleanup step that raises outside that helper — verified
+    # by mutation: the behaviour test still passes without it, so it is belt and
+    # braces rather than the mechanism.
     begin
-      remove_env_file!
-    rescue StandardError => e
-      log "WARNING: could not remove the environment file: #{e.message}"
-    end
-
-    begin
-      cleanup_repository_access
-    rescue StandardError => e
-      log "WARNING: could not remove the repository key: #{e.message}"
+      begin
+        report_cleanup_failure("environment file") unless remove_env_file!
+      rescue StandardError => e
+        report_cleanup_failure("environment file", e)
+      end
+    ensure
+      begin
+        cleanup_repository_access
+      rescue StandardError => e
+        report_cleanup_failure("repository key", e)
+      end
     end
   end
 
@@ -300,6 +308,16 @@ class AppDeployer
   end
 
   def remove_env_file! = deploy_env.remove!(ssh)
+
+  # Reporting a cleanup failure must never become the failure. `log` persists and
+  # broadcasts, and both can fail precisely when a deploy is already going wrong —
+  # so a problem tidying up must not replace the original error.
+  def report_cleanup_failure(what, error = nil)
+    detail = error ? ": #{error.message}" : " — it may still hold sensitive values"
+    log "WARNING: could not remove the #{what}#{detail}"
+  rescue StandardError
+    Rails.logger.warn("[Deploy:#{app.slug}] could not remove the #{what}#{detail}")
+  end
 
   # Stop whatever is actually serving, resolved by label — not just the fixed
   # name. An app that previously deployed zero-downtime runs as

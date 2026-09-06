@@ -90,13 +90,15 @@ class ServerIdentity
     # THE CHECK AND THE WRITE ARE ONE OPERATION, under one lock. Checking outside it
     # lets two concurrent repairs both see "absent" and both append.
     #
-    # The match scans EVERY FIELD of each non-comment line, not just field 2. An
-    # authorized_keys entry may carry options — `from="10.0.0.1" ssh-ed25519 BLOB` —
-    # which pushes the blob to field 3. Matching only field 2 would read that as
-    # absent and append an UNRESTRICTED copy of the same key, quietly defeating the
-    # source restriction the operator set. Comparing whole fields (rather than
-    # `grep -F` on the raw text) still ignores a commented-out line and cannot match
-    # inside somebody's comment.
+    # THE KEY IS THE FIELD AFTER THE TYPE. An entry may carry options —
+    # `from="10.0.0.1" ssh-ed25519 BLOB` — which pushes the blob to field 3, so
+    # matching field 2 alone read that as absent and would have appended an
+    # UNRESTRICTED copy of the same key, defeating the operator's restriction.
+    #
+    # But scanning every field is wrong in the other direction: the same blob
+    # appearing in ANOTHER key's trailing comment would read as present and skip an
+    # install that was needed. Requiring the preceding field to be a key type pins
+    # the match to the position sshd actually reads.
     #
     # The trailing-newline guard matters too: appending to a file whose last line has
     # no newline splices the new key onto it and breaks both entries.
@@ -106,7 +108,7 @@ class ServerIdentity
       touch #{path}
       chown #{owner}:#{owner} #{path} 2>/dev/null || true
       chmod 600 #{path}
-      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'$1 !~ /^#/ { for (i = 1; i <= NF; i++) if ($i == k) f = 1 } END { exit !f }'"'"' #{path}; then
+      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'$1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == k && $(i-1) ~ /^(ssh-|ecdsa-|sk-)/) f = 1 } END { exit !f }'"'"' #{path}; then
         echo CONDUCTOR_KEY_PRESENT
       else
         if [ -s #{path} ] && [ -n "$(tail -c 1 #{path})" ]; then echo >> #{path}; fi

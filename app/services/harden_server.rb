@@ -58,7 +58,11 @@ class HardenServer
     # appending them changes no existing line's position. The leading newline covers
     # a file with no trailing one, which would otherwise splice two keys together.
     sudo sh -c 'echo >> /home/#{DEPLOY_USER}/.ssh/authorized_keys'
-    sudo sh -c 'grep -Fxv -f /home/#{DEPLOY_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys >> /home/#{DEPLOY_USER}/.ssh/authorized_keys || true'
+    # `|| true` would swallow a real I/O error and let provisioning continue to
+    # disabling root having silently copied nothing. grep exits 0 (lines emitted),
+    # 1 (none missing — the ordinary idempotent case) and 2 (an actual failure), so
+    # only 0 and 1 are success here.
+    sudo sh -c 'grep -Fxv -f /home/#{DEPLOY_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys >> /home/#{DEPLOY_USER}/.ssh/authorized_keys; [ $? -le 1 ]'
     sudo chown #{DEPLOY_USER}:#{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chmod 600 /home/#{DEPLOY_USER}/.ssh/authorized_keys
     echo 'deploy ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-deploy >/dev/null
