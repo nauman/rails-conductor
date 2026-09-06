@@ -48,7 +48,9 @@ class KamalSecretsTransportTest < ActiveSupport::TestCase
     stale = File.join(@dir, ".kamal", "secrets")
     File.write(stale, "API_TOKEN=s3cr3t-value\n")
 
-    deployer.send(:write_secrets_file)
+    d = deployer
+    d.instance_variable_set(:@shell, UntrackedShell.new)
+    d.send(:write_secrets_file)
 
     assert_not File.exist?(stale), "a stale plaintext secrets file must be deleted"
   end
@@ -68,8 +70,34 @@ class KamalSecretsTransportTest < ActiveSupport::TestCase
     assert File.exist?(committed), "a file the repo committed is not ours to delete"
   end
 
+  # git ls-files exits 0 either way; it PRINTS the path only when the file is tracked.
   class TrackedShell
-    def run(*, **) = Struct.new(:success?).new(true)
+    def run(*, **) = LocalShell::Result.new(success: true, exit_code: 0, output: ".kamal/secrets\n")
+  end
+
+  class UntrackedShell
+    def run(*, **) = LocalShell::Result.new(success: true, exit_code: 0, output: "")
+  end
+
+  # Not a git repository, git missing, a shell that failed for any reason at all.
+  class BrokenShell
+    def run(*, **) = LocalShell::Result.new(success: false, exit_code: 128, output: "not a git repository")
+  end
+
+  # DELETION NEEDS A POSITIVE ANSWER. The first version deleted whenever the git
+  # query FAILED, so a non-repo directory, a missing git, or a stubbed shell all
+  # authorised it — and its test passed because the temp dir was not a repo, meaning
+  # the test demonstrated the bug rather than the fix.
+  test "a git failure leaves the file alone" do
+    FileUtils.mkdir_p(File.join(@dir, ".kamal"))
+    path = File.join(@dir, ".kamal", "secrets")
+    File.write(path, "API_TOKEN=s3cr3t-value\n")
+
+    d = deployer
+    d.instance_variable_set(:@shell, BrokenShell.new)
+    d.send(:write_secrets_file)
+
+    assert File.exist?(path), "no answer from git is not permission to delete"
   end
 
   # Grandfathered apps still need their secrets, so the raw path stays for them —

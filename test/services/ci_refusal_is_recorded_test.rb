@@ -41,6 +41,32 @@ class CiRefusalIsRecordedTest < ActiveSupport::TestCase
            "a refusal still standing after a week is a fault, not a blip"
   end
 
+  # THE CLOCK MUST NOT RESET. Stamping `now` on every refusal meant an app deploying
+  # more often than the threshold never reached it — each deploy pushed the deadline
+  # out, so a permanently invalid workflow stayed invisible for as long as anyone
+  # kept deploying. The first version of the test above backdated ONE refusal and
+  # never recorded a second, so it could not see this.
+  test "a repeated refusal does not reset the clock" do
+    @app.record_ci_refusal!(:quota_exhausted, "first")
+    @app.update_columns(ci_refused_at: 8.days.ago)
+
+    @app.record_ci_refusal!(:quota_exhausted, "and again")
+
+    assert @app.reload.ci_refusal_persistent?, "the fault is eight days old, however often it recurs"
+    assert_match(/and again/, @app.ci_refused_detail, "the latest detail still tracks")
+  end
+
+  # And after a success the clock starts fresh, because that is a different fault.
+  test "a refusal after a success dates from the new one" do
+    @app.record_ci_refusal!(:quota_exhausted, "old")
+    @app.update_columns(ci_refused_at: 30.days.ago)
+    @app.clear_ci_refusal!
+
+    @app.record_ci_refusal!(:quota_exhausted, "new")
+
+    assert_not @app.reload.ci_refusal_persistent?
+  end
+
   test "a fresh refusal is not yet persistent" do
     @app.record_ci_refusal!(:quota_exhausted, "run failed to start")
 

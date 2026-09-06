@@ -1157,14 +1157,25 @@ class KamalDeployer
     File.write(secrets_path, content)
   end
 
-  # Untracked means Conductor wrote it; tracked means the repo owns it. On any doubt
-  # — no git, an unreadable checkout — LEAVE IT. Failing to clear our own residue is
-  # a smaller harm than deleting a file an app committed.
+  # Untracked means Conductor wrote it; tracked means the repo owns it.
+  #
+  # DELETION REQUIRES A POSITIVE ANSWER, not the absence of a negative one. The first
+  # version asked `git ls-files --error-unmatch` and deleted whenever that FAILED —
+  # so a directory that is not a repo (exit 128), a missing git (-1), or a stubbed
+  # shell all authorised the delete. The comment said "on any doubt it stays" and the
+  # code did the opposite; its test passed precisely because the temp dir was not a
+  # git repo, which meant the test proved the bug.
+  #
+  # `git ls-files -- <path>` exits 0 either way and prints the path only when tracked.
+  # So the safe reading is: the command SUCCEEDED and printed nothing.
   def remove_generated_secrets_file(path)
     return unless File.exist?(path)
 
-    tracked = @shell.run("git", "ls-files", "--error-unmatch", ".kamal/secrets", chdir: checkout_dir)
-    return if tracked.success?
+    listed = @shell.run("git", "ls-files", "--", ".kamal/secrets", chdir: checkout_dir)
+    unless listed.respond_to?(:success?) && listed.success?
+      return log "Left .kamal/secrets in place — could not ask git whether the repo owns it"
+    end
+    return log "Left .kamal/secrets in place — the repository commits it" if listed.output.to_s.strip.present?
 
     File.delete(path)
     log "Removed a stale .kamal/secrets left by an earlier deploy (this app uses generated pointers)"

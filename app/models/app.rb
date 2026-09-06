@@ -104,8 +104,14 @@ class App < ApplicationRecord
   # on CI for a week and nobody noticed".
   CI_REFUSAL_PERSISTENT_AFTER = 7.days
 
+  # THE FIRST UNRESOLVED REFUSAL IS THE ONE THAT DATES THE FAULT. Stamping `now` on
+  # every refusal meant an app deploying more often than the threshold could never
+  # reach it — each deploy reset the clock, so a permanently invalid workflow stayed
+  # invisible exactly as long as anyone kept deploying. The reason and detail still
+  # track the latest occurrence; only the clock is preserved until it is cleared.
   def record_ci_refusal!(reason, detail = nil)
-    update_columns(ci_refused_reason: reason.to_s, ci_refused_at: Time.current,
+    update_columns(ci_refused_reason: reason.to_s,
+                   ci_refused_at: ci_refused_at.presence || Time.current,
                    ci_refused_detail: detail.to_s.presence)
   end
 
@@ -208,30 +214,6 @@ class App < ApplicationRecord
   # Distinct slugs collapse to one base — `foo-bar`, `foo_bar` and `foo.bar` all
   # become `foo_bar`. The older app keeps the plain name so its database never moves
   # under it; the newcomer is the one that gives way.
-  # A CI venue refusing the work is not an error — the build falls back and the
-  # deploy succeeds. But a refusal that KEEPS happening (an invalid workflow file,
-  # Actions disabled) repeats forever behind green deploys, visible only in a log
-  # nobody re-reads. Recording it is what lets a report say "this app has not built
-  # on CI for a week and nobody noticed".
-  CI_REFUSAL_PERSISTENT_AFTER = 7.days
-
-  def record_ci_refusal!(reason, detail = nil)
-    update_columns(ci_refused_reason: reason.to_s, ci_refused_at: Time.current,
-                   ci_refused_detail: detail.to_s.presence)
-  end
-
-  # Cleared on success, or the record becomes its own stale fact (ADR 0010): a fault
-  # fixed weeks ago still reading as current.
-  def clear_ci_refusal!
-    return if ci_refused_reason.blank? && ci_refused_at.blank?
-
-    update_columns(ci_refused_reason: nil, ci_refused_at: nil, ci_refused_detail: nil)
-  end
-
-  def ci_refusal_persistent?
-    ci_refused_at.present? && ci_refused_at < CI_REFUSAL_PERSISTENT_AFTER.ago
-  end
-
   # Set rather than demanded: a caller should not have to know the rule to satisfy
   # it. The validation exists for the case someone turns it off on purpose.
   def adopt_kamal_contract
