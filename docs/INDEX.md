@@ -22,7 +22,7 @@
 | Agents | `docs/agents/deploy.agent.md` | Deploy agent: GHCR CI backbone, kamal-proxy edge, `localvault` secrets, `/version` verify |
 | Threads | `docs/threads/` | Living agent↔agent conversations (`<topic>.thread.md`); convention in `docs/dev/THREADS.md` |
 | Learnings | `docs/learnings/` | Hard-won manual-ops learnings → Conductor feature blueprints (e.g. multi-app-hosting) |
-| Architecture | `docs/architecture/` | Cross-cutting design notes too long for an ADR. New pages are numbered (`01-builder.md` — where an image is built and what bounds its cost); earlier ones keep their names so inbound links survive: `derived-state.md` (what Conductor caches, what refreshes it, where the gaps are), `rituals.md` (the recipe library and how a cited ritual is fetched), `database-conventions.md` (how a database is named and reached) |
+| Architecture | `docs/architecture/` | Cross-cutting design notes too long for an ADR. New pages are numbered folders (`01-builder/` — where an image is built, who decides, and what bounds its cost); earlier ones keep their names so inbound links survive: `derived-state.md` (what Conductor caches, what refreshes it, where the gaps are), `rituals.md` (the recipe library and how a cited ritual is fetched), `database-conventions.md` (how a database is named and reached) |
 | Code learnings | `docs/code_learnings/INDEX.md` | Durable project operating rules, including Kuickr-first visual review |
 | Infrastructure | `docs/infra/INDEX.md` | VM/Kamal/Caddy/R2/Active Storage ops docs |
 | Development | `docs/dev/INDEX.md` | Roadmap, changelog, features, and spec method |

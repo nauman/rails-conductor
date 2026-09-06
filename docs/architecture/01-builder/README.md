@@ -57,22 +57,51 @@ the outcome the ladder was written to prevent.
 The check runs before the repo is cloned, so a policy problem does not arrive
 underneath a clone failure.
 
-## What is NOT protected yet
+## Bounding the cost
 
 Moving builds onto the control machine concentrates them on a box that serves live
-apps, and **nothing currently bounds their cost**:
+apps. Two things bound that; one exists.
 
-- **No CPU ceiling.** `nice` is not the answer — it constrains the Kamal client
-  while the real work happens inside daemon-managed BuildKit containers, and CPU
-  shares are a relative weight rather than a limit. The control is a
-  `--driver-opt cpu-quota=…` on the buildx worker, verified before each build,
-  because Kamal will happily recreate an unconstrained one.
-- **No lock.** Two concurrent builds are two builds' worth of contention. A
-  host-wide `flock`, held from builder preparation through push, makes them queue.
+### One build at a time — built
 
-Both are named in ADR 0014 as not built. Until they exist, "builds on the control
-machine" means "builds on a production box with more headroom", not "builds
-somewhere safe".
+Control-venue builds run under a host-wide `flock` at `/tmp/conductor-build.lock`.
+Every Conductor worker contends for the *same* file, because a per-app or
+per-deploy path would serialise nothing.
+
+It is **non-blocking**, deliberately. A build that queues indefinitely behind
+another one is indistinguishable from a hung deploy, and the useful answer is "the
+builder is busy, deploy again" rather than a process that may or may not still be
+alive. `flock` exits `75` on contention — chosen from the range reserved for
+temporary failures so it cannot collide with a build's own status.
+
+**Contention is reported as contention.** A busy lock says the machine is occupied
+and the incumbent is untouched; it does not say the build failed. Telling an
+operator their commit is broken when the machine was merely busy is the same
+conflation that made an exhausted CI quota read as bad code.
+
+Target-venue builds are not locked here: they run on the app's own server and never
+contend for this machine's CPU.
+
+### A CPU ceiling — not built, and it needs a decision
+
+`nice` is not the control. It constrains the Kamal client while the real work
+happens inside daemon-managed BuildKit containers, and CPU shares are a relative
+weight rather than a limit. The actual control is
+`--driver-opt cpu-period=…,cpu-quota=…` on the buildx worker.
+
+**The obstacle is ownership.** Kamal creates and manages that builder
+(`kamal-local-docker-container`) and will recreate it unconstrained if it does not
+find what it expects. For Conductor to impose a quota it must own the worker's
+lifecycle — verifying the limits before every build and refusing when Kamal has
+replaced it. That is the same shape as Conductor overruling a repo's
+`builder.remote`: two things managing one resource, with the quieter one silently
+losing.
+
+So this is a design decision, not a patch, and it is open.
+
+Until it lands, one build runs at a time and nothing caps how much of the machine
+that build takes. On a 12-core box at low baseline load that is survivable; it is
+not a guarantee.
 
 ## Related
 

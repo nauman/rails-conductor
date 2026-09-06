@@ -84,15 +84,22 @@ whatever else failed first.
   in one migration would change where nine live apps build, discovered whenever each
   next deploys.
 
-## Not built
+## Bounding the cost
 
-- **A CPU ceiling and a build lock on the control machine.** With builds moving
-  there, two concurrent builds or one large one compete with the apps that box
-  serves. `nice` is not sufficient — it constrains the Kamal client while the work
-  happens in daemon-managed BuildKit containers, and CPU shares are relative rather
-  than a ceiling. The real controls are a `--driver-opt cpu-quota` on the buildx
-  worker and a host-wide `flock` held through push.
+**Built:** control-venue builds hold a host-wide, non-blocking `flock`, so only one
+runs at a time and a second reports contention rather than queueing invisibly. A
+busy lock is explicitly not a build failure.
+
+**Not built, and it needs a decision:** a CPU ceiling. The control is
+`--driver-opt cpu-quota` on the buildx worker, but Kamal creates and manages that
+builder and will recreate it unconstrained. Imposing a quota means Conductor owns
+the worker lifecycle and refuses to build when Kamal has replaced it — the same
+two-things-managing-one-resource shape as overruling a repo's `builder.remote`.
+Until that is decided, one build runs at a time and nothing caps its size.
+
+## Also not built
+
 - **`BuildPlacement` proposing the venue at setup** rather than ranking at preflight.
 
 Related: ADR 0001 (Conductor generates the kamal artifact), ADR 0003 (one deploy
-path), `docs/architecture/builder.md`.
+path), [`docs/architecture/01-builder/`](../../architecture/01-builder/README.md).

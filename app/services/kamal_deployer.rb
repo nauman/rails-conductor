@@ -741,6 +741,13 @@ class KamalDeployer
     result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
+    if build_outcome_for(result.exit_code) == :busy
+      fail_with("another build holds the control machine's build lock — nothing was built and the " \
+                "incumbent is untouched. This is contention, not a broken commit: deploy again when " \
+                "the other build finishes.")
+      return false
+    end
+
     fail_with("kamal build push failed (exit #{result.exit_code}) — incumbent left running")
     false
   end
@@ -843,7 +850,42 @@ class KamalDeployer
     ["bash", "-lc", "#{kamal_bin} #{operation}"]
   end
 
-  def kamal_build_command = [ "bash", "-lc", "#{kamal_bin} #{kamal_gateway.build_release}" ]
+  # `flock --conflict-exit-code` uses this to say "someone else holds it" — chosen
+  # from the range reserved for temporary failures so it cannot collide with a
+  # build's own exit status.
+  LOCK_BUSY_EXIT = 75
+  # Host-wide and outside any checkout: every Conductor worker must contend for the
+  # SAME file, so a per-app or per-deploy path would serialise nothing at all.
+  BUILD_LOCK_PATH = "/tmp/conductor-build.lock".freeze
+
+  def kamal_build_command = [ "bash", "-lc", with_build_lock(kamal_gateway.build_release) ]
+
+  # ONE BUILD AT A TIME ON THE CONTROL MACHINE. Builds land here by default now, and
+  # this box also serves live apps — two concurrent builds are two builds' worth of
+  # contention on the machine your users are talking to.
+  #
+  # `--nonblock` deliberately: a build that queues indefinitely behind another one
+  # looks identical to a hung deploy, and the honest answer is "the builder is busy,
+  # try again" rather than a deploy that may or may not still be alive.
+  #
+  # Target-venue builds run on the app's own server, so locking them here would
+  # serialise builds that never contend for the same CPU.
+  def with_build_lock(command)
+    return "#{kamal_bin} #{command}" unless app.build_venue == "control"
+
+    "flock --nonblock --conflict-exit-code #{LOCK_BUSY_EXIT} #{BUILD_LOCK_PATH} " \
+      "#{kamal_bin} #{command}"
+  end
+
+  # A busy builder is CONTENTION, not a red build. Reporting it as a failure would
+  # tell an operator their commit is broken when the machine was merely occupied —
+  # the same conflation that made an exhausted CI quota read as a bad commit.
+  def build_outcome_for(exit_code)
+    return :ok if exit_code.to_i.zero?
+    return :busy if exit_code.to_i == LOCK_BUSY_EXIT
+
+    :failed
+  end
 
   def kamal_rollback_command(version)
     ["bash", "-lc", "#{kamal_bin} #{kamal_gateway.rollback(version)}"]
