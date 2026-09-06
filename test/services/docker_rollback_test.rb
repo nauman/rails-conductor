@@ -14,6 +14,16 @@ class DockerRollbackTest < ActiveSupport::TestCase
       @boot = boot
     end
 
+    # Sensitive values travel as file CONTENT, so the double needs the seam or the
+    # rollback would appear to work while writing nothing.
+    attr_reader :uploads
+    def upload_content(content, path, mode: nil)
+      (@uploads ||= []) << [ content, path, mode ]
+      true
+    end
+
+    def error = nil
+
     def execute_with_status(cmd)
       @commands << cmd
       return { success: true, output: (@present ? "PRESENT" : ""), stderr: "" } if cmd.include?("image inspect")
@@ -149,4 +159,24 @@ class DockerRollbackTest < ActiveSupport::TestCase
     assert_equal "failed", @deployment.reload.status
     assert_match(/not supported for native/i, @deployment.reload.log.to_s)
   end
+  # A ROLLBACK THAT BOOTS WITHOUT ITS SECRETS still starts, still passes a
+  # `docker ps` check, and is broken in a way nothing here would notice. The env
+  # file is referenced by --env-file, so it has to be written first.
+  test "the env file is uploaded before the rolled-back container is created" do
+    @app.env_variables.create!(key: "API_TOKEN", value: "s3cr3t-value", secret: true)
+    ssh = FakeSsh.new
+
+    DockerRollback.new(@app.reload, @deployment, ssh: ssh).rollback!("abc1234")
+
+    assert ssh.uploads.to_a.any?, "the file must be written, not merely referenced"
+    content, _path, mode = ssh.uploads.first
+    assert_includes content.to_s, "API_TOKEN=s3cr3t-value"
+    assert_equal 0o600, mode
+
+    run_idx = ssh.commands.index { |c| c.to_s.start_with?("docker run") }
+    assert run_idx, "expected a docker run"
+    assert_empty ssh.commands[0..run_idx].grep(/s3cr3t-value/),
+                 "no command up to and including the run may carry the value"
+  end
+
 end

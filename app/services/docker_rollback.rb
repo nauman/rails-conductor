@@ -80,7 +80,19 @@ class DockerRollback
     @ssh.execute_with_status("docker stop #{esc(app.container_name)} 2>/dev/null || true")
     @ssh.execute_with_status("docker rm #{esc(app.container_name)} 2>/dev/null || true")
 
+    # THE FILE MUST EXIST BEFORE THE CONTAINER IS CREATED. run_command references
+    # it with --env-file; without this the rollback boots a container with every
+    # sensitive value missing — a container that starts, passes a `docker ps` check,
+    # and is broken in a way nothing here would notice.
+    unless deploy_env.upload!(@ssh)
+      fail_with("Could not write the environment file to #{app.server.name}: #{@ssh.error}")
+      return false
+    end
+
     res = @ssh.execute_with_status(run_command(version))
+    # Removed on both paths: a 0600 file of live credentials outliving the thing that
+    # needed it is the worse outcome.
+    deploy_env.remove!(@ssh)
     if res[:success]
       # `docker run -d` succeeding means the daemon accepted it, not that the
       # process stayed up. Confirm before calling the rollback done.
