@@ -24,6 +24,23 @@ class SshKey < ApplicationRecord
     private_key.present? && fingerprint.present?
   end
 
+  # THE FORM sshd ACTUALLY READS. `public_key` holds PEM
+  # ("-----BEGIN PUBLIC KEY-----"), which is the right thing for display and the
+  # wrong thing for authorized_keys: sshd expects one line of
+  # `<type> <base64-blob> [comment]` and silently ignores anything else. Appending
+  # the PEM would have produced a file that looks installed, authorizes nothing, and
+  # reports no error anywhere — sending whoever debugs it back to editing the file
+  # by hand, which is the whole thing this is meant to end.
+  def authorized_keys_line(comment: "conductor")
+    return nil if private_key.blank?
+
+    key = Net::SSH::KeyFactory.load_data_private_key(private_key, passphrase)
+    pub = key.respond_to?(:public_key) ? key.public_key : key
+    "#{pub.ssh_type} #{[ pub.to_blob ].pack('m0')} #{comment}"
+  rescue StandardError
+    nil
+  end
+
   private
 
   def extract_key_metadata

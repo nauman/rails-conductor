@@ -54,7 +54,10 @@ module ToolAuthorization
       # Arbitrary shell over the server's SSH identity; root-level host mutation.
       "run_script" => :execute, "harden" => :execute, "install_packages" => :execute,
       # Generates and stores an encrypted private key.
-      "add_ssh_key" => :credentials
+      "add_ssh_key" => :credentials,
+      # Writes into a server's authorized_keys — it grants Conductor durable access
+      # to a machine, which is a credentials operation however routine it looks.
+      "repair_identity" => :credentials
     },
     "conductor_domain" => {
       "remove" => :destroy, "delete_dns" => :destroy, "remove_stray_proxy" => :destroy

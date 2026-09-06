@@ -31,7 +31,11 @@ class HardenServer
     set -e
     id #{DEPLOY_USER} >/dev/null 2>&1 || sudo useradd -m -s /bin/bash #{DEPLOY_USER}
     sudo install -d -m 700 -o #{DEPLOY_USER} -g #{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh
-    # Conductor's key already authorizes root; mirror it to deploy so Conductor can log in as deploy.
+    # Carry over whatever authorizes root so the operator keeps their way in. This is
+    # a MIGRATION step, not an identity step — it makes deploy work the way root did.
+    # Conductor's OWN key is installed separately by ServerIdentity, because assuming
+    # "the key that reached root is Conductor's key" is only true on the box you
+    # registered from, and false on every other one.
     sudo cp /root/.ssh/authorized_keys /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chown #{DEPLOY_USER}:#{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chmod 600 /home/#{DEPLOY_USER}/.ssh/authorized_keys
@@ -141,6 +145,21 @@ class HardenServer
     run_root("ssh_harden", SSH_HARDEN) or return failed_result
 
     @server.update!(ssh_user: DEPLOY_USER)
+
+    # ESTABLISH CONDUCTOR'S OWN IDENTITY while root is still reachable. This is the
+    # one moment it legitimately holds a privileged credential, and the only moment
+    # at which installing its key needs no other way in. Skipping it is what turned
+    # "add the public key to your servers' authorized_keys" into a documented manual
+    # errand, and what made a cross-box deploy fail until a human edited a file.
+    #
+    # Non-fatal: the box is hardened and usable either way, and a failure here is
+    # reported rather than silently retried at deploy time.
+    identity = ServerIdentity.new(@server).ensure!
+    if identity.ok?
+      @steps << { step: "identity", ok: true, detail: "Conductor's key #{identity.action} for #{DEPLOY_USER}" }
+    else
+      @steps << { step: "identity", ok: false, detail: identity.reason }
+    end
 
     audit = (@auditor || ServerAudit.new(@server)).audit
     @server.record_audit!(audit.status) if audit.ok?

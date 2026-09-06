@@ -43,7 +43,9 @@ class HardenServerTest < ActiveSupport::TestCase
     assert_equal :secure, result.audit_status
     assert_equal "deploy", @server.reload.ssh_user, "Conductor now manages the box as deploy"
     names = result.steps.map { |s| s[:step] }
-    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db ssh_harden], names
+    # `identity` last: Conductor installs its OWN key while root is still reachable,
+    # rather than assuming the key that reached root was already its own.
+    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db ssh_harden identity], names
   end
 
   test "installs the ServerSudo wrappers for the deploy user (readiness + apply_updates work post-harden)" do
