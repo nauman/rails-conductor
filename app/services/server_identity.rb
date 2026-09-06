@@ -90,10 +90,13 @@ class ServerIdentity
     # THE CHECK AND THE WRITE ARE ONE OPERATION, under one lock. Checking outside it
     # lets two concurrent repairs both see "absent" and both append.
     #
-    # The match is on an ACTIVE entry's key field, not a substring of the file:
-    # `grep -F` also matches the blob inside a commented-out line or inside somebody
-    # else's comment field, and would skip an installation that was actually needed.
-    # awk compares field 2 of non-comment lines, which is where sshd looks.
+    # The match scans EVERY FIELD of each non-comment line, not just field 2. An
+    # authorized_keys entry may carry options — `from="10.0.0.1" ssh-ed25519 BLOB` —
+    # which pushes the blob to field 3. Matching only field 2 would read that as
+    # absent and append an UNRESTRICTED copy of the same key, quietly defeating the
+    # source restriction the operator set. Comparing whole fields (rather than
+    # `grep -F` on the raw text) still ignores a commented-out line and cannot match
+    # inside somebody's comment.
     #
     # The trailing-newline guard matters too: appending to a file whose last line has
     # no newline splices the new key onto it and breaks both entries.
@@ -103,7 +106,7 @@ class ServerIdentity
       touch #{path}
       chown #{owner}:#{owner} #{path} 2>/dev/null || true
       chmod 600 #{path}
-      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'$1 !~ /^#/ && $2 == k { f = 1 } END { exit !f }'"'"' #{path}; then
+      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'$1 !~ /^#/ { for (i = 1; i <= NF; i++) if ($i == k) f = 1 } END { exit !f }'"'"' #{path}; then
         echo CONDUCTOR_KEY_PRESENT
       else
         if [ -s #{path} ] && [ -n "$(tail -c 1 #{path})" ]; then echo >> #{path}; fi

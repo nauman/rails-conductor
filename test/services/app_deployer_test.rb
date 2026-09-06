@@ -15,6 +15,17 @@ class AppDeployerTest < ActiveSupport::TestCase
       @resolver = resolver
     end
 
+    # The repository deploy key travels as file CONTENT over scp now, never
+    # base64'd into a command — base64 is reversible, so that put a private key in
+    # the remote process's argv.
+    attr_reader :uploads
+    def upload_content(content, path, mode: nil)
+      (@uploads ||= []) << [ content, path, mode ]
+      true
+    end
+
+    def error = nil
+
     def execute_with_status(command)
       @commands << command
       r = @resolver.call(command)
@@ -80,6 +91,10 @@ class AppDeployerTest < ActiveSupport::TestCase
     assert_includes clone, "git@github.com:x/y.git"
     refute_includes clone, "https://github.com"
     refute_includes d.deployment.log, private_key
+    # Not merely absent from the LOG: absent from every command. Redacting the
+    # logged copy hid the key from us, not from the host's process table.
+    assert_empty ssh.commands.grep(/PRIVATE KEY/)
+    assert ssh.uploads.to_a.any? { |content, _p, mode| content == private_key && mode == 0o600 }
   end
 
   test "a clone that exits non-zero fails the step (exit status, not stderr, decides)" do

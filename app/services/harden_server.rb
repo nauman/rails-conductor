@@ -43,19 +43,22 @@ class HardenServer
     # "the key that reached root is Conductor's key" is true only on the box you
     # registered from.
     sudo touch /home/#{DEPLOY_USER}/.ssh/authorized_keys
-    # NO NESTED QUOTING, deliberately. The first attempt piped through
-    # `awk "NF && !seen[$0]++"`, and Ruby consumed the backslash so the inner shell
-    # expanded $0 to its own name BEFORE awk ran — making the dedupe key a constant
-    # and keeping only the FIRST line. Reproduced: three keys in, one key out, exit
-    # status 0. A merge that silently deletes keys is worse than the overwrite it
-    # replaced, and it would have deleted Conductor's own credential on a re-run.
+    # APPEND WHAT IS MISSING, PRESERVING ORDER. Two earlier attempts were worse than
+    # the `cp` they replaced:
     #
-    # Append then dedupe in place. `sort -u -o` on the same file is safe, and the
-    # leading newline covers a file that lacks a trailing one — without it, `cat`
-    # would splice the first incoming key onto the last existing line and break both.
+    #   awk "NF && !seen[$0]++"  — Ruby ate the backslash, the inner shell expanded
+    #   $0 before awk ran, the dedupe key became constant, and three keys went in
+    #   while one came out.
+    #
+    #   sort -u                  — deduplicates by REORDERING, and sshd uses the
+    #   FIRST matching entry. Sorting can move `no-pty KEY` ahead of `restrict KEY`
+    #   and thereby GRANT access the operator had restricted.
+    #
+    # `grep -Fxv -f` emits root's lines that are not already present verbatim, and
+    # appending them changes no existing line's position. The leading newline covers
+    # a file with no trailing one, which would otherwise splice two keys together.
     sudo sh -c 'echo >> /home/#{DEPLOY_USER}/.ssh/authorized_keys'
-    sudo sh -c 'cat /root/.ssh/authorized_keys >> /home/#{DEPLOY_USER}/.ssh/authorized_keys'
-    sudo sort -u -o /home/#{DEPLOY_USER}/.ssh/authorized_keys /home/#{DEPLOY_USER}/.ssh/authorized_keys
+    sudo sh -c 'grep -Fxv -f /home/#{DEPLOY_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys >> /home/#{DEPLOY_USER}/.ssh/authorized_keys || true'
     sudo chown #{DEPLOY_USER}:#{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chmod 600 /home/#{DEPLOY_USER}/.ssh/authorized_keys
     echo 'deploy ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-deploy >/dev/null

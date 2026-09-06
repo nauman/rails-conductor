@@ -67,11 +67,21 @@ class AppDeployer
   rescue => e
     fail_with("Unexpected error: #{e.message}")
   ensure
-    # BOTH, on every path. A 0600 file of live credentials outliving the deploy that
-    # needed it is the worse outcome, and an exception between upload and container
-    # creation is exactly when it would be left behind.
-    remove_env_file!
-    cleanup_repository_access
+    # INDEPENDENTLY PROTECTED. Two cleanups in one ensure means the first one raising
+    # skips the second — and the first reads the app's env, so an env failure would
+    # strand the repository key. Each credential's cleanup gets its own rescue; a
+    # failure to tidy is reported, never allowed to suppress the next tidy.
+    begin
+      remove_env_file!
+    rescue StandardError => e
+      log "WARNING: could not remove the environment file: #{e.message}"
+    end
+
+    begin
+      cleanup_repository_access
+    rescue StandardError => e
+      log "WARNING: could not remove the repository key: #{e.message}"
+    end
   end
 
   private
@@ -140,16 +150,25 @@ class AppDeployer
 
     @repository_key_path = "/home/#{app.server.ssh_user_or_default}/.conductor/keys/#{app.resource_key}"
     key_dir = File.dirname(@repository_key_path)
-    encoded = Base64.strict_encode64(key)
-    command =
-      "mkdir -p #{esc(key_dir)} && chmod 700 #{esc(key_dir)} && " \
-      "printf %s #{esc(encoded)} | base64 -d > #{esc(@repository_key_path)} && " \
-      "chmod 600 #{esc(@repository_key_path)}"
-    display =
-      "mkdir -p #{esc(key_dir)} && chmod 700 #{esc(key_dir)} && " \
-      "[REDACTED deploy key] > #{esc(@repository_key_path)} && chmod 600 #{esc(@repository_key_path)}"
 
-    run(command, display: display)
+    # UPLOADED, NOT ECHOED. This used to base64 the private key into the SSH command
+    # string. Base64 is reversible, so the key sat in the remote process's argv for
+    # the life of that command — readable in the host process table and by anything
+    # recording commands. Redacting the LOGGED copy did nothing about that; it only
+    # hid it from us.
+    #
+    # The directory is created first and separately, so no command ever carries the
+    # material, and scp applies 0600 at creation rather than in a later chmod.
+    return false unless run("mkdir -p #{esc(key_dir)} && chmod 700 #{esc(key_dir)}",
+                            display: "preparing #{key_dir} for the repository key")
+
+    if ssh.upload_content(key, @repository_key_path, mode: 0o600)
+      log "Repository deploy key placed at #{@repository_key_path}"
+      true
+    else
+      fail_with("could not place the repository deploy key on #{app.server.name}: #{ssh.error}")
+      false
+    end
   end
 
   def clone_or_pull_repo

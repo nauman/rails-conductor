@@ -91,6 +91,24 @@ class DeployEnvTest < ActiveSupport::TestCase
     assert_not_includes mk, "mkdir -p", "-p would accept whatever is already there"
   end
 
+  # THE REPOSITORY DEPLOY KEY had the same defect the env file had: it was base64'd
+  # into the SSH command, and base64 is reversible — so a private key sat in the
+  # remote process's argv. Redacting the logged copy hid it from us, not from the
+  # host.
+  test "the repository deploy key is uploaded, never put in a command" do
+    key = OpenSSL::PKey::RSA.new(2048).to_pem
+    @subject.create_deploy_key!(private_key: key, public_key: "ssh-rsa AAAAPUB repo")
+
+    ssh = FakeSsh.new
+    deployer = AppDeployer.new(@subject, @subject.deployments.create!(user: @org.users.first, status: "deploying"))
+    deployer.instance_variable_set(:@ssh, ssh)
+    deployer.send(:prepare_repository_access)
+
+    assert ssh.uploads.any? { |content, _p, mode| content.to_s.include?("PRIVATE KEY") && mode == 0o600 }
+    assert_empty ssh.commands.grep(/PRIVATE KEY|#{Regexp.escape(Base64.strict_encode64(key)[0, 40])}/),
+                 "no command may carry the key, encoded or otherwise"
+  end
+
   class FakeSsh
     attr_reader :uploads, :commands
     def initialize(succeed: true) = (@uploads = []; @commands = []; @succeed = succeed)

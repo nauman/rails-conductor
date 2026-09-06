@@ -179,4 +179,18 @@ class DockerRollbackTest < ActiveSupport::TestCase
                  "no command up to and including the run may carry the value"
   end
 
+  # A FAILED UPLOAD MUST STILL TIDY. Removing only after run_command covered exactly
+  # one exit path: an upload that failed part-way, or an exception mid-swap, left a
+  # 0600 file of live credentials on the host.
+  test "the env file is removed even when the rollback fails before the run" do
+    @app.env_variables.create!(key: "API_TOKEN", value: "s3cr3t-value", secret: true)
+    ssh = FakeSsh.new
+    def ssh.upload_content(*, **) = false
+
+    DockerRollback.new(@app.reload, @deployment, ssh: ssh).rollback!("abc1234")
+
+    assert ssh.commands.any? { |c| c.to_s.include?("rm -rf") },
+           "cleanup must cover the upload failure, not just the run"
+  end
+
 end

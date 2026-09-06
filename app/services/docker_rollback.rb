@@ -67,7 +67,20 @@ class DockerRollback
     false
   end
 
+  # The env file must be removed however this ends — a failed upload leaving a
+  # partial file, an exception mid-swap, or an early return on a boot failure. Doing
+  # it after run_command covered exactly one of those.
   def swap_to(version)
+    swap_to!(version)
+  ensure
+    begin
+      deploy_env.remove!(@ssh)
+    rescue StandardError => e
+      log("WARNING: could not remove the environment file: #{e.message}")
+    end
+  end
+
+  def swap_to!(version)
     # Stop whatever is ACTUALLY serving, resolved by label — after a
     # zero-downtime deploy the live container is app-<id>-r<rev>-<sha>, so
     # stopping the legacy fixed name would leave it running and roll back into a
@@ -95,9 +108,6 @@ class DockerRollback
     @ssh.execute_with_status("docker rm #{esc(app.container_name)} 2>/dev/null || true")
 
     res = @ssh.execute_with_status(run_command(version))
-    # Removed on both paths: a 0600 file of live credentials outliving the thing that
-    # needed it is the worse outcome.
-    deploy_env.remove!(@ssh)
     if res[:success]
       # `docker run -d` succeeding means the daemon accepted it, not that the
       # process stayed up. Confirm before calling the rollback done.
