@@ -8,79 +8,121 @@ require "shellwords"
 # documented as a feature, and it is why a cross-box deploy failed until a human
 # edited a file.
 #
-# The deeper version of the same mistake is in provisioning, which copies ROOT's
-# authorized_keys onto the deploy user. That is a migration step — "let deploy work
-# the way root did" — wearing the clothes of an identity step. On the box you
-# registered from they are indistinguishable, because the operator's key is the key
-# in both. They diverge on every other box, which is exactly where this broke.
+# TWO CONNECTIONS, deliberately, because they answer different questions:
 #
-# Registration is the right moment: it is the one time Conductor legitimately holds
-# root (see docs/learnings/root-is-a-registration-only-credential.md). Everything
-# after that is repair, and repair runs as the ordinary SSH user.
+#   writer   — may be privileged (root during provisioning). Puts the key in place.
+#   verifier — connects AS THE TARGET USER USING ONLY THE STORED KEY. Proves the
+#              thing we just did actually works.
+#
+# Verifying over the writer's connection would prove nothing: it is already
+# authenticated, by whatever credential got it in. Net::SSH will also offer agent
+# identities and ~/.ssh/config keys unless told not to, so an ordinary connection
+# can succeed on the OPERATOR's key while Conductor's own is absent — a check that
+# passes exactly when it should fail.
 class ServerIdentity
   Result = Struct.new(:ok, :action, :reason, keyword_init: true) do
     def ok? = ok
   end
 
-  # Proof-of-life for a connection made WITH the key we just authorized.
   PROBE = "echo CONDUCTOR_IDENTITY_OK".freeze
 
-  def initialize(server, ssh: nil)
+  def initialize(server, ssh: nil, verifier: nil, target_user: nil)
     @server = server
-    @ssh = ssh || SshConnection.new(server)
+    @target_user = target_user.presence || server.ssh_user_or_default
+    @ssh = ssh || SshConnection.new(server, user: @target_user)
+    @verifier = verifier || SshConnection.new(server, user: @target_user)
   end
 
   def ensure!
     key = @server.ssh_key
-    # The OPENSSH LINE, not the PEM in `public_key`. sshd reads one line of
-    # `<type> <blob> [comment]` and silently ignores anything else, so installing
-    # the PEM would authorize nothing and say nothing.
-    public_key = key&.authorized_keys_line(comment: "conductor@#{@server.name}").to_s.strip
-    if public_key.blank?
+    # The OPENSSH LINE, not the PEM in `public_key`: sshd reads
+    # `<type> <blob> [comment]` and silently ignores anything else, so installing the
+    # PEM would authorize nothing and report nothing.
+    line = key&.authorized_keys_line(comment: comment)
+    if line.blank?
       return Result.new(ok: false, reason: "no ssh key is stored for #{@server.name}, so there is " \
                                            "no identity to install")
     end
 
-    return verify("already-authorized") if authorized?(public_key)
+    # MATCH ON THE KEY ITSELF, never the whole line. The comment carries a server
+    # name, so matching the line would append a duplicate every time a server is
+    # renamed — and would also match an entry someone had commented out.
+    blob = line.split[1]
+    # A two-value return: [action, error]. An earlier version returned the ACTION as
+    # a String on success and the ERROR as a String on failure, then treated "any
+    # String" as failure — so every successful install was read as an error. Two
+    # meanings on one type is how that happens.
+    action, error = install!(line, blob)
+    return Result.new(ok: false, reason: error) if error
 
-    append!(public_key)
-    verify("installed")
+    verify(action)
   end
 
   private
 
-  # `grep -qF` — FIXED string, not a pattern. A public key contains `+` and `/`,
-  # which a regex would read as operators.
-  def authorized?(public_key)
-    @ssh.execute_with_status(
-      "grep -qF #{Shellwords.escape(public_key)} ~/.ssh/authorized_keys 2>/dev/null"
-    )[:success]
+  # Single line, always. A server name is operator-supplied and may contain a
+  # newline; Shellwords preserves it inside the argument, so an unsanitised comment
+  # can introduce ENTIRE EXTRA authorized_keys lines — an injection into the one file
+  # that decides who may log in.
+  def comment
+    "conductor@#{@server.name.to_s.gsub(/[^A-Za-z0-9_.\-]/, '-')[0, 64]}"
   end
 
-  # Idempotent by construction: the grep runs again inside the shell, so a race
-  # between check and append cannot duplicate the line. Permissions are set every
-  # time because sshd silently ignores an authorized_keys file it considers too
-  # open — a failure mode with no error message anywhere.
-  def append!(public_key)
-    escaped = Shellwords.escape(public_key)
-    @ssh.execute_with_status(
-      "install -d -m 700 ~/.ssh && touch ~/.ssh/authorized_keys && " \
-      "chmod 600 ~/.ssh/authorized_keys && " \
-      "grep -qF #{escaped} ~/.ssh/authorized_keys || echo #{escaped} >> ~/.ssh/authorized_keys"
-    )
+  # The target user's file by absolute path: the writer may be root, in which case
+  # `~` is root's home and not the account being authorized.
+  def authorized_keys_path
+    home = @target_user == "root" ? "/root" : "/home/#{@target_user}"
+    "#{home}/.ssh/authorized_keys"
   end
 
-  # VERIFY BY USING IT. A write that returned zero proves the file was edited, not
-  # that the key authenticates — and a recorded authorization nobody tested is the
-  # stale-fact pattern this fleet keeps paying for (ADR 0010). sshd may reject the
-  # file's permissions, the key may be the wrong type for the host's config, or the
-  # append may have gone to a different user's home than the one we log in as.
+  # Returns [action, nil] on success, or [nil, reason] on failure.
+  #
+  # Permissions are repaired on EVERY run, present key or not: sshd silently ignores
+  # an authorized_keys file it considers too open, which is a failure with no error
+  # message anywhere.
+  def install!(line, blob)
+    path = Shellwords.escape(authorized_keys_path)
+    dir = Shellwords.escape(File.dirname(authorized_keys_path))
+    escaped_line = Shellwords.escape(line)
+    escaped_blob = Shellwords.escape(blob)
+    owner = Shellwords.escape(@target_user)
+
+    # flock serialises concurrent appends: two deploys repairing the same box at once
+    # would otherwise both pass the check and both append.
+    script = <<~SH
+      set -e
+      install -d -m 700 -o #{owner} -g #{owner} #{dir} 2>/dev/null || install -d -m 700 #{dir}
+      touch #{path}
+      chown #{owner}:#{owner} #{path} 2>/dev/null || true
+      chmod 600 #{path}
+      if grep -qF #{escaped_blob} #{path}; then
+        echo CONDUCTOR_KEY_PRESENT
+      else
+        flock #{path} sh -c 'printf "%s\\n" #{escaped_line} >> #{path}'
+        echo CONDUCTOR_KEY_ADDED
+      fi
+    SH
+
+    result = @ssh.execute_with_status(script)
+    unless result[:success]
+      return [ nil, "could not write #{authorized_keys_path} on #{@server.name}: " \
+                    "#{(result[:stderr].presence || result[:stdout]).to_s.strip[0, 200]}" ]
+    end
+
+    [ result[:stdout].to_s.include?("CONDUCTOR_KEY_PRESENT") ? "already-authorized" : "installed", nil ]
+  end
+
+  # VERIFY BY USING IT, on a connection restricted to the stored key. A write that
+  # returned zero proves the file was edited, not that the key authenticates.
   def verify(action)
-    result = @ssh.execute_with_status(PROBE)
-    return Result.new(ok: true, action: action) if result[:success] && result[:stdout].to_s.include?("CONDUCTOR_IDENTITY_OK")
+    result = @verifier.with_only_stored_key { |ssh| ssh.execute_with_status(PROBE) }
+    if result[:success] && result[:stdout].to_s.include?("CONDUCTOR_IDENTITY_OK")
+      return Result.new(ok: true, action: action)
+    end
 
     Result.new(ok: false, action: action,
-               reason: "wrote the key to #{@server.name} but could not authenticate with it afterwards" \
-                       "#{" (#{@ssh.error})" if @ssh.error.present?}")
+               reason: "wrote the key to #{@server.name} but could not authenticate as " \
+                       "#{@target_user} using it" \
+                       "#{" (#{@verifier.error})" if @verifier.error.present?}")
   end
 end

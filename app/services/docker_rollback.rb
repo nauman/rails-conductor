@@ -158,13 +158,13 @@ class DockerRollback
   def ref(version) = "#{app.image_name}:#{version}"
   def esc(str) = Shellwords.escape(str.to_s)
 
-  def deploy_env_flags
-    app.deploy_env_pairs(server: app.server).filter_map do |key, value|
-      next if %w[PORT RAILS_ENV RAILS_LOG_TO_STDOUT].include?(key)
+  # ONE PLACE, shared with the deploy path. This method used to be a second copy,
+  # and the copies had drifted: the deploy path redacted secrets from its logs, this
+  # one did not redact at all, so a rollback wrote every credential into the
+  # deployment record in clear. Duplicated logic fails in whichever copy nobody reads.
+  def deploy_env = @deploy_env ||= DeployEnv.new(app, server: app.server, deployment_id: deployment.id)
 
-      "-e #{key}=#{Shellwords.escape(value.to_s)}"
-    end.join(" ")
-  end
+  def deploy_env_flags(redacted: false) = deploy_env.flags(redacted: redacted)
 
   def log(message)
     deployment.append_log(message)

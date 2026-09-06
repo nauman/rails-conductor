@@ -15,8 +15,11 @@ class RepairServerIdentityTool
 
   DEFINITION = {
     name: "repair_server_identity",
-    description: "Install Conductor's own SSH key in the target's authorized_keys, then prove it " \
-                 "authenticates. For servers registered before Conductor installed its key itself.",
+    description: "Install Conductor's own SSH key in a server's authorized_keys and prove it " \
+                 "authenticates, for servers registered before Conductor did this itself. " \
+                 "REQUIRES that Conductor can already reach the box with some credential — it " \
+                 "makes the identity durable, it cannot create access from nothing. A box " \
+                 "Conductor cannot reach at all must be re-registered.",
     input_schema: {
       type: "object",
       properties: {
@@ -38,9 +41,13 @@ class RepairServerIdentityTool
     result = ServerIdentity.new(server).ensure!
 
     unless result.ok?
-      # A refusal here names what is missing rather than suggesting a way around it.
-      # "Add the key by hand" is the behaviour being removed, not a fallback.
-      return Result.fail("Could not establish Conductor's identity on #{server.name}: #{result.reason}")
+      # A refusal names what is missing rather than suggesting a way around it. "Add
+      # the key by hand" is the behaviour being removed, not a fallback. And repair
+      # cannot bootstrap: if no credential reaches the box, there is nothing to make
+      # durable, and re-registration is the honest answer.
+      return Result.fail("Could not establish Conductor's identity on #{server.name}: #{result.reason}. " \
+                         "If Conductor cannot reach this box at all, repair has nothing to build on — " \
+                         "re-register it, which is the step that installs the key while root is available.")
     end
 
     Result.ok({

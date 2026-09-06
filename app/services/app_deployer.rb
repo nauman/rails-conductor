@@ -246,18 +246,32 @@ class AppDeployer
   # here is the boundary, not a nicety.
   def esc(value) = Shellwords.escape(value.to_s)
 
-  # App#deploy_env_pairs includes Conductor-derived values such as the
-  # dedicated DATABASE_URL. Reading EnvVariable rows directly silently omitted
-  # those values from plain-docker and Conductor-driven Kamal artifacts.
-  def deploy_env_flags(redacted: false)
-    secret_keys = app.deploy_secret_keys(server: app.server)
-    app.deploy_env_pairs(server: app.server).filter_map do |key, value|
-      next if %w[PORT RAILS_ENV RAILS_LOG_TO_STDOUT].include?(key)
+  # ONE PLACE, shared with DockerRollback. This used to be a second copy of that
+  # logic and the two had already drifted — this one redacted secrets from the log,
+  # the rollback one did not redact at all, so a rollback wrote every credential into
+  # the deployment record in clear.
+  #
+  # Sensitive values now travel in a 0600 file uploaded over scp rather than as `-e`
+  # arguments, so they are not readable in the host process table for the life of the
+  # command. They ARE still in the container's environment and still visible to
+  # `docker inspect` — inherent to env vars, and stated so the flag cannot
+  # over-promise.
+  def deploy_env = @deploy_env ||= DeployEnv.new(app, server: app.server, deployment_id: deployment.id)
 
-      rendered = redacted && secret_keys.include?(key) ? "[REDACTED]" : Shellwords.escape(value.to_s)
-      "-e #{key}=#{rendered}"
-    end.join(" ")
+  def deploy_env_flags(redacted: false) = deploy_env.flags(redacted: redacted)
+
+  # Uploaded before the container is created; removed afterwards on BOTH paths,
+  # success and failure — a 0600 file of live credentials outliving the thing that
+  # needed it is the worse outcome.
+  def upload_env_file!
+    return true unless deploy_env.file_needed?
+    return true if deploy_env.upload!(ssh)
+
+    fail_with("could not write the environment file to #{app.server.name}: #{ssh.error}")
+    false
   end
+
+  def remove_env_file! = deploy_env.remove!(ssh)
 
   # Stop whatever is actually serving, resolved by label — not just the fixed
   # name. An app that previously deployed zero-downtime runs as
@@ -311,7 +325,12 @@ class AppDeployer
     # Redact secret env values in the logged/broadcast copy.
     display    = (prefix + [ deploy_env_flags(redacted: true) ] + suffix).join(" ")
 
-    if run(docker_run, display: display)
+    return false unless upload_env_file!
+
+    created = run(docker_run, display: display)
+    remove_env_file!
+
+    if created
       # Get container ID
       run("docker ps -q -f name=#{app.container_name}")
       if ssh.output.present?
@@ -421,7 +440,13 @@ class AppDeployer
     cmd = (prefix + [ deploy_env_flags ] + suffix).join(" ")
     display = (prefix + [ deploy_env_flags(redacted: true) ] + suffix).join(" ")
 
-    return false unless run(cmd, display: display)
+    return false unless upload_env_file!
+
+    started = run(cmd, display: display)
+    # Whether or not it started, the file has done its job — and leaving a 0600 file
+    # of live credentials behind on the failure path is the worse outcome.
+    remove_env_file!
+    return false unless started
 
     @candidate_name = name # set BEFORE the probe so any later failure can clean up
     @candidate_container = container_id_of(name)

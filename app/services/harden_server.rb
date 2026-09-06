@@ -31,12 +31,19 @@ class HardenServer
     set -e
     id #{DEPLOY_USER} >/dev/null 2>&1 || sudo useradd -m -s /bin/bash #{DEPLOY_USER}
     sudo install -d -m 700 -o #{DEPLOY_USER} -g #{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh
-    # Carry over whatever authorizes root so the operator keeps their way in. This is
-    # a MIGRATION step, not an identity step — it makes deploy work the way root did.
-    # Conductor's OWN key is installed separately by ServerIdentity, because assuming
-    # "the key that reached root is Conductor's key" is only true on the box you
-    # registered from, and false on every other one.
-    sudo cp /root/.ssh/authorized_keys /home/#{DEPLOY_USER}/.ssh/authorized_keys
+    # MERGE, never overwrite. Carrying root's keys over lets the operator keep their
+    # way in, but `cp` also DELETES whatever deploy already authorized — including
+    # Conductor's own key, installed by a previous run of this very script. Re-running
+    # harden on a hardened box would then remove the credential Conductor manages it
+    # with, moments before root is disabled: a lockout built out of two correct-looking
+    # steps.
+    #
+    # This is a MIGRATION step, not an identity step — it makes deploy work the way
+    # root did. Conductor's own key is installed separately by ServerIdentity, because
+    # "the key that reached root is Conductor's key" is true only on the box you
+    # registered from.
+    sudo touch /home/#{DEPLOY_USER}/.ssh/authorized_keys
+    sudo sh -c 'cat /root/.ssh/authorized_keys /home/#{DEPLOY_USER}/.ssh/authorized_keys | awk "NF && !seen[\$0]++" > /tmp/.ak.merged && cat /tmp/.ak.merged > /home/#{DEPLOY_USER}/.ssh/authorized_keys && rm -f /tmp/.ak.merged'
     sudo chown #{DEPLOY_USER}:#{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chmod 600 /home/#{DEPLOY_USER}/.ssh/authorized_keys
     echo 'deploy ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-deploy >/dev/null
@@ -142,24 +149,26 @@ class HardenServer
 
     run_root("firewall", firewall_script) or return failed_result
     run_root("close_db",  CLOSE_DB)  or return failed_result
+
+    # ESTABLISH CONDUCTOR'S OWN IDENTITY *BEFORE* ROOT IS SURRENDERED, and refuse to
+    # surrender it if that fails. Installing afterwards meant a failure left the box
+    # with root disabled and Conductor holding a key that may not authorize — the
+    # lockout this whole routine is otherwise careful to avoid. Root is the only way
+    # back, so it is the last thing to give up.
+    # Writer is the PRIVILEGED connection (root is still up); verifier connects as
+    # the deploy user with only the stored key, so success means that key works.
+    identity = ServerIdentity.new(@server, ssh: privileged_ssh, verifier: @deploy_ssh,
+                                  target_user: DEPLOY_USER).ensure!
+    @steps << { step: "identity", ok: identity.ok?, detail: identity.ok? ? "Conductor's key #{identity.action} for #{DEPLOY_USER}" : identity.reason }
+    unless identity.ok?
+      return fail!("could not establish Conductor's own key on #{@server.name} (#{identity.reason}) — " \
+                   "root left enabled rather than surrendering the only way back in")
+    end
+
     run_root("ssh_harden", SSH_HARDEN) or return failed_result
 
     @server.update!(ssh_user: DEPLOY_USER)
 
-    # ESTABLISH CONDUCTOR'S OWN IDENTITY while root is still reachable. This is the
-    # one moment it legitimately holds a privileged credential, and the only moment
-    # at which installing its key needs no other way in. Skipping it is what turned
-    # "add the public key to your servers' authorized_keys" into a documented manual
-    # errand, and what made a cross-box deploy fail until a human edited a file.
-    #
-    # Non-fatal: the box is hardened and usable either way, and a failure here is
-    # reported rather than silently retried at deploy time.
-    identity = ServerIdentity.new(@server).ensure!
-    if identity.ok?
-      @steps << { step: "identity", ok: true, detail: "Conductor's key #{identity.action} for #{DEPLOY_USER}" }
-    else
-      @steps << { step: "identity", ok: false, detail: identity.reason }
-    end
 
     audit = (@auditor || ServerAudit.new(@server)).audit
     @server.record_audit!(audit.status) if audit.ok?

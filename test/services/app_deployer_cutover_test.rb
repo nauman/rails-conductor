@@ -13,6 +13,15 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
       @fail_on = fail_on
     end
 
+    # Sensitive values travel as FILE CONTENT over scp, never as a command — the
+    # whole point, since anything passed through exec becomes a command string on
+    # the remote host.
+    attr_reader :uploads
+    def upload_content(content, path, mode: nil)
+      (@uploads ||= []) << [ content, path, mode ]
+      true
+    end
+
     def execute_with_status(cmd)
       @commands << cmd
       failed = @fail_on && cmd.include?(@fail_on)
@@ -349,9 +358,18 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     ssh = FakeSsh.new
     cutover(ssh)
 
+    # The derived DATABASE_URL carries the database password, and it used to ride on
+    # the docker run command line — readable in the host process table for the life
+    # of the command. It now travels in a 0600 file uploaded over scp.
     run = ssh.commands.find { |c| c.start_with?("docker run") }
-    assert_includes run, "DATABASE_URL="
-    assert_includes run, "top-secret"
+    assert_includes run, "--env-file"
+    assert_not_includes run, "top-secret", "a password must not be an argv element"
+
+    content, path, mode = ssh.uploads.to_a.first
+    assert_includes content.to_s, "DATABASE_URL=", "the candidate must still receive it"
+    assert_includes content.to_s, "top-secret"
+    assert_equal 0o600, mode
+    assert_includes path.to_s, "conductor-env"
 
     display = @deployment.reload.log.to_s
     assert_not_includes display, "top-secret"

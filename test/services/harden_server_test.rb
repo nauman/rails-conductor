@@ -15,7 +15,26 @@ class HardenServerTest < ActiveSupport::TestCase
     def execute_with_status(cmd)
       @commands << cmd
       ok = @succeed && !(@fail_on && cmd.include?(@fail_on))
-      { success: ok, output: ok ? @output : "boom", stdout: ok ? @output : "", stderr: ok ? "" : "boom", exit_code: ok ? 0 : 1 }
+      out = ok ? identity_aware_output(cmd) : ""
+      { success: ok, output: ok ? out : "boom", stdout: out, stderr: ok ? "" : "boom", exit_code: ok ? 0 : 1 }
+    end
+
+    # Identity verification restricts the connection to the stored key, so a
+    # verification cannot pass on the operator's credential. The seam has to exist
+    # on the double or the fake proves something the real thing does not.
+    def with_only_stored_key
+      yield self
+    end
+
+    private
+
+    # ServerIdentity reads these markers to tell "added" from "already there", and
+    # its probe from either.
+    def identity_aware_output(cmd)
+      return "CONDUCTOR_IDENTITY_OK\n" if cmd.include?("CONDUCTOR_IDENTITY_OK")
+      return "CONDUCTOR_KEY_ADDED\n" if cmd.include?("authorized_keys") && cmd.include?("grep -qF")
+
+      @output
     end
   end
 
@@ -43,9 +62,12 @@ class HardenServerTest < ActiveSupport::TestCase
     assert_equal :secure, result.audit_status
     assert_equal "deploy", @server.reload.ssh_user, "Conductor now manages the box as deploy"
     names = result.steps.map { |s| s[:step] }
-    # `identity` last: Conductor installs its OWN key while root is still reachable,
-    # rather than assuming the key that reached root was already its own.
-    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db ssh_harden identity], names
+    assert_equal %w[provision verify_deploy_sudo grant_sudo_wrappers firewall close_db identity ssh_harden], names
+    # THE ORDER IS THE LOCKOUT GUARD. Conductor's own key must be installed and
+    # proven while root is still reachable; doing it after ssh_harden would leave a
+    # failure with root disabled and Conductor holding a key that may not authorize.
+    assert names.index("identity") < names.index("ssh_harden"),
+           "root is the only way back, so it is the last thing surrendered"
   end
 
   test "installs the ServerSudo wrappers for the deploy user (readiness + apply_updates work post-harden)" do

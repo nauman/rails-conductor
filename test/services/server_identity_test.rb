@@ -20,7 +20,7 @@ class ServerIdentityTest < ActiveSupport::TestCase
   test "installing needs a key with a public half" do
     @server.update!(ssh_key: nil)
 
-    result = ServerIdentity.new(@server, ssh: FakeSsh.new).ensure!
+    result = ServerIdentity.new(@server, ssh: FakeSsh.new, verifier: FakeSsh.new).ensure!
 
     assert_not result.ok?
     assert_match(/no ssh key/i, result.reason)
@@ -28,7 +28,7 @@ class ServerIdentityTest < ActiveSupport::TestCase
 
   test "the key is appended for the deploy user, idempotently" do
     ssh = FakeSsh.new(authorized: "")
-    ServerIdentity.new(@server, ssh: ssh).ensure!
+    ServerIdentity.new(@server, ssh: ssh, verifier: ssh).ensure!
 
     assert ssh.commands.any? { |c| c.include?("authorized_keys") }
     assert ssh.commands.any? { |c| c.include?("grep") }, "must check before appending, or it duplicates"
@@ -38,16 +38,18 @@ class ServerIdentityTest < ActiveSupport::TestCase
   # tested is the stale-fact pattern this fleet keeps paying for.
   test "success requires a fresh connection made with that key" do
     ssh = FakeSsh.new(authorized: "")
-    result = ServerIdentity.new(@server, ssh: ssh).ensure!
+    result = ServerIdentity.new(@server, ssh: ssh, verifier: ssh).ensure!
 
     assert result.ok?
     assert ssh.verified?, "the identity is only established once it has been used"
+    assert ssh.verified_under_restriction?,
+           "verification must offer ONLY the stored key, or it can pass on the operator's"
   end
 
   test "a write that appears to succeed but does not authenticate is a failure" do
     ssh = FakeSsh.new(authorized: "", verify_succeeds: false)
 
-    result = ServerIdentity.new(@server, ssh: ssh).ensure!
+    result = ServerIdentity.new(@server, ssh: ssh, verifier: ssh).ensure!
 
     assert_not result.ok?
     assert_match(/could not authenticate/i, result.reason)
@@ -66,11 +68,12 @@ class ServerIdentityTest < ActiveSupport::TestCase
   test "an already-authorized key is left alone" do
     ssh = FakeSsh.new(authorized: @key.authorized_keys_line)
 
-    result = ServerIdentity.new(@server, ssh: ssh).ensure!
+    result = ServerIdentity.new(@server, ssh: ssh, verifier: ssh).ensure!
 
     assert result.ok?
     assert_equal "already-authorized", result.action
-    assert_not ssh.commands.any? { |c| c.include?(">>") }, "must not append what is already there"
+    assert ssh.commands.any? { |c| c.include?("CONDUCTOR_KEY_PRESENT") || c.include?("grep -qF") },
+           "must check before appending"
   end
 
   # Writing into authorized_keys grants durable access to a machine. However routine
@@ -91,20 +94,33 @@ class ServerIdentityTest < ActiveSupport::TestCase
 
     def verified? = @verified
 
+    # Verification MUST go through with_only_stored_key, or it could pass on a
+    # credential that is not the one being installed.
+    def with_only_stored_key
+      @restricted = true
+      yield self
+    ensure
+      @restricted = false
+    end
+
+    def restricted? = @restricted
+
     def execute_with_status(command)
       @commands << command
-      if command.include?("grep")
-        # Match on the key BLOB, which survives shell escaping intact.
-        blob = @authorized.to_s.split[1].to_s
-        found = blob.present? && command.include?(blob)
-        return { success: found, stdout: "", stderr: "" }
-      end
       if command.include?("CONDUCTOR_IDENTITY_OK")
         @verified = true
+        @verified_under_restriction = @restricted
         return { success: @verify_succeeds, stdout: @verify_succeeds ? "CONDUCTOR_IDENTITY_OK\n" : "", stderr: "" }
+      end
+      if command.include?("authorized_keys")
+        blob = @authorized.to_s.split[1].to_s
+        present = blob.present? && command.include?(blob)
+        return { success: true, stdout: present ? "CONDUCTOR_KEY_PRESENT\n" : "CONDUCTOR_KEY_ADDED\n", stderr: "" }
       end
       { success: true, stdout: "", stderr: "" }
     end
+
+    def verified_under_restriction? = @verified_under_restriction
 
     def error = nil
   end

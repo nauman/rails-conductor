@@ -220,6 +220,40 @@ class SshConnection
     false
   end
 
+  # Upload CONTENT, not a command that writes content. The difference is the whole
+  # point for a credential: anything passed through `exec` becomes a command string
+  # on the remote host — visible in its process table and to anything recording
+  # commands — whereas scp moves the bytes over the encrypted channel and they never
+  # appear as an argument anywhere.
+  #
+  # `mode` is applied by scp at creation, so the file is never briefly world-readable
+  # and no symlink planted at a predictable path is followed.
+  # Restrict authentication to the stored key for the life of this block, so a
+  # verification cannot pass on somebody else's credential.
+  def with_only_stored_key
+    previous = @strict_identity
+    @strict_identity = true
+    yield self
+  ensure
+    @strict_identity = previous
+  end
+
+  def upload_content(content, remote_path, mode: 0o600)
+    @error = nil
+    return false unless server.ssh_key.present? && server.ip_address.present?
+
+    Net::SSH.start(server.ip_address, login_user, **ssh_options) do |ssh|
+      ssh.scp.upload!(StringIO.new(content.to_s), remote_path, mode: mode)
+    end
+    true
+  rescue Net::SSH::AuthenticationFailed => e
+    failure("Authentication failed: #{e.message}")
+    false
+  rescue => e
+    failure("Upload failed: #{e.message}")
+    false
+  end
+
   def success?
     @error.nil?
   end
@@ -249,6 +283,18 @@ class SshConnection
         options[:passphrase] = server.ssh_key.passphrase
       end
     end
+
+    # ONLY THE STORED KEY, when the caller is proving that key works.
+    #
+    # By default Net::SSH will also offer agent identities and anything ~/.ssh/config
+    # points at, so a connection can succeed on the OPERATOR's key while Conductor's
+    # own is absent — and a check built on that proves nothing. Whenever the question
+    # is "does the key we hold authenticate?", every other credential has to be off
+    # the table or the answer is theatre.
+    options.merge!(
+      keys: [], keys_only: true, use_agent: false, config: false,
+      auth_methods: [ "publickey" ]
+    ) if @strict_identity
 
     options
   end
