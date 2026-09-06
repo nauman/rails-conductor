@@ -70,6 +70,19 @@ class HardenServerTest < ActiveSupport::TestCase
            "root is the only way back, so it is the last thing surrendered"
   end
 
+  # The OpenSSH ufw profile only covers 22. Enabling ufw on a box that listens
+  # elsewhere cuts every later connection — including the identity verification and
+  # including root, so leaving root enabled does not rescue it.
+  test "the firewall allows the server's actual ssh port, not just the OpenSSH profile" do
+    @server.update!(ssh_port: 2222)
+    root = FakeSsh.new
+    HardenServer.new(@server, root_ssh: root, deploy_ssh: FakeSsh.new(output: "DEPLOY_SUDO_OK"),
+                     auditor: FakeAudit.new(:secure)).call
+
+    firewall = root.commands.find { |c| c.include?("ufw allow") }
+    assert_includes firewall, "2222/tcp"
+  end
+
   test "installs the ServerSudo wrappers for the deploy user (readiness + apply_updates work post-harden)" do
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))

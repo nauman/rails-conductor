@@ -46,9 +46,16 @@ class DeployEnv
 
   def file_needed? = sensitive_pairs.any?
 
+  # A PRIVATE DIRECTORY, not shared /tmp. scp's receiver opens an existing
+  # destination without O_EXCL or O_NOFOLLOW, so an attacker-planted symlink or a
+  # pre-created file keeps its own permissions and `mode: 0600` guarantees nothing.
+  # Creating the directory 0700 first means the path we write cannot already exist
+  # as someone else's file.
+  #
   # PER DEPLOY, so two deploys of the same app cannot overwrite each other's file
   # mid-flight — a build takes minutes and overlapping deploys are ordinary.
-  def file_path = "/tmp/conductor-env-#{@app.resource_key}-#{@deployment_id}"
+  def file_dir = "/tmp/conductor-env-#{@app.resource_key}-#{@deployment_id}"
+  def file_path = "#{file_dir}/env"
 
   # UPLOADED AS CONTENT, never echoed into a command. Writing it with a heredoc
   # leaves the value in the SSH command string — the exposure this exists to remove,
@@ -60,6 +67,14 @@ class DeployEnv
     return true unless file_needed?
 
     sensitive_pairs.each { |key, value| assert_carriable!(key, value) }
+
+    # `mkdir` without -p FAILS if the path exists — including as a symlink someone
+    # planted. That refusal is the point: -p would happily accept whatever is there.
+    prepared = ssh.execute_with_status(
+      "rm -rf #{Shellwords.escape(file_dir)} && mkdir -m 700 #{Shellwords.escape(file_dir)}"
+    )
+    return false unless prepared[:success]
+
     body = sensitive_pairs.map { |key, value| "#{key}=#{value}" }.join("\n") + "\n"
     ssh.upload_content(body, file_path, mode: 0o600)
   end
@@ -69,11 +84,13 @@ class DeployEnv
   # fail a deploy that otherwise worked. It must still run on the failure path — a
   # 0600 file of live credentials outliving the thing that needed it is the worse
   # outcome.
+  # Returns whether the removal actually succeeded, so a caller can say so. An
+  # earlier version returned true unconditionally, which made a failed cleanup
+  # indistinguishable from a clean one — the file staying behind is the whole risk.
   def remove!(ssh)
     return true unless file_needed?
 
-    ssh.execute_with_status("rm -f #{Shellwords.escape(file_path)}")
-    true
+    ssh.execute_with_status("rm -rf #{Shellwords.escape(file_dir)}")[:success]
   end
 
   def sensitive_pairs

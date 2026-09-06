@@ -67,18 +67,35 @@ class DeployEnvTest < ActiveSupport::TestCase
     assert_empty ssh.commands.grep(/s3cr3t-value/), "no command may carry the value"
   end
 
-  test "removal is by path and tolerates a file that is already gone" do
+  # `rm -rf` on the directory, and the RESULT IS REPORTED. Returning true whatever
+  # happened made a failed cleanup indistinguishable from a clean one, and the file
+  # staying behind is the entire risk.
+  test "removal takes the directory and reports whether it worked" do
     ssh = FakeSsh.new
-    @env.remove!(ssh)
+    assert @env.remove!(ssh)
+    assert ssh.commands.any? { |c| c.include?("rm -rf") }
 
-    assert ssh.commands.any? { |c| c.include?("rm -f") }
+    assert_not @env.remove!(FakeSsh.new(succeed: false)), "a failed cleanup must not read as success"
+  end
+
+  # scp's receiver opens an existing destination without O_EXCL or O_NOFOLLOW, so a
+  # planted symlink or pre-created file keeps its own permissions and mode: 0600
+  # guarantees nothing. `mkdir` without -p refuses a path that already exists, which
+  # is the point.
+  test "the upload directory is created exclusively, not reused" do
+    ssh = FakeSsh.new
+    @env.upload!(ssh)
+
+    mk = ssh.commands.find { |c| c.include?("mkdir") }
+    assert_includes mk, "mkdir -m 700"
+    assert_not_includes mk, "mkdir -p", "-p would accept whatever is already there"
   end
 
   class FakeSsh
     attr_reader :uploads, :commands
-    def initialize = (@uploads = []; @commands = [])
+    def initialize(succeed: true) = (@uploads = []; @commands = []; @succeed = succeed)
     def upload_content(content, path, mode: nil) = (@uploads << [ content, path, mode ]; true)
-    def execute_with_status(cmd) = (@commands << cmd; { success: true, stdout: "", stderr: "" })
+    def execute_with_status(cmd) = (@commands << cmd; { success: @succeed, stdout: "", stderr: "" })
     def error = nil
   end
 end

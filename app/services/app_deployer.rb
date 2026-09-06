@@ -23,7 +23,7 @@ class AppDeployer
   # cannot have this at all.
   ZERO_DOWNTIME_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
-    start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
+    upload_env_file start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
     promote_candidate republish_edge_route drain_previous_container cleanup
   ].freeze
 
@@ -31,8 +31,8 @@ class AppDeployer
   # republished — unavoidable when the fixed host port IS the service.
   STOP_FIRST_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
-    stop_old_container start_container health_check run_gated_migrations run_seeds_if_requested
-    republish_edge_route cleanup
+    upload_env_file stop_old_container start_container health_check run_gated_migrations
+    run_seeds_if_requested republish_edge_route cleanup
   ].freeze
 
   def deploy!
@@ -67,6 +67,10 @@ class AppDeployer
   rescue => e
     fail_with("Unexpected error: #{e.message}")
   ensure
+    # BOTH, on every path. A 0600 file of live credentials outliving the deploy that
+    # needed it is the worse outcome, and an exception between upload and container
+    # creation is exactly when it would be left behind.
+    remove_env_file!
     cleanup_repository_access
   end
 
@@ -260,14 +264,19 @@ class AppDeployer
 
   def deploy_env_flags(redacted: false) = deploy_env.flags(redacted: redacted)
 
-  # Uploaded before the container is created; removed afterwards on BOTH paths,
-  # success and failure — a 0600 file of live credentials outliving the thing that
-  # needed it is the worse outcome.
-  def upload_env_file!
+  # A DEPLOY STEP, and deliberately BEFORE anything destructive. An unsupported
+  # value or a failed upload discovered after the incumbent has been stopped is an
+  # outage caused by a validation we could have run first — so the environment is
+  # settled while the old container is still serving.
+  def upload_env_file
     return true unless deploy_env.file_needed?
     return true if deploy_env.upload!(ssh)
 
     fail_with("could not write the environment file to #{app.server.name}: #{ssh.error}")
+    false
+  rescue DeployEnv::Unsupported => e
+    # Raised before the incumbent is touched, so nothing is down.
+    fail_with("#{e.message} Nothing was changed — the running container is untouched.")
     false
   end
 
@@ -325,10 +334,7 @@ class AppDeployer
     # Redact secret env values in the logged/broadcast copy.
     display    = (prefix + [ deploy_env_flags(redacted: true) ] + suffix).join(" ")
 
-    return false unless upload_env_file!
-
     created = run(docker_run, display: display)
-    remove_env_file!
 
     if created
       # Get container ID
@@ -440,12 +446,7 @@ class AppDeployer
     cmd = (prefix + [ deploy_env_flags ] + suffix).join(" ")
     display = (prefix + [ deploy_env_flags(redacted: true) ] + suffix).join(" ")
 
-    return false unless upload_env_file!
-
     started = run(cmd, display: display)
-    # Whether or not it started, the file has done its job — and leaving a 0600 file
-    # of live credentials behind on the failure path is the worse outcome.
-    remove_env_file!
     return false unless started
 
     @candidate_name = name # set BEFORE the probe so any later failure can clean up

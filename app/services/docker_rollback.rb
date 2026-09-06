@@ -72,6 +72,20 @@ class DockerRollback
     # zero-downtime deploy the live container is app-<id>-r<rev>-<sha>, so
     # stopping the legacy fixed name would leave it running and roll back into a
     # split-traffic state.
+    # BEFORE ANYTHING IS DESTROYED. An unsupported value or a failed upload found
+    # after the live container is gone is an outage caused by a check we could have
+    # run first.
+    begin
+      unless deploy_env.upload!(@ssh)
+        fail_with("Could not write the environment file to #{app.server.name}: #{@ssh.error} — " \
+                  "nothing was stopped, the running container is untouched")
+        return false
+      end
+    rescue DeployEnv::Unsupported => e
+      fail_with("#{e.message} Nothing was stopped — the running container is untouched.")
+      return false
+    end
+
     live = live_container
     if live.present?
       @ssh.execute_with_status("docker stop #{esc(live)} 2>/dev/null || true")
@@ -79,15 +93,6 @@ class DockerRollback
     end
     @ssh.execute_with_status("docker stop #{esc(app.container_name)} 2>/dev/null || true")
     @ssh.execute_with_status("docker rm #{esc(app.container_name)} 2>/dev/null || true")
-
-    # THE FILE MUST EXIST BEFORE THE CONTAINER IS CREATED. run_command references
-    # it with --env-file; without this the rollback boots a container with every
-    # sensitive value missing — a container that starts, passes a `docker ps` check,
-    # and is broken in a way nothing here would notice.
-    unless deploy_env.upload!(@ssh)
-      fail_with("Could not write the environment file to #{app.server.name}: #{@ssh.error}")
-      return false
-    end
 
     res = @ssh.execute_with_status(run_command(version))
     # Removed on both paths: a 0600 file of live credentials outliving the thing that

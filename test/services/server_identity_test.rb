@@ -31,7 +31,13 @@ class ServerIdentityTest < ActiveSupport::TestCase
     ServerIdentity.new(@server, ssh: ssh, verifier: ssh).ensure!
 
     assert ssh.commands.any? { |c| c.include?("authorized_keys") }
-    assert ssh.commands.any? { |c| c.include?("grep") }, "must check before appending, or it duplicates"
+    # The check and the append are ONE locked operation now: checking outside the
+    # lock lets two concurrent repairs both see "absent" and both append. And the
+    # match is on an active entry's key field via awk, not a substring — `grep -F`
+    # would match a commented-out key and skip an install that was needed.
+    write = ssh.commands.find { |c| c.include?("authorized_keys") }
+    assert_includes write, "flock", "check-and-write must happen under one lock"
+    assert_includes write, "awk", "match an active key field, not any substring of the file"
   end
 
   # VERIFY BY CONNECTING, not by trusting the write. A recorded authorization nobody

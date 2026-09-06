@@ -43,7 +43,19 @@ class HardenServer
     # "the key that reached root is Conductor's key" is true only on the box you
     # registered from.
     sudo touch /home/#{DEPLOY_USER}/.ssh/authorized_keys
-    sudo sh -c 'cat /root/.ssh/authorized_keys /home/#{DEPLOY_USER}/.ssh/authorized_keys | awk "NF && !seen[\$0]++" > /tmp/.ak.merged && cat /tmp/.ak.merged > /home/#{DEPLOY_USER}/.ssh/authorized_keys && rm -f /tmp/.ak.merged'
+    # NO NESTED QUOTING, deliberately. The first attempt piped through
+    # `awk "NF && !seen[$0]++"`, and Ruby consumed the backslash so the inner shell
+    # expanded $0 to its own name BEFORE awk ran — making the dedupe key a constant
+    # and keeping only the FIRST line. Reproduced: three keys in, one key out, exit
+    # status 0. A merge that silently deletes keys is worse than the overwrite it
+    # replaced, and it would have deleted Conductor's own credential on a re-run.
+    #
+    # Append then dedupe in place. `sort -u -o` on the same file is safe, and the
+    # leading newline covers a file that lacks a trailing one — without it, `cat`
+    # would splice the first incoming key onto the last existing line and break both.
+    sudo sh -c 'echo >> /home/#{DEPLOY_USER}/.ssh/authorized_keys'
+    sudo sh -c 'cat /root/.ssh/authorized_keys >> /home/#{DEPLOY_USER}/.ssh/authorized_keys'
+    sudo sort -u -o /home/#{DEPLOY_USER}/.ssh/authorized_keys /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chown #{DEPLOY_USER}:#{DEPLOY_USER} /home/#{DEPLOY_USER}/.ssh/authorized_keys
     sudo chmod 600 /home/#{DEPLOY_USER}/.ssh/authorized_keys
     echo 'deploy ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-deploy >/dev/null
@@ -70,7 +82,14 @@ class HardenServer
       set -e
       export DEBIAN_FRONTEND=noninteractive
       sudo apt-get install -y -qq ufw fail2ban >/dev/null 2>&1 || true
-      sudo ufw allow OpenSSH >/dev/null
+      # THE PORT THIS SERVER ACTUALLY USES, not just the OpenSSH profile. That
+      # profile only covers 22, so enabling UFW on a box that listens on a custom
+      # port cuts every subsequent connection — including the identity verification
+      # a few steps later, and including root, so leaving root enabled does not
+      # rescue it. Both are allowed: the profile for the ordinary case, the explicit
+      # port for the rest.
+      sudo ufw allow OpenSSH >/dev/null 2>&1 || true
+      sudo ufw allow #{@server.ssh_port_or_default}/tcp >/dev/null
       sudo ufw allow 80/tcp >/dev/null
       sudo ufw allow 443/tcp >/dev/null
       # Let containers keep reaching host-bound services (e.g. a colocated Postgres).

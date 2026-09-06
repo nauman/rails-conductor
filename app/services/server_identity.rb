@@ -87,20 +87,29 @@ class ServerIdentity
     escaped_blob = Shellwords.escape(blob)
     owner = Shellwords.escape(@target_user)
 
-    # flock serialises concurrent appends: two deploys repairing the same box at once
-    # would otherwise both pass the check and both append.
+    # THE CHECK AND THE WRITE ARE ONE OPERATION, under one lock. Checking outside it
+    # lets two concurrent repairs both see "absent" and both append.
+    #
+    # The match is on an ACTIVE entry's key field, not a substring of the file:
+    # `grep -F` also matches the blob inside a commented-out line or inside somebody
+    # else's comment field, and would skip an installation that was actually needed.
+    # awk compares field 2 of non-comment lines, which is where sshd looks.
+    #
+    # The trailing-newline guard matters too: appending to a file whose last line has
+    # no newline splices the new key onto it and breaks both entries.
     script = <<~SH
       set -e
       install -d -m 700 -o #{owner} -g #{owner} #{dir} 2>/dev/null || install -d -m 700 #{dir}
       touch #{path}
       chown #{owner}:#{owner} #{path} 2>/dev/null || true
       chmod 600 #{path}
-      if grep -qF #{escaped_blob} #{path}; then
+      flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'$1 !~ /^#/ && $2 == k { f = 1 } END { exit !f }'"'"' #{path}; then
         echo CONDUCTOR_KEY_PRESENT
       else
-        flock #{path} sh -c 'printf "%s\\n" #{escaped_line} >> #{path}'
+        if [ -s #{path} ] && [ -n "$(tail -c 1 #{path})" ]; then echo >> #{path}; fi
+        printf "%s\\n" #{escaped_line} >> #{path}
         echo CONDUCTOR_KEY_ADDED
-      fi
+      fi'
     SH
 
     result = @ssh.execute_with_status(script)
