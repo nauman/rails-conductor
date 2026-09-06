@@ -1,4 +1,14 @@
 class Server < ApplicationRecord
+  # Generated on demand rather than at creation: a server only needs one when it
+  # actually fronts on-demand TLS, and a token that exists for every server is a
+  # secret with no purpose sitting in every row.
+  def ask_token!
+    return ask_token if ask_token.present?
+
+    update!(ask_token: SecureRandom.urlsafe_base64(24))
+    ask_token
+  end
+
   PROVIDERS = %w[hetzner digitalocean linode vultr aws gcp azure].freeze
   STATUSES = %w[online degraded offline rebooting].freeze
 

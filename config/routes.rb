@@ -235,6 +235,11 @@ Rails.application.routes.draw do
   get "/docs/:slug", to: "guides#show", as: :guide, constraints: { slug: /[a-z0-9][a-z0-9-]*/ }
 
   # Public landing page at "/"; the authenticated app dashboard at /dashboard.
+  # Caddy's on-demand TLS gate. Unauthenticated by necessity: Caddy calls it from
+  # the host before a certificate exists, and it is the only process on the box that
+  # knows every zone — see app/controllers/caddy_ask_controller.rb.
+  get "/caddy/ask", to: "caddy_ask#show", as: :caddy_ask
+
   # Read-only: the shared ritual library, which MCP could read and a person could not.
   resources :rituals, only: [ :index, :show ], id: /[a-z0-9][a-z0-9-]*/
 

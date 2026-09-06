@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_06_130449) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_06_154541) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -585,6 +585,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_130449) do
   create_table "servers", force: :cascade do |t|
     t.string "agent_token"
     t.string "agent_url"
+    t.string "ask_token"
     t.boolean "build_role", default: false, null: false
     t.integer "caddy_port"
     t.integer "cpu_cores"
@@ -632,6 +633,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_130449) do
     t.datetime "updated_at", null: false
     t.integer "uptime_seconds", default: 0, null: false
     t.bigint "user_id"
+    t.index ["ask_token"], name: "index_servers_on_ask_token", unique: true
     t.index ["organization_id"], name: "index_servers_on_organization_id"
     t.index ["ssh_key_id"], name: "index_servers_on_ssh_key_id"
     t.index ["status"], name: "index_servers_on_status"
