@@ -112,7 +112,16 @@ class ServerIdentity
       set -e
       install -d -m 700 -o #{owner} -g #{owner} #{dir} 2>/dev/null || install -d -m 700 #{dir}
       touch #{path}
-      chown #{owner}:#{owner} #{path} 2>/dev/null || true
+      # OWNERSHIP FIRST, AND IT MUST SUCCEED. `chown user:user` fails on a system
+      # where the account has no same-named group, and swallowing that failure then
+      # running `chmod 600` turned a working root-owned 0644 file into one the user
+      # cannot read — disabling existing key access for Conductor AND the operator.
+      # Verification would notice afterwards and could not undo it.
+      #
+      # `chown user` (no group) works regardless of group naming. If even that fails
+      # we are not in a position to manage this file, so we stop BEFORE narrowing its
+      # permissions rather than after.
+      chown #{owner} #{path} || { echo CONDUCTOR_CHOWN_FAILED >&2; exit 1; }
       chmod 600 #{path}
       flock #{path} sh -c 'if awk -v k=#{escaped_blob} '"'"'{ gsub(/\r/, "") } $1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == k && $(i-1) ~ /^(ssh-|ecdsa-|sk-)/) f = 1 } END { exit !f }'"'"' #{path}; then
         echo CONDUCTOR_KEY_PRESENT
@@ -125,6 +134,13 @@ class ServerIdentity
 
     result = @ssh.execute_with_status(script)
     unless result[:success]
+      if result[:stderr].to_s.include?("CONDUCTOR_CHOWN_FAILED")
+        return [ nil, "could not take ownership of #{authorized_keys_path} on #{@server.name} for " \
+                      "#{@target_user} — stopped without changing its permissions, because " \
+                      "narrowing them without owning the file would remove that account's " \
+                      "existing access" ]
+      end
+
       return [ nil, "could not write #{authorized_keys_path} on #{@server.name}: " \
                     "#{(result[:stderr].presence || result[:stdout]).to_s.strip[0, 200]}" ]
     end

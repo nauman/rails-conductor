@@ -89,11 +89,28 @@ class ServerIdentityTest < ActiveSupport::TestCase
     assert_not ToolAuthorization.read_only?("conductor_server", "repair_identity")
   end
 
+  # THE FOURTH LOCKOUT MECHANISM found in this work. `chown user:user` fails where
+  # the account has no same-named group; swallowing that and running `chmod 600`
+  # anyway turns a working root-owned 0644 file into one the user cannot read,
+  # removing existing key access for Conductor AND the operator. Verification would
+  # notice afterwards and could not undo it. So ownership is taken first, and a
+  # failure stops BEFORE permissions are narrowed.
+  test "a failure to take ownership stops before permissions are narrowed" do
+    ssh = FakeSsh.new(authorized: "", chown_fails: true)
+
+    result = ServerIdentity.new(@server, ssh: ssh, verifier: ssh).ensure!
+
+    assert_not result.ok?
+    assert_match(/ownership/i, result.reason)
+    assert_match(/without changing its permissions/i, result.reason)
+  end
+
   class FakeSsh
     attr_reader :commands
-    def initialize(authorized: "", verify_succeeds: true)
+    def initialize(authorized: "", verify_succeeds: true, chown_fails: false)
       @authorized = authorized
       @verify_succeeds = verify_succeeds
+      @chown_fails = chown_fails
       @commands = []
       @verified = false
     end
@@ -117,6 +134,9 @@ class ServerIdentityTest < ActiveSupport::TestCase
         @verified = true
         @verified_under_restriction = @restricted
         return { success: @verify_succeeds, stdout: @verify_succeeds ? "CONDUCTOR_IDENTITY_OK\n" : "", stderr: "" }
+      end
+      if command.include?("authorized_keys") && @chown_fails
+        return { success: false, stdout: "", stderr: "CONDUCTOR_CHOWN_FAILED\n" }
       end
       if command.include?("authorized_keys")
         blob = @authorized.to_s.split[1].to_s
