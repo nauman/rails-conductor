@@ -82,7 +82,7 @@ conflation that made an exhausted CI quota read as bad code.
 Target-venue builds are not locked here: they run on the app's own server and never
 contend for this machine's CPU.
 
-### A CPU ceiling — not built, and it needs a decision
+### A CPU ceiling — decided against ([ADR 0015](../../dev/adr/0015-no-build-quota-fix-the-placement.md))
 
 `nice` is not the control. It constrains the Kamal client while the real work
 happens inside daemon-managed BuildKit containers, and CPU shares are a relative
@@ -97,11 +97,15 @@ replaced it. That is the same shape as Conductor overruling a repo's
 `builder.remote`: two things managing one resource, with the quieter one silently
 losing.
 
-So this is a design decision, not a patch, and it is open.
+**The decision is not to build it.** The question is not how to cap a build, but why
+a build competes with served traffic at all — a ceiling makes the wrong placement
+survivable and costs Conductor permanent ownership of a worker Kamal manages.
 
-Until it lands, one build runs at a time and nothing caps how much of the machine
-that build takes. On a 12-core box at low baseline load that is survivable; it is
-not a guarantee.
+The lock removes the case that hurts (concurrency). A box that serves nothing
+(`build_venue: builder`) is the real answer when the fleet outgrows the control
+machine. Revisit when builds regularly overlap, when load during a build shows up in
+a served response time, or when a build box exists — at which point the venue moves
+and the question disappears.
 
 ## Related
 

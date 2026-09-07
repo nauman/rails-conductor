@@ -18,6 +18,7 @@
 | Usage | `docs/USAGE.md` | Getting started and the web UI / API / MCP / chat surfaces |
 | Pillars | `docs/PILLARS.md` | Seven pillars, current maturity, and contribution entry points |
 | Agents | `docs/agents/00-roster.md` | The `awaiting:` address book — read first on boot; names usable in thread headers |
+| Agents | `docs/agents/audit-prompt-templates.md` | Conductor's extension of the shared Template 5 — fleet invariants, working file lists, and the five lockout paths to re-ask of anything touching access |
 | Agents | `docs/agents/staff_engineer.md` | Engineering brief: TDD-first, vanilla-Rails/Hotwire defaults, Conductor conventions |
 | Agents | `docs/agents/deploy.agent.md` | Deploy agent: GHCR CI backbone, kamal-proxy edge, `localvault` secrets, `/version` verify |
 | Threads | `docs/threads/` | Living agent↔agent conversations (`<topic>.thread.md`); convention in `docs/dev/THREADS.md` |

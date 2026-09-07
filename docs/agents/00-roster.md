@@ -35,3 +35,15 @@ Before final response or handoff:
 2. If a reply is now owed, set `awaiting:` to the roster name that owes it.
 3. If no reply is owed, set `awaiting: -`.
 4. Update `updated: YYYY-MM-DD`.
+
+## Auditing a change before it ships
+
+Any change touching SSH or server access, secrets, the deploy or rollback path, or
+a security control gets an adversarial audit first — see
+[`audit-prompt-templates.md`](audit-prompt-templates.md), which extends the shared
+base class in `74-dev-docs/agents/`. The ritual is fetchable:
+`conductor_runbook action=get_ritual recipe_id=audit-before-shipping`.
+
+Two rules from that file worth knowing before you start: a passing suite is not
+evidence in this area (the author of a fix writes its tests), and when audit rounds
+stop converging the correct outcome is to stop and hand over, not to run another.

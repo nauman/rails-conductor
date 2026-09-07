@@ -1,5 +1,11 @@
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
+require "open3"
+require "tmpdir"
+# Shell behaviour is asserted by EXECUTION, never by matching a command string —
+# see test/support/shell_behaviour.rb for why, and for the defects that rule exists
+# because of.
+Dir[File.expand_path("support/**/*.rb", __dir__)].sort.each { |f| require f }
 require "rails/test_help"
 require "minitest/mock"
 require "net/ssh"
@@ -42,6 +48,9 @@ module ActiveSupport
         :number_of_processors
       end
     parallelize(workers: workers)
+
+    # Assert shell by running it, not by matching the command string.
+    include ShellBehaviour
 
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all

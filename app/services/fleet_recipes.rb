@@ -14,6 +14,45 @@
 class FleetRecipes
   RECIPES = [
     {
+      id: "audit-before-shipping",
+      topic: "Get a change adversarially audited before it ships",
+      description: <<~MD,
+        ## Purpose
+        For any change touching SSH or server access, secrets, the deploy or rollback
+        path, or a security control. Not for ordinary features.
+
+        ## Hidden truth
+        **One pass is not an audit.** Every round of the SSH identity work found a
+        defect in the previous round's fix, and twice the fix left access LESS
+        restricted than the code it replaced — a dedupe that reordered
+        authorized_keys so a permissive entry outranked a restrictive one, and a
+        presence check that missed an options-bearing key and appended an
+        unrestricted copy of it.
+
+        **Green tests prove nothing here.** All of those passed a full suite. Tests
+        assert what their author intended, and the author of the fix wrote them.
+
+        **Ask the question you cannot answer about your own work.** Two changed
+        decisions in this repo: *is this converging?* and *can any path leave a
+        server nobody can log in to?* The second ended with a capability being pulled
+        rather than shipped.
+
+        The auditor is a second pair of eyes, not an approver. It has been wrong —
+        reading a pointer file as plaintext, reporting an issue already fixed in a
+        newer snapshot. Verify before acting.
+      MD
+      checklist: [
+        { id: "scope", text: "Name the exact files and forbid docs/ — an unbounded prompt wanders and returns nothing usable" },
+        { id: "stdin", text: "Close stdin (`< /dev/null`) or the run hangs, and pin nothing else: `codex exec --skip-git-repo-check -s read-only`" },
+        { id: "argue", text: "State your own answer and ask it to refute you. A fresh survey is worth less than a disagreement" },
+        { id: "verdict", text: "Demand a verdict line and blocking issues only — SAFE TO DEPLOY or NOT SAFE" },
+        { id: "verify", text: "Check each finding against the code before acting. Some will be stale or wrong" },
+        { id: "refix", text: "Fix, then RE-AUDIT the fix. The defect is usually in the repair, not the original" },
+        { id: "converging", text: "Ask whether it is converging. If each round introduces as much as it removes, stop and hand over rather than running another" },
+        { id: "irreversible", text: "For anything touching access, ask the one question that cannot be undone: can this leave a server nobody can log in to?", required: false }
+      ]
+    },
+    {
       id: "migrate-to-self-describing",
       topic: "Move a grandfathered kamal app onto the generated deploy contract",
       description: <<~MD,

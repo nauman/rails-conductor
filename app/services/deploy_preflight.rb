@@ -28,10 +28,45 @@ class DeployPreflight
   def initialize(app) = @app = app
 
   def check
-    Result.new(checks: [ published_port_check, migrations_check, seeds_check, build_check, audit_check, threads_check, residue_check ])
+    Result.new(checks: [ published_port_check, migrations_check, seeds_check, build_check,
+                         contract_check, venue_check, audit_check, threads_check, residue_check ])
   end
 
   private
+
+  # TWO MIGRATIONS ARE OUTSTANDING, and both were deliberately left as per-app
+  # decisions rather than a bulk flip — flipping live apps together changes their
+  # shape on a deploy nobody is watching. Which means the reminder has to arrive
+  # where the decision is made: at this app's deploy. A list somewhere else is a list
+  # nobody reads.
+  #
+  # WARN, never block. These apps deploy correctly today; the point is that each
+  # deploy is a moment someone can decide, not that deploys should stop.
+  def contract_check
+    return skip(:contract, "Kamal contract", "not a kamal app") unless @app.kamal?
+    if @app.self_describing?
+      return ok(:contract, "Kamal contract", "generates its own deploy config and git-safe secrets")
+    end
+
+    warn(:contract, "Kamal contract",
+         "predates the contract, so this deploy writes RAW SECRET VALUES into .kamal/secrets " \
+         "instead of git-safe pointers. Adopt it on the deploy-config page; the ritual " \
+         "migrate-to-self-describing walks one app across, and the first step is comparing this " \
+         "app's own secrets file against Conductor's env — a key present there and missing here " \
+         "disappears silently.")
+  end
+
+  def venue_check
+    return skip(:venue, "Build venue", "native app — no image is built") if @app.build_location_summary.nil?
+    unless @app.build_venue_inherited?
+      return ok(:venue, "Build venue", "#{@app.build_venue} (chosen)")
+    end
+
+    warn(:venue, "Build venue",
+         "this app has not chosen where it builds, so the venue is still whatever the SSH key " \
+         "configuration happens to select — today that is #{@app.build_location_summary}. " \
+         "Choosing `control` builds on Conductor's own box instead of the machine serving this app.")
+  end
 
   # Where the image gets built, BEFORE the click rather than in a log afterwards.
   # Conductor does not decide this: kamal reads `builder.remote` from the app's own

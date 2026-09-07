@@ -54,6 +54,46 @@
   processes never exit, so every session reads as alive however long it has been
   idle. It never touches the current session or `default`.
 
+## Adversarial Audit
+
+- **Audit before shipping, not after.** Run `codex exec --skip-git-repo-check -s read-only "<prompt>" < /dev/null`
+  (stdin MUST be closed or it hangs) for any change that touches: SSH or server
+  access, secrets, the deploy or rollback path, or a security control.
+- **Name the files and forbid `docs/`.** An unbounded prompt wanders and returns
+  nothing useful. Ask for a verdict line — SAFE TO DEPLOY / NOT SAFE — plus blocking
+  issues only.
+- **Give it your own answer and ask it to argue.** A fresh survey is worth less than
+  a disagreement, and stating your reasoning is what lets it be refuted.
+- **Ask the question you cannot answer about your own work.** The two that have
+  mattered here: *is this converging, or is each round introducing new defects?* and
+  *can any path leave a server nobody can log into?* Both changed a decision.
+- **Fix the finding, then re-audit the fix.** Every round of this work found a defect
+  in the previous round's fix — twice a fix that left access LESS restricted than the
+  code it replaced. One pass is not an audit.
+- **When rounds stop converging, stop and hand over.** Nine rounds on SSH access
+  control ended with a capability pulled from provisioning rather than a tenth.
+- The audit is a second pair of eyes, not an approver. It has been wrong (it read a
+  pointer file as plaintext, and reported an already-fixed issue from a stale
+  snapshot). Verify its claims against the code before acting.
+
+## Shell Commands
+
+- **If a change renders shell, a test renders that shell and RUNS it.** Assert the
+  file or the exit status, never the command string. `test/support/shell_behaviour.rb`
+  provides `in_a_sandbox`, `run_shell` and `run_shell_with_empty_path`; it is
+  included in every `ActiveSupport::TestCase`.
+- The inputs that find defects are the awkward ones: empty file, missing file, a
+  last line with no newline, CRLF, a tool absent from `PATH`, a failed `chown`.
+- **Use `/bin/sh`, not bash.** Remote commands run through `sh -c`, so a bashism
+  that works locally is a defect that only appears in production.
+- Why this is a rule and not advice: every shell defect in this repo's history
+  passed code review and a green suite. `awk "NF && !seen[$0]++"` kept one key in
+  three because Ruby ate the backslash and the inner shell expanded `$0` first;
+  `sort -u` deduplicated by reordering and could promote a less-restricted
+  `authorized_keys` entry above a more-restricted one; a `tail` guard treated its
+  own failure as success and spliced two keys into one broken line. Reading found
+  none of them. Running found all three.
+
 ## Git Commits
 
 - Do not include AI attributions or disclaimers in commit messages.
