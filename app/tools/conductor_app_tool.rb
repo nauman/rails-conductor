@@ -7,6 +7,7 @@ class ConductorAppTool
     "create"      => CreateAppTool,
     "update"      => UpdateAppTool,
     "deploy"      => DeployAppTool,
+    "readiness"   => AppReadinessTool,
     "rollback"    => RollbackAppTool,
     "sync_status" => SyncAppStatusTool,
     "cancel"      => CancelDeploymentAppTool,
@@ -37,7 +38,7 @@ class ConductorAppTool
     input_schema: {
       type: "object",
       properties: {
-        action:            { type: "string", enum: %w[create update deploy rollback sync_status cancel convert_database transfer_plan transfer retire runner edge], description: "Which app operation" },
+        action:            { type: "string", enum: %w[create update deploy readiness rollback sync_status cancel convert_database transfer_plan transfer retire runner edge], description: "Which app operation" },
         target_server_id:   { type: "integer", description: "transfer_plan/transfer: destination server by id (or target_server_name)" },
         target_server_name: { type: "string",  description: "transfer_plan/transfer: destination server by name (or target_server_id)" },
         from_server_id:     { type: "integer", description: "retire: the box to retire the app FROM, by id (or from_server_name). Named explicitly — never defaulted." },

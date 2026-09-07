@@ -25,7 +25,7 @@ module ToolAuthorization
   # sounds observational.
   READ_ONLY_ACTIONS = {
     "conductor_read"     => :all,
-    "conductor_app"      => %w[transfer_plan],
+    "conductor_app"      => %w[transfer_plan readiness],
     # NB: server `audit` and `test_connection` are deliberately NOT here — both
     # open SSH and persist (metrics, edge detection, an audit rollup), so a
     # read-scoped token must not reach them.

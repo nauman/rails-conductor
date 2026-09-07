@@ -122,9 +122,16 @@ class FleetRecipes
 
         **`build_host` is recorded by the first deploy, not by setup.** Until then it
         reads "not recorded yet", which is not the same as "builds on the app server".
+
+        **A first install fails LATE if you do not check first.** Missing credentials
+        surface inside the deploy, after a clone and a build. `readiness` answers the
+        same question before any of that — and answers it in names, because the one
+        move an agent must never make is asking a human to paste a secret into the
+        conversation.
       MD
       checklist: [
         { id: "create-app", text: "Create the app and confirm its assigned identity (`app-<id>`) — never depend on the slug, which is editable" },
+        { id: "readiness", text: "Run `conductor_app action=readiness` BEFORE anything else. It names the credentials still missing and how to supply each one. NEVER ask for a secret in conversation and never paste one into a tool call — the routes it gives you exist so the value does not enter a transcript" },
         { id: "pick-edge", text: "Decide the edge from the SERVER, not the deploy method: is this box running kamal-proxy or a host Caddy? Ask Conductor rather than assuming" },
         { id: "provision-db", text: "Provision the database with app_id and NO name, so it follows the convention. Confirm the returned name is `<app>_production` and the role is `<app>`" },
         { id: "env-clear", text: "Add non-secret env vars (RAILS_ENV, host, port) through Conductor's env UI — it is the source of truth for all three deploy paths" },
