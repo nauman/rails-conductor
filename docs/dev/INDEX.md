@@ -36,6 +36,7 @@ Development docs are lightweight summaries and process notes. The canonical prod
 | [`0013`](adr/0013-one-flag-one-guarantee.md) | **Proposed** | One "sensitive" flag should mean one guarantee on every deploy path; today it means log redaction on two of them. A first implementation was audited and reverted unshipped — the findings, including two constraints found only by testing, are recorded in the ADR |
 | [`0014`](adr/0014-a-build-venue-is-chosen-not-inherited.md) | **Accepted** | Where an image is built becomes an app's explicit choice rather than a consequence of whether its server happened to have a stored SSH key; a venue that cannot take the build fails the deploy instead of relocating it |
 | [`0015`](adr/0015-no-build-quota-fix-the-placement.md) | **Accepted** | No buildx CPU quota: a ceiling makes the wrong placement survivable and costs permanent ownership of a worker Kamal manages. The lock handles concurrency; a non-serving build box is the real answer, with named triggers to revisit |
+| [`0016`](adr/0016-the-app-owns-its-secrets.md) | **Accepted** | An app keeps its secrets in its own credentials and Conductor supplies one key to unlock them; Conductor holds only a bounded set of infrastructure credentials. Rejects vault-at-deploy-time — an interactive unlock cannot sit on an unattended path |
 
 ## Authoring Notes
 

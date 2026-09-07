@@ -4,7 +4,16 @@ Date: 2026-09-05
 
 ## Status
 
-**Proposed. An implementation was attempted on 2026-09-05, audited, and reverted
+**Proposed, and re-scoped by [ADR 0016](0016-the-app-owns-its-secrets.md).** The
+docker path was implemented on 2026-09-07 (values travel in a 0600 file over scp,
+never as argv); the native path remains open.
+
+ADR 0016 narrows what this is even about: an application's secrets belong in its own
+credentials, unlocked by a single `RAILS_MASTER_KEY`. What flows through Conductor
+is a bounded set of INFRASTRUCTURE credentials, so this gap covers a handful of
+values rather than an app's whole secret set. Still worth closing; no longer urgent.
+
+**An earlier implementation was attempted on 2026-09-05, audited, and reverted
 unshipped.** The problem statement and the audit findings below are the value of
 this document; the design in "Decision" is not yet safe to build as written. See
 "Why the first attempt was reverted".

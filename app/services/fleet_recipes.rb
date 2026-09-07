@@ -103,8 +103,14 @@ class FleetRecipes
         kamal-proxy OR behind host Caddy; the box decides, not the deploy method. Pick
         the wrong one and the first deploy appears to succeed while nothing routes.
 
-        **A secret belongs in the secret list, not the clear one.** Conductor generates
-        the kamal config from its own env vars, so a value marked secret becomes
+        **Most secrets should never reach Conductor at all.** An app keeps them in its
+        own `credentials.yml.enc`; Conductor supplies `RAILS_MASTER_KEY` and never sees
+        what it unlocks. Fifty app secrets cost Conductor one key. What belongs in
+        Conductor's env is the bounded infrastructure set — the master key itself, a
+        DATABASE_URL it provisioned, a registry password (ADR 0016).
+
+        **Of those, a secret belongs in the secret list, not the clear one.** Conductor
+        generates the kamal config from its own env vars, so a value marked secret becomes
         `env: secret:` with a git-safe pointer. Put it in clear and kamal inlines it
         into the `docker run` line, where it reaches logs and `docker inspect`. A live
         OAuth credential leaked exactly that way. Note the flag is only structural on
@@ -122,7 +128,8 @@ class FleetRecipes
         { id: "pick-edge", text: "Decide the edge from the SERVER, not the deploy method: is this box running kamal-proxy or a host Caddy? Ask Conductor rather than assuming" },
         { id: "provision-db", text: "Provision the database with app_id and NO name, so it follows the convention. Confirm the returned name is `<app>_production` and the role is `<app>`" },
         { id: "env-clear", text: "Add non-secret env vars (RAILS_ENV, host, port) through Conductor's env UI — it is the source of truth for all three deploy paths" },
-        { id: "env-secret", text: "Add every credential as a SECRET, not a clear var. Verify none appears in the generated deploy config before deploying" },
+        { id: "app-owns-secrets", text: "PUT THE APP'S SECRETS IN ITS OWN CREDENTIALS, not in Conductor. Rails credentials cost Conductor exactly one key (RAILS_MASTER_KEY) however many secrets the app has — and a value Conductor never holds is one it can never leak (ADR 0016)" },
+        { id: "env-secret", text: "Only INFRASTRUCTURE credentials belong here — the master key, a provisioned DATABASE_URL, a registry password. Add each as SECRET, not clear, and verify none appears in the generated deploy config" },
         { id: "domain-dns", text: "Register the domain and confirm DNS resolves to this box BEFORE the first deploy — a certificate attempt against wrong DNS rate-limits" },
         { id: "first-deploy", text: "Run the first deploy through Conductor and record the deployment id + commit sha" },
         { id: "verify-origin", text: "Verify the origin answers on its port AND the public host answers over TLS — the second can fail while the first succeeds" },
