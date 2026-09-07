@@ -23,7 +23,7 @@ class AppDeployer
   # cannot have this at all.
   ZERO_DOWNTIME_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
-    upload_env_file start_candidate health_check_candidate run_gated_migrations run_seeds_if_requested
+    upload_env_file run_gated_migrations start_candidate health_check_candidate run_seeds_if_requested
     promote_candidate republish_edge_route drain_previous_container cleanup
   ].freeze
 
@@ -31,7 +31,7 @@ class AppDeployer
   # republished — unavoidable when the fixed host port IS the service.
   STOP_FIRST_STEPS = %i[
     ensure_docker prepare_repository_access clone_or_pull_repo build_image
-    upload_env_file stop_old_container start_container health_check run_gated_migrations
+    upload_env_file run_gated_migrations stop_old_container start_container health_check
     run_seeds_if_requested republish_edge_route cleanup
   ].freeze
 
@@ -659,7 +659,32 @@ class AppDeployer
     ssh.output.to_s.strip
   end
 
+  # NEVER REMOVE THE CONTAINER THAT IS SERVING. On a retry, start_candidate adopts a
+  # same-named survivor precisely because removing it would be an outage — and then
+  # every failure path called this and removed it anyway. The guard lives HERE rather
+  # than in one caller: health-check failure and the cutover compensation both arrive
+  # by their own routes, and a protection only one of three paths honours is not a
+  # protection.
   def discard_candidate(reason)
+    if @candidate_container.present? && @candidate_container == @previous_container
+      log "ERROR: #{reason}"
+      # REFUSING TO DELETE IS NOT THE SAME AS KNOWING IT IS SAFE. resolve_serving_container
+      # picks the first running container carrying the service label; it does not ask
+      # the edge which one is actually receiving traffic. So this container is either
+      # the incumbent (deleting it is an outage) or a leftover from an interrupted
+      # attempt (leaving it is an orphan). We cannot tell them apart here, and the
+      # asymmetry decides: an outage is worse than an orphan.
+      #
+      # But an orphan nobody is told about is how this fleet lost twelve days to a
+      # second live copy sharing a queue. So it is said loudly, and the residue check
+      # is the thing that finds it if this was the wrong guess.
+      log "Left #{@candidate_name} (#{@candidate_container}) RUNNING and did not remove it: it is " \
+          "the container this deploy adopted as already-serving. If the edge is in fact pointing " \
+          "somewhere else, this is now an orphan — run a residue check for #{app.name} to confirm, " \
+          "because a second live copy of an app is invisible to every external health check."
+      return false
+    end
+
     log "ERROR: #{reason} — removing the candidate; the previous release keeps serving"
     run("docker rm -f #{Shellwords.escape(@candidate_name)} 2>/dev/null || true") if @candidate_name.present?
     false
@@ -691,19 +716,76 @@ class AppDeployer
   # before traffic moves. Plain Docker artifacts may not be Rails applications,
   # so they retain their existing opt-out until migrations become an explicit
   # capability instead of an artifact convention.
+  # THIS GATE WAS UNREACHABLE. It opened with `return true unless app.kamal?` — but
+  # AppDeployer serves DOCKER apps only: native goes to NativeDeployer and kamal to
+  # KamalDeployer. So the gate, written and wired into both step lists, had never run
+  # for a single app.
+  #
+  # WHETHER AN APP MIGRATES IS DECLARED, NOT PROBED. Two probes were written and both
+  # could fail OPEN: `test -f bin/rails` returns 1 for a denied path traversal as well
+  # as a missing file, and running it needs `--entrypoint sh`, which bypasses any `cd`
+  # the real entrypoint performs — so an image that runs Rails fine can be read as
+  # "does not migrate" and skipped silently. A guess that fails open on the safety
+  # check is worse than no check, because it looks like one.
+  #
+  # `migrates` defaults to true. An app that genuinely cannot migrate fails loudly
+  # once and is corrected; the opposite default loses the gate quietly forever.
+  #
+  # IT RUNS IN A ONE-OFF CONTAINER, BEFORE ANYTHING IS DESTROYED. Running it against
+  # the new release container meant the stop-first path had already removed the
+  # incumbent — so a failed migration left the app DOWN while the log claimed "the
+  # previous release keeps serving". A throwaway container from the new image needs
+  # no host port, so it cannot collide with the incumbent, and a failure means
+  # nothing has been touched yet.
   def run_gated_migrations
-    return true unless app.kamal?
-
-    log "=== gated migrations: bin/rails db:migrate ==="
-    unless run_in_release("bin/rails db:migrate")
-      return fail_release_gate("db:migrate failed — the previous release keeps serving")
+    unless app.migrates?
+      # NAG EVERY DEPLOY, don't just note it once.
+      #
+      # Nothing turns this off by itself — there is deliberately no backfill and no
+      # inference, because both earlier attempts at one were wrong in opposite
+      # directions. So an app reaching this line was switched off by a person, and
+      # the only question is whether they still mean it.
+      #
+      # For an app with no database that is correct and this line is noise. For a
+      # Rails app it is the difference between a caught failure and 500s nobody
+      # traces back to a schema. We cannot tell which from here — probing the image
+      # is what failed open twice — so it says what actually goes wrong and lets a
+      # human settle it.
+      log "MIGRATION GATE OFF for #{app.name}: this deploy will NOT run db:migrate and will " \
+          "NOT stop on pending migrations. If this app is a Rails app, that means a release " \
+          "can go live against an out-of-date schema and 500 in production. Turn the gate on " \
+          "for this app to fix it; if it genuinely does not migrate, this line is correct and " \
+          "will keep appearing."
+      return true
     end
 
-    unless run_in_release("bin/rails db:abort_if_pending_migrations")
-      return fail_release_gate("pending migrations remain after db:migrate — the previous release keeps serving")
+    log "=== gated migrations: bin/rails db:migrate (one-off container, incumbent untouched) ==="
+    unless run(migration_command("bin/rails db:migrate"))
+      return fail_with("db:migrate failed — nothing was stopped, the running release is untouched. " \
+                       "If this app does not run migrations, clear its `migrates` setting rather " \
+                       "than leaving the gate to fail every deploy.")
+    end
+
+    unless run(migration_command("bin/rails db:abort_if_pending_migrations"))
+      return fail_with("pending migrations remain after db:migrate — nothing was stopped, the " \
+                       "running release is untouched")
     end
 
     true
+  end
+
+  # `--rm` and no published port: it cannot collide with the incumbent, and it leaves
+  # nothing behind. It carries the same env the release will, because a migration
+  # needs the same DATABASE_URL the app will use — and the SAME image reference the
+  # container start uses, so the schema is verified against the code that will serve.
+  def migration_command(command)
+    parts = [ "docker run --rm" ]
+    parts << "--network #{esc(app.deploy_network)}" if app.deploy_network.present?
+    parts << deploy_env_flags
+    parts << "-e RAILS_ENV=production"
+    parts << esc(image_ref(release_tag))
+    parts << command
+    parts.reject(&:blank?).join(" ")
   end
 
   def run_seeds_if_requested
@@ -729,6 +811,12 @@ class AppDeployer
 
   def run_in_release(command)
     run("docker exec #{esc(release_container_name)} #{command}")
+  end
+
+  # Ask the container, do not infer from deploy_method. A docker app may be Rails,
+  # a Go binary, or a static site; only the image knows.
+  def release_can_migrate?
+    run("docker exec #{esc(release_container_name)} test -x bin/rails")
   end
 
   def release_container_name

@@ -209,7 +209,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     ssh = FakeSsh.new
     cutover(ssh)
 
-    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    run = ssh.commands.find { |c| c.start_with?("docker run -d") }
     assert_includes run, "--name app-#{@app.id}-r1-d#{@deployment.id}-abc1234"
     assert_not_includes run, "-p 3000:3000",
                         "binding the old container's port defeats running alongside"
@@ -249,26 +249,37 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     assert health < swap, "must not move traffic to an unproven container"
   end
 
-  test "schema gates run inside the healthy candidate before traffic moves" do
+  # The gate now runs in a ONE-OFF container from the new image, BEFORE the candidate
+  # is started. The property being protected is unchanged and stronger: the schema is
+  # verified before traffic moves — and now before anything is created or destroyed,
+  # so the same gate is safe on the stop-first path where the incumbent is already
+  # gone by the time a candidate exists.
+  test "schema gates pass before anything is started or traffic moves" do
     ssh = FakeSsh.new
     cutover(ssh)
 
-    migrate = index_of(ssh, /docker exec .* db:migrate/)
-    pending = index_of(ssh, /docker exec .* db:abort_if_pending_migrations/)
+    migrate = index_of(ssh, /docker run --rm .* db:migrate/)
+    pending = index_of(ssh, /docker run --rm .* db:abort_if_pending_migrations/)
+    candidate = index_of(ssh, /docker run -d --name app-#{@app.id}-r1/)
     swap = index_of(ssh, /kamal-proxy deploy/)
 
-    assert migrate, "expected db:migrate in the candidate"
-    assert pending, "expected the pending-migration assertion in the candidate"
+    assert migrate, "expected db:migrate in a one-off container"
+    assert pending, "expected the pending-migration assertion"
     assert migrate < pending
+    assert pending < candidate, "the schema gate must pass before the candidate is started"
     assert pending < swap, "traffic must not move before the schema gate passes"
   end
 
-  test "a failed migration discards the candidate and leaves the old release serving" do
+  # Stronger than before: a failed migration used to require discarding a candidate
+  # that had already been created. Now the gate runs first, so there is nothing to
+  # discard — and nothing was ever started, stopped, or published.
+  test "a failed migration leaves the old release serving, having created nothing" do
     ssh = FakeSsh.new(fail_on: "db:migrate")
     results = cutover(ssh)
 
     assert_not results[:run_gated_migrations]
-    assert ssh.commands.any? { |c| c.match?(/docker rm -f .*app-#{@app.id}-r1/) }
+    assert_not ssh.commands.any? { |c| c.match?(/docker run -d --name app-#{@app.id}-r1/) },
+               "no candidate should exist to discard"
     assert_not ssh.commands.any? { |c| c.include?("kamal-proxy deploy") }
     assert_not ssh.commands.any? { |c| c.match?(/docker stop oldcid999/) }
   end
@@ -319,7 +330,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     def fake_edge.publish(**) = { route_id: "r1" }
     Edge.stub(:for, ->(*, **) { fake_edge }) { cutover(ssh) }
 
-    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    run = ssh.commands.find { |c| c.start_with?("docker run -d") }
     assert_match(/-p 127\.0\.0\.1:\d+:3000/, run, "candidate needs its own host port")
     assert_not_includes run, "-p 3000:3000", "must not contend for the live port"
   end
@@ -330,7 +341,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     ssh = FakeSsh.new
     cutover(ssh)
 
-    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    run = ssh.commands.find { |c| c.start_with?("docker run -d") }
     assert_match(/-p 127\.0\.0\.1:\d+:3000/, run,
                  "the candidate host port must forward to Rails' internal port")
     assert_includes run, "-e PORT=3000"
@@ -344,7 +355,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     ssh = FakeSsh.new
     cutover(ssh)
 
-    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    run = ssh.commands.find { |c| c.start_with?("docker run -d") }
     assert_match(/-p 127\.0\.0\.1:\d+:4000/, run)
     assert_includes run, "-e PORT=4000"
   end
@@ -361,7 +372,7 @@ class AppDeployerCutoverTest < ActiveSupport::TestCase
     # The derived DATABASE_URL carries the database password, and it used to ride on
     # the docker run command line — readable in the host process table for the life
     # of the command. It now travels in a 0600 file uploaded over scp.
-    run = ssh.commands.find { |c| c.start_with?("docker run") }
+    run = ssh.commands.find { |c| c.start_with?("docker run -d") }
     assert_includes run, "--env-file"
     assert_not_includes run, "top-secret", "a password must not be an argv element"
 

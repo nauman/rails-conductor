@@ -122,6 +122,14 @@
     </div>
 
     <div class="flex items-start gap-3">
+      <%= f.check_box :migrates, class: "mt-0.5 rounded border-border-strong text-ink focus:ring-primary" %>
+      <div>
+        <%= f.label :migrates, "Run database migrations before each release goes live", class: "text-sm text-body" %>
+        <p class="mt-1 text-2xs text-muted">On: <code>db:migrate</code> runs in a throwaway container built from the new image, before anything is stopped — a failed migration leaves the current release serving. Off: a release can go live against an out-of-date schema. Turn it off only for apps that genuinely have no database.</p>
+      </div>
+    </div>
+
+    <div class="flex items-start gap-3">
       <%= f.check_box :self_managed, class: "mt-0.5 rounded border-border-strong text-ink focus:ring-primary" %>
       <div>
         <%= f.label :self_managed, "This app is Conductor itself", class: "text-sm text-body" %>
