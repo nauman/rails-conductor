@@ -122,3 +122,6 @@ this is a gap to close deliberately rather than an incident. The log redaction i
 
 Related: ADR 0001 (Kamal artifacts generated from Conductor's env),
 `secret_scrubber.rb`.
+
+See also [`docs/architecture/02-secrets/`](../../architecture/02-secrets/README.md)
+for the per-path transport table and the two constraints that were found by testing.

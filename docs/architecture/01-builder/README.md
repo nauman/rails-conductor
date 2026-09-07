@@ -112,3 +112,4 @@ and the question disappears.
 - [ADR 0014](../dev/adr/0014-a-build-venue-is-chosen-not-inherited.md) — the decision
 - [ADR 0003](../dev/adr/0003-one-deploy-path-kamal-as-contract.md) — one deploy path
 - `app/services/build_placement.rb` — the ladder, which still advises at preflight
+- [`../02-secrets/`](../02-secrets/README.md) — the sibling map for credentials

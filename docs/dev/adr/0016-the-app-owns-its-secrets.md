@@ -97,4 +97,6 @@ app and is a candidate for tier 1 — Rails derives it from credentials in the o
 case, so holding it separately is a copy with no owner.
 
 Related: ADR 0001 (Conductor generates the kamal artifact), ADR 0013 (one flag, one
-guarantee — now correctly scoped by this).
+guarantee — now correctly scoped by this),
+[`docs/architecture/02-secrets/`](../../architecture/02-secrets/README.md) — the
+practical map: what is held, how it travels per path, and what none of it buys.
