@@ -91,6 +91,12 @@
         <%= f.text_field :branch, class: "mt-1 block w-full rounded-control border-border-strong text-sm shadow-soft focus:border-primary focus:ring-primary", placeholder: "main" %>
       </div>
 
+      <div>
+        <%= f.label :app_root, "App Root", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
+        <%= f.text_field :app_root, class: "mt-1 block w-full rounded-control border-border-strong font-mono text-sm shadow-soft focus:border-primary focus:ring-primary", placeholder: "leave blank unless it is a monorepo" %>
+        <p class="mt-1 text-2xs text-muted">Monorepos only: the path from the repository root to the Rails app, e.g. <code class="font-mono">alfaaz-rails</code>. Blank means the app is the repository root.</p>
+      </div>
+
       <div data-deploy-method-toggle-target="dockerFields">
         <%= f.label :dockerfile_path, "Dockerfile Path", class: "block font-mono text-2xs uppercase tracking-label text-muted" %>
         <%= f.text_field :dockerfile_path, class: "mt-1 block w-full rounded-control border-border-strong font-mono text-sm shadow-soft focus:border-primary focus:ring-primary", placeholder: "Dockerfile" %>

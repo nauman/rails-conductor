@@ -16,6 +16,7 @@ class UpdateAppTool
         deploy_method:  { type: 'string',  description: 'One of: docker, native, kamal' },
         repository_url: { type: 'string',  description: 'Git repository URL' },
         branch:         { type: 'string',  description: 'Deploy branch' },
+        app_root:       { type: 'string',  description: 'Monorepo only: path from the repository root to the Rails app (e.g. alfaaz-rails). Blank means the app IS the repo root.' },
         domain:         { type: 'string',  description: 'Public domain' },
         port:           { type: 'integer', description: 'App port' },
         notes:          { type: 'string',  description: 'Free-form deploy notes (surfaced in fleet_status + API)' },
@@ -27,7 +28,7 @@ class UpdateAppTool
     }
   }.freeze
 
-  UPDATABLE = %w[deploy_method repository_url branch domain port notes deploy_hold deploy_hold_reason seed_on_next_deploy].freeze
+  UPDATABLE = %w[deploy_method repository_url branch app_root domain port notes deploy_hold deploy_hold_reason seed_on_next_deploy].freeze
 
   def initialize(user:)
     @user = user
@@ -64,6 +65,7 @@ class UpdateAppTool
       app:           app.name,
       deploy_method: app.deploy_method,
       repository_url: app.repository_url,
+      app_root:       app.app_root,
       domain:        app.domain,
       notes:         app.notes,
       message:       "Updated #{app.name}.",

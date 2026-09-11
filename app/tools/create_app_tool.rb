@@ -15,6 +15,7 @@ class CreateAppTool
         domain:            { type: 'string',  description: 'Optional public domain' },
         port:              { type: 'integer', description: 'Optional app port' },
         branch:            { type: 'string',  description: 'Optional git branch (default main)' },
+        app_root:          { type: 'string',  description: 'Monorepo only: path from the repository root to the Rails app (e.g. alfaaz-rails). Omit when the app is the repo root.' },
         notes:             { type: 'string',  description: 'Optional free-form deploy notes' },
         organization_slug: { type: 'string',  description: 'Optional org slug; defaults to the actor\'s first org' },
         organization_id:   { type: 'integer', description: 'Optional org id (overrides organization_slug)' }
@@ -49,6 +50,7 @@ class CreateAppTool
       domain:         input['domain'].presence,
       port:           input['port'].presence,
       branch:         input['branch'].presence || 'main',
+      app_root:       input['app_root'].presence,
       notes:          input['notes'].presence
     )
 
@@ -62,6 +64,7 @@ class CreateAppTool
       domain:         app.domain,
       port:           app.port,
       branch:         app.branch,
+      app_root:       app.app_root,
       notes:          app.notes,
       server:         server&.name,
       message:        "App #{app.name} created in #{org.name}.",

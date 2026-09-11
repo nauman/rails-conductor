@@ -22,8 +22,8 @@ class ConductorAppTool
   DEFINITION = {
     name: "conductor_app",
     description: "App lifecycle. Set `action` to one of: " \
-      "create (new app — needs name, repository_url, deploy_method; optional server, domain, port, branch, notes), " \
-      "update (change an existing app's config — app_id/app_name + any of deploy_method, repository_url, branch, domain, port, notes), " \
+      "create (new app — needs name, repository_url, deploy_method; optional server, domain, port, branch, app_root, notes), " \
+      "update (change an existing app's config — app_id/app_name + any of deploy_method, repository_url, branch, app_root, domain, port, notes), " \
       "deploy (deploy an app to the latest commit on origin/<branch> — the REMOTE, not any local checkout; PUSH FIRST, unpushed commits are not shipped. app_id/app_name; the result reports ships_from + a verify pointer and records the resolved commit_sha. Runs a preflight that BLOCKS on an at-risk server audit, a deploy hold, or a failed seed run, returning status 'blocked' with the blockers — pass force:true to override. NB: the migration row is a capability label — whether a post-deploy migrate gate exists — NOT a pending-migration/drift probe, so it never blocks), " \
       "rollback (Kamal only: boot a previously-shipped release again — app_id/app_name + optional deployment_id; omit deployment_id to roll back to the release before the current one. No rebuild — reboots the prior image Kamal retains on the host), " \
       "sync_status (check live container status over SSH — app_id/app_name), " \
@@ -58,6 +58,7 @@ class ConductorAppTool
         message:           { type: "string",  description: "edge maintenance: message shown while the app is unavailable" },
         name:              { type: "string",  description: "create: app name" },
         repository_url:    { type: "string",  description: "create/update: git repository URL" },
+        app_root:          { type: "string",  description: "create/update: MONOREPO ONLY — relative path from the repository root to the Rails app (e.g. alfaaz-rails). Git still clones the repository; Kamal and config/deploy.yml, .kamal/secrets, config/master.key and db/seeds.rb are read from here. Omit/blank when the app is the repository root." },
         deploy_method:     { type: "string",  enum: %w[docker native kamal], description: "create (docker|native) / update (docker|native|kamal)" },
         server_id:         { type: "integer", description: "create: server to deploy to (or server_name)" },
         server_name:       { type: "string",  description: "create: server to deploy to (or server_id)" },
