@@ -20,6 +20,7 @@ require "tmpdir"
 # Edge mutations are exposed only to EdgeOperations, and deploy/rollback belong
 # to KamalDeployer's explicit transaction boundary.
 class KamalOps
+  include RepoCheckout
   Result = Struct.new(:ok, :output, :via, :error, keyword_init: true) do
     def ok? = ok
   end
@@ -66,6 +67,14 @@ class KamalOps
     end
 
     return "#{@app.name} does not deploy via kamal (deploy_method: #{@app.deploy_method})" unless @app.kamal?
+
+    # Checked BEFORE materialize: an app_root that does not resolve inside the
+    # checkout must never reach a path that writes files.
+    if @app.app_root.present? && app_dir.nil?
+      return "#{@app.name} app_root '#{@app.app_root}' does not resolve to a directory inside its " \
+             "checkout at #{checkout_dir} — refusing to operate outside the repository"
+    end
+
     if @app.self_describing? && !File.exist?(deploy_config_path)
       materialize_ops_config
       return "#{@app.name} Kamal config could not be materialized: #{@materialize_error}" if @materialize_error
@@ -104,7 +113,7 @@ class KamalOps
     ssh_home, key_file = prepare_ssh_home
     write_secrets_file
     result = @shell.run("bash", "-lc", "#{kamal_bin} #{verb}",
-                        chdir: checkout_dir, env: ops_env(key_file, ssh_home))
+                        chdir: app_dir, env: ops_env(key_file, ssh_home))
 
     Result.new(ok: result.success?, output: result.output.to_s, via: "kamal",
                error: result.success? ? nil : "kamal #{verb} failed (exit #{result.exit_code})")
@@ -164,7 +173,10 @@ class KamalOps
   # Kamal resolves secret references from the checkout, so an ops verb needs the
   # same file a deploy writes — otherwise `app exec` dies resolving a secret.
   def write_secrets_file
-    path = File.join(checkout_dir, ".kamal", "secrets")
+    dir = ensure_app_dir
+    return unless dir
+
+    path = File.join(dir, ".kamal", "secrets")
     content = KamalEnvWriter.secrets_content(@app, server: server)
     return if content.to_s.strip.empty?
 
@@ -179,16 +191,23 @@ class KamalOps
   # generated overlay/secrets used by deploy; no source clone or new app
   # container is needed for logs/details/exec --reuse.
   def materialize_ops_config
-    FileUtils.mkdir_p(File.dirname(deploy_config_path))
-    unless File.exist?(deploy_config_path)
-      File.write(deploy_config_path, <<~YAML)
+    dir = ensure_app_dir
+    unless dir
+      @materialize_error = "app_root '#{@app.app_root}' does not resolve to a directory inside the checkout"
+      return
+    end
+
+    config_path = File.join(dir, "config", "deploy.yml")
+    FileUtils.mkdir_p(File.dirname(config_path))
+    unless File.exist?(config_path)
+      File.write(config_path, <<~YAML)
         require_destination: true
         builder:
           arch: amd64
       YAML
     end
     KamalConfig.new(@app, target_server: @target_server).files.each do |relative_path, content|
-      path = File.join(checkout_dir, relative_path)
+      path = File.join(dir, relative_path)
       FileUtils.mkdir_p(File.dirname(path))
       File.write(path, content)
     end
@@ -199,7 +218,36 @@ class KamalOps
 
   def server = @target_server || @app.server
   def live_version = @app.deployments.successful.recent.first&.target_version
-  def deploy_config_path = File.join(checkout_dir, "config", "deploy.yml")
+  def deploy_config_path = app_dir ? File.join(app_dir, "config", "deploy.yml") : nil
+
+  # Ops mirrors the deploy's split: git owns checkout_dir, Kamal owns the app
+  # inside it. `composed_app_dir` is where the app SHOULD be (usable before the
+  # directory exists, so materialize can create it); `app_dir` is where it
+  # actually resolves, refusing a link that leaves the checkout. Falling back to
+  # checkout_dir on an escape would silently operate the wrong tree, so an
+  # unresolvable app_root yields the composed path and the existing
+  # "no kamal config checked out" guard then reports it.
+  def composed_app_dir
+    root = @app.app_root.presence
+    root ? File.join(checkout_dir, root) : checkout_dir
+  end
+
+  # Deliberately NO fallback to composed_app_dir. An earlier version fell back on
+  # the composed path "because the missing-config guard would report it" — which was
+  # wrong in the one direction that mattered: materialize_ops_config CREATES that
+  # config, so the guard then passed and Kamal ran with chdir outside the checkout,
+  # after writing files through the escaping link. nil means unavailable, full stop.
+  def app_dir = contained_app_dir(checkout_dir, @app.app_root)
+
+  # Create the app directory before resolving it, so a first materialize on a
+  # fresh checkout works; returns nil when it still cannot be contained.
+  def ensure_app_dir
+    FileUtils.mkdir_p(composed_app_dir)
+    contained_app_dir(checkout_dir, @app.app_root)
+  rescue StandardError
+    nil
+  end
+
   def checkout_dir = File.join(workspace, @app.slug)
   def workspace = ENV.fetch("KAMAL_WORKSPACE", Rails.root.join("tmp", "kamal").to_s)
   def kamal_bin = "BUNDLE_GEMFILE=#{Shellwords.escape(conductor_gemfile)} bundle exec kamal"

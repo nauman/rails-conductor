@@ -21,6 +21,7 @@ require "digest"
 #   - docker CLI in the image + the host's /var/run/docker.sock mounted in
 #   - the app repo reachable (public, or a deploy key/token — separate backlog item)
 class KamalDeployer
+  include RepoCheckout
   attr_reader :app, :deployment, :error
 
   # Recorded in apps.build_host. A literal, not a description, so it can be
@@ -302,15 +303,14 @@ class KamalDeployer
     # `alfaaz-rails -> ../other-app` (or -> /etc) satisfies the check above and
     # would then chdir Kamal outside this app's checkout — reading another app's
     # .kamal/secrets. Containment is therefore asserted on the RESOLVED paths.
-    root = File.realpath(checkout_dir)
-    resolved = File.realpath(app_dir)
-    if resolved == root || resolved.start_with?(root + File::SEPARATOR)
+    resolved = contained_app_dir(checkout_dir, app.app_root)
+    if resolved
       @verified_app_dir = resolved
       return true
     end
 
-    fail_with("app_root '#{app.app_root}' resolves to #{resolved}, which is outside the checkout " \
-              "at #{root}. Refusing to deploy through a link that leaves the repository.")
+    fail_with("app_root '#{app.app_root}' resolves outside the checkout at #{checkout_dir}. " \
+              "Refusing to deploy through a link that leaves the repository.")
     false
   rescue StandardError => e
     # Fail closed AND keep the diagnostic: without this the outer rescue reports

@@ -204,4 +204,118 @@ class KamalDeployerMonorepoTest < ActiveSupport::TestCase
     assert_match(/alfaaz-rails/, deployment.reload.log.to_s)
     assert_match(/desktop/, deployment.log.to_s, "the error should list what the repo actually holds")
   end
+
+  # Copilot review caught this: the deploy path learned about app_root but the OPS
+  # path did not, so logs/exec/console/rollback would look for config/deploy.yml at
+  # the repository root and report "no kamal config checked out" for every monorepo
+  # app — a deploy that works and an app you cannot then operate.
+  test "kamal ops reads the app's deploy.yml from app_root, not the repo root" do
+    build_monorepo_checkout
+    ops = KamalOps.new(@app, shell: RecordingShell.new)
+
+    # Compared through realpath: app_dir is deliberately the RESOLVED directory, and
+    # on macOS the tmpdir itself is a /var -> /private/var symlink.
+    assert_equal File.realpath(File.join(app_dir, "config", "deploy.yml")),
+                 File.realpath(ops.send(:deploy_config_path))
+    assert File.exist?(ops.send(:deploy_config_path)), "the app's config must be the one ops resolves"
+  end
+
+  test "kamal ops keeps using the checkout root when there is no app_root" do
+    @app.update!(app_root: nil)
+    FileUtils.mkdir_p(File.join(checkout_dir, "config"))
+    ops = KamalOps.new(@app, shell: RecordingShell.new)
+
+    assert_equal File.join(checkout_dir, "config", "deploy.yml"), ops.send(:deploy_config_path)
+  end
+
+  test "kamal ops refuses to follow an app_root that leaves the checkout" do
+    outside = File.join(@workspace, "someone-elses-checkout")
+    FileUtils.mkdir_p(File.join(outside, "config"))
+    File.write(File.join(outside, "config", "deploy.yml"), "service: not-ours\n")
+    FileUtils.mkdir_p(checkout_dir)
+    File.symlink(outside, app_dir)
+
+    ops = KamalOps.new(@app, shell: RecordingShell.new)
+    resolved = ops.send(:deploy_config_path)
+
+    assert_not_equal File.join(File.realpath(outside), "config", "deploy.yml"), resolved,
+                     "ops must not resolve into another checkout via a symlink"
+  end
+
+  # The containment rule is shared by the deploy and ops paths; pin it directly so
+  # a change in one caller cannot quietly weaken it for the other.
+  test "contained_app_dir accepts inside, refuses outside, and never raises" do
+    helper = Object.new.extend(RepoCheckout)
+    FileUtils.mkdir_p(File.join(checkout_dir, "inside"))
+
+    assert_equal File.realpath(File.join(checkout_dir, "inside")),
+                 helper.contained_app_dir(checkout_dir, "inside")
+    assert_equal checkout_dir, helper.contained_app_dir(checkout_dir, nil), "blank means the repo root"
+    assert_nil helper.contained_app_dir(checkout_dir, "does-not-exist")
+    assert_nil helper.contained_app_dir(File.join(@workspace, "no-such-checkout"), "inside")
+
+    outside = File.join(@workspace, "outside")
+    FileUtils.mkdir_p(outside)
+    File.symlink(outside, File.join(checkout_dir, "escape"))
+    assert_nil helper.contained_app_dir(checkout_dir, "escape")
+
+    # A sibling whose name merely PREFIXES the checkout path must not pass.
+    sibling = "#{checkout_dir}-evil"
+    FileUtils.mkdir_p(sibling)
+    File.symlink(sibling, File.join(checkout_dir, "prefixy"))
+    assert_nil helper.contained_app_dir(checkout_dir, "prefixy")
+  end
+
+  # The fallback this replaces was a write primitive, not just a read bug:
+  # materialize_ops_config CREATED the config it was then guarded by.
+  test "kamal ops refuses an escaping app_root instead of materializing through it" do
+    outside = File.join(@workspace, "outside-the-checkout")
+    FileUtils.mkdir_p(outside)
+    FileUtils.mkdir_p(checkout_dir)
+    File.symlink(outside, app_dir)
+    @app.update!(self_describing: true)
+
+    ops = KamalOps.new(@app, shell: RecordingShell.new)
+
+    assert_not ops.available?, "an app_root that leaves the checkout must make ops unavailable"
+    assert_match(/does not resolve/, ops.unavailable_reason)
+    assert_match(/alfaaz-rails/, ops.unavailable_reason)
+
+    # Nothing may have been written through the link.
+    assert_not File.exist?(File.join(outside, "config", "deploy.yml")),
+               "materialize must not write outside the checkout"
+    assert_empty Dir.children(outside), "no generated config may land outside the checkout"
+  end
+
+  test "kamal ops materializes into the app directory for a contained app_root" do
+    FileUtils.mkdir_p(app_dir)
+    @app.update!(self_describing: true)
+
+    ops = KamalOps.new(@app, shell: RecordingShell.new)
+    ops.send(:materialize_ops_config)
+
+    assert_nil ops.instance_variable_get(:@materialize_error)
+    assert File.exist?(File.join(app_dir, "config", "deploy.yml")),
+           "the base config belongs under app_root"
+    assert_not File.exist?(File.join(checkout_dir, "config", "deploy.yml")),
+               "nothing may be written at the repository root"
+  end
+
+  # The precise attack: a config ALREADY present outside the checkout. With a
+  # fallback to the composed path, File.exist? is satisfied, available? returns
+  # true, and `run` chdirs Kamal into someone else's tree. Nothing in the
+  # materialize guard catches this, because materialize never runs.
+  test "kamal ops refuses an escaping app_root even when a config already exists outside" do
+    outside = File.join(@workspace, "someone-elses-checkout")
+    FileUtils.mkdir_p(File.join(outside, "config"))
+    File.write(File.join(outside, "config", "deploy.yml"), "service: not-ours\n")
+    FileUtils.mkdir_p(checkout_dir)
+    File.symlink(outside, app_dir)
+
+    ops = KamalOps.new(@app, shell: RecordingShell.new)
+
+    assert_not ops.available?,
+               "an existing config outside the checkout must not make ops available"
+    assert_match(/does not resolve/, ops.unavailable_reason)
+  end
 end
