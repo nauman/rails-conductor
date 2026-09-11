@@ -16,6 +16,15 @@ class KamalDeployerMonorepoTest < ActiveSupport::TestCase
       yield "out" if block_given?
       LocalShell::Result.new(success: true, exit_code: 0, output: "out")
     end
+
+    # Match the actual kamal invocation, not any command whose path merely
+    # contains "kamal" — the test workspace is itself under a kamal-* tmpdir.
+    def kamal_runs = runs.select { |r| r[:command].last.to_s.match?(/bundle exec kamal\b/) }
+    def git_runs = runs.select { |r| r[:command].first == "git" || r[:command].last.to_s.include?("git ") }
+  end
+
+  class FakeSsh
+    def execute_with_status(_command) = { success: true, exit_code: 0, output: "", stderr: "" }
   end
 
   setup do
@@ -317,5 +326,56 @@ class KamalDeployerMonorepoTest < ActiveSupport::TestCase
     assert_not ops.available?,
                "an existing config outside the checkout must not make ops available"
     assert_match(/does not resolve/, ops.unavailable_reason)
+  end
+
+  # STAGE-2 REVIEW FINDING: the tests above assert path HELPERS. They would all
+  # still pass if the real deploy and ops commands ran in checkout_dir, because
+  # nothing drove those commands. These drive them and assert on what the shell
+  # was actually told, which is the only thing that decides where Kamal runs.
+  test "every kamal command in a real deploy runs in the app directory, and git does not" do
+    build_monorepo_checkout
+    # Must match the secret build_monorepo_checkout's deploy.yml declares, or
+    # verify_required_secrets refuses before kamal is ever reached.
+    @app.env_variables.create!(key: "RAILS_MASTER_KEY", value: "a" * 32)
+    shell = RecordingShell.new
+    deployer = KamalDeployer.new(@app, @app.deployments.create!(user: User.first),
+                                 shell: shell, ssh: FakeSsh.new, allow_self_deploy: true)
+    deployer.stub(:caddy_cutover, nil) { deployer.deploy! }
+
+    kamal = shell.kamal_runs
+    assert kamal.any?, "precondition: the deploy must have invoked kamal at least once"
+    kamal.each do |run|
+      assert_equal File.realpath(app_dir), run[:chdir],
+                   "kamal ran in #{run[:chdir]} instead of the app directory: #{run[:command].last}"
+    end
+
+    # And the repository operations must NOT have moved into the subdirectory.
+    sync = shell.runs.find { |r| r[:command].last.to_s.include?("git clone") || r[:command].last.to_s.include?("git fetch") }
+    assert sync, "precondition: the deploy must have synced the repo"
+    assert_includes sync[:command].last, checkout_dir
+    assert_not_includes sync[:command].last, "alfaaz-rails"
+  end
+
+  test "a kamal ops verb runs in the app directory" do
+    build_monorepo_checkout
+    shell = RecordingShell.new
+    ops = KamalOps.new(@app, shell: shell)
+    ops.logs
+
+    run = shell.runs.last
+    assert run, "precondition: ops must have invoked kamal"
+    assert_match(/bundle exec kamal\b/, run[:command].last.to_s)
+    assert_equal File.realpath(app_dir), run[:chdir],
+                 "ops ran in #{run[:chdir]} instead of the app directory"
+  end
+
+  test "a root-relative app still runs kamal ops at the checkout root" do
+    @app.update!(app_root: nil)
+    FileUtils.mkdir_p(File.join(checkout_dir, "config"))
+    File.write(File.join(checkout_dir, "config", "deploy.yml"), "service: plain\n")
+    shell = RecordingShell.new
+    KamalOps.new(@app, shell: shell).logs
+
+    assert_equal checkout_dir, shell.runs.last[:chdir]
   end
 end
