@@ -438,6 +438,25 @@ class App < ApplicationRecord
             allow_blank: true
   validates :image_name, format: { with: %r{\A[a-z0-9][a-z0-9._\-/]*\z}, message: "may contain only lowercase letters, digits, dot, dash, underscore and slash" },
             allow_blank: true
+  # A monorepo keeps the Rails app in a subdirectory; blank means the app IS the
+  # repository root, which is every app that predates this column. Stored with no
+  # leading or trailing slash so File.join(checkout_dir, app_root) is the only
+  # composition any caller needs to know about.
+  #
+  # Stricter than dockerfile_path on purpose. This value is both joined onto the
+  # workspace path AND used as a shell `cd` target, so a `..` segment would walk
+  # the deploy out of the checkout and run Kamal against whatever it landed in.
+  # A dot is fine inside a segment (`alfaaz-rails.v2`); a segment that IS `.` or
+  # `..` is refused.
+  validates :app_root, format: {
+              with: %r{\A[\w\-.]+(?:/[\w\-.]+)*\z},
+              message: "must be a relative path such as alfaaz-rails, with no leading or trailing slash"
+            }, allow_blank: true
+  validate :app_root_is_not_traversal
+
+  # Trim whitespace and strip surrounding slashes before validating, so "/alfaaz-rails/"
+  # and "alfaaz-rails" are the same stored value rather than one valid and one not.
+  normalizes :app_root, with: ->(value) { value.to_s.strip.gsub(%r{\A/+|/+\z}, "").presence }
   validates :health_check_path, format: { with: %r{\A/[\w.\-/]*\z}, message: "must be a path starting with /" },
             allow_blank: true
   validates :database_mode, inclusion: { in: DATABASE_MODES }
@@ -937,6 +956,16 @@ class App < ApplicationRecord
   end
 
   private
+
+  # The format validation already refuses a bare `..`, but it is one regex away from
+  # a path-traversal hole in the deploy path, so the rule is asserted twice and
+  # independently: no segment may be a relative-path operator.
+  def app_root_is_not_traversal
+    return if app_root.blank?
+    return unless app_root.split("/").any? { |segment| segment == "." || segment == ".." }
+
+    errors.add(:app_root, "must not contain . or .. path segments")
+  end
 
   def form_fields_change_only_through_form_change
     return if validation_context == :form_change

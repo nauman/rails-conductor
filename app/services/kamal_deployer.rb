@@ -79,6 +79,7 @@ class KamalDeployer
     end
 
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
+    return false unless verify_app_root
     return false unless verify_synced_head
     # Caddy is only the edge; Kamal still owns this deploy transaction. The
     # Caddy-specific post-boot route assertion must run in this class, not in
@@ -155,6 +156,7 @@ class KamalDeployer
     # host/registry/service — sync the repo (current branch HEAD; config only, the
     # target image is NOT rebuilt) and materialize secrets, exactly as a deploy would.
     return false unless run_step("Syncing repo", sync_repo_command, env: git_env)
+    return false unless verify_app_root
     return false unless verify_required_secrets
     materialize_master_key
     write_secrets_file
@@ -268,7 +270,7 @@ class KamalDeployer
   # bare referenced env var name, or nil. Only the `$VAR` indirection form is an
   # env alias; `$(cat …)` materialization and literals are not.
   def committed_secret_reference(key)
-    path = File.join(checkout_dir, ".kamal", "secrets")
+    path = File.join(app_dir, ".kamal", "secrets")
     return nil unless File.exist?(path)
 
     File.readlines(path).each do |line|
@@ -278,11 +280,56 @@ class KamalDeployer
     nil
   end
 
+  # A wrong app_root is otherwise invisible: required_secrets returns [] for a
+  # missing config/deploy.yml, so the deploy would sail past the secrets check and
+  # fail deep inside Kamal with an error about the wrong thing. Name it here,
+  # against the checkout that actually exists.
+  def verify_app_root
+    # Re-resolve every time. A deployer instance that runs a second deploy (or a
+    # rollback after a deploy) must not reuse the previous run's resolved path:
+    # the checkout has been re-synced since, and app_root may have changed.
+    @verified_app_dir = nil
+    return true if app.app_root.blank?
+
+    unless File.directory?(app_dir)
+      fail_with("app_root '#{app.app_root}' is not a directory in #{app.repository_url} " \
+                "on branch #{app.branch}. The repository root holds: #{repo_root_listing}")
+      return false
+    end
+
+    # The validations refuse a `..` segment, but they only constrain the STRING.
+    # File.directory? follows symlinks, so a repository shipping
+    # `alfaaz-rails -> ../other-app` (or -> /etc) satisfies the check above and
+    # would then chdir Kamal outside this app's checkout — reading another app's
+    # .kamal/secrets. Containment is therefore asserted on the RESOLVED paths.
+    root = File.realpath(checkout_dir)
+    resolved = File.realpath(app_dir)
+    if resolved == root || resolved.start_with?(root + File::SEPARATOR)
+      @verified_app_dir = resolved
+      return true
+    end
+
+    fail_with("app_root '#{app.app_root}' resolves to #{resolved}, which is outside the checkout " \
+              "at #{root}. Refusing to deploy through a link that leaves the repository.")
+    false
+  rescue StandardError => e
+    # Fail closed AND keep the diagnostic: without this the outer rescue reports
+    # a generic "Unexpected error" and the app_root cause is lost.
+    fail_with("Could not verify app_root '#{app.app_root}': #{e.message}")
+    false
+  end
+
+  def repo_root_listing
+    Dir.children(checkout_dir).reject { |c| c.start_with?(".") }.sort.first(20).join(", ")
+  rescue StandardError => e
+    "(could not list the repository root: #{e.message})"
+  end
+
   # Secret keys the app's deploy.yml references — bare UPPER_SNAKE list items
   # under registry.password and env.secret. Each must be present in the app's
   # EnvVariables, since KamalEnvWriter builds .kamal/secrets from them.
   def required_secrets
-    path = File.join(checkout_dir, "config", "deploy.yml")
+    path = File.join(app_dir, "config", "deploy.yml")
     return [] unless File.exist?(path)
 
     File.readlines(path).filter_map { |line| line[/\A\s*-\s*([A-Z][A-Z0-9_]+)\s*\z/, 1] }.uniq
@@ -300,7 +347,7 @@ class KamalDeployer
     key = ENV["RAILS_MASTER_KEY"]
     return if key.blank?
 
-    path = File.join(checkout_dir, "config", "master.key")
+    path = File.join(app_dir, "config", "master.key")
     return if File.exist?(path)
 
     FileUtils.mkdir_p(File.dirname(path))
@@ -342,7 +389,7 @@ class KamalDeployer
   # rather than discovering from a CPU graph. Read-only, and never fatal: failing
   # a deploy over a log line would be absurd.
   def record_build_location
-    config = Dir[File.join(checkout_dir, "config", "deploy*.yml")].min
+    config = Dir[File.join(app_dir, "config", "deploy*.yml")].min
     return unless config
 
     remote = File.read(config)[/^\s*remote:\s*(\S+)/, 1]
@@ -476,7 +523,7 @@ class KamalDeployer
   def verify_proxy_off_on_caddy_edge
     return true unless deploy_server&.edge_type == "caddy"
 
-    configs = Dir.glob(File.join(checkout_dir, "config", "deploy*.yml"))
+    configs = Dir.glob(File.join(app_dir, "config", "deploy*.yml"))
     return true if configs.any? { |f| File.read(f).match?(/^\s*proxy:\s*false\b/) }
 
     fail_with("Refusing to deploy #{app.name} to #{deploy_server.name}: it fronts with host Caddy, so " \
@@ -521,7 +568,7 @@ class KamalDeployer
     log "=== proxy-less (host-Caddy) fixed-port app: stopping prior container so the port frees before boot ==="
     return false unless stop_native_port_owner
 
-    result = @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.stop}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.stop}", chdir: app_dir, env: deploy_env) { |line| log(line) }
     log "prior-container stop returned exit #{result.exit_code} (advisory; continuing to boot)" unless result.success?
     release_fixed_port
     @stopped_prior = true
@@ -697,7 +744,7 @@ class KamalDeployer
     end
 
     log "=== deploy failed after stop-first — best-effort rebooting so the app isn't left down ==="
-    @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.boot}", chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    @shell.run("bash", "-lc", "#{kamal_bin} #{kamal_gateway.boot}", chdir: app_dir, env: deploy_env) { |line| log(line) }
   rescue StandardError => e
     log "recovery reboot failed (#{e.message}); manual `kamal app boot` may be needed"
   end
@@ -738,7 +785,7 @@ class KamalDeployer
     return produce_image_elsewhere if elsewhere_build?
 
     log "=== building and pushing release before stopping the fixed-port incumbent ==="
-    result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run(*kamal_build_command, chdir: app_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
     if build_outcome_for(result.exit_code) == :busy
@@ -792,7 +839,7 @@ class KamalDeployer
     app.record_ci_refusal!(outcome.reason, outcome.detail)
     log "CI could not take this build (#{outcome.reason}: #{outcome.detail}) — building here instead"
     log "Recorded as a CI fault. If it persists, the venue needs fixing — a fallback is not a cure."
-    result = @shell.run(*kamal_build_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run(*kamal_build_command, chdir: app_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
     fail_with("kamal build push failed (exit #{result.exit_code}) — incumbent left running")
@@ -807,13 +854,13 @@ class KamalDeployer
     operation = prebuilt ? "kamal deploy --skip-push" : "kamal deploy"
     command = kamal_command(prebuilt: prebuilt)
     log "Running: #{operation}"
-    result = @shell.run(*command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run(*command, chdir: app_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
     if result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
       log "Stale kamal deploy lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
-      @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
-      result = @shell.run(*command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      @shell.run(*kamal_lock_release_command, chdir: app_dir, env: deploy_env) { |line| log(line) }
+      result = @shell.run(*command, chdir: app_dir, env: deploy_env) { |line| log(line) }
       return true if result.success?
     end
 
@@ -825,12 +872,12 @@ class KamalDeployer
   # host. Same stale-lock recovery as deploy (a killed run can strand the lock).
   def run_kamal_rollback(version)
     log "Running: kamal rollback #{version}"
-    result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run(*kamal_rollback_command(version), chdir: app_dir, env: deploy_env) { |line| log(line) }
 
     if !result.success? && result.output.to_s.include?("Deploy lock found") && reclaimable_lock?
       log "Stale kamal lock detected (a prior deploy was killed mid-run). Releasing and retrying once."
-      @shell.run(*kamal_lock_release_command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
-      result = @shell.run(*kamal_rollback_command(version), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+      @shell.run(*kamal_lock_release_command, chdir: app_dir, env: deploy_env) { |line| log(line) }
+      result = @shell.run(*kamal_rollback_command(version), chdir: app_dir, env: deploy_env) { |line| log(line) }
     end
 
     unless result.success?
@@ -893,7 +940,7 @@ class KamalDeployer
 
   def rollback_version_running?(version)
     command = [ "bash", "-lc", "#{kamal_bin} #{kamal_gateway.exec_live("true", version: version)}" ]
-    result = @shell.run(*command, chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    result = @shell.run(*command, chdir: app_dir, env: deploy_env) { |line| log(line) }
     return true if result.success?
 
     log "rollback postcondition failed: release #{version} could not be reused"
@@ -925,13 +972,13 @@ class KamalDeployer
   # recurring prod-500 root cause). Idempotent: a no-op when already migrated.
   def run_gated_migrations
     log "=== gated migrations: bin/rails db:migrate ==="
-    migrate = @shell.run(*kamal_app_exec("bin/rails db:migrate"), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    migrate = @shell.run(*kamal_app_exec("bin/rails db:migrate"), chdir: app_dir, env: deploy_env) { |line| log(line) }
     unless migrate.success?
       fail_with("db:migrate failed (exit #{migrate.exit_code}) — deploy halted before marking success")
       return false
     end
 
-    check = @shell.run(*kamal_app_exec("bin/rails db:abort_if_pending_migrations"), chdir: checkout_dir, env: deploy_env) { |line| log(line) }
+    check = @shell.run(*kamal_app_exec("bin/rails db:abort_if_pending_migrations"), chdir: app_dir, env: deploy_env) { |line| log(line) }
     unless check.success?
       fail_with("pending migrations remain after deploy — schema is behind the code")
       return false
@@ -951,7 +998,7 @@ class KamalDeployer
 
     log "=== running seeds (requested): bin/rails db:seed ==="
     buffer = +""
-    result = @shell.run(*kamal_app_exec("bin/rails db:seed"), chdir: checkout_dir, env: deploy_env) do |line|
+    result = @shell.run(*kamal_app_exec("bin/rails db:seed"), chdir: app_dir, env: deploy_env) do |line|
       buffer << line << "\n"
       log(line)
     end
@@ -972,7 +1019,7 @@ class KamalDeployer
 
   # SHA256 of the committed db/seeds.rb (evidence of WHICH seeds ran), or nil.
   def seeds_digest
-    path = File.join(checkout_dir, "db", "seeds.rb")
+    path = File.join(app_dir, "db", "seeds.rb")
     File.exist?(path) ? Digest::SHA256.hexdigest(File.read(path)) : nil
   end
 
@@ -1193,7 +1240,7 @@ class KamalDeployer
     # `-d <destination>`. Writing both meant every self-describing app also got a
     # plaintext credential file on disk that no deploy ever read: the whole cost of
     # the exposure, none of the benefit. See ADR 0001 and ADR 0013.
-    secrets_path = File.join(checkout_dir, ".kamal", "secrets")
+    secrets_path = File.join(app_dir, ".kamal", "secrets")
 
     if app.self_describing?
       # AND REMOVE ONE CONDUCTOR LEFT BEHIND. Declining to write it is not the same
@@ -1234,7 +1281,7 @@ class KamalDeployer
   def remove_generated_secrets_file(path)
     return unless File.exist?(path)
 
-    listed = @shell.run("git", "ls-files", "--", ".kamal/secrets", chdir: checkout_dir)
+    listed = @shell.run("git", "ls-files", "--", ".kamal/secrets", chdir: app_dir)
     unless listed.respond_to?(:success?) && listed.success?
       return log "Left .kamal/secrets in place — could not ask git whether the repo owns it"
     end
@@ -1251,7 +1298,7 @@ class KamalDeployer
   # Secrets resolve from deploy_env (variable substitution), which Conductor injects.
   def write_self_describing_config
     KamalConfig.new(app, target_server: @target_server).files.each do |rel_path, content|
-      full = File.join(checkout_dir, rel_path)
+      full = File.join(app_dir, rel_path)
       FileUtils.mkdir_p(File.dirname(full))
       File.write(full, content)
       log "Wrote self-describing #{rel_path}"
@@ -1302,7 +1349,23 @@ class KamalDeployer
     end
   end
 
+  # Git operates on the REPOSITORY; Kamal operates on the APP inside it. For a
+  # normal repo these are the same directory. For a monorepo they are not, and
+  # conflating them is what made this unsupported: the clone must happen at the
+  # repo root while config/deploy.yml, .kamal/secrets, config/master.key and
+  # db/seeds.rb all live under app_root.
   def checkout_dir = File.join(workspace, app.slug)
+
+  # Once verify_app_root has resolved and contained this path, every later use is
+  # bound to the RESOLVED directory rather than re-walking the composed one. That
+  # closes the gap between the check and the `chdir`: swapping the symlink
+  # afterwards cannot redirect Kamal, because nothing follows it a second time.
+  def app_dir
+    return @verified_app_dir if @verified_app_dir
+
+    root = app.app_root.presence
+    root ? File.join(checkout_dir, root) : checkout_dir
+  end
 
   def workspace
     ENV.fetch("KAMAL_WORKSPACE", Rails.root.join("tmp", "kamal").to_s)
