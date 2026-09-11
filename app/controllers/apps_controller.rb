@@ -361,16 +361,26 @@ class AppsController < ApplicationController
   # owners rely on quietly starts building someone else's code. That stays with
   # owners. Branch is left editable — shipping a hotfix branch is exactly what
   # the editor role is for.
-  def require_repository_capability!
-    return unless params[:app]&.key?(:repository_url)
+  # Both fields answer "what source does this app deploy". repository_url picks the
+  # repository; app_root picks which tree inside it — and that tree supplies the
+  # Dockerfile, config/deploy.yml and .kamal/secrets. Repointing an app at a
+  # sibling directory therefore changes what gets built and which secrets are
+  # read, with the blast radius of a repository change. See ADR 0017.
+  REPOSITORY_FIELDS = %i[repository_url app_root].freeze
 
-    # Compare on the normalized value, and treat "" / whitespace as a real
-    # change — CLEARING the repository is an owner-only repository change too
-    # (it disables deploys), not a no-op to be waved through.
-    requested = params.dig(:app, :repository_url).to_s.strip
-    return if requested == @app.repository_url.to_s.strip
+  def require_repository_capability!
+    changed = REPOSITORY_FIELDS.select do |field|
+      next false unless params[:app]&.key?(field)
+
+      # Compare on the normalized value, and treat "" / whitespace as a real
+      # change — CLEARING the repository is an owner-only repository change too
+      # (it disables deploys), not a no-op to be waved through.
+      params.dig(:app, field).to_s.strip != @app.public_send(field).to_s.strip
+    end
+    return if changed.empty?
     return if OperatorPolicy.can?(current_user, current_organization, :repository)
 
-    redirect_to @app, alert: "Changing an app's source repository requires an organization owner."
+    field_label = changed.include?(:repository_url) ? "source repository" : "app root"
+    redirect_to @app, alert: "Changing an app's #{field_label} requires an organization owner."
   end
 end
