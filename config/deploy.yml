@@ -14,7 +14,9 @@ deploy_timeout: 30
 drain_timeout: 30
 
 # Name of the container image.
-image: <%= ENV["KAMAL_REGISTRY_USERNAME"].presence || "your-user" %>/conductor
+# The image namespace may differ from the registry login (an org the pushing user
+# belongs to). KAMAL_IMAGE_NAMESPACE wins; the login name is only the fallback.
+image: <%= ENV["KAMAL_IMAGE_NAMESPACE"].presence || ENV["KAMAL_REGISTRY_USERNAME"].presence || "your-user" %>/conductor
 
 # Deploy to these servers.
 servers:
