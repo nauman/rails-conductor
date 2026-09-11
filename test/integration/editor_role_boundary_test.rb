@@ -67,6 +67,57 @@ class EditorRoleBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal "https://github.com/acme/shop-v2", @web_app.reload.repository_url
   end
 
+  # app_root selects which tree in the repo supplies the Dockerfile, deploy.yml and
+  # .kamal/secrets, so repointing it is a source change (ADR 0017), not an ordinary
+  # config edit like branch.
+  test "an editor may not repoint the app root" do
+    @web_app.update!(app_root: "web")
+    sign_in_as(@editor)
+
+    patch app_path(@web_app), params: { app: { app_root: "admin" } }
+
+    assert_equal "web", @web_app.reload.app_root
+    assert_match(/app root/i, flash[:alert].to_s)
+  end
+
+  test "an editor may not SET an app root on an app that has none" do
+    sign_in_as(@editor)
+    assert_nil @web_app.app_root, "precondition: no app_root yet"
+
+    patch app_path(@web_app), params: { app: { app_root: "admin" } }
+
+    assert_nil @web_app.reload.app_root, "setting a first app_root is still a source change"
+  end
+
+  test "an editor may not CLEAR the app root" do
+    @web_app.update!(app_root: "web")
+    sign_in_as(@editor)
+
+    [ "", "   " ].each do |blank|
+      patch app_path(@web_app), params: { app: { app_root: blank } }
+      assert_equal "web", @web_app.reload.app_root,
+                   "blank app_root (#{blank.inspect}) must not slip through"
+    end
+  end
+
+  test "an editor may submit an unchanged app root alongside an ordinary edit" do
+    @web_app.update!(app_root: "web")
+    sign_in_as(@editor)
+
+    patch app_path(@web_app), params: { app: { app_root: "web", notes: "ok" } }
+
+    assert_equal "ok", @web_app.reload.notes, "an unchanged app_root must not block an ordinary edit"
+  end
+
+  test "an owner may repoint the app root" do
+    @web_app.update!(app_root: "web")
+    sign_in_as(@owner)
+
+    patch app_path(@web_app), params: { app: { app_root: "admin" } }
+
+    assert_equal "admin", @web_app.reload.app_root
+  end
+
   # ---- web: owner-only execute + credentials -----------------------------
 
   test "an editor cannot reach scripts, credentials, or ssh keys" do
