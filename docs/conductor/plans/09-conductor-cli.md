@@ -27,8 +27,15 @@ from config.
    GoReleaser, `SURFACE.txt` snapshot.
 2. **Lives in-repo at `cli/`** with its own `go.mod` (module
    `github.com/nauman/rails-conductor/cli`). One repo, one release ritual, the
-   contract and its consumer ship together (`CLI_API_CONTRACT.md` §5). The Rust
-   `conductor-cli/` is **deleted** in the same commit that scaffolds `cli/`.
+   contract and its consumer ship together (`CLI_API_CONTRACT.md` §5).
+
+   *Amended 2026-09-12:* the Rust `conductor-cli/` was to be deleted in the same
+   commit that scaffolds `cli/`. It was removed earlier, on its own, because the
+   coupling gave a dead relic an indefinite stay of execution — scaffolding has
+   not started, the repo is public, and the directory advertised a `conductor`
+   binary that does not build or work. Removing it is independently correct and
+   this plan is the record of why it existed. Nothing referenced it but
+   `.gitignore`.
 3. **Transport v1 = the existing MCP tools endpoint.** The CLI speaks JSON-RPC
    `tools/call` to `/mcp` with a bearer token — the same wire `bin/conductor`
    proved. No new Rails surface is required for v1; the MCP tool inputs/results
