@@ -11,12 +11,19 @@ import (
 	"os"
 
 	"github.com/nauman/rails-conductor/cli/internal/appctx"
+	"github.com/nauman/rails-conductor/cli/internal/auth"
 	"github.com/nauman/rails-conductor/cli/internal/commands"
 	"github.com/nauman/rails-conductor/cli/internal/config"
 	"github.com/nauman/rails-conductor/cli/internal/exiterr"
 	"github.com/nauman/rails-conductor/cli/internal/mcp"
 	"github.com/nauman/rails-conductor/cli/internal/output"
 	"github.com/nauman/rails-conductor/cli/internal/version"
+)
+
+// Commands that need no token carry this annotation.
+const (
+	annotationAuth     = "auth"
+	annotationAuthSkip = "skip"
 )
 
 type rootFlags struct {
@@ -75,16 +82,40 @@ func NewRootCmd(out, errOut *os.File) (*cobraCommand, *output.Writer) {
 			}
 		}
 
+		// The token is resolved here, once, so every command sees the same
+		// answer. A keyring read that FAILS is surfaced now rather than as a
+		// puzzling 401 from whatever command happens to run first.
+		//
+		// Commands that need no token opt out: a locked keychain must not be
+		// able to break `conductor version` or `--help`, which is exactly the
+		// kind of failure that makes a tool feel broken for an unrelated reason.
+		store := auth.SystemStore{}
+		var token string
+		source := auth.SourceNone
+		if cmd.Annotations[annotationAuth] != annotationAuthSkip {
+			var err error
+			token, source, err = auth.Resolve(store, cfg.APIURL)
+			if err != nil {
+				return err
+			}
+		}
+		if flags.verbose && source != auth.SourceNone {
+			fmt.Fprintf(errOut, "config: token from %s\n", source)
+		}
+
 		cmd.SetContext(appctx.Into(cmd.Context(), &appctx.App{
-			Config: cfg,
-			API:    mcp.New(cfg.APIURL, cfg.Token),
-			Out:    writer,
+			Config:      cfg,
+			API:         mcp.New(cfg.APIURL, token),
+			Out:         writer,
+			Store:       store,
+			TokenSource: source,
 		}))
 		return nil
 	}
 
 	root.AddCommand(commands.NewStatusCmd())
 	root.AddCommand(commands.NewSituationCmd())
+	root.AddCommand(commands.NewAuthCmd())
 	root.AddCommand(commands.NewVersionCmd())
 	return root, writer
 }

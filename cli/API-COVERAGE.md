@@ -3,14 +3,18 @@
 Conductor's MCP tools → CLI commands. In-scope endpoints stay at 100%; adding an
 SDK method without its command and row is an incomplete change.
 
-Scope for v1 is the **read** surface. Mutating tools (deploy, server lifecycle,
-domains, databases) are deliberately out of scope until auth moves to the
-keyring — a destructive command should not be one env var away from running.
+Scope for v1 is the **read** surface, plus token management.
+
+Mutating tools (deploy, server lifecycle, domains, databases) remain out of
+scope. Keyring auth now exists, which was the stated precondition, but the
+second half of the argument still stands: a destructive command wants a
+confirmation path and an audit story of its own, not just a safer token.
 
 | Tool (action) | CLI command | Status |
 |---|---|---|
 | `conductor_read` (`fleet_status`) | `conductor status` | ✅ |
 | `conductor_read` (`situation`) | `conductor situation` | ✅ |
+| — (local) | `conductor auth login` / `status` / `logout` | ✅ |
 | `conductor_read` (`server`) | `conductor server <id>` | ⬜ |
 | `conductor_read` (`app_logs`) | `conductor logs <app>` | ⬜ |
 | `conductor_read` (`deployment`) | `conductor deployment <id>` | ⬜ |

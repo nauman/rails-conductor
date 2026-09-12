@@ -19,7 +19,6 @@ import (
 // Config is the resolved settings for one invocation.
 type Config struct {
 	APIURL  string
-	Token   string
 	Profile string
 
 	// Sources maps a field name to the layer that set it.
@@ -51,11 +50,9 @@ func Load(startDir string) *Config {
 	if v := strings.TrimSpace(os.Getenv("CONDUCTOR_URL")); v != "" {
 		cfg.APIURL, cfg.Sources["api_url"] = v, "env CONDUCTOR_URL"
 	}
-	if v := strings.TrimSpace(os.Getenv("CONDUCTOR_MCP_TOKEN")); v != "" {
-		// The token is never written to a config file by this CLI; it comes
-		// from the environment or, later, the keyring.
-		cfg.Token, cfg.Sources["token"] = v, "env CONDUCTOR_MCP_TOKEN"
-	}
+	// The token is deliberately NOT resolved here. It lives in internal/auth,
+	// which reads the environment then the keyring, so there is exactly one
+	// place that answers "which token" and one place that can leak it.
 	if v := strings.TrimSpace(os.Getenv("CONDUCTOR_PROFILE")); v != "" {
 		cfg.Profile, cfg.Sources["profile"] = v, "env CONDUCTOR_PROFILE"
 	}

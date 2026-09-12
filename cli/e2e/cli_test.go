@@ -192,3 +192,57 @@ func TestVersionWorksWithoutAnyConfiguration(t *testing.T) {
 		t.Errorf("expected a version envelope, got %q", stdout)
 	}
 }
+
+// The token must never be reconstructible from output. This drives the real
+// binary because that is the only place the whole rendering path is exercised.
+func TestAuthStatusReportsTheSourceWithoutLeakingTheToken(t *testing.T) {
+	bin := build(t)
+	secret := "conductor_pat_9f3c2a7e5b1d4a6c"
+
+	stdout, stderr, code := run(t, bin, []string{
+		"CONDUCTOR_URL=https://c.test", "CONDUCTOR_MCP_TOKEN=" + secret,
+	}, "auth", "status", "--json")
+
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %s)", code, stderr)
+	}
+	if strings.Contains(stdout, secret) || strings.Contains(stderr, secret) {
+		t.Fatal("the token appeared in output — a fingerprint must never be reversible")
+	}
+	if !strings.Contains(stdout, "env CONDUCTOR_MCP_TOKEN") {
+		t.Errorf("the source should be reported, got %q", stdout)
+	}
+}
+
+// Login reads stdin. Nothing is written anywhere when there is nothing to read,
+// so this never reaches the real keyring.
+func TestAuthLoginWithoutStdinIsAUsageError(t *testing.T) {
+	bin := build(t)
+	_, stderr, code := run(t, bin, []string{"CONDUCTOR_URL=https://c.test"}, "auth", "login")
+
+	if code != 2 {
+		t.Fatalf("an empty token must exit 2, got %d (stderr: %s)", code, stderr)
+	}
+	if !strings.Contains(stderr, "conductor auth login") {
+		t.Errorf("the hint should show how to pipe a token, got %q", stderr)
+	}
+}
+
+// There must be no --token flag: an argument lands in `ps`, shell history and
+// an agent transcript. This asserts the absence deliberately.
+func TestThereIsNoTokenFlag(t *testing.T) {
+	bin := build(t)
+	stdout, stderr, _ := run(t, bin, nil, "auth", "login", "--help")
+	if strings.Contains(stdout+stderr, "--token") {
+		t.Error("a --token flag would put the secret back into argv")
+	}
+}
+
+// A command that needs no token must not be broken by the keyring.
+func TestVersionDoesNotTouchTheKeyring(t *testing.T) {
+	bin := build(t)
+	_, stderr, code := run(t, bin, []string{"CONDUCTOR_URL=https://c.test"}, "version", "--json")
+	if code != 0 {
+		t.Fatalf("version must not depend on auth, got %d (stderr: %s)", code, stderr)
+	}
+}

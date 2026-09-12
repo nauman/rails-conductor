@@ -14,6 +14,8 @@ func NewVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Show the CLI version",
 		Args:  cobra.NoArgs,
+		// Needs no token: a locked keychain must not break `version`.
+		Annotations: map[string]string{"auth": "skip"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			app := appctx.From(cmd.Context())
 			return app.Out.OK(output.Response{

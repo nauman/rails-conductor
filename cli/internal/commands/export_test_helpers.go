@@ -13,3 +13,12 @@ func StatusBreadcrumbsForTest() []output.Breadcrumb { return statusBreadcrumbs(n
 func SituationBreadcrumbsForTest() []output.Breadcrumb {
 	return []output.Breadcrumb{{Label: "Fleet health, server by server", Command: "conductor status"}}
 }
+
+// AuthBreadcrumbsForTest returns every breadcrumb the auth commands can emit.
+func AuthBreadcrumbsForTest() []output.Breadcrumb {
+	return []output.Breadcrumb{
+		{Label: "Confirm what the CLI is using", Command: "conductor auth status"},
+		{Label: "Fleet health, server by server", Command: "conductor status"},
+		{Label: "Store a token", Command: "conductor auth login"},
+	}
+}

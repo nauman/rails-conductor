@@ -13,6 +13,7 @@ internal/mcp/           the typed SDK (transport: POST /mcp/call)
 internal/output/        the envelope, --jq, TTY-aware rendering
 internal/exiterr/       typed errors + the stable exit-code enum
 internal/config/        flags > env > project file > global file > defaults
+internal/auth/          token resolution (env > keyring) + the keyring store
 internal/appctx/        the dependency handle, injected via context
 e2e/                    the real binary against a stub Conductor
 ```
@@ -49,6 +50,11 @@ typed client stops being typed the first time one caller reaches past it.
 - Errors render **without** the `--jq` filter, so a broken filter cannot swallow
   the message explaining what broke.
 - Exit codes are a contract. Append; never renumber.
-- The token is environment- or keyring-supplied. It is never read from a config
-  file and never passed in argv — that is why `bin/conductor` (the Ruby shim)
-  exists and why this CLI keeps the same discipline.
+- The token is environment- or keyring-supplied, resolved in `internal/auth`
+  (env > keyring). It is never read from a config file and there is deliberately
+  **no `--token` flag**: an argument is visible in `ps`, lands in shell history,
+  and is written into an agent transcript. `conductor auth login` reads stdin.
+- Never print a token. `auth.Fingerprint` renders enough to tell two apart and
+  never enough to use one.
+- A command that needs no token annotates `auth: skip`, so a locked keychain
+  cannot break something unrelated like `version`.

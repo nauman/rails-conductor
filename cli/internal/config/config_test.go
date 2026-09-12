@@ -71,16 +71,22 @@ func TestMalformedConfigIsIgnoredNotFatal(t *testing.T) {
 	}
 }
 
-// The token is environment-supplied; a config file must never be able to set it.
-func TestTokenComesOnlyFromTheEnvironment(t *testing.T) {
+// Config must not carry a token at all — that invariant now lives in
+// internal/auth, and is asserted there (TestAConfigFileCannotSupplyAToken).
+// A config file naming a token must still be harmless.
+func TestAConfigFileWithATokenFieldIsIgnoredSafely(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".conductor.json"),
 		[]byte(`{"api_url":"https://x.test","token":"leaked_from_file"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("CONDUCTOR_MCP_TOKEN", "")
+	t.Setenv("CONDUCTOR_URL", "")
 
-	if cfg := Load(dir); cfg.Token != "" {
-		t.Errorf("a config file must not supply a token, got %q", cfg.Token)
+	cfg := Load(dir)
+	if cfg.APIURL != "https://x.test" {
+		t.Errorf("the url should still load, got %q", cfg.APIURL)
+	}
+	if _, ok := cfg.Sources["token"]; ok {
+		t.Error("config must not claim a token source; auth owns the token")
 	}
 }

@@ -7,6 +7,7 @@ Usage:
   conductor [command]
 
 Available Commands:
+  auth        Manage the Conductor token
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   situation   Show what is in flight and what needs attention

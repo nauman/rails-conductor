@@ -48,6 +48,7 @@ func allBreadcrumbs() []output.Breadcrumb {
 	var all []output.Breadcrumb
 	all = append(all, commands.StatusBreadcrumbsForTest()...)
 	all = append(all, commands.SituationBreadcrumbsForTest()...)
+	all = append(all, commands.AuthBreadcrumbsForTest()...)
 	return all
 }
 
