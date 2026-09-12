@@ -49,3 +49,10 @@
 # Ignore Docker-related files
 /.dockerignore
 /Dockerfile*
+
+# Documentation and tests never run in production (2026-09-12). Only files the app
+# reads at runtime are re-included; add a line here when a new runtime read lands.
+/docs/**
+!/docs/guides/**
+!/docs/skills/**
+/test
