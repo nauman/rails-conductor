@@ -1,2 +1,4 @@
 # The built binary is a local artifact.
 bin/
+completions/
+dist/

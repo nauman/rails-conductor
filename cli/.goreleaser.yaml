@@ -1,0 +1,112 @@
+# GoReleaser for the conductor CLI.
+#
+# This CLI is a nested Go module in a Rails repo, which constrains the tag shape:
+# `go install .../cli/cmd/conductor@v0.1.0` only resolves if the tag is
+# `cli/v0.1.0`. That prefix is a Go module rule, not a preference.
+#
+# GoReleaser's `monorepo:` block handles prefixed tags, but it is a Pro feature.
+# So the version travels in CLI_VERSION instead: bin/release derives it from the
+# tag, strips the `cli/v` prefix, and exports it. Every template below uses
+# {{ .Env.CLI_VERSION }} rather than {{ .Version }}, because .Version would carry
+# the slash and put it into archive filenames.
+#
+# Run it through `bin/release`, never by hand and never from a push hook. The
+# gate is local and is the authority; a release is something a person decides.
+version: 2
+
+project_name: conductor
+
+before:
+  hooks:
+    - go mod tidy
+    # Shell completions are generated, not committed: a stale checked-in
+    # completion is worse than none, because it confidently offers commands
+    # that no longer exist.
+    - sh -c 'mkdir -p completions && go run ./cmd/conductor completion bash > completions/conductor.bash'
+    - sh -c 'go run ./cmd/conductor completion zsh > completions/conductor.zsh'
+    - sh -c 'go run ./cmd/conductor completion fish > completions/conductor.fish'
+
+builds:
+  - id: conductor
+    main: ./cmd/conductor
+    binary: conductor
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      # Windows on ARM is not a platform anyone is operating a fleet from yet.
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/nauman/rails-conductor/cli/internal/version.Version=v{{.Env.CLI_VERSION}}
+      - -X github.com/nauman/rails-conductor/cli/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/nauman/rails-conductor/cli/internal/version.Date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"  # reproducible builds
+
+archives:
+  - id: conductor
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Env.CLI_VERSION }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE*
+      - README*
+      - AGENTS.md
+      - src: completions/*
+        dst: completions
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  - id: conductor
+    package_name: conductor
+    formats: [deb, rpm]
+    maintainer: Conductor
+    description: CLI for operating a self-hosted Rails fleet through Conductor.
+    license: MIT
+    bindir: /usr/bin
+    contents:
+      - src: completions/conductor.bash
+        dst: /usr/share/bash-completion/completions/conductor
+      - src: completions/conductor.zsh
+        dst: /usr/share/zsh/site-functions/_conductor
+      - src: completions/conductor.fish
+        dst: /usr/share/fish/vendor_completions.d/conductor.fish
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    # The Rails app and the CLI share a repo; only CLI work belongs in a CLI
+    # changelog. Everything else is noise to whoever is reading a release note.
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+
+release:
+  draft: false
+  prerelease: auto  # a -rc or -beta tag releases as a prerelease on its own
+  name_template: "conductor v{{ .Env.CLI_VERSION }}"
+  header: |
+    CLI for operating a self-hosted Rails fleet through Conductor.
+
+    Install with Go:
+
+        go install github.com/nauman/rails-conductor/cli/cmd/conductor@{{ .Tag }}
+
+# Deliberately NOT configured, rather than configured and broken:
+#
+#   brews / scoops — need a tap repository that does not exist yet.
+#   cosign         — needs signing keys.
+#   notarize       — needs an Apple Developer ID and credentials.
+#
+# Each would fail the release at the last step, which is the worst place to
+# discover missing credentials. Add them when the inputs actually exist.

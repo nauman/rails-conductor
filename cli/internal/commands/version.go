@@ -19,7 +19,7 @@ func NewVersionCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			app := appctx.From(cmd.Context())
 			return app.Out.OK(output.Response{
-				Data:    map[string]any{"version": version.Version, "commit": version.Commit},
+				Data:    version.Info(),
 				Summary: "conductor " + version.String(),
 			})
 		},

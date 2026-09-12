@@ -1,0 +1,60 @@
+# Release the conductor CLI from hosted CI.
+#
+# This fires on NOTHING. There is no push or tag trigger, deliberately.
+#
+# The authority is the local gate: `bin/release-cli <version>` runs `make -C cli ci`,
+# tags, pushes and publishes. This workflow exists so that path is ready if hosted
+# CI is ever the better venue — not so a release can happen as a side effect of a
+# push. A workflow that auto-fires and fails on a missing credential leaves a red
+# mark nobody acts on, in the exact place a real failure would appear.
+name: Release CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v, e.g. 0.1.0. The tag cli/v<version> must already exist."
+        required: true
+        type: string
+
+permissions:
+  contents: write # creating a release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # GoReleaser needs full history and tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      # The same gate the local path runs. A hosted release that skipped it
+      # would be a second, weaker standard for the same artifact.
+      - name: Gate
+        run: make -C cli ci
+
+      - name: Verify the tag exists
+        run: |
+          tag="cli/v${{ inputs.version }}"
+          git rev-parse "$tag" >/dev/null 2>&1 || {
+            echo "::error::$tag does not exist. Tag it first, or use bin/release-cli."
+            exit 1
+          }
+
+      - name: Publish
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+          workdir: cli
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLI_VERSION: ${{ inputs.version }}
+          GORELEASER_CURRENT_TAG: cli/v${{ inputs.version }}

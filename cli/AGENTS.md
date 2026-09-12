@@ -58,3 +58,30 @@ typed client stops being typed the first time one caller reaches past it.
   never enough to use one.
 - A command that needs no token annotates `auth: skip`, so a locked keychain
   cannot break something unrelated like `version`.
+
+## Releasing
+
+`bin/release-cli 0.1.0` from the repo root. It runs the gate, tags `cli/v0.1.0`,
+pushes the tag, and publishes with GoReleaser — in that order, so a red gate
+refuses the release *before* a tag exists rather than after one is public.
+
+Two constraints worth knowing before changing anything here:
+
+- **The `cli/` tag prefix is a Go rule, not a preference.** This is a nested
+  module, so `go install .../cli/cmd/conductor@v0.1.0` resolves only from a
+  `cli/v0.1.0` tag.
+- **The version travels in `CLI_VERSION`.** GoReleaser's `monorepo:` block
+  handles prefixed tags but is a Pro feature, and `{{ .Version }}` would carry
+  the slash into archive filenames. Every template uses `{{ .Env.CLI_VERSION }}`
+  instead. `bin/release-cli` sets it; so does the workflow.
+
+`make snapshot` builds every platform without publishing. Run it before tagging —
+a tag is the one step that is awkward to take back.
+
+`.github/workflows/release-cli.yml` is `workflow_dispatch` only and fires on
+nothing. The local gate is the authority; the workflow is there in case hosted CI
+becomes the better venue.
+
+Not configured, deliberately: Homebrew/Scoop taps (no tap repo yet), cosign (no
+keys), notarization (no Apple credentials). Each would fail at the last step of a
+release, which is the worst place to discover a missing credential.
