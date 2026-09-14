@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -116,14 +117,25 @@ func summarize(servers []mcp.Server) string {
 // statusBreadcrumbs suggest the next command. They are data, not help text, so
 // an agent can follow them without parsing prose.
 //
-// Every breadcrumb must name a command that EXISTS. A suggestion that fails when
-// followed is worse than silence: it spends the reader's trust and their time.
-// `conductor server <id>` would be the natural next step for an offline box, and
-// it is missing from this slice, so it is not suggested — see API-COVERAGE.md.
-func statusBreadcrumbs(_ []mcp.Server) []output.Breadcrumb {
-	return []output.Breadcrumb{
+// Every breadcrumb must name a command that EXISTS — a suggestion that fails when
+// followed is worse than silence. The per-server crumb was withheld until
+// `conductor server` was written, and is asserted by
+// TestEveryBreadcrumbNamesARegisteredCommand rather than remembered.
+func statusBreadcrumbs(servers []mcp.Server) []output.Breadcrumb {
+	crumbs := []output.Breadcrumb{
 		{Label: "What needs attention right now", Command: "conductor situation"},
 	}
+	// Point at the boxes worth opening, not at every box: a breadcrumb list as
+	// long as the fleet is not a suggestion, it is the same table again.
+	for _, s := range servers {
+		if !strings.EqualFold(s.Status, "online") {
+			crumbs = append(crumbs, output.Breadcrumb{
+				Label:   fmt.Sprintf("Inspect %s, which is %s", s.Name, s.Status),
+				Command: fmt.Sprintf("conductor server %d", s.ID),
+			})
+		}
+	}
+	return crumbs
 }
 
 func plural(n int, noun string) string {
@@ -131,4 +143,14 @@ func plural(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// decodedOrRaw turns embedded JSON into something the renderer can walk, falling
+// back to the raw string rather than dropping it.
+func decodedOrRaw(raw []byte) any {
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return string(raw)
+	}
+	return decoded
 }

@@ -24,18 +24,21 @@ func TestEveryBreadcrumbNamesARegisteredCommand(t *testing.T) {
 			t.Errorf("breadcrumb %q must start with `conductor`", crumb.Command)
 			continue
 		}
-		// Drop the binary name, and any <placeholder> or --flag arguments.
-		var path []string
+		// Drop the binary name and any flags; what remains is a command path
+		// followed by arguments. A concrete argument (`server 7`) looks exactly
+		// like a subcommand name, so the walk stops at the first segment that is
+		// not a registered child rather than assuming every word is a command.
+		var segments []string
 		for _, f := range fields[1:] {
-			if strings.HasPrefix(f, "-") || strings.HasPrefix(f, "<") {
+			if strings.HasPrefix(f, "-") {
 				break
 			}
-			path = append(path, f)
+			segments = append(segments, f)
 		}
-		if len(path) == 0 {
+		if len(segments) == 0 {
 			continue // `conductor` alone is the root; always valid
 		}
-		if !hasCommandPath(root, path) {
+		if !resolvesToACommand(root, segments) {
 			t.Errorf("breadcrumb %q names a command that does not exist — "+
 				"implement it or stop suggesting it", crumb.Command)
 		}
@@ -49,22 +52,42 @@ func allBreadcrumbs() []output.Breadcrumb {
 	all = append(all, commands.StatusBreadcrumbsForTest()...)
 	all = append(all, commands.SituationBreadcrumbsForTest()...)
 	all = append(all, commands.AuthBreadcrumbsForTest()...)
+	all = append(all, commands.ServerBreadcrumbsForTest()...)
 	return all
 }
 
-func hasCommandPath(root *cobra.Command, path []string) bool {
+// resolvesToACommand walks as deep as the segments match registered commands and
+// treats whatever remains as arguments. It requires the FIRST segment to match —
+// that is the part a breadcrumb is actually promising.
+//
+// Remaining segments are checked against the command's own Args validator, so a
+// breadcrumb that passes an argument to a command taking none is still caught.
+func resolvesToACommand(root *cobra.Command, segments []string) bool {
 	current := root
-	for _, segment := range path {
-		found := false
-		for _, child := range current.Commands() {
-			if child.Name() == segment {
-				current, found = child, true
-				break
-			}
+	matched := 0
+	for _, segment := range segments {
+		child := findChild(current, segment)
+		if child == nil {
+			break
 		}
-		if !found {
-			return false
+		current, matched = child, matched+1
+	}
+	if matched == 0 {
+		return false
+	}
+
+	remaining := segments[matched:]
+	if current.Args == nil {
+		return len(remaining) == 0 // cobra's default rejects unknown subcommands
+	}
+	return current.Args(current, remaining) == nil
+}
+
+func findChild(parent *cobra.Command, name string) *cobra.Command {
+	for _, child := range parent.Commands() {
+		if child.Name() == name {
+			return child
 		}
 	}
-	return true
+	return nil
 }

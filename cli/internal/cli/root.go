@@ -115,9 +115,41 @@ func NewRootCmd(out, errOut *os.File) (*cobraCommand, *output.Writer) {
 
 	root.AddCommand(commands.NewStatusCmd())
 	root.AddCommand(commands.NewSituationCmd())
+	root.AddCommand(commands.NewServerCmd())
 	root.AddCommand(commands.NewAuthCmd())
 	root.AddCommand(commands.NewVersionCmd())
+
+	classifyUsageErrors(root)
 	return root, writer
+}
+
+// classifyUsageErrors makes cobra's own validation failures exit 2, not 1.
+//
+// Cobra returns a plain error for "accepts 1 arg(s), received 0" and for an
+// unknown flag. Untyped errors fall back to the generic API code, so a script
+// could not tell "you typed it wrong" from "the backend failed" — which are the
+// two things an exit code most needs to separate.
+//
+// Applied by walking the tree rather than per command, so a command added later
+// inherits it instead of having to remember.
+func classifyUsageErrors(cmd *cobraCommand) {
+	cmd.SetFlagErrorFunc(func(_ *cobraCommand, err error) error {
+		return exiterr.Wrap(exiterr.Usage, err, err.Error(), "Run with --help to see the accepted flags.")
+	})
+
+	if inner := cmd.Args; inner != nil {
+		cmd.Args = func(c *cobraCommand, args []string) error {
+			if err := inner(c, args); err != nil {
+				return exiterr.Wrap(exiterr.Usage, err, err.Error(),
+					fmt.Sprintf("Run `%s --help` for the expected arguments.", c.CommandPath()))
+			}
+			return nil
+		}
+	}
+
+	for _, child := range cmd.Commands() {
+		classifyUsageErrors(child)
+	}
 }
 
 // resolveFormat collapses the output flags into one format, refusing a

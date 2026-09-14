@@ -10,6 +10,7 @@ Available Commands:
   auth        Manage the Conductor token
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
+  server      Show one server in detail
   situation   Show what is in flight and what needs attention
   status      Show every server in the fleet with its apps and health
   version     Show the CLI version

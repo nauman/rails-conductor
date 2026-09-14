@@ -15,7 +15,7 @@ confirmation path and an audit story of its own, not just a safer token.
 | `conductor_read` (`fleet_status`) | `conductor status` | ✅ |
 | `conductor_read` (`situation`) | `conductor situation` | ✅ |
 | — (local) | `conductor auth login` / `status` / `logout` | ✅ |
-| `conductor_read` (`server`) | `conductor server <id>` | ⬜ |
+| `conductor_read` (`server`) | `conductor server <id-or-name>` (`--probe`) | ✅ |
 | `conductor_read` (`app_logs`) | `conductor logs <app>` | ⬜ |
 | `conductor_read` (`deployment`) | `conductor deployment <id>` | ⬜ |
 | `conductor_read` (`logs`) | — | ⬜ |
@@ -32,7 +32,11 @@ confirmation path and an audit story of its own, not just a safer token.
 | `conductor_github` | — | out of scope for v1 (mutating) |
 | `conductor_runbook` | — | out of scope for v1 |
 
-`conductor server <id>` is the most-wanted gap: `status` would naturally suggest
-it for an offline box, and deliberately does not, because a breadcrumb naming a
-command that does not exist is a defect. `TestEveryBreadcrumbNamesARegisteredCommand`
-enforces that mechanically — a suggestion cannot outrun its implementation.
+`conductor server` closed the gap the scaffold left open, and `status` now emits
+the per-server breadcrumb it had to withhold.
+`TestEveryBreadcrumbNamesARegisteredCommand` enforces that mechanically — a
+suggestion cannot outrun its implementation, and the check covers arity too, so
+a crumb passing an argument to a command that takes none is caught as well.
+
+Next gap worth closing: `conductor logs <app>`, which is the other question an
+operator asks after `status` shows something is not running.

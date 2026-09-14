@@ -246,3 +246,94 @@ func TestVersionDoesNotTouchTheKeyring(t *testing.T) {
 		t.Fatalf("version must not depend on auth, got %d (stderr: %s)", code, stderr)
 	}
 }
+
+func TestServerRendersDetailAndWarnsTheDataIsStored(t *testing.T) {
+	bin := build(t)
+	srv := stubConductor(t, 200, `{"result":{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online",
+		"edge":{"type":"kamal_proxy","detail":"v0.9.2"},
+		"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},
+		"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},
+		"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},
+		"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}}`)
+
+	stdout, stderr, code := run(t, bin, []string{
+		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
+	}, "server", "6", "--json")
+
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %s)", code, stderr)
+	}
+
+	var env struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Name, Edge, SSH, Audit string
+			Apps                   []string
+		} `json:"data"`
+		Summary string `json:"summary"`
+		Notice  string `json:"notice"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("stdout was not the envelope: %v\n%s", err, stdout)
+	}
+	if env.Data.Name != "web-1" || !strings.Contains(env.Data.Edge, "kamal_proxy") {
+		t.Errorf("unexpected detail: %+v", env.Data)
+	}
+	// The audit says "attention", so the summary must lead with that rather than
+	// burying it under a wall of healthy-looking fields.
+	if !strings.Contains(env.Summary, "attention") {
+		t.Errorf("the summary should surface the audit concern, got %q", env.Summary)
+	}
+	// Stored data presented as current is how someone acts on a stale picture.
+	if !strings.Contains(env.Notice, "--probe") {
+		t.Errorf("the notice must say the data is stored, got %q", env.Notice)
+	}
+	if !strings.Contains(env.Data.SSH, "a-key") || strings.Contains(stdout, "PRIVATE KEY") {
+		t.Errorf("ssh should name the key, never carry one: %q", env.Data.SSH)
+	}
+}
+
+func TestServerAcceptsANameNotJustAnID(t *testing.T) {
+	bin := build(t)
+	srv := stubConductor(t, 200, `{"result":{"id":6,"name":"web-1","status":"online"}}`)
+
+	stdout, _, code := run(t, bin, []string{
+		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
+	}, "server", "web-1", "--jq", ".data.name")
+
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	if strings.TrimSpace(stdout) != "web-1" {
+		t.Errorf("expected the named server, got %q", stdout)
+	}
+}
+
+func TestServerRequiresExactlyOneArgument(t *testing.T) {
+	bin := build(t)
+	for _, args := range [][]string{{"server"}, {"server", "a", "b"}} {
+		_, stderr, code := run(t, bin, []string{
+			"CONDUCTOR_URL=https://c.test", "CONDUCTOR_MCP_TOKEN=tok",
+		}, args...)
+		if code != 2 {
+			t.Errorf("%v should exit 2, got %d (stderr: %s)", args, code, stderr)
+		}
+	}
+}
+
+// A 404 must reach the operator as "not found", not as a generic failure.
+func TestServerNotFoundExitsFour(t *testing.T) {
+	bin := build(t)
+	srv := stubConductor(t, http.StatusNotFound, `{"error":"Server not found: 99"}`)
+
+	_, stderr, code := run(t, bin, []string{
+		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
+	}, "server", "99", "--json")
+
+	if code != 4 {
+		t.Fatalf("a 404 must exit 4, got %d (stderr: %s)", code, stderr)
+	}
+	if !strings.Contains(stderr, "Server not found") {
+		t.Errorf("the server's own message should reach the user, got %q", stderr)
+	}
+}
