@@ -11,11 +11,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewServerCmd inspects one server.
+// NewServerCmd groups the per-server reads. `show` is its own subcommand rather
+// than a bare argument because plan 09 pairs it with `server logs`, and a noun
+// that takes an argument today cannot grow a sibling verb tomorrow without
+// breaking every caller.
 func NewServerCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "server",
+		Short: "Inspect a server",
+	}
+	cmd.AddCommand(newServerShowCmd())
+	return cmd
+}
+
+func newServerShowCmd() *cobra.Command {
 	var probe bool
 	cmd := &cobra.Command{
-		Use:   "server <id-or-name>",
+		Use:   "show <id-or-name>",
 		Short: "Show one server in detail",
 		Long: "Show one server: health, edge, SSH identity, stored audit and update\n" +
 			"posture, cron jobs and hosted apps.\n\n" +
@@ -181,7 +193,7 @@ func serverNotice(d *mcp.ServerDetail, probed bool) string {
 
 func serverBreadcrumbs(d *mcp.ServerDetail) []output.Breadcrumb {
 	crumbs := []output.Breadcrumb{
-		{Label: "Fleet health, server by server", Command: "conductor status"},
+		{Label: "Fleet health, server by server", Command: "conductor fleet"},
 	}
 	if len(d.Apps) > 0 {
 		crumbs = append(crumbs, output.Breadcrumb{

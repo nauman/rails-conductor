@@ -37,9 +37,10 @@ type rootFlags struct {
 	verbose  bool
 }
 
-// NewRootCmd builds the tree. out/errOut are injected so tests can drive the
-// real command tree without capturing process streams.
-func NewRootCmd(out, errOut *os.File) (*cobraCommand, *output.Writer) {
+// NewRootCmd builds the tree. out/errOut and the token store are injected so a
+// test can drive the REAL command tree — including whether the keyring is
+// consulted at all, which cannot be asserted against a hardcoded SystemStore.
+func NewRootCmd(out, errOut *os.File, store auth.Store) (*cobraCommand, *output.Writer) {
 	flags := &rootFlags{}
 	writer := &output.Writer{Out: out, Err: errOut, Format: output.FormatAuto, IsTTY: isTTY(out)}
 
@@ -48,6 +49,13 @@ func NewRootCmd(out, errOut *os.File) (*cobraCommand, *output.Writer) {
 		"Configuration comes from flags, then CONDUCTOR_URL / CONDUCTOR_MCP_TOKEN,\n" +
 		"then .conductor.json in this directory or above, then ~/.conductor.json."
 	root.Version = version.String()
+	// `conductor` with no arguments runs `situation` — the resume point, per plan
+	// 09. Cobra has no default-command concept, so the root borrows situation's
+	// RunE; Args stays NoArgs so a typo still reports an unknown command rather
+	// than being swallowed as a default invocation.
+	situation := commands.NewSituationCmd()
+	root.Args = noArgs
+	root.RunE = situation.RunE
 	root.SilenceUsage = true  // a runtime failure is not a usage error
 	root.SilenceErrors = true // main renders errors through the envelope
 
@@ -89,7 +97,6 @@ func NewRootCmd(out, errOut *os.File) (*cobraCommand, *output.Writer) {
 		// Commands that need no token opt out: a locked keychain must not be
 		// able to break `conductor version` or `--help`, which is exactly the
 		// kind of failure that makes a tool feel broken for an unrelated reason.
-		store := auth.SystemStore{}
 		var token string
 		source := auth.SourceNone
 		if cmd.Annotations[annotationAuth] != annotationAuthSkip {
@@ -113,8 +120,8 @@ func NewRootCmd(out, errOut *os.File) (*cobraCommand, *output.Writer) {
 		return nil
 	}
 
-	root.AddCommand(commands.NewStatusCmd())
-	root.AddCommand(commands.NewSituationCmd())
+	root.AddCommand(commands.NewFleetCmd())
+	root.AddCommand(situation)
 	root.AddCommand(commands.NewServerCmd())
 	root.AddCommand(commands.NewAuthCmd())
 	root.AddCommand(commands.NewVersionCmd())
@@ -184,7 +191,7 @@ func resolveFormat(f *rootFlags) (output.Format, error) {
 // Execute runs the tree and returns the process exit code. main does nothing
 // but call this and exit, so the exit path is testable.
 func Execute(ctx context.Context) int {
-	root, writer := NewRootCmd(os.Stdout, os.Stderr)
+	root, writer := NewRootCmd(os.Stdout, os.Stderr, auth.SystemStore{})
 	if err := root.ExecuteContext(ctx); err != nil {
 		return int(writer.Fail(err))
 	}

@@ -9,7 +9,7 @@ Go CLI over Conductor's MCP endpoint. House standard:
 cmd/conductor/main.go   tiny: set version, call internal/cli.Execute
 internal/cli/           cobra root; PersistentPreRunE does ALL init
 internal/commands/      one file per noun; thin RunE → run func
-internal/mcp/           the typed SDK (transport: POST /mcp/call)
+internal/mcp/           the typed SDK (transport: JSON-RPC tools/call over POST /mcp)
 internal/output/        the envelope, --jq, TTY-aware rendering
 internal/exiterr/       typed errors + the stable exit-code enum
 internal/config/        flags > env > project file > global file > defaults
@@ -85,3 +85,12 @@ becomes the better venue.
 Not configured, deliberately: Homebrew/Scoop taps (no tap repo yet), cosign (no
 keys), notarization (no Apple credentials). Each would fail at the last step of a
 release, which is the worst place to discover a missing credential.
+
+## Transport
+
+JSON-RPC 2.0 `tools/call` over `POST /mcp` — the same wire a native MCP client
+registers against. Three failure layers stay distinct, and collapsing them is a
+bug: an HTTP status, a JSON-RPC `error` (the call never reached a tool), and
+`isError` on an otherwise successful result (the tool refused). The tool's own
+JSON arrives as **text inside** MCP's content envelope, so unwrapping is a
+separate step from decoding the transport.

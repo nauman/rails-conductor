@@ -9,10 +9,10 @@ import (
 // suggestion names a real command. They are the narrowest seam that makes that
 // invariant testable without exporting the command internals.
 
-// StatusBreadcrumbsForTest returns the breadcrumbs `status` can emit, including
-// the per-server crumb, which only appears when a server is not online.
-func StatusBreadcrumbsForTest() []output.Breadcrumb {
-	return statusBreadcrumbs([]mcp.Server{{ID: 7, Name: "web-1", Status: "offline"}})
+// FleetBreadcrumbsForTest returns the breadcrumbs `fleet` can emit, including the
+// per-server crumb, which only appears when a server is not online.
+func FleetBreadcrumbsForTest() []output.Breadcrumb {
+	return fleetBreadcrumbs([]mcp.Server{{ID: 7, Name: "web-1", Status: "offline"}})
 }
 
 // ServerBreadcrumbsForTest returns the breadcrumbs `server` can emit.
@@ -22,14 +22,14 @@ func ServerBreadcrumbsForTest() []output.Breadcrumb {
 
 // SituationBreadcrumbsForTest returns the breadcrumbs `situation` can emit.
 func SituationBreadcrumbsForTest() []output.Breadcrumb {
-	return []output.Breadcrumb{{Label: "Fleet health, server by server", Command: "conductor status"}}
+	return []output.Breadcrumb{{Label: "Fleet health, server by server", Command: "conductor fleet"}}
 }
 
 // AuthBreadcrumbsForTest returns every breadcrumb the auth commands can emit.
 func AuthBreadcrumbsForTest() []output.Breadcrumb {
 	return []output.Breadcrumb{
 		{Label: "Confirm what the CLI is using", Command: "conductor auth status"},
-		{Label: "Fleet health, server by server", Command: "conductor status"},
+		{Label: "Fleet health, server by server", Command: "conductor fleet"},
 		{Label: "Store a token", Command: "conductor auth login"},
 	}
 }

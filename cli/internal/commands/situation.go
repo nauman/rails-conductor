@@ -42,7 +42,7 @@ func NewSituationCmd() *cobra.Command {
 				Data:    data,
 				Summary: summarizeSituation(data),
 				Breadcrumbs: []output.Breadcrumb{
-					{Label: "Fleet health, server by server", Command: "conductor status"},
+					{Label: "Fleet health, server by server", Command: "conductor fleet"},
 				},
 			})
 		},

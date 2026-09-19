@@ -4,15 +4,16 @@ Configuration comes from flags, then CONDUCTOR_URL / CONDUCTOR_MCP_TOKEN,
 then .conductor.json in this directory or above, then ~/.conductor.json.
 
 Usage:
+  conductor [flags]
   conductor [command]
 
 Available Commands:
   auth        Manage the Conductor token
   completion  Generate the autocompletion script for the specified shell
+  fleet       Show every server in the fleet with its apps and health
   help        Help about any command
-  server      Show one server in detail
+  server      Inspect a server
   situation   Show what is in flight and what needs attention
-  status      Show every server in the fleet with its apps and health
   version     Show the CLI version
 
 Flags:
@@ -29,23 +30,37 @@ Flags:
 
 Use "conductor [command] --help" for more information about a command.
 
-Show every server in the fleet with its apps and health
+conductor talks to a Conductor instance's MCP endpoint.
+
+Configuration comes from flags, then CONDUCTOR_URL / CONDUCTOR_MCP_TOKEN,
+then .conductor.json in this directory or above, then ~/.conductor.json.
 
 Usage:
-  conductor status [flags]
+  conductor [flags]
+  conductor [command]
+
+Available Commands:
+  auth        Manage the Conductor token
+  completion  Generate the autocompletion script for the specified shell
+  fleet       Show every server in the fleet with its apps and health
+  help        Help about any command
+  server      Inspect a server
+  situation   Show what is in flight and what needs attention
+  version     Show the CLI version
 
 Flags:
-  -h, --help   help for status
-
-Global Flags:
       --agent            agent-friendly output (same as --quiet --json)
       --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+  -h, --help             help for conductor
       --jq string        filter the JSON envelope with a jq expression (implies --json)
       --json             output the JSON envelope
       --markdown         output portable markdown tables
       --profile string   named configuration profile
       --quiet            output data only, without summary or breadcrumbs
       --verbose          report where each setting came from
+  -v, --version          version for conductor
+
+Use "conductor [command] --help" for more information about a command.
 
 Show the CLI version
 

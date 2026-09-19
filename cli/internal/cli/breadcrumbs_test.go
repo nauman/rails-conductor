@@ -16,7 +16,7 @@ import (
 // This walks every breadcrumb any command can emit and asserts the command it
 // names is registered on the real tree.
 func TestEveryBreadcrumbNamesARegisteredCommand(t *testing.T) {
-	root, _ := NewRootCmd(os.Stdout, os.Stderr)
+	root, _ := NewRootCmd(os.Stdout, os.Stderr, nil)
 
 	for _, crumb := range allBreadcrumbs() {
 		fields := strings.Fields(crumb.Command)
@@ -49,7 +49,7 @@ func TestEveryBreadcrumbNamesARegisteredCommand(t *testing.T) {
 // their set here; that is cheaper than reflecting over unexported functions.
 func allBreadcrumbs() []output.Breadcrumb {
 	var all []output.Breadcrumb
-	all = append(all, commands.StatusBreadcrumbsForTest()...)
+	all = append(all, commands.FleetBreadcrumbsForTest()...)
 	all = append(all, commands.SituationBreadcrumbsForTest()...)
 	all = append(all, commands.AuthBreadcrumbsForTest()...)
 	all = append(all, commands.ServerBreadcrumbsForTest()...)

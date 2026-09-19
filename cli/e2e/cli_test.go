@@ -59,30 +59,40 @@ func asExitError(err error, target **exec.ExitError) bool {
 	return false
 }
 
-func stubConductor(t *testing.T, status int, body string) *httptest.Server {
+// stubConductor speaks the real transport: JSON-RPC over POST /mcp, with the
+// tool payload as TEXT inside MCP's content envelope. A stub that accepted the
+// CLI's own idea of the wire would let a wrong transport pass every e2e test.
+func stubConductor(t *testing.T, status int, payload string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/mcp/call" {
+		if r.URL.Path != "/mcp" || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_, _ = w.Write([]byte(body))
+		if status != http.StatusOK {
+			_, _ = w.Write([]byte(payload)) // an error body, sent as-is
+			return
+		}
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("could not encode the payload: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":` +
+			string(encoded) + `}],"isError":false}}`))
 	}))
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func TestStatusRendersTheEnvelopeEndToEnd(t *testing.T) {
+func TestFleetRendersTheEnvelopeEndToEnd(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `{"result":[{"id":4,"name":"web-1","ip":"10.0.0.1",
-		"status":"online","cpu_percent":4,"disk":29,"memory":"4.0 / 63 GB","uptime":"1d",
-		"edge":{"type":"kamal_proxy"},"apps":[{"name":"kuickr","status":"running"}]}]}`)
+	srv := stubConductor(t, 200, `[{"id":4,"name":"web-1","ip":"10.0.0.1","status":"online","cpu_percent":4,"disk":29,"memory":"4.0 / 63 GB","uptime":"1d","edge":{"type":"kamal_proxy"},"apps":[{"name":"kuickr","status":"running"}]}]`)
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
-	}, "status", "--json")
+	}, "fleet", "--json")
 
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr: %s)", code, stderr)
@@ -113,11 +123,11 @@ func TestStatusRendersTheEnvelopeEndToEnd(t *testing.T) {
 
 func TestJQFlagFiltersRealOutput(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `{"result":[{"id":4,"name":"web-1","status":"online"}]}`)
+	srv := stubConductor(t, 200, `[{"id":4,"name":"web-1","status":"online"}]`)
 
 	stdout, _, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
-	}, "status", "--jq", ".data[].name")
+	}, "fleet", "--jq", ".data[].name")
 
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
@@ -134,7 +144,7 @@ func TestUnauthorizedExitsThree(t *testing.T) {
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=bad",
-	}, "status", "--json")
+	}, "fleet", "--json")
 
 	if code != 3 {
 		t.Fatalf("a 401 must exit 3, got %d", code)
@@ -164,7 +174,7 @@ func TestMissingTokenExitsThreeWithoutCallingTheServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, stderr, code := run(t, bin, []string{"CONDUCTOR_URL=" + srv.URL}, "status", "--json")
+	_, stderr, code := run(t, bin, []string{"CONDUCTOR_URL=" + srv.URL}, "fleet", "--json")
 
 	if code != 3 {
 		t.Fatalf("a missing token must exit 3, got %d (stderr: %s)", code, stderr)
@@ -176,7 +186,7 @@ func TestMissingTokenExitsThreeWithoutCallingTheServer(t *testing.T) {
 
 func TestContradictoryFormatFlagsAreAUsageError(t *testing.T) {
 	bin := build(t)
-	_, stderr, code := run(t, bin, nil, "status", "--json", "--markdown")
+	_, stderr, code := run(t, bin, nil, "fleet", "--json", "--markdown")
 	if code != 2 {
 		t.Fatalf("contradictory flags must exit 2, got %d (stderr: %s)", code, stderr)
 	}
@@ -197,7 +207,10 @@ func TestVersionWorksWithoutAnyConfiguration(t *testing.T) {
 // binary because that is the only place the whole rendering path is exercised.
 func TestAuthStatusReportsTheSourceWithoutLeakingTheToken(t *testing.T) {
 	bin := build(t)
-	secret := "conductor_pat_9f3c2a7e5b1d4a6c"
+	// Deliberately shares no prefix with "conductor": the binary name appears all
+	// over legitimate output, so a token starting with it would trip the
+	// substring scan below for reasons that have nothing to do with leaking.
+	secret := "Xy7f3c2a7e5b1d4a6c8e0f2b"
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=https://c.test", "CONDUCTOR_MCP_TOKEN=" + secret,
@@ -206,8 +219,23 @@ func TestAuthStatusReportsTheSourceWithoutLeakingTheToken(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr: %s)", code, stderr)
 	}
-	if strings.Contains(stdout, secret) || strings.Contains(stderr, secret) {
-		t.Fatal("the token appeared in output — a fingerprint must never be reversible")
+	// Checking only for the WHOLE token is too weak: a fingerprint that revealed
+	// all but the last character would pass. Assert that no long run of the
+	// token's characters survives, and that its middle never appears at all.
+	combined := stdout + stderr
+	if strings.Contains(combined, secret) {
+		t.Fatal("the whole token appeared in output")
+	}
+	middle := secret[4 : len(secret)-4]
+	if strings.Contains(combined, middle) {
+		t.Fatalf("the token's middle leaked: %q", middle)
+	}
+	for size := 6; size <= len(secret); size++ {
+		for i := 0; i+size <= len(secret); i++ {
+			if run := secret[i : i+size]; strings.Contains(combined, run) {
+				t.Fatalf("a %d-character run of the token leaked: %q", size, run)
+			}
+		}
 	}
 	if !strings.Contains(stdout, "env CONDUCTOR_MCP_TOKEN") {
 		t.Errorf("the source should be reported, got %q", stdout)
@@ -238,8 +266,11 @@ func TestThereIsNoTokenFlag(t *testing.T) {
 	}
 }
 
-// A command that needs no token must not be broken by the keyring.
-func TestVersionDoesNotTouchTheKeyring(t *testing.T) {
+// Whether the keyring is consulted is asserted properly in
+// internal/cli.TestCommandsAnnotatedAuthSkipNeverReadTheKeyring, which
+// instruments the store. This only checks the user-visible outcome: version
+// works with a URL configured and no token.
+func TestVersionWorksWithAUrlAndNoToken(t *testing.T) {
 	bin := build(t)
 	_, stderr, code := run(t, bin, []string{"CONDUCTOR_URL=https://c.test"}, "version", "--json")
 	if code != 0 {
@@ -249,16 +280,11 @@ func TestVersionDoesNotTouchTheKeyring(t *testing.T) {
 
 func TestServerRendersDetailAndWarnsTheDataIsStored(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `{"result":{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online",
-		"edge":{"type":"kamal_proxy","detail":"v0.9.2"},
-		"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},
-		"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},
-		"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},
-		"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}}`)
+	srv := stubConductor(t, 200, `{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online","edge":{"type":"kamal_proxy","detail":"v0.9.2"},"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}`)
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
-	}, "server", "6", "--json")
+	}, "server", "show", "6", "--json")
 
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr: %s)", code, stderr)
@@ -295,11 +321,11 @@ func TestServerRendersDetailAndWarnsTheDataIsStored(t *testing.T) {
 
 func TestServerAcceptsANameNotJustAnID(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `{"result":{"id":6,"name":"web-1","status":"online"}}`)
+	srv := stubConductor(t, 200, `{"id":6,"name":"web-1","status":"online"}`)
 
 	stdout, _, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
-	}, "server", "web-1", "--jq", ".data.name")
+	}, "server", "show", "web-1", "--jq", ".data.name")
 
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
@@ -311,7 +337,7 @@ func TestServerAcceptsANameNotJustAnID(t *testing.T) {
 
 func TestServerRequiresExactlyOneArgument(t *testing.T) {
 	bin := build(t)
-	for _, args := range [][]string{{"server"}, {"server", "a", "b"}} {
+	for _, args := range [][]string{{"server", "show"}, {"server", "show", "a", "b"}} {
 		_, stderr, code := run(t, bin, []string{
 			"CONDUCTOR_URL=https://c.test", "CONDUCTOR_MCP_TOKEN=tok",
 		}, args...)
@@ -328,7 +354,7 @@ func TestServerNotFoundExitsFour(t *testing.T) {
 
 	_, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
-	}, "server", "99", "--json")
+	}, "server", "show", "99", "--json")
 
 	if code != 4 {
 		t.Fatalf("a 404 must exit 4, got %d (stderr: %s)", code, stderr)

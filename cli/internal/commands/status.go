@@ -14,19 +14,19 @@ import (
 )
 
 // NewStatusCmd reports fleet health: every server, its load and its apps.
-func NewStatusCmd() *cobra.Command {
+func NewFleetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status",
+		Use:   "fleet",
 		Short: "Show every server in the fleet with its apps and health",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runStatus(cmd)
+			return runFleet(cmd)
 		},
 	}
 	return cmd
 }
 
-func runStatus(cmd *cobra.Command) error {
+func runFleet(cmd *cobra.Command) error {
 	app := appctx.From(cmd.Context())
 	if app == nil {
 		return exiterr.New(exiterr.Usage, "the command was not initialized", "")
@@ -40,7 +40,7 @@ func runStatus(cmd *cobra.Command) error {
 	return app.Out.OK(output.Response{
 		Data:        normalizeServers(servers),
 		Summary:     summarize(servers),
-		Breadcrumbs: statusBreadcrumbs(servers),
+		Breadcrumbs: fleetBreadcrumbs(servers),
 	})
 }
 
@@ -114,14 +114,14 @@ func summarize(servers []mcp.Server) string {
 	return summary + " — " + strings.Join(problems, ", ") + "."
 }
 
-// statusBreadcrumbs suggest the next command. They are data, not help text, so
+// fleetBreadcrumbs suggest the next command. They are data, not help text, so
 // an agent can follow them without parsing prose.
 //
 // Every breadcrumb must name a command that EXISTS — a suggestion that fails when
 // followed is worse than silence. The per-server crumb was withheld until
 // `conductor server` was written, and is asserted by
 // TestEveryBreadcrumbNamesARegisteredCommand rather than remembered.
-func statusBreadcrumbs(servers []mcp.Server) []output.Breadcrumb {
+func fleetBreadcrumbs(servers []mcp.Server) []output.Breadcrumb {
 	crumbs := []output.Breadcrumb{
 		{Label: "What needs attention right now", Command: "conductor situation"},
 	}
@@ -131,7 +131,7 @@ func statusBreadcrumbs(servers []mcp.Server) []output.Breadcrumb {
 		if !strings.EqualFold(s.Status, "online") {
 			crumbs = append(crumbs, output.Breadcrumb{
 				Label:   fmt.Sprintf("Inspect %s, which is %s", s.Name, s.Status),
-				Command: fmt.Sprintf("conductor server %d", s.ID),
+				Command: fmt.Sprintf("conductor server show %d", s.ID),
 			})
 		}
 	}

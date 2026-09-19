@@ -5,42 +5,100 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nauman/rails-conductor/cli/internal/exiterr"
 )
 
-func TestCallSendsToolNameAndBearerToken(t *testing.T) {
-	var gotAuth, gotPath string
-	var gotBody toolRequest
+// Asserts the JSON-RPC wire itself. The previous version asserted /mcp/call and
+// a {name,input} body, so it would have passed while the CLI spoke a transport
+// the server does not implement — a test that confirmed the bug.
+// rpcOK wraps a tool payload in MCP's content envelope the way the server does:
+// the tool's JSON is a STRING inside content[0].text. Built rather than
+// hand-escaped, because hand-escaped JSON in a test is where typos hide.
+func rpcOK(t *testing.T, payload string) string {
+	t.Helper()
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("could not encode the payload: %v", err)
+	}
+	return `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":` + string(encoded) + `}],"isError":false}}`
+}
+
+func TestCallSpeaksJSONRPCToolsCall(t *testing.T) {
+	var gotAuth, gotPath, gotProtocol string
+	var gotBody rpcRequest
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth, gotPath = r.Header.Get("Authorization"), r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.Path
+		gotProtocol = r.Header.Get("MCP-Protocol-Version")
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"result":[]}`))
+		_, _ = w.Write([]byte(rpcOK(t, "[]")))
 	}))
 	defer srv.Close()
 
 	if _, err := New(srv.URL, "tok_abc").Fleet().Status(context.Background()); err != nil {
 		t.Fatalf("Status returned %v", err)
 	}
+	if gotPath != "/mcp" {
+		t.Errorf("the MCP transport is POST /mcp, got %q", gotPath)
+	}
+	if gotBody.JSONRPC != "2.0" || gotBody.Method != "tools/call" {
+		t.Errorf("expected a JSON-RPC tools/call, got %+v", gotBody)
+	}
+	if gotBody.Params.Name != "conductor_read" || gotBody.Params.Arguments["action"] != "fleet_status" {
+		t.Errorf("the tool and action belong in params, got %+v", gotBody.Params)
+	}
 	if gotAuth != "Bearer tok_abc" {
 		t.Errorf("expected a bearer token, got %q", gotAuth)
 	}
-	if gotPath != "/mcp/call" {
-		t.Errorf("expected /mcp/call, got %q", gotPath)
+	if gotProtocol == "" {
+		t.Error("the MCP-Protocol-Version header should be sent so a mismatch is a clear 400")
 	}
-	if gotBody.Name != "conductor_read" || gotBody.Input["action"] != "fleet_status" {
-		t.Errorf("wrong tool call: %+v", gotBody)
+}
+
+// The tool's payload arrives as TEXT inside MCP's content envelope, not as the
+// result itself. Unwrapping the wrong layer yields a parse error at the caller.
+func TestCallUnwrapsTheContentEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(rpcOK(t, `[{"id":4,"name":"web-1"}]`)))
+	}))
+	defer srv.Close()
+
+	servers, err := New(srv.URL, "t").Fleet().Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status returned %v", err)
+	}
+	if len(servers) != 1 || servers[0].Name != "web-1" {
+		t.Errorf("the tool payload did not survive unwrapping: %+v", servers)
+	}
+}
+
+// Three failure layers must stay distinct: HTTP status, a JSON-RPC error, and
+// isError on an otherwise successful call.
+func TestJSONRPCErrorIsNotATransportFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, "t").Fleet().Status(context.Background())
+	if err == nil {
+		t.Fatal("a JSON-RPC error must fail the call")
+	}
+	if !strings.Contains(err.Error(), "Method not found") {
+		t.Errorf("the protocol error should reach the user, got %q", err.Error())
 	}
 }
 
 func TestStatusDecodesServers(t *testing.T) {
+	payload := `[{"id":4,"name":"box","status":"online","cpu_percent":7,"disk":29,` +
+		`"edge":{"type":"kamal_proxy"},"apps":[{"name":"kuickr","status":"running"}]}]`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"result":[{"id":4,"name":"box","status":"online",
-			"cpu_percent":7,"disk":29,"edge":{"type":"kamal_proxy"},
-			"apps":[{"name":"kuickr","status":"running"}]}]}`))
+		_, _ = w.Write([]byte(rpcOK(t, payload)))
 	}))
 	defer srv.Close()
 
@@ -89,10 +147,12 @@ func TestHTTPStatusBecomesTheRightExitCode(t *testing.T) {
 	}
 }
 
-// A tool refusal is a 200 with an error body: the call worked, the tool said no.
+// A tool refusal is a 200 with isError set: the call reached the tool and it said
+// no. The tool's own message must reach the user, not a generic transport error.
 func TestToolLevelErrorIsReported(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"error":"App not found: nope"}`))
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text",` +
+			`"text":"App not found: nope"}],"isError":true}}`))
 	}))
 	defer srv.Close()
 
@@ -143,10 +203,10 @@ func TestServerAcceptsAnIDOrAName(t *testing.T) {
 		{"web-1", "server_name", "web-1"},
 	}
 	for _, c := range cases {
-		var got toolRequest
+		var got rpcRequest
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewDecoder(r.Body).Decode(&got)
-			_, _ = w.Write([]byte(`{"result":{"id":6,"name":"web-1"}}`))
+			_, _ = w.Write([]byte(rpcOK(t, `{"id":6,"name":"web-1"}`)))
 		}))
 
 		if _, err := New(srv.URL, "t").Fleet().Server(context.Background(), c.reference, false); err != nil {
@@ -154,20 +214,20 @@ func TestServerAcceptsAnIDOrAName(t *testing.T) {
 		}
 		srv.Close()
 
-		if got.Input[c.wantKey] != c.wantValue {
-			t.Errorf("%q should send %s=%v, got input %+v", c.reference, c.wantKey, c.wantValue, got.Input)
+		if got.Params.Arguments[c.wantKey] != c.wantValue {
+			t.Errorf("%q should send %s=%v, got input %+v", c.reference, c.wantKey, c.wantValue, got.Params.Arguments)
 		}
-		if _, unwanted := got.Input["probe"]; unwanted {
-			t.Errorf("probe must be absent unless asked for, got %+v", got.Input)
+		if _, unwanted := got.Params.Arguments["probe"]; unwanted {
+			t.Errorf("probe must be absent unless asked for, got %+v", got.Params.Arguments)
 		}
 	}
 }
 
 func TestServerProbeIsOptIn(t *testing.T) {
-	var got toolRequest
+	var got rpcRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&got)
-		_, _ = w.Write([]byte(`{"result":{"id":6,"live":{"health":"ok"}}}`))
+		_, _ = w.Write([]byte(rpcOK(t, `{"id":6,"live":{"health":"ok"}}`)))
 	}))
 	defer srv.Close()
 
@@ -175,8 +235,8 @@ func TestServerProbeIsOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Server returned %v", err)
 	}
-	if got.Input["probe"] != true {
-		t.Errorf("probe:true should be sent, got %+v", got.Input)
+	if got.Params.Arguments["probe"] != true {
+		t.Errorf("probe:true should be sent, got %+v", got.Params.Arguments)
 	}
 	if len(detail.Live) == 0 {
 		t.Error("the live payload should survive as raw JSON")
@@ -184,14 +244,15 @@ func TestServerProbeIsOptIn(t *testing.T) {
 }
 
 func TestServerDecodesTheStoredRecord(t *testing.T) {
+	payload := `{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online",` +
+		`"edge":{"type":"kamal_proxy","detail":"v0.9.2"},` +
+		`"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},` +
+		`"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},` +
+		`"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},` +
+		`"cron_jobs":[{"id":3,"name":"Sync","task":"x:sync","schedule":"every hour","enabled":true}],` +
+		`"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"result":{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online",
-			"edge":{"type":"kamal_proxy","detail":"v0.9.2"},
-			"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},
-			"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},
-			"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},
-			"cron_jobs":[{"id":3,"name":"Sync","task":"x:sync","schedule":"every hour","enabled":true}],
-			"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}}`))
+		_, _ = w.Write([]byte(rpcOK(t, payload)))
 	}))
 	defer srv.Close()
 

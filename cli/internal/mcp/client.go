@@ -1,9 +1,16 @@
 // Package mcp is the typed SDK the CLI talks through. Commands call methods
 // here; they never build a request or read a status code themselves.
 //
-// Transport v1 is Conductor's existing /mcp endpoint (plan 09 decision 3). The
-// MCP tool inputs and results ARE the contract — they are already flat-enum and
-// already audited — so the CLI needs no new Rails surface to exist.
+// Transport is JSON-RPC 2.0 `tools/call` over POST /mcp (plan 09 decision 3) —
+// the same wire a native MCP client registers against, not the older REST-ish
+// /mcp/call. The MCP tool inputs and results ARE the contract: already flat-enum,
+// already audited, so the CLI needs no new Rails surface to exist.
+//
+// The server wraps a tool result in the MCP content envelope — the tool's own
+// JSON arrives as TEXT inside content[0].text — so there are three failure layers
+// to keep apart: HTTP status, a JSON-RPC `error`, and `isError` on an otherwise
+// successful call. Collapsing them is how a tool refusal gets reported as a
+// transport failure.
 //
 // Andon-cord (GO_CLI_ARCHITECTURE §4): if a command needs something this SDK
 // cannot express, add the method HERE. A command that reaches past the SDK to
@@ -40,20 +47,53 @@ func New(baseURL, token string) *Client {
 	}
 }
 
-// toolRequest is the POST /mcp/call body Conductor expects.
-type toolRequest struct {
-	Name  string         `json:"name"`
-	Input map[string]any `json:"input"`
+// protocolVersion is the MCP revision this client speaks. The server accepts a
+// blank header, but sending it makes a future mismatch a clear 400 rather than a
+// silently different interpretation of the same bytes.
+const protocolVersion = "2025-06-18"
+
+// rpcRequest is a single JSON-RPC 2.0 call. Batching was removed in MCP
+// 2025-06-18 and the server rejects arrays, so this is never a slice.
+type rpcRequest struct {
+	JSONRPC string    `json:"jsonrpc"`
+	ID      int       `json:"id"`
+	Method  string    `json:"method"`
+	Params  rpcParams `json:"params"`
 }
 
-// toolResponse carries either a result or a server-rendered error.
-type toolResponse struct {
-	Result json.RawMessage `json:"result"`
-	Error  string          `json:"error"`
+type rpcParams struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
 }
 
-// Call invokes one MCP tool and decodes its result. Every SDK method routes
-// through here, so authentication, status mapping and decoding exist once.
+// rpcResponse is the JSON-RPC envelope. `Error` is a protocol-level failure
+// (unknown method, bad params); a TOOL failure arrives as a successful result
+// with isError set.
+type rpcResponse struct {
+	JSONRPC string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Result  *toolResult `json:"result"`
+	Error   *rpcError   `json:"error"`
+}
+
+type rpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// toolResult is MCP's content envelope. The tool's own JSON is a string inside
+// it, which is why unwrapping is a separate step from decoding the transport.
+type toolResult struct {
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+	IsError bool `json:"isError"`
+}
+
+// Call invokes one MCP tool and returns the tool's own JSON. Every SDK method
+// routes through here, so authentication, protocol framing, status mapping and
+// unwrapping exist exactly once.
 func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (json.RawMessage, error) {
 	if c.BaseURL == "" {
 		return nil, exiterr.New(exiterr.Usage, "no Conductor URL configured",
@@ -61,24 +101,30 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 	}
 	if c.Token == "" {
 		return nil, exiterr.New(exiterr.Auth, "no Conductor token configured",
-			"Set CONDUCTOR_MCP_TOKEN to an MCP/API bearer token.")
+			"Run `conductor auth login`, or set CONDUCTOR_MCP_TOKEN.")
 	}
 	if input == nil {
 		input = map[string]any{}
 	}
 
-	body, err := json.Marshal(toolRequest{Name: tool, Input: input})
+	body, err := json.Marshal(rpcRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params:  rpcParams{Name: tool, Arguments: input},
+	})
 	if err != nil {
 		return nil, exiterr.Wrap(exiterr.Usage, err, "could not encode the request", "")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/mcp/call", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/mcp", bytes.NewReader(body))
 	if err != nil {
 		return nil, exiterr.Wrap(exiterr.Usage, err, "could not build the request", "")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("MCP-Protocol-Version", protocolVersion)
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -96,17 +142,44 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 		return nil, statusError(resp.StatusCode, raw)
 	}
 
-	var decoded toolResponse
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	var envelope rpcResponse
+	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, exiterr.Wrap(exiterr.API, err, "Conductor returned a response this CLI could not parse",
 			"This usually means the URL is not a Conductor instance.")
 	}
-	if decoded.Error != "" {
-		// A tool-level refusal: the call reached Conductor and it said no. That
-		// is an API error, not a transport one, and the message is the server's.
-		return nil, exiterr.New(exiterr.API, decoded.Error, "")
+
+	// Protocol-level failure: the call never reached a tool.
+	if envelope.Error != nil {
+		return nil, exiterr.New(exiterr.API,
+			fmt.Sprintf("Conductor rejected the call: %s", envelope.Error.Message),
+			"This is a protocol error, not a tool refusal — the CLI and server may disagree on the wire.")
 	}
-	return decoded.Result, nil
+	if envelope.Result == nil {
+		return nil, exiterr.New(exiterr.API, "Conductor returned neither a result nor an error", "")
+	}
+
+	text := firstText(envelope.Result)
+
+	// Tool-level refusal: the call reached the tool and it said no. That is an
+	// API error, not a transport one, and the message is the tool's own.
+	if envelope.Result.IsError {
+		return nil, exiterr.New(exiterr.API, strings.TrimSpace(text), "")
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, nil // a tool that legitimately returns nothing
+	}
+	return json.RawMessage(text), nil
+}
+
+// firstText pulls the tool's payload out of MCP's content envelope. Only text
+// parts carry it; anything else is ignored rather than guessed at.
+func firstText(result *toolResult) string {
+	for _, part := range result.Content {
+		if part.Type == "text" {
+			return part.Text
+		}
+	}
+	return ""
 }
 
 // statusError turns a non-200 into a typed error, preferring the server's own

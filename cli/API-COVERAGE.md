@@ -12,11 +12,11 @@ confirmation path and an audit story of its own, not just a safer token.
 
 | Tool (action) | CLI command | Status |
 |---|---|---|
-| `conductor_read` (`fleet_status`) | `conductor status` | ✅ |
-| `conductor_read` (`situation`) | `conductor situation` | ✅ |
+| `conductor_read` (`fleet_status`) | `conductor fleet` | ✅ |
+| `conductor_read` (`situation`) | `conductor situation` (also the default command) | ✅ |
 | — (local) | `conductor auth login` / `status` / `logout` | ✅ |
-| `conductor_read` (`server`) | `conductor server <id-or-name>` (`--probe`) | ✅ |
-| `conductor_read` (`app_logs`) | `conductor logs <app>` | ⬜ |
+| `conductor_read` (`server`) | `conductor server show <id-or-name>` (`--probe`) | ✅ |
+| `conductor_read` (`app_logs`) | `conductor server logs` / `conductor app logs` | ⬜ |
 | `conductor_read` (`deployment`) | `conductor deployment <id>` | ⬜ |
 | `conductor_read` (`logs`) | — | ⬜ |
 | `conductor_read` (`edge`) | — | ⬜ |
@@ -38,5 +38,9 @@ the per-server breadcrumb it had to withhold.
 suggestion cannot outrun its implementation, and the check covers arity too, so
 a crumb passing an argument to a command that takes none is caught as well.
 
-Next gap worth closing: `conductor logs <app>`, which is the other question an
-operator asks after `status` shows something is not running.
+Command names follow plan 09's table, not convenience: `fleet` (not `status`),
+`situation` as the default command, and `server show` as a subcommand so
+`server logs` can join it without breaking callers.
+
+Next gap worth closing: `server logs`, the other question an operator asks after
+`fleet` shows something is not running.

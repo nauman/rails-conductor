@@ -74,7 +74,7 @@ func newAuthLoginCmd() *cobra.Command {
 				Summary: fmt.Sprintf("Stored a token for %s in the keyring.", app.Config.APIURL),
 				Breadcrumbs: []output.Breadcrumb{
 					{Label: "Confirm what the CLI is using", Command: "conductor auth status"},
-					{Label: "Fleet health, server by server", Command: "conductor status"},
+					{Label: "Fleet health, server by server", Command: "conductor fleet"},
 				},
 			})
 		},
@@ -114,7 +114,7 @@ func newAuthStatusCmd() *cobra.Command {
 			if token != "" {
 				summary = fmt.Sprintf("Using a token from %s for %s.", source, app.Config.APIURL)
 				crumbs = []output.Breadcrumb{
-					{Label: "Fleet health, server by server", Command: "conductor status"},
+					{Label: "Fleet health, server by server", Command: "conductor fleet"},
 				}
 			}
 
