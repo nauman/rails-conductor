@@ -59,28 +59,42 @@ func asExitError(err error, target **exec.ExitError) bool {
 	return false
 }
 
+// call is what the stub REQUIRES the CLI to send. Naming the exact tool and
+// action is the point: an earlier version accepted any non-empty values, and a
+// reviewer proved it by making the client send wrong_tool/wrong_action — the
+// whole e2e suite still passed. A stub that accepts anything is a stub that
+// tests nothing.
+type call struct {
+	tool   string
+	action string
+	token  string
+}
+
 // stubConductor speaks the real transport: JSON-RPC over POST /mcp, with the
 // tool payload as TEXT inside MCP's content envelope. A stub that accepted the
 // CLI's own idea of the wire would let a wrong transport pass every e2e test.
-func stubConductor(t *testing.T, status int, payload string) *httptest.Server {
+func stubConductor(t *testing.T, status int, payload string, want call) *httptest.Server {
 	t.Helper()
+	if want.token == "" {
+		want.token = "tok"
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/mcp" || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		// Assert the WIRE, not just the route. Checking only method and path
-		// would let a malformed JSON-RPC body, a missing bearer token or a
-		// dropped protocol header pass every e2e test — the stub would be
-		// agreeing with whatever the CLI sent.
-		if got := r.Header.Get("Authorization"); got != "Bearer tok" && got != "Bearer bad" {
-			t.Errorf("stub: expected a bearer token, got %q", got)
+		// Assert the WIRE, exactly. Checking only method and path — or merely
+		// that fields are non-empty — lets a malformed body, the wrong tool or a
+		// dropped header pass while the stub appears to prove the transport.
+		if got, expected := r.Header.Get("Authorization"), "Bearer "+want.token; got != expected {
+			t.Errorf("stub: Authorization = %q, want %q", got, expected)
 		}
 		if got := r.Header.Get("MCP-Protocol-Version"); got == "" {
 			t.Error("stub: the MCP-Protocol-Version header must be sent")
 		}
 		var body struct {
 			JSONRPC string `json:"jsonrpc"`
+			ID      int    `json:"id"`
 			Method  string `json:"method"`
 			Params  struct {
 				Name      string         `json:"name"`
@@ -90,12 +104,19 @@ func stubConductor(t *testing.T, status int, payload string) *httptest.Server {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("stub: body was not JSON: %v", err)
 		}
-		if body.JSONRPC != "2.0" || body.Method != "tools/call" {
-			t.Errorf("stub: expected JSON-RPC tools/call, got jsonrpc=%q method=%q", body.JSONRPC, body.Method)
+		if body.JSONRPC != "2.0" {
+			t.Errorf("stub: jsonrpc = %q, want \"2.0\"", body.JSONRPC)
 		}
-		if body.Params.Name == "" || body.Params.Arguments["action"] == nil {
-			t.Errorf("stub: expected a tool name and an action argument, got %+v", body.Params)
+		if body.Method != "tools/call" {
+			t.Errorf("stub: method = %q, want \"tools/call\"", body.Method)
 		}
+		if body.Params.Name != want.tool {
+			t.Errorf("stub: tool = %q, want %q", body.Params.Name, want.tool)
+		}
+		if got := body.Params.Arguments["action"]; got != want.action {
+			t.Errorf("stub: action = %v, want %q", got, want.action)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != http.StatusOK {
@@ -115,7 +136,8 @@ func stubConductor(t *testing.T, status int, payload string) *httptest.Server {
 
 func TestFleetRendersTheEnvelopeEndToEnd(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `[{"id":4,"name":"web-1","ip":"10.0.0.1","status":"online","cpu_percent":4,"disk":29,"memory":"4.0 / 63 GB","uptime":"1d","edge":{"type":"kamal_proxy"},"apps":[{"name":"kuickr","status":"running"}]}]`)
+	srv := stubConductor(t, 200, `[{"id":4,"name":"web-1","ip":"10.0.0.1","status":"online","cpu_percent":4,"disk":29,"memory":"4.0 / 63 GB","uptime":"1d","edge":{"type":"kamal_proxy"},"apps":[{"name":"kuickr","status":"running"}]}]`,
+		call{tool: "conductor_read", action: "fleet_status"})
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
@@ -150,7 +172,8 @@ func TestFleetRendersTheEnvelopeEndToEnd(t *testing.T) {
 
 func TestJQFlagFiltersRealOutput(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `[{"id":4,"name":"web-1","status":"online"}]`)
+	srv := stubConductor(t, 200, `[{"id":4,"name":"web-1","status":"online"}]`,
+		call{tool: "conductor_read", action: "fleet_status"})
 
 	stdout, _, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
@@ -167,7 +190,8 @@ func TestJQFlagFiltersRealOutput(t *testing.T) {
 // The exit code is the contract a script branches on.
 func TestUnauthorizedExitsThree(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, http.StatusUnauthorized, `{"error":"invalid token"}`)
+	srv := stubConductor(t, http.StatusUnauthorized, `{"error":"invalid token"}`,
+		call{tool: "conductor_read", action: "fleet_status", token: "bad"})
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=bad",
@@ -307,7 +331,8 @@ func TestVersionWorksWithAUrlAndNoToken(t *testing.T) {
 
 func TestServerRendersDetailAndWarnsTheDataIsStored(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online","edge":{"type":"kamal_proxy","detail":"v0.9.2"},"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}`)
+	srv := stubConductor(t, 200, `{"id":6,"name":"web-1","ip":"10.0.0.9","status":"online","edge":{"type":"kamal_proxy","detail":"v0.9.2"},"metrics":{"cpu_percent":17,"cpu_cores":2,"disk":78,"load":0.29,"memory":"3.0 / 23 GB"},"audit":{"last_status":"attention","last_at":"2026-09-11 05:17 UTC"},"ssh":{"user":"deploy","port":22,"key":"a-key","configured":true},"apps":[{"name":"kuickr","status":"running","domain":"kuickr.co"}]}`,
+		call{tool: "conductor_read", action: "server"})
 
 	stdout, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
@@ -348,7 +373,8 @@ func TestServerRendersDetailAndWarnsTheDataIsStored(t *testing.T) {
 
 func TestServerAcceptsANameNotJustAnID(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, 200, `{"id":6,"name":"web-1","status":"online"}`)
+	srv := stubConductor(t, 200, `{"id":6,"name":"web-1","status":"online"}`,
+		call{tool: "conductor_read", action: "server"})
 
 	stdout, _, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
@@ -377,7 +403,8 @@ func TestServerRequiresExactlyOneArgument(t *testing.T) {
 // A 404 must reach the operator as "not found", not as a generic failure.
 func TestServerNotFoundExitsFour(t *testing.T) {
 	bin := build(t)
-	srv := stubConductor(t, http.StatusNotFound, `{"error":"Server not found: 99"}`)
+	srv := stubConductor(t, http.StatusNotFound, `{"error":"Server not found: 99"}`,
+		call{tool: "conductor_read", action: "server"})
 
 	_, stderr, code := run(t, bin, []string{
 		"CONDUCTOR_URL=" + srv.URL, "CONDUCTOR_MCP_TOKEN=tok",
