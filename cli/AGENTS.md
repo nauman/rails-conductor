@@ -30,7 +30,7 @@ A new endpoint is **not done** until all five exist:
 2. its registration in `internal/cli/root.go`
 3. a unit test **and** an e2e test asserting the exit code
 4. a row in `API-COVERAGE.md`
-5. the skill updated
+5. the skill updated (`skills/conductor-cli/SKILL.md`) and `make surface-check` re-run
 
 A command without its coverage row is an unfinished change.
 

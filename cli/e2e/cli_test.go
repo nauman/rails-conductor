@@ -69,6 +69,33 @@ func stubConductor(t *testing.T, status int, payload string) *httptest.Server {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		// Assert the WIRE, not just the route. Checking only method and path
+		// would let a malformed JSON-RPC body, a missing bearer token or a
+		// dropped protocol header pass every e2e test — the stub would be
+		// agreeing with whatever the CLI sent.
+		if got := r.Header.Get("Authorization"); got != "Bearer tok" && got != "Bearer bad" {
+			t.Errorf("stub: expected a bearer token, got %q", got)
+		}
+		if got := r.Header.Get("MCP-Protocol-Version"); got == "" {
+			t.Error("stub: the MCP-Protocol-Version header must be sent")
+		}
+		var body struct {
+			JSONRPC string `json:"jsonrpc"`
+			Method  string `json:"method"`
+			Params  struct {
+				Name      string         `json:"name"`
+				Arguments map[string]any `json:"arguments"`
+			} `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("stub: body was not JSON: %v", err)
+		}
+		if body.JSONRPC != "2.0" || body.Method != "tools/call" {
+			t.Errorf("stub: expected JSON-RPC tools/call, got jsonrpc=%q method=%q", body.JSONRPC, body.Method)
+		}
+		if body.Params.Name == "" || body.Params.Arguments["action"] == nil {
+			t.Errorf("stub: expected a tool name and an action argument, got %+v", body.Params)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != http.StatusOK {

@@ -42,5 +42,15 @@ Command names follow plan 09's table, not convenience: `fleet` (not `status`),
 `situation` as the default command, and `server show` as a subcommand so
 `server logs` can join it without breaking callers.
 
+## Known gaps against plan 09 phase 1
+
+Named here rather than left for a reviewer to discover:
+
+| Gap | Why it is not in this slice |
+|---|---|
+| `conductor deploys show` | reads a deployment; wants `server logs` alongside it to be useful |
+| **Profiles** | `config` stores a profile name but resolves no bundles. One instance needs none; the design is in place so adding them moves no callers |
+| **Keyring file fallback** (§5) | the OS keyring works on macOS/Linux/Windows; a fallback matters for headless CI, which today uses `CONDUCTOR_MCP_TOKEN` |
+
 Next gap worth closing: `server logs`, the other question an operator asks after
 `fleet` shows something is not running.
