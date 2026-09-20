@@ -23,7 +23,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -103,6 +105,9 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 		return nil, exiterr.New(exiterr.Auth, "no Conductor token configured",
 			"Run `conductor auth login`, or set CONDUCTOR_MCP_TOKEN.")
 	}
+	if err := requireSecureTransport(c.BaseURL); err != nil {
+		return nil, err
+	}
 	if input == nil {
 		input = map[string]any{}
 	}
@@ -174,6 +179,44 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 	// the output: a terminal scrollback, a CI log, a piped file. With a token of
 	// realistic length an accidental collision is not a practical concern.
 	return json.RawMessage(c.redact(text)), nil
+}
+
+// requireSecureTransport refuses to put a bearer token on the wire in plaintext.
+//
+// Loopback is exempt because that traffic does not leave the machine, and
+// refusing it would make local development impossible for no gain.
+func requireSecureTransport(baseURL string) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return exiterr.Wrap(exiterr.Usage, err, fmt.Sprintf("could not parse the Conductor URL %q", baseURL),
+			"Give a full URL, e.g. https://conductor.example.com")
+	}
+	switch parsed.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopback(parsed.Hostname()) {
+			return nil
+		}
+		return exiterr.New(exiterr.Usage,
+			fmt.Sprintf("refusing to send a token over plaintext HTTP to %s", parsed.Host),
+			"Use https://. Plain HTTP is allowed only for localhost.")
+	default:
+		return exiterr.New(exiterr.Usage,
+			fmt.Sprintf("unsupported URL scheme %q in the Conductor URL", parsed.Scheme),
+			"Use an https:// URL.")
+	}
+}
+
+func isLoopback(host string) bool {
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 // redact removes the bearer token from any text the SERVER produced before it

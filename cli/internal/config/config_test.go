@@ -6,25 +6,26 @@ import (
 	"testing"
 )
 
-func TestPrecedenceFlagsBeatEnvBeatsProjectBeatsGlobal(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".conductor.json"),
-		[]byte(`{"api_url":"https://from-project.test"}`), 0o600); err != nil {
+func TestPrecedenceFlagsBeatEnvBeatsFiles(t *testing.T) {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, ".conductor.json"),
+		[]byte(`{"api_url":"https://from-global.test"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("HOME", home)
 
-	// Project file alone.
+	// Global file alone.
 	t.Setenv("CONDUCTOR_URL", "")
-	cfg := Load(dir)
-	if cfg.APIURL != "https://from-project.test" {
-		t.Errorf("project file should apply, got %q", cfg.APIURL)
+	cfg := Load(t.TempDir())
+	if cfg.APIURL != "https://from-global.test" {
+		t.Errorf("the global file should apply, got %q", cfg.APIURL)
 	}
 
-	// Env beats the project file.
+	// Env beats the file.
 	t.Setenv("CONDUCTOR_URL", "https://from-env.test")
-	cfg = Load(dir)
+	cfg = Load(t.TempDir())
 	if cfg.APIURL != "https://from-env.test" {
-		t.Errorf("env must beat the project file, got %q", cfg.APIURL)
+		t.Errorf("env must beat the global file, got %q", cfg.APIURL)
 	}
 	if cfg.Sources["api_url"] != "env CONDUCTOR_URL" {
 		t.Errorf("the source must be recorded, got %q", cfg.Sources["api_url"])
@@ -40,10 +41,12 @@ func TestPrecedenceFlagsBeatEnvBeatsProjectBeatsGlobal(t *testing.T) {
 	}
 }
 
+// Project files are still discovered by walking up — they just cannot carry
+// api_url. Asserted on `profile`, which they may set.
 func TestProjectFileIsFoundByWalkingUp(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ".conductor.json"),
-		[]byte(`{"api_url":"https://walked-up.test"}`), 0o600); err != nil {
+		[]byte(`{"profile":"walked-up"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	nested := filepath.Join(root, "a", "b", "c")
@@ -51,9 +54,9 @@ func TestProjectFileIsFoundByWalkingUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("CONDUCTOR_URL", "")
-	if cfg := Load(nested); cfg.APIURL != "https://walked-up.test" {
-		t.Errorf("expected the ancestor's config, got %q", cfg.APIURL)
+	t.Setenv("CONDUCTOR_PROFILE", "")
+	if cfg := Load(nested); cfg.Profile != "walked-up" {
+		t.Errorf("expected the ancestor's config, got %q", cfg.Profile)
 	}
 }
 
@@ -83,10 +86,51 @@ func TestAConfigFileWithATokenFieldIsIgnoredSafely(t *testing.T) {
 	t.Setenv("CONDUCTOR_URL", "")
 
 	cfg := Load(dir)
-	if cfg.APIURL != "https://x.test" {
-		t.Errorf("the url should still load, got %q", cfg.APIURL)
-	}
 	if _, ok := cfg.Sources["token"]; ok {
 		t.Error("config must not claim a token source; auth owns the token")
+	}
+
+}
+
+// The attack this prevents: clone a hostile repo, run `conductor` inside it, and
+// its .conductor.json points api_url at the attacker — who receives whatever
+// CONDUCTOR_MCP_TOKEN is exported in that shell. A project file is attacker-
+// supplied by definition, so it may carry settings but never the host a
+// credential is sent to.
+func TestAProjectFileCannotRedirectTheAPIURL(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".conductor.json"),
+		[]byte(`{"api_url":"https://evil.example.com","profile":"harmless"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CONDUCTOR_URL", "")
+	t.Setenv("CONDUCTOR_PROFILE", "")
+
+	cfg := Load(dir)
+
+	if cfg.APIURL == "https://evil.example.com" {
+		t.Fatal("a project file redirected the API URL — this is the token-exfiltration path")
+	}
+	if cfg.APIURL != "" {
+		t.Errorf("expected no api_url from a project file, got %q", cfg.APIURL)
+	}
+	// Non-sensitive settings still apply: the file is not ignored, only limited.
+	if cfg.Profile != "harmless" {
+		t.Errorf("a project file should still set a profile, got %q", cfg.Profile)
+	}
+}
+
+// The global file is the user's own, so it keeps the privilege a project file loses.
+func TestTheGlobalFileMaySetTheAPIURL(t *testing.T) {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, ".conductor.json"),
+		[]byte(`{"api_url":"https://mine.example.com"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("CONDUCTOR_URL", "")
+
+	if cfg := Load(t.TempDir()); cfg.APIURL != "https://mine.example.com" {
+		t.Errorf("the global file should set api_url, got %q", cfg.APIURL)
 	}
 }

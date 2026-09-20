@@ -20,6 +20,12 @@ on:
 permissions:
   contents: write # creating a release
 
+# Third-party actions are pinned to commit SHAs, not tags. This job holds
+# contents: write, so an upstream tag retargeted at malicious code could publish
+# or alter releases without anyone touching this repository. A tag is a pointer
+# someone else can move; a SHA is not. The trailing comment records which release
+# each SHA was, so updating them stays a readable decision.
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -38,7 +44,7 @@ jobs:
           fi
 
       - name: Checkout the tag being released
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Check out the TAG, not the branch. Checking out a branch and then
           # verifying the tag points at it leaves a window where the tag can be
@@ -49,7 +55,7 @@ jobs:
           fetch-depth: 0 # GoReleaser needs full history and tags
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
@@ -74,7 +80,7 @@ jobs:
           fi
 
       - name: Publish
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: "~> v2"
           args: release --clean

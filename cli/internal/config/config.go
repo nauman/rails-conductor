@@ -1,5 +1,17 @@
-// Package config resolves settings by layer: flags > env > project file >
-// global file > defaults.
+// Package config resolves settings by layer: flags > env > global file >
+// defaults.
+//
+// A PROJECT file may not set api_url, and that is a security boundary rather
+// than a simplification. `.conductor.json` is discovered by walking up from the
+// working directory, so it is attacker-supplied the moment you run the CLI
+// inside a repository you cloned. If such a file could set api_url, cloning a
+// hostile repo and running `conductor` in it would send CONDUCTOR_MCP_TOKEN to
+// whatever host that file named.
+//
+// The keyring is not exposed this way — tokens are stored per instance URL, so
+// an unknown URL finds no token — but an exported environment token is sent
+// wherever the CLI is pointed. Project files therefore carry only settings that
+// cannot redirect a credential.
 //
 // Sources records which layer supplied each value. That is not bookkeeping for
 // its own sake — when a CLI reads the wrong URL, the only useful question is
@@ -25,7 +37,8 @@ type Config struct {
 	Sources map[string]string
 }
 
-// file is the on-disk shape of .conductor.json, at either scope.
+// file is the on-disk shape of .conductor.json. api_url is honored only from the
+// GLOBAL file; see the package comment.
 type file struct {
 	APIURL  string `json:"api_url"`
 	Profile string `json:"profile"`
@@ -38,12 +51,14 @@ func Load(startDir string) *Config {
 
 	// Layer 4: global file.
 	if home, err := os.UserHomeDir(); err == nil {
-		cfg.applyFile(filepath.Join(home, ".conductor.json"), "global file")
+		cfg.applyFile(filepath.Join(home, ".conductor.json"), "global file", withAPIURL)
 	}
 
 	// Layer 3: nearest project file, walking up from the working directory.
+	// Settings only — never api_url. A project file is whatever the directory
+	// you happen to be standing in says it is.
 	if path := findProjectFile(startDir); path != "" {
-		cfg.applyFile(path, "project file")
+		cfg.applyFile(path, "project file", withoutAPIURL)
 	}
 
 	// Layer 2: environment.
@@ -76,7 +91,15 @@ func (c *Config) SetProfile(v string) {
 	c.Profile, c.Sources["profile"] = v, "flag --profile"
 }
 
-func (c *Config) applyFile(path, source string) {
+// Whether a config layer is trusted to name the host a token is sent to.
+type apiURLTrust bool
+
+const (
+	withAPIURL    apiURLTrust = true
+	withoutAPIURL apiURLTrust = false
+)
+
+func (c *Config) applyFile(path, source string, trust apiURLTrust) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return
@@ -87,7 +110,7 @@ func (c *Config) applyFile(path, source string) {
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return
 	}
-	if parsed.APIURL != "" {
+	if parsed.APIURL != "" && trust == withAPIURL {
 		c.APIURL, c.Sources["api_url"] = parsed.APIURL, source
 	}
 	if parsed.Profile != "" {

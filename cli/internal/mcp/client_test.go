@@ -342,3 +342,30 @@ func TestTheTokenIsRedactedFromSuccessfulPayloadsToo(t *testing.T) {
 		t.Errorf("the token survived into result data: %q", servers[0].Name)
 	}
 }
+
+// A project you cloned should not be able to point the CLI at a host of its
+// choosing, and a token must never travel in plaintext to one that is not local.
+func TestRefusesToSendATokenOverPlaintextHTTP(t *testing.T) {
+	_, err := New("http://evil.example.com", testToken).Fleet().Status(context.Background())
+	if err == nil {
+		t.Fatal("plaintext HTTP to a remote host must be refused")
+	}
+	if got := exiterr.CodeOf(err); got != exiterr.Usage {
+		t.Errorf("expected a usage error, got %v", got)
+	}
+	if !strings.Contains(err.Error(), "plaintext") {
+		t.Errorf("the reason should be plain, got %q", err.Error())
+	}
+}
+
+// Loopback stays usable: that traffic never leaves the machine.
+func TestPlaintextIsAllowedForLoopback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(rpcOK(t, "[]")))
+	}))
+	defer srv.Close() // httptest serves http://127.0.0.1:port
+
+	if _, err := New(srv.URL, testToken).Fleet().Status(context.Background()); err != nil {
+		t.Errorf("loopback http must be allowed, got %v", err)
+	}
+}
