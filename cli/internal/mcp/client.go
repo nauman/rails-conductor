@@ -168,7 +168,12 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 	if strings.TrimSpace(text) == "" {
 		return nil, nil // a tool that legitimately returns nothing
 	}
-	return json.RawMessage(text), nil
+	// Successful payloads are redacted too. The earlier version covered only the
+	// error paths, on the reasoning that a server echoing your own token already
+	// has it — true, but the leak is not to the server, it is to whatever reads
+	// the output: a terminal scrollback, a CI log, a piped file. With a token of
+	// realistic length an accidental collision is not a practical concern.
+	return json.RawMessage(c.redact(text)), nil
 }
 
 // redact removes the bearer token from any text the SERVER produced before it
@@ -180,19 +185,17 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 // verbatim to stderr. The cost of being wrong once is a credential in a
 // terminal scrollback or a CI log.
 func (c *Client) redact(text string) string {
-	// Below minRedactableToken the substring is too short to be a credential and
-	// long enough to appear by accident: redacting a one-character token rewrites
-	// every message it touches. Caught by a test whose fixture token was "t",
-	// which turned "App not found" into "App no[redacted] found".
 	if text == "" || len(c.Token) < minRedactableToken {
 		return text
 	}
 	return strings.ReplaceAll(text, c.Token, "[redacted]")
 }
 
-// Shorter than this is not a credential worth protecting, and redacting it costs
-// more in mangled messages than it buys.
-const minRedactableToken = 12
+// A minimum has to exist: redacting a one-character token rewrites every message
+// it touches (a fixture token of "t" turned "App not found" into
+// "App no[redacted] found"). Eight is below any credential a real deployment
+// issues and above the length at which collisions are plausible.
+const minRedactableToken = 8
 
 // firstText pulls the tool's payload out of MCP's content envelope. Only text
 // parts carry it; anything else is ignored rather than guessed at.

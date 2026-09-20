@@ -24,22 +24,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # GoReleaser needs full history and tags
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
-
-      # The same gate the local path runs. A hosted release that skipped it
-      # would be a second, weaker standard for the same artifact.
-      - name: Gate
-        run: make -C cli ci
-
       # inputs.version reaches the shell through the ENVIRONMENT, never through
       # ${{ }} interpolation. Interpolating a dispatch input directly into a run
       # block lets anyone who can trigger the workflow inject shell that runs with
@@ -53,23 +37,39 @@ jobs:
             exit 1
           fi
 
-      # The tag must exist AND point at the commit being built. Checking only
-      # that it exists lets GoReleaser build this checkout while labelling the
-      # release with an unrelated tag — a release whose contents are not what
-      # its tag says.
-      - name: Verify the tag matches this checkout
+      - name: Checkout the tag being released
+        uses: actions/checkout@v7
+        with:
+          # Check out the TAG, not the branch. Checking out a branch and then
+          # verifying the tag points at it leaves a window where the tag can be
+          # moved between the check and the publish. Building from the tag ref
+          # removes the race instead of narrowing it: the artifact is whatever
+          # that tag contains, by construction.
+          ref: refs/tags/cli/v${{ inputs.version }}
+          fetch-depth: 0 # GoReleaser needs full history and tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      # The same gate the local path runs. A hosted release that skipped it
+      # would be a second, weaker standard for the same artifact.
+      - name: Gate
+        run: make -C cli ci
+
+      # The checkout above already guarantees HEAD is the tag; this fails loudly
+      # if that ever stops being true rather than trusting it silently.
+      - name: Confirm the checkout is the tag
         env:
           VERSION: ${{ inputs.version }}
         run: |
           tag="cli/v$VERSION"
-          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            echo "::error::$tag does not exist. Tag it first, or use bin/release-cli."
-            exit 1
-          fi
           tagged=$(git rev-list -n 1 "$tag")
           head=$(git rev-parse HEAD)
           if [ "$tagged" != "$head" ]; then
-            echo "::error::$tag points at $tagged but this checkout is $head — refusing to publish a mismatched release."
+            echo "::error::$tag points at $tagged but the checkout is $head."
             exit 1
           fi
 

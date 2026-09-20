@@ -83,6 +83,16 @@ if ! git push origin "$tag"; then
   die "could not push $tag — the local tag was removed so you can retry cleanly"
 fi
 
+# The gate and the snapshot ran against the tree as it was minutes ago, and
+# `goreleaser release` rebuilds from the tree as it is NOW. Re-check rather than
+# assume nothing moved: an editor autosave or a concurrent agent is enough.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "the working tree changed after the gate ran — refusing to publish something that was not gated.
+The tag $tag is pushed; delete it if you are not retrying:
+  git push --delete origin $tag && git tag -d $tag"
+[ -z "$(git ls-files --others --exclude-standard -- cli)" ] \
+  || die "untracked files appeared under cli/ after the gate ran — refusing to publish"
+
 printf 'Publishing\n'
 CLI_VERSION="$version"
 export CLI_VERSION

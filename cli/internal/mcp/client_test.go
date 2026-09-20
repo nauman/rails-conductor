@@ -17,6 +17,9 @@ import (
 // rpcOK wraps a tool payload in MCP's content envelope the way the server does:
 // the tool's JSON is a STRING inside content[0].text. Built rather than
 // hand-escaped, because hand-escaped JSON in a test is where typos hide.
+// A realistic token length, so no test depends on redaction's minimum.
+const testToken = "tok_test_9f3c2a7e5b1d"
+
 func rpcOK(t *testing.T, payload string) string {
 	t.Helper()
 	encoded, err := json.Marshal(payload)
@@ -40,7 +43,7 @@ func TestCallSpeaksJSONRPCToolsCall(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := New(srv.URL, "tok_abc").Fleet().Status(context.Background()); err != nil {
+	if _, err := New(srv.URL, "tok_abcdefghijkl").Fleet().Status(context.Background()); err != nil {
 		t.Fatalf("Status returned %v", err)
 	}
 	if gotPath != "/mcp" {
@@ -52,7 +55,7 @@ func TestCallSpeaksJSONRPCToolsCall(t *testing.T) {
 	if gotBody.Params.Name != "conductor_read" || gotBody.Params.Arguments["action"] != "fleet_status" {
 		t.Errorf("the tool and action belong in params, got %+v", gotBody.Params)
 	}
-	if gotAuth != "Bearer tok_abc" {
+	if gotAuth != "Bearer tok_abcdefghijkl" {
 		t.Errorf("expected a bearer token, got %q", gotAuth)
 	}
 	if gotProtocol == "" {
@@ -68,7 +71,7 @@ func TestCallUnwrapsTheContentEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	servers, err := New(srv.URL, "t").Fleet().Status(context.Background())
+	servers, err := New(srv.URL, testToken).Fleet().Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status returned %v", err)
 	}
@@ -85,7 +88,7 @@ func TestJSONRPCErrorIsNotATransportFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := New(srv.URL, "t").Fleet().Status(context.Background())
+	_, err := New(srv.URL, testToken).Fleet().Status(context.Background())
 	if err == nil {
 		t.Fatal("a JSON-RPC error must fail the call")
 	}
@@ -102,7 +105,7 @@ func TestStatusDecodesServers(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	servers, err := New(srv.URL, "t").Fleet().Status(context.Background())
+	servers, err := New(srv.URL, testToken).Fleet().Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status returned %v", err)
 	}
@@ -135,7 +138,7 @@ func TestHTTPStatusBecomesTheRightExitCode(t *testing.T) {
 			w.WriteHeader(c.status)
 			_, _ = w.Write([]byte(`{"error":"nope"}`))
 		}))
-		_, err := New(srv.URL, "t").Fleet().Status(context.Background())
+		_, err := New(srv.URL, testToken).Fleet().Status(context.Background())
 		srv.Close()
 
 		if err == nil {
@@ -156,7 +159,7 @@ func TestToolLevelErrorIsReported(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := New(srv.URL, "t").Fleet().Status(context.Background())
+	_, err := New(srv.URL, testToken).Fleet().Status(context.Background())
 	if err == nil {
 		t.Fatal("expected the tool error to surface")
 	}
@@ -209,7 +212,7 @@ func TestServerAcceptsAnIDOrAName(t *testing.T) {
 			_, _ = w.Write([]byte(rpcOK(t, `{"id":6,"name":"web-1"}`)))
 		}))
 
-		if _, err := New(srv.URL, "t").Fleet().Server(context.Background(), c.reference, false); err != nil {
+		if _, err := New(srv.URL, testToken).Fleet().Server(context.Background(), c.reference, false); err != nil {
 			t.Fatalf("Server(%q) returned %v", c.reference, err)
 		}
 		srv.Close()
@@ -231,7 +234,7 @@ func TestServerProbeIsOptIn(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	detail, err := New(srv.URL, "t").Fleet().Server(context.Background(), "6", true)
+	detail, err := New(srv.URL, testToken).Fleet().Server(context.Background(), "6", true)
 	if err != nil {
 		t.Fatalf("Server returned %v", err)
 	}
@@ -256,7 +259,7 @@ func TestServerDecodesTheStoredRecord(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	d, err := New(srv.URL, "t").Fleet().Server(context.Background(), "6", false)
+	d, err := New(srv.URL, testToken).Fleet().Server(context.Background(), "6", false)
 	if err != nil {
 		t.Fatalf("Server returned %v", err)
 	}
@@ -315,5 +318,27 @@ func TestAServerEchoingTheTokenCannotLeakIt(t *testing.T) {
 				t.Errorf("expected the token to be replaced, got %q", err.Error())
 			}
 		})
+	}
+}
+
+// A token echoed in a SUCCESSFUL result is still a leak — not to the server,
+// which already has it, but to whatever reads the output: a scrollback, a CI
+// log, a piped file.
+func TestTheTokenIsRedactedFromSuccessfulPayloadsToo(t *testing.T) {
+	const token = "Xy7f3c2a7e5b1d4a6c8e0f2b"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(rpcOK(t, `[{"id":1,"name":"`+token+`"}]`)))
+	}))
+	defer srv.Close()
+
+	servers, err := New(srv.URL, token).Fleet().Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status returned %v", err)
+	}
+	if len(servers) != 1 {
+		t.Fatalf("expected 1 server, got %d", len(servers))
+	}
+	if strings.Contains(servers[0].Name, token) {
+		t.Errorf("the token survived into result data: %q", servers[0].Name)
 	}
 }
