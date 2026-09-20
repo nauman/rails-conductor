@@ -1,0 +1,137 @@
+conductor talks to a Conductor instance's MCP endpoint.
+
+Configuration comes from flags, then CONDUCTOR_URL / CONDUCTOR_MCP_TOKEN,
+then .conductor.json in this directory or above, then ~/.conductor.json.
+
+Usage:
+  conductor [flags]
+  conductor [command]
+
+Available Commands:
+  auth        Manage the Conductor token
+  completion  Generate the autocompletion script for the specified shell
+  fleet       Show every server in the fleet with its apps and health
+  help        Help about any command
+  server      Inspect a server
+  situation   Show what is in flight and what needs attention
+  version     Show the CLI version
+
+Flags:
+      --agent            agent-friendly output (same as --quiet --json)
+      --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+  -h, --help             help for conductor
+      --jq string        filter the JSON envelope with a jq expression (implies --json)
+      --json             output the JSON envelope
+      --markdown         output portable markdown tables
+      --profile string   named configuration profile
+      --quiet            output data only, without summary or breadcrumbs
+      --verbose          report where each setting came from
+  -v, --version          version for conductor
+
+Use "conductor [command] --help" for more information about a command.
+
+Store a Conductor token in the OS keyring.
+
+There is deliberately no --token flag: an argument is visible in `ps`,
+lands in shell history, and is written into an agent's transcript.
+The token is read from stdin instead.
+
+Usage:
+  conductor auth [command]
+
+Available Commands:
+  login       Store a token for this Conductor instance (reads it from stdin)
+  logout      Remove this instance's token from the keyring
+  status      Show which token the CLI would use, and where it came from
+
+Flags:
+  -h, --help   help for auth
+
+Global Flags:
+      --agent            agent-friendly output (same as --quiet --json)
+      --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+      --jq string        filter the JSON envelope with a jq expression (implies --json)
+      --json             output the JSON envelope
+      --markdown         output portable markdown tables
+      --profile string   named configuration profile
+      --quiet            output data only, without summary or breadcrumbs
+      --verbose          report where each setting came from
+
+Use "conductor auth [command] --help" for more information about a command.
+
+Show every server in the fleet with its apps and health
+
+Usage:
+  conductor fleet [flags]
+
+Flags:
+  -h, --help   help for fleet
+
+Global Flags:
+      --agent            agent-friendly output (same as --quiet --json)
+      --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+      --jq string        filter the JSON envelope with a jq expression (implies --json)
+      --json             output the JSON envelope
+      --markdown         output portable markdown tables
+      --profile string   named configuration profile
+      --quiet            output data only, without summary or breadcrumbs
+      --verbose          report where each setting came from
+
+Inspect a server
+
+Usage:
+  conductor server [command]
+
+Available Commands:
+  show        Show one server in detail
+
+Flags:
+  -h, --help   help for server
+
+Global Flags:
+      --agent            agent-friendly output (same as --quiet --json)
+      --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+      --jq string        filter the JSON envelope with a jq expression (implies --json)
+      --json             output the JSON envelope
+      --markdown         output portable markdown tables
+      --profile string   named configuration profile
+      --quiet            output data only, without summary or breadcrumbs
+      --verbose          report where each setting came from
+
+Use "conductor server [command] --help" for more information about a command.
+
+Show what is in flight and what needs attention
+
+Usage:
+  conductor situation [flags]
+
+Flags:
+  -h, --help   help for situation
+
+Global Flags:
+      --agent            agent-friendly output (same as --quiet --json)
+      --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+      --jq string        filter the JSON envelope with a jq expression (implies --json)
+      --json             output the JSON envelope
+      --markdown         output portable markdown tables
+      --profile string   named configuration profile
+      --quiet            output data only, without summary or breadcrumbs
+      --verbose          report where each setting came from
+
+Show the CLI version
+
+Usage:
+  conductor version [flags]
+
+Flags:
+  -h, --help   help for version
+
+Global Flags:
+      --agent            agent-friendly output (same as --quiet --json)
+      --api-url string   Conductor base URL (overrides CONDUCTOR_URL)
+      --jq string        filter the JSON envelope with a jq expression (implies --json)
+      --json             output the JSON envelope
+      --markdown         output portable markdown tables
+      --profile string   named configuration profile
+      --quiet            output data only, without summary or breadcrumbs
+      --verbose          report where each setting came from

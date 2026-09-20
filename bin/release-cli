@@ -1,0 +1,111 @@
+#!/bin/sh
+# Release the conductor CLI.
+#
+#   bin/release-cli 0.1.0
+#
+# A release is a deliberate act, not a side effect of a push. This runs the gate
+# FIRST, and only tags and publishes if it is green — so a broken release is
+# refused before a tag exists, rather than after one is public.
+#
+# Tag shape is fixed by Go, not by taste: a nested module at cli/ resolves
+# `go install .../cli/cmd/conductor@v0.1.0` only from a `cli/v0.1.0` tag.
+set -eu
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+
+[ $# -eq 1 ] || die "usage: bin/release-cli <version>   e.g. bin/release-cli 0.1.0"
+
+# Accept 0.1.0 or v0.1.0; store without the v, since the tag adds it back.
+version=$(printf '%s' "$1" | sed 's/^v//')
+
+# Semver, optionally with a prerelease suffix (0.2.0-rc1 releases as a prerelease).
+echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
+  || die "not a semver version: $1"
+
+tag="cli/v$version"
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+# A dirty tree means the tag would not describe what was built.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "working tree has uncommitted changes — commit or stash first"
+
+# Untracked files UNDER cli/ are the dangerous ones: they are compiled into the
+# artifact but are not in the tag, so the published binary would contain source
+# nobody can retrieve from the tag. Untracked files elsewhere in the repo cannot
+# reach the build, so they are not this script's business.
+untracked=$(git ls-files --others --exclude-standard -- cli)
+[ -z "$untracked" ] || die "untracked files under cli/ would be built but not tagged:
+$untracked
+Commit them, or add them to .gitignore."
+
+git rev-parse "$tag" >/dev/null 2>&1 && die "tag $tag already exists"
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$branch" = "main" ] || die "releases are cut from main, not $branch"
+
+git fetch --quiet origin
+local_head=$(git rev-parse HEAD)
+remote_head=$(git rev-parse origin/main)
+[ "$local_head" = "$remote_head" ] \
+  || die "main is not in sync with origin/main — push or pull first"
+
+# GoReleaser publishes through the GitHub API. Reuse the gh login rather than
+# asking for a second credential; never echo it.
+if [ -z "${GITHUB_TOKEN:-}" ]; then
+  command -v gh >/dev/null 2>&1 || die "set GITHUB_TOKEN, or install gh and run: gh auth login"
+  GITHUB_TOKEN=$(gh auth token 2>/dev/null) || die "could not read a token from gh — run: gh auth login"
+  export GITHUB_TOKEN
+fi
+[ -n "${GITHUB_TOKEN:-}" ] || die "no GitHub token available"
+
+command -v goreleaser >/dev/null 2>&1 || die "goreleaser is not installed (brew install goreleaser)"
+
+printf 'Gate: make -C cli ci\n'
+make -C cli ci || die "the gate is red — not releasing"
+
+# Build the REAL artifact before tagging. The gate runs `goreleaser check`, which
+# validates the config but compiles nothing: a broken release-only hook or a
+# platform that does not build would surface AFTER the tag was pushed, which is
+# the expensive place to find it. A snapshot build exercises every hook and every
+# target, and publishes nothing.
+printf 'Build check: every platform, publishing nothing\n'
+(cd cli && CLI_VERSION="$version" goreleaser build --snapshot --clean >/dev/null) \
+  || die "the release build failed — not tagging. Run: cd cli && CLI_VERSION=$version goreleaser build --snapshot"
+
+printf 'Tagging %s\n' "$tag"
+git tag -a "$tag" -m "conductor CLI v$version"
+
+# Push the tag before publishing: GoReleaser builds the release against it, and
+# a release whose tag never reached the remote is a dead link.
+if ! git push origin "$tag"; then
+  git tag -d "$tag" >/dev/null 2>&1 || true
+  die "could not push $tag — the local tag was removed so you can retry cleanly"
+fi
+
+# The gate and the snapshot ran against the tree as it was minutes ago, and
+# `goreleaser release` rebuilds from the tree as it is NOW. Re-check rather than
+# assume nothing moved: an editor autosave or a concurrent agent is enough.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "the working tree changed after the gate ran — refusing to publish something that was not gated.
+The tag $tag is pushed; delete it if you are not retrying:
+  git push --delete origin $tag && git tag -d $tag"
+[ -z "$(git ls-files --others --exclude-standard -- cli)" ] \
+  || die "untracked files appeared under cli/ after the gate ran — refusing to publish"
+
+printf 'Publishing\n'
+CLI_VERSION="$version"
+export CLI_VERSION
+# GORELEASER_CURRENT_TAG tells OSS GoReleaser which tag it is releasing; without
+# it, it looks for the newest plain-semver tag and would not find this one.
+GORELEASER_CURRENT_TAG="$tag"
+export GORELEASER_CURRENT_TAG
+
+if ! (cd cli && goreleaser release --clean); then
+  printf '\nPublish failed. The tag %s is pushed; delete it if you are not retrying:\n' "$tag" >&2
+  printf '  git push --delete origin %s && git tag -d %s\n' "$tag" "$tag" >&2
+  exit 1
+fi
+
+printf '\nReleased %s\n' "$tag"
+printf '  go install github.com/nauman/rails-conductor/cli/cmd/conductor@v%s\n' "$version"
