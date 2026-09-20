@@ -40,13 +40,38 @@ jobs:
       - name: Gate
         run: make -C cli ci
 
-      - name: Verify the tag exists
+      # inputs.version reaches the shell through the ENVIRONMENT, never through
+      # ${{ }} interpolation. Interpolating a dispatch input directly into a run
+      # block lets anyone who can trigger the workflow inject shell that runs with
+      # GITHUB_TOKEN. The format is validated before it is used for anything.
+      - name: Validate the version
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          tag="cli/v${{ inputs.version }}"
-          git rev-parse "$tag" >/dev/null 2>&1 || {
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::not a semver version: $VERSION"
+            exit 1
+          fi
+
+      # The tag must exist AND point at the commit being built. Checking only
+      # that it exists lets GoReleaser build this checkout while labelling the
+      # release with an unrelated tag — a release whose contents are not what
+      # its tag says.
+      - name: Verify the tag matches this checkout
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="cli/v$VERSION"
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
             echo "::error::$tag does not exist. Tag it first, or use bin/release-cli."
             exit 1
-          }
+          fi
+          tagged=$(git rev-list -n 1 "$tag")
+          head=$(git rev-parse HEAD)
+          if [ "$tagged" != "$head" ]; then
+            echo "::error::$tag points at $tagged but this checkout is $head — refusing to publish a mismatched release."
+            exit 1
+          fi
 
       - name: Publish
         uses: goreleaser/goreleaser-action@v6

@@ -139,7 +139,7 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, statusError(resp.StatusCode, raw)
+		return nil, statusError(resp.StatusCode, raw, c.redact)
 	}
 
 	var envelope rpcResponse
@@ -151,7 +151,7 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 	// Protocol-level failure: the call never reached a tool.
 	if envelope.Error != nil {
 		return nil, exiterr.New(exiterr.API,
-			fmt.Sprintf("Conductor rejected the call: %s", envelope.Error.Message),
+			fmt.Sprintf("Conductor rejected the call: %s", c.redact(envelope.Error.Message)),
 			"This is a protocol error, not a tool refusal — the CLI and server may disagree on the wire.")
 	}
 	if envelope.Result == nil {
@@ -163,13 +163,36 @@ func (c *Client) Call(ctx context.Context, tool string, input map[string]any) (j
 	// Tool-level refusal: the call reached the tool and it said no. That is an
 	// API error, not a transport one, and the message is the tool's own.
 	if envelope.Result.IsError {
-		return nil, exiterr.New(exiterr.API, strings.TrimSpace(text), "")
+		return nil, exiterr.New(exiterr.API, c.redact(strings.TrimSpace(text)), "")
 	}
 	if strings.TrimSpace(text) == "" {
 		return nil, nil // a tool that legitimately returns nothing
 	}
 	return json.RawMessage(text), nil
 }
+
+// redact removes the bearer token from any text the SERVER produced before it
+// reaches a log, an error message or the envelope.
+//
+// Defence in depth, not a known bug: Conductor does not echo the token. But a
+// server error body is attacker-influenceable in general — a proxy, a WAF, a
+// misconfigured error page — and every one of those strings is rendered
+// verbatim to stderr. The cost of being wrong once is a credential in a
+// terminal scrollback or a CI log.
+func (c *Client) redact(text string) string {
+	// Below minRedactableToken the substring is too short to be a credential and
+	// long enough to appear by accident: redacting a one-character token rewrites
+	// every message it touches. Caught by a test whose fixture token was "t",
+	// which turned "App not found" into "App no[redacted] found".
+	if text == "" || len(c.Token) < minRedactableToken {
+		return text
+	}
+	return strings.ReplaceAll(text, c.Token, "[redacted]")
+}
+
+// Shorter than this is not a credential worth protecting, and redacting it costs
+// more in mangled messages than it buys.
+const minRedactableToken = 12
 
 // firstText pulls the tool's payload out of MCP's content envelope. Only text
 // parts carry it; anything else is ignored rather than guessed at.
@@ -184,7 +207,7 @@ func firstText(result *toolResult) string {
 
 // statusError turns a non-200 into a typed error, preferring the server's own
 // message over a generic one when it sent a JSON error body.
-func statusError(status int, raw []byte) error {
+func statusError(status int, raw []byte, redact func(string) string) error {
 	code := exiterr.FromHTTPStatus(status)
 	msg := fmt.Sprintf("Conductor returned HTTP %d", status)
 
@@ -192,7 +215,7 @@ func statusError(status int, raw []byte) error {
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &payload); err == nil && payload.Error != "" {
-		msg = payload.Error
+		msg = redact(payload.Error)
 	}
 
 	hint := ""

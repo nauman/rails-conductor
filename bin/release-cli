@@ -30,6 +30,15 @@ cd "$root"
 [ -z "$(git status --porcelain --untracked-files=no)" ] \
   || die "working tree has uncommitted changes — commit or stash first"
 
+# Untracked files UNDER cli/ are the dangerous ones: they are compiled into the
+# artifact but are not in the tag, so the published binary would contain source
+# nobody can retrieve from the tag. Untracked files elsewhere in the repo cannot
+# reach the build, so they are not this script's business.
+untracked=$(git ls-files --others --exclude-standard -- cli)
+[ -z "$untracked" ] || die "untracked files under cli/ would be built but not tagged:
+$untracked
+Commit them, or add them to .gitignore."
+
 git rev-parse "$tag" >/dev/null 2>&1 && die "tag $tag already exists"
 
 branch=$(git rev-parse --abbrev-ref HEAD)
@@ -54,6 +63,15 @@ command -v goreleaser >/dev/null 2>&1 || die "goreleaser is not installed (brew 
 
 printf 'Gate: make -C cli ci\n'
 make -C cli ci || die "the gate is red — not releasing"
+
+# Build the REAL artifact before tagging. The gate runs `goreleaser check`, which
+# validates the config but compiles nothing: a broken release-only hook or a
+# platform that does not build would surface AFTER the tag was pushed, which is
+# the expensive place to find it. A snapshot build exercises every hook and every
+# target, and publishes nothing.
+printf 'Build check: every platform, publishing nothing\n'
+(cd cli && CLI_VERSION="$version" goreleaser build --snapshot --clean >/dev/null) \
+  || die "the release build failed — not tagging. Run: cd cli && CLI_VERSION=$version goreleaser build --snapshot"
 
 printf 'Tagging %s\n' "$tag"
 git tag -a "$tag" -m "conductor CLI v$version"

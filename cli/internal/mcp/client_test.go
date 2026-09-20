@@ -276,3 +276,44 @@ func TestServerDecodesTheStoredRecord(t *testing.T) {
 		t.Error("live must be absent when not probed")
 	}
 }
+
+// Defence in depth: every string the SERVER produced is rendered to stderr, so a
+// token echoed back — by a proxy, a WAF, a misconfigured error page — would land
+// in a terminal scrollback or a CI log. Each server-supplied path is covered.
+func TestAServerEchoingTheTokenCannotLeakIt(t *testing.T) {
+	const token = "Xy7f3c2a7e5b1d4a6c8e0f2b"
+
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"http error body", http.StatusForbidden,
+			`{"error":"token ` + token + ` is not permitted"}`},
+		{"json-rpc error", http.StatusOK,
+			`{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"bad token ` + token + `"}}`},
+		{"tool error", http.StatusOK,
+			`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"refused for ` + token + `"}],"isError":true}}`},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(c.status)
+				_, _ = w.Write([]byte(c.body))
+			}))
+			defer srv.Close()
+
+			_, err := New(srv.URL, token).Fleet().Status(context.Background())
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if strings.Contains(err.Error(), token) {
+				t.Errorf("the token survived into the error message: %q", err.Error())
+			}
+			if !strings.Contains(err.Error(), "[redacted]") {
+				t.Errorf("expected the token to be replaced, got %q", err.Error())
+			}
+		})
+	}
+}
