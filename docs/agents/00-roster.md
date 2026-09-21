@@ -12,7 +12,9 @@ thread reply or handoff target. See `docs/dev/THREADS.md` for the convention.
 | `specification` | role | Cross-surface spec, roadmap, plan, or ADR alignment is needed (see `docs/agents/specification.agent.md`) |
 | `review` | role | Fresh-context review is needed before merge or publish |
 | `claude` | alias | Claude Code owes the next implementation or docs reply |
+| `kuickr-agent` | alias | The agent operating Kuickr owes the next reply (opened the 2026-09-21 Cloudflare 522 thread) |
 | `codex` | alias | Codex owes the next implementation or docs reply |
+| `antigravity` | alias | Gemini/Antigravity owes an independent audit or review. **Runs in the GUI app only** — it has no CLI, and the `gemini` CLI is deauthorized for individuals (`IneligibleTierError`), so a thread awaiting this name needs a human to carry the prompt across unless `GEMINI_API_KEY` is exported |
 
 ## Thread Duty
 
@@ -26,6 +28,10 @@ On boot:
    (Falls back to `../74-dev-docs/scripts/agent-thread-status.sh docs ...` if the
    local copy is absent.)
 3. Reply first to any `OWED BY ME` thread.
+3b. Treat `UNRECOGNISED STATUS` as a real finding, not noise: it means a thread
+    carries a status the scan does not handle, or has no header at all, and it is
+    therefore counted nowhere. `open` and `active` are equivalent; `resolved` and
+    `closed` are done; anything else needs fixing at the source.
 4. If the report shows `WAITING ON OTHERS`, report the exact owner/path instead
    of idling silently.
 

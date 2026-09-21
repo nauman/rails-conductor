@@ -101,6 +101,7 @@ owed=()
 waiting=()
 no_reply=()
 parked=()
+unknown=()
 
 while IFS= read -r thread; do
   status="$(header_value "$thread" status)"
@@ -110,8 +111,14 @@ while IFS= read -r thread; do
   relative="${thread#"$DOCS_ROOT"/}"
   line="$relative | awaiting=${awaiting:-unknown} | updated=${updated:-unknown} | ${title:-untitled}"
 
+  # `open` is a synonym for `active`. It was not handled, so a thread written with
+  # it fell through this case and was dropped WITHOUT a word — three live threads
+  # were invisible to the boot scan, which is the exact failure the scan exists to
+  # prevent. An unrecognised status is now reported rather than swallowed: a
+  # coordination tool that silently ignores what it does not understand is worse
+  # than one that is absent, because it looks like it answered.
   case "$status" in
-    active)
+    active|open)
       if [[ "$awaiting" == "-" ]]; then
         no_reply+=("$line")
       elif alias_match "$awaiting"; then
@@ -122,6 +129,12 @@ while IFS= read -r thread; do
       ;;
     parked)
       parked+=("$line")
+      ;;
+    resolved|closed)
+      : # done; deliberately not listed
+      ;;
+    *)
+      unknown+=("$line | status=${status:-missing}")
       ;;
   esac
 done < <(find "$DOCS_ROOT" -path '*/threads/*.thread.md' -type f | sort)
@@ -158,6 +171,7 @@ print_section "OWED BY ME" owed
 print_section "WAITING ON OTHERS" waiting
 print_section "NO REPLY OWED" no_reply
 print_section "PARKED" parked
+print_section "UNRECOGNISED STATUS (not counted anywhere)" unknown
 
 echo
 if [[ ${#owed[@]} -gt 0 ]]; then
