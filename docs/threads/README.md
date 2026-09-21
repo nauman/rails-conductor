@@ -26,3 +26,4 @@ Canonical convention: [`docs/dev/THREADS.md`](../dev/THREADS.md) (mirrors
 | --- | --- | --- |
 | [`self-describing-deploys`](self-describing-deploys.thread.md) | deploy ↔ staff-engineer | staff-engineer |
 | [`stale-deploy-hold-reasons`](stale-deploy-hold-reasons.thread.md) | claude ↔ operator ↔ deploy | operator |
+| [`host-network-diagnose-and-cloudflare-522`](host-network-diagnose-and-cloudflare-522.thread.md) | kuickr-agent ↔ claude ↔ operator | claude |
