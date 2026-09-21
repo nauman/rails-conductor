@@ -53,6 +53,40 @@ class FleetRecipes
       ]
     },
     {
+      id: "release-conductor",
+      topic: "Cut a Conductor release, including the CLI nobody remembers",
+      description: <<~MD,
+        ## Purpose
+        Conductor ships two artifacts from one repo and only one of them ships
+        itself. The Rails app deploys on every merge to main; the CLI does not, and
+        will sit unreleased indefinitely unless a step says otherwise.
+
+        ## Hidden truth
+        **The CLI has no automatic trigger, by design.** A release is a deliberate
+        act, not a side effect of a push — `.github/workflows/release-cli.yml` fires
+        on nothing and `bin/release-cli` is a local command. That is the right
+        default and it is exactly why it gets forgotten: nothing goes red when a
+        release does not happen.
+
+        The first symptom is a README that describes a surface nobody can install.
+        Conductor's said the CLI "is on the roadmap" after it had shipped, then
+        described a CLI with no release to install from.
+
+        **Tags are a Go rule here, not taste.** `cli/` is a nested module, so
+        `go install .../cli/cmd/conductor@v0.1.0` resolves only from a `cli/v0.1.0`
+        tag. A bare `v0.1.0` does not work.
+      MD
+      checklist: [
+        { id: "app-shipped", text: "Confirm the Rails app deployed: the merge to main ran Deploy Conductor green, and /version matches" },
+        { id: "cli-changed", text: "Ask whether anything under cli/ changed since the last cli/v* tag. If yes, the CLI owes a release — `git log $(git describe --tags --match \"cli/v*\" --abbrev=0 2>/dev/null || echo HEAD)..HEAD -- cli/`" },
+        { id: "cli-gate", text: "Run the CLI's own gate before tagging: `make -C cli ci` (fmt, vet, lint, unit, e2e, goreleaser check, surface drift)" },
+        { id: "cli-release", text: "Cut it: `bin/release-cli <version>` — it re-runs the gate, builds all five platforms, tags cli/v<version>, pushes and publishes. It refuses on a dirty tree or untracked files under cli/" },
+        { id: "cli-installable", text: "Verify the release is installable, not just published: `go install github.com/nauman/rails-conductor/cli/cmd/conductor@v<version>` from a clean directory" },
+        { id: "surfaces", text: "Keep surfaces in lockstep — README surfaces table, cli/API-COVERAGE.md, cli/SURFACE.txt and the CLI skill. A README naming a surface nobody can install is the defect this ritual exists to prevent" },
+        { id: "coverage-gaps", text: "Re-read cli/API-COVERAGE.md and confirm the named gaps are still the right ones to be missing", required: false }
+      ]
+    },
+    {
       id: "migrate-to-self-describing",
       topic: "Move a grandfathered kamal app onto the generated deploy contract",
       description: <<~MD,

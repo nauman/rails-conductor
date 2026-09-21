@@ -48,4 +48,16 @@ class CloudflareCutoverTest < ActiveSupport::TestCase
     refute res.ok?
     assert_match(/no DNS record/i, res.message)
   end
+  # The moment a domain goes behind Cloudflare, every request starts arriving from
+  # an edge address. Nothing breaks loudly, so the requirement has to be said here
+  # or it is discovered months later by wondering why one IP has 91 requests.
+  test "putting an app behind Cloudflare says the app must now trust Cloudflare's ranges" do
+    result = CloudflareCutover.new(@app, client_for: ->(_c) { FakeClient.new }).put_behind!
+
+    assert result.ok?
+    assert_match(/trusted_proxies/, result.message,
+                 "the message must name the actual setting, not just warn vaguely")
+    assert_match(/remote_ip/, result.message)
+    assert_match(%r{cloudflare\.com/ips-v4}, result.message, "it should say where the ranges come from")
+  end
 end
