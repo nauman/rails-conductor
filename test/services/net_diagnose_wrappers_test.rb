@@ -18,7 +18,12 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
 
   def grant = ServerSudo.grant_command(DEPLOY.new("deploy"))
 
+  # A wrapper HELD pending audit is not written by grant_command, so it is fetched
+  # from its own accessor. The tests must keep running it: holding a capability
+  # back is not a reason to stop exercising it, and the audit needs it working.
   def wrapper(name)
+    return ServerSudo.pending_wrapper_script(name) if ServerSudo::WRAPPERS_PENDING_AUDIT.include?(name)
+
     body = grant[/#{Regexp.escape(name)} >\/dev\/null <<.CONDUCTOR.\n(.*?)\nCONDUCTOR\n/m, 1]
     assert body, "could not extract #{name} from the grant command"
     body
@@ -27,6 +32,18 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
   # The heredoc invariant. Ruby's <<~ strips the SMALLEST indentation in the
   # block, so one flush-left line anywhere silently un-indents the terminators and
   # breaks every wrapper at once.
+  # The held wrapper must not reach a host: not written, not named in sudoers.
+  # Hiding only the MCP action would leave it installed root-owned everywhere.
+  test "a wrapper held pending audit is never installed or granted" do
+    script = grant
+    ServerSudo::WRAPPERS_PENDING_AUDIT.each do |path|
+      assert_not_includes script, path,
+                          "#{path} is held pending audit and must not be written or granted"
+    end
+    assert ServerSudo.pending_wrapper_script(ServerSudo::UNBAN_CLOUDFLARE).present?,
+           "the held script must still be renderable for the audit and these tests"
+  end
+
   test "every wrapper heredoc terminator renders flush left" do
     script = grant
     indented = script.lines.select { |l| l.rstrip.end_with?("CONDUCTOR") && l.start_with?(" ") }

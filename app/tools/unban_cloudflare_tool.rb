@@ -16,6 +16,16 @@ class UnbanCloudflareTool
   end
 
   def call(input)
+    # HELD pending an independent adversarial audit. The wrapper is not installed
+    # on any host (ServerSudo::WRAPPERS_PENDING_AUDIT), so this would fail anyway;
+    # refusing here says WHY instead of surfacing a missing-wrapper error.
+    if ServerSudo::WRAPPERS_PENDING_AUDIT.include?(ServerSudo::UNBAN_CLOUDFLARE)
+      return Result.fail("unban_cloudflare is held pending an independent security audit and is not " \
+                         "installed on any host. Use conductor_server action=net_diagnose to see which " \
+                         "bans are inside Cloudflare's ranges; release them with " \
+                         "`fail2ban-client set <jail> unbanip <ip>` as the deploy user meanwhile.")
+    end
+
     server = find_server(input)
     return Result.fail("Server not found: #{input['server_id'] || input['server_name']}") unless server
 

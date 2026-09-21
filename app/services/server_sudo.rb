@@ -23,7 +23,20 @@ module ServerSudo
   NET_DIAGNOSE     = "#{WRAPPER_DIR}/conductor-net-diagnose".freeze              # read-only host network state
   UNBAN_CLOUDFLARE = "#{WRAPPER_DIR}/conductor-unban-cloudflare".freeze          # confirm-gated, Cloudflare ranges only
   WRAPPERS         = [ CHECK, SECURITY_UPDATES, ALL_UPDATES, REBOOT, RECLAIM_SWAP,
-                       NET_DIAGNOSE, UNBAN_CLOUDFLARE ].freeze
+                       NET_DIAGNOSE ].freeze
+
+  # HELD PENDING AN INDEPENDENT ADVERSARIAL AUDIT (codex rate-limited until
+  # 2026-09-27). Listed here rather than deleted so the audit has the exact script
+  # to review and the tests keep exercising it.
+  #
+  # Being in this list and not WRAPPERS means it is NEVER WRITTEN to a host and
+  # never named in the sudoers grant — the capability does not exist on any box.
+  # Hiding the MCP action alone would not hold anything: the wrapper would still
+  # be installed root-owned on every server the next time anything elevated.
+  #
+  # To release it: move the constant into WRAPPERS and drop the guard in
+  # UnbanCloudflareTool. Two lines, once someone who did not write it has looked.
+  WRAPPERS_PENDING_AUDIT = [ UNBAN_CLOUDFLARE ].freeze
   SUDOERS_FILE     = "/etc/sudoers.d/conductor".freeze
 
   # A Unix account name. Validated because #grant_command interpolates it into a
@@ -128,6 +141,152 @@ module ServerSudo
   # One-time, root-run setup: writes the wrapper scripts (root-owned, 0755 — not
   # writable by the deploy user) and a sudoers rule granting NOPASSWD on exactly
   # those wrappers for this server's SSH user. No permanent root SSH; no shell escape.
+
+  # The script for a wrapper that is built and tested but not yet installed.
+  # Kept renderable so the audit reviews what would ship, not a description of it.
+  # Test seam: run a block with a different pending-audit set. Exists so a held
+  # capability's own logic stays covered while it is held.
+  def stub_const_pending_audit(list)
+    original = WRAPPERS_PENDING_AUDIT
+    send(:remove_const, :WRAPPERS_PENDING_AUDIT)
+    const_set(:WRAPPERS_PENDING_AUDIT, list.freeze)
+    yield
+  ensure
+    send(:remove_const, :WRAPPERS_PENDING_AUDIT)
+    const_set(:WRAPPERS_PENDING_AUDIT, original)
+  end
+
+  def pending_wrapper_script(path)
+    raise ArgumentError, "#{path} is not pending audit" unless WRAPPERS_PENDING_AUDIT.include?(path)
+
+    <<~SH
+        #!/bin/sh
+        # Unban every fail2ban entry that falls inside Cloudflare's published ranges,
+        # and add those ranges to ignoreip so it cannot recur.
+        #
+        # THE WRAPPER DECIDES WHAT COUNTS AS CLOUDFLARE. It takes no arguments and
+        # fetches the ranges itself. If the caller supplied the address list, the
+        # confirm-gate would be theatre: anything could be unbanned by naming it. The
+        # only way "Cloudflare only" is a guarantee rather than a hope is for the
+        # privileged side to derive it.
+        #
+        # FAILS CLOSED. If the ranges cannot be fetched or do not look like CIDRs,
+        # nothing is unbanned. A stale or empty list must never widen to "unban
+        # everything" — that is the failure mode that turns a fix into an incident.
+        set -e
+        # See conductor-net-diagnose: the jail and address loops use unquoted
+        # expansion to word-split fail2ban's output, and unquoted expansion globs.
+        # This wrapper ACTS on those values, so closing that edge matters more here.
+        set -f
+
+        command -v fail2ban-client >/dev/null 2>&1 || { echo "fail2ban-client not installed" >&2; exit 4; }
+        fail2ban-client ping >/dev/null 2>&1 || { echo "fail2ban is not responding" >&2; exit 4; }
+        # python3 is not an added dependency: fail2ban is written in Python, so it is
+        # present wherever fail2ban is. It gives correct IPv4 AND IPv6 CIDR matching,
+        # which shell arithmetic does not.
+        command -v python3 >/dev/null 2>&1 || { echo "python3 not available" >&2; exit 4; }
+
+        ranges=$(mktemp) || exit 4
+        one=$(mktemp) || exit 4
+        trap 'rm -f "$ranges" "$one" "$one.clean"' EXIT INT TERM
+
+        # Validate EACH URL separately, then merge. Appending both to one file and
+        # checking the union hides a partial fetch: an empty 200 from one of them
+        # leaves a half list that still "looks valid", and the run then reports
+        # success having compared bans against half the ranges.
+        for u in https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6; do
+          : >"$one"
+          curl -fsS --max-time 15 --proto '=https' --tlsv1.2 "$u" >"$one" || {
+            echo "could not fetch $u - refusing to unban anything" >&2; exit 5; }
+
+          # NORMALISE, then validate strictly. Stripping CR, trimming spaces and
+          # dropping comments/blank lines costs nothing and removes a silent
+          # dependency on a third party never changing its whitespace: today the
+          # endpoint serves bare LF, and a switch to CRLF would have made every
+          # line fail the CIDR check and the feature refuse forever. Failing closed
+          # is the safe direction, but a fix that is dead on arrival is not a fix.
+          # Normalising does NOT weaken the check — what remains is validated whole.
+          sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+              -e '/^#/d' -e '/^$/d' "$one" >"$one.clean" && mv "$one.clean" "$one"
+
+          # Shape: every remaining line must be a CIDR. A captive portal or an error
+          # page answers 200 with HTML, and this is the cheapest way to notice.
+          if grep -qvE '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$one"; then
+            echo "$u did not return a CIDR list - refusing to unban anything" >&2; exit 5
+          fi
+
+          # PLAUSIBILITY, which shape alone does not give. Cloudflare publishes
+          # roughly fifteen IPv4 and seven IPv6 prefixes; a response with one or two
+          # lines is a truncated transfer, and a truncated "173.245.48.0/20" becomes
+          # "173.245.48.0/2" — a perfectly well-shaped CIDR covering a quarter of the
+          # internet. Shape-only validation let 0.0.0.0/0 through and unbanned every
+          # address on the box, which is the exact incident this wrapper exists to
+          # prevent rather than cause.
+          n=$(grep -cE '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$one") || n=0
+          if [ "$n" -lt 4 ]; then
+            echo "$u returned only $n prefixes - too few to be the published list; refusing" >&2; exit 5
+          fi
+
+          # A prefix broader than anything Cloudflare publishes means the list is not
+          # Cloudflare's, whatever it claims. /12 is well below their broadest IPv4
+          # block and /32 below their IPv6; anything shorter would exempt swathes of
+          # the internet from fail2ban.
+          if awk -F/ '$2 == "" { next }
+                      /:/  { if ($2 + 0 < 32) exit 1; next }
+                             { if ($2 + 0 < 12) exit 1 }' "$one"; then
+            :
+          else
+            echo "$u contains a prefix broader than Cloudflare publishes - refusing to unban anything" >&2
+            exit 5
+          fi
+
+          cat "$one" >>"$ranges"
+          printf '\n' >>"$ranges"
+        done
+
+        cidrs=$(grep -E '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$ranges")
+        jails=$(fail2ban-client status 2>/dev/null | sed -n 's/.*Jail list:[[:space:]]*//p' | tr ',' ' ')
+        [ -n "$jails" ] || { echo "no jails configured; nothing to do"; exit 0; }
+
+        unbanned=0
+        for j in $jails; do
+          banned=$(fail2ban-client status "$j" 2>/dev/null | sed -n 's/.*Banned IP list:[[:space:]]*//p')
+          for ip in $banned; do
+            # A ONE-LINER on purpose. A multi-line python block must start at column
+            # 0, which drops the Ruby heredoc's minimum indentation to zero — then
+            # <<~ strips nothing, the CONDUCTOR terminators render INDENTED, and sh
+            # stops recognising them. That silently breaks every wrapper in this
+            # file, not just this one. Caught by rendering and running it.
+            #
+            # Any exception exits non-zero, which reads as "not a Cloudflare
+            # address" and unbans nothing. Failing closed is the right direction.
+            if printf '%s\n' "$cidrs" | python3 -c 'import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if any(a in ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()) else 1)' "$ip" 2>/dev/null; then
+              if fail2ban-client set "$j" unbanip "$ip" >/dev/null 2>&1; then
+                echo "UNBANNED $j $ip"
+                unbanned=$(( unbanned + 1 ))
+              else
+                echo "warning: could not unban $ip from $j" >&2
+              fi
+            fi
+          done
+
+          # Add the ranges to ignoreip so the ban cannot recur. Done per jail and
+          # tolerantly: an older fail2ban without addignoreip should not fail the
+          # whole run after addresses were already released.
+          for c in $cidrs; do
+            fail2ban-client set "$j" addignoreip "$c" >/dev/null 2>&1 || true
+          done
+        done
+
+        # "ban(s)", not "address(es)". A ban is per jail per address, so the same
+        # address released from three jails is three bans — reporting that as
+        # "3 addresses" tells the reader the box was in worse shape than it was.
+        echo "released ${unbanned} ban(s) inside Cloudflare ranges"
+        echo "NOTE: ignoreip changes are RUNTIME only - add them to jail.local to survive a restart"
+        exit 0
+    SH
+  end
+
   def grant_command(server, user: nil)
     user ||= server.ssh_user_or_default
     raise UnsafeUser, "refusing to build a sudoers grant for #{user.inspect}" unless user.to_s.match?(SAFE_USER)
@@ -314,132 +473,6 @@ module ServerSudo
         grep -E '^(ListenOverflows|ListenDrops)' /proc/net/netstat 2>/dev/null \
           || echo "nstat not installed"
       fi
-      exit 0
-      CONDUCTOR
-      sudo tee #{UNBAN_CLOUDFLARE} >/dev/null <<'CONDUCTOR'
-      #!/bin/sh
-      # Unban every fail2ban entry that falls inside Cloudflare's published ranges,
-      # and add those ranges to ignoreip so it cannot recur.
-      #
-      # THE WRAPPER DECIDES WHAT COUNTS AS CLOUDFLARE. It takes no arguments and
-      # fetches the ranges itself. If the caller supplied the address list, the
-      # confirm-gate would be theatre: anything could be unbanned by naming it. The
-      # only way "Cloudflare only" is a guarantee rather than a hope is for the
-      # privileged side to derive it.
-      #
-      # FAILS CLOSED. If the ranges cannot be fetched or do not look like CIDRs,
-      # nothing is unbanned. A stale or empty list must never widen to "unban
-      # everything" — that is the failure mode that turns a fix into an incident.
-      set -e
-      # See conductor-net-diagnose: the jail and address loops use unquoted
-      # expansion to word-split fail2ban's output, and unquoted expansion globs.
-      # This wrapper ACTS on those values, so closing that edge matters more here.
-      set -f
-
-      command -v fail2ban-client >/dev/null 2>&1 || { echo "fail2ban-client not installed" >&2; exit 4; }
-      fail2ban-client ping >/dev/null 2>&1 || { echo "fail2ban is not responding" >&2; exit 4; }
-      # python3 is not an added dependency: fail2ban is written in Python, so it is
-      # present wherever fail2ban is. It gives correct IPv4 AND IPv6 CIDR matching,
-      # which shell arithmetic does not.
-      command -v python3 >/dev/null 2>&1 || { echo "python3 not available" >&2; exit 4; }
-
-      ranges=$(mktemp) || exit 4
-      one=$(mktemp) || exit 4
-      trap 'rm -f "$ranges" "$one" "$one.clean"' EXIT INT TERM
-
-      # Validate EACH URL separately, then merge. Appending both to one file and
-      # checking the union hides a partial fetch: an empty 200 from one of them
-      # leaves a half list that still "looks valid", and the run then reports
-      # success having compared bans against half the ranges.
-      for u in https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6; do
-        : >"$one"
-        curl -fsS --max-time 15 --proto '=https' --tlsv1.2 "$u" >"$one" || {
-          echo "could not fetch $u - refusing to unban anything" >&2; exit 5; }
-
-        # NORMALISE, then validate strictly. Stripping CR, trimming spaces and
-        # dropping comments/blank lines costs nothing and removes a silent
-        # dependency on a third party never changing its whitespace: today the
-        # endpoint serves bare LF, and a switch to CRLF would have made every
-        # line fail the CIDR check and the feature refuse forever. Failing closed
-        # is the safe direction, but a fix that is dead on arrival is not a fix.
-        # Normalising does NOT weaken the check — what remains is validated whole.
-        sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
-            -e '/^#/d' -e '/^$/d' "$one" >"$one.clean" && mv "$one.clean" "$one"
-
-        # Shape: every remaining line must be a CIDR. A captive portal or an error
-        # page answers 200 with HTML, and this is the cheapest way to notice.
-        if grep -qvE '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$one"; then
-          echo "$u did not return a CIDR list - refusing to unban anything" >&2; exit 5
-        fi
-
-        # PLAUSIBILITY, which shape alone does not give. Cloudflare publishes
-        # roughly fifteen IPv4 and seven IPv6 prefixes; a response with one or two
-        # lines is a truncated transfer, and a truncated "173.245.48.0/20" becomes
-        # "173.245.48.0/2" — a perfectly well-shaped CIDR covering a quarter of the
-        # internet. Shape-only validation let 0.0.0.0/0 through and unbanned every
-        # address on the box, which is the exact incident this wrapper exists to
-        # prevent rather than cause.
-        n=$(grep -cE '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$one") || n=0
-        if [ "$n" -lt 4 ]; then
-          echo "$u returned only $n prefixes - too few to be the published list; refusing" >&2; exit 5
-        fi
-
-        # A prefix broader than anything Cloudflare publishes means the list is not
-        # Cloudflare's, whatever it claims. /12 is well below their broadest IPv4
-        # block and /32 below their IPv6; anything shorter would exempt swathes of
-        # the internet from fail2ban.
-        if awk -F/ '$2 == "" { next }
-                    /:/  { if ($2 + 0 < 32) exit 1; next }
-                           { if ($2 + 0 < 12) exit 1 }' "$one"; then
-          :
-        else
-          echo "$u contains a prefix broader than Cloudflare publishes - refusing to unban anything" >&2
-          exit 5
-        fi
-
-        cat "$one" >>"$ranges"
-        printf '\n' >>"$ranges"
-      done
-
-      cidrs=$(grep -E '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$ranges")
-      jails=$(fail2ban-client status 2>/dev/null | sed -n 's/.*Jail list:[[:space:]]*//p' | tr ',' ' ')
-      [ -n "$jails" ] || { echo "no jails configured; nothing to do"; exit 0; }
-
-      unbanned=0
-      for j in $jails; do
-        banned=$(fail2ban-client status "$j" 2>/dev/null | sed -n 's/.*Banned IP list:[[:space:]]*//p')
-        for ip in $banned; do
-          # A ONE-LINER on purpose. A multi-line python block must start at column
-          # 0, which drops the Ruby heredoc's minimum indentation to zero — then
-          # <<~ strips nothing, the CONDUCTOR terminators render INDENTED, and sh
-          # stops recognising them. That silently breaks every wrapper in this
-          # file, not just this one. Caught by rendering and running it.
-          #
-          # Any exception exits non-zero, which reads as "not a Cloudflare
-          # address" and unbans nothing. Failing closed is the right direction.
-          if printf '%s\n' "$cidrs" | python3 -c 'import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if any(a in ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()) else 1)' "$ip" 2>/dev/null; then
-            if fail2ban-client set "$j" unbanip "$ip" >/dev/null 2>&1; then
-              echo "UNBANNED $j $ip"
-              unbanned=$(( unbanned + 1 ))
-            else
-              echo "warning: could not unban $ip from $j" >&2
-            fi
-          fi
-        done
-
-        # Add the ranges to ignoreip so the ban cannot recur. Done per jail and
-        # tolerantly: an older fail2ban without addignoreip should not fail the
-        # whole run after addresses were already released.
-        for c in $cidrs; do
-          fail2ban-client set "$j" addignoreip "$c" >/dev/null 2>&1 || true
-        done
-      done
-
-      # "ban(s)", not "address(es)". A ban is per jail per address, so the same
-      # address released from three jails is three bans — reporting that as
-      # "3 addresses" tells the reader the box was in worse shape than it was.
-      echo "released ${unbanned} ban(s) inside Cloudflare ranges"
-      echo "NOTE: ignoreip changes are RUNTIME only - add them to jail.local to survive a restart"
       exit 0
       CONDUCTOR
       sudo chmod 0755 #{WRAPPERS.join(' ')}

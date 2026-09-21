@@ -24,6 +24,14 @@ class NetDiagnoseToolsTest < ActiveSupport::TestCase
     HostNetworkDiagnosis.stub(:new, ->(*) { Struct.new(:call).new(result) }) { yield }
   end
 
+  # unban_cloudflare is held pending an independent audit, so its own logic is
+  # unreachable through the tool. The logic still has to be tested — a held
+  # capability that nobody exercises is one that rots before it is released, and
+  # the audit needs it working. This lifts the hold for the duration of a test.
+  def with_hold_lifted
+    ServerSudo.stub_const_pending_audit([]) { yield }
+  end
+
   test "net_diagnose reports the Cloudflare bans it found" do
     with_diagnosis(diagnosis(banned: %w[173.245.48.12 198.51.100.7], cloudflare: %w[173.245.48.12])) do
       out = NetDiagnoseTool.new(user: @user).call("server_id" => @server.id)
@@ -58,39 +66,49 @@ class NetDiagnoseToolsTest < ActiveSupport::TestCase
   end
 
   test "unban without confirm reports and changes nothing" do
-    with_diagnosis(diagnosis(banned: %w[173.245.48.12], cloudflare: %w[173.245.48.12])) do
+    with_hold_lifted { with_diagnosis(diagnosis(banned: %w[173.245.48.12], cloudflare: %w[173.245.48.12])) do
       out = UnbanCloudflareTool.new(user: @user).call("server_id" => @server.id)
 
       assert out.success?
       assert_not out.value[:confirmed]
       assert_equal [ "173.245.48.12" ], out.value[:would_unban].map { |b| b[:address] }
       assert_match(/confirm: true/, out.value[:message])
-    end
+    end }
   end
 
   # The wrapper writes Cloudflare's ranges into ignoreip on EVERY jail. Running it
   # after a report that said "nothing to unban" applies a change the preview never
   # offered — including on sshd.
   test "unban with confirm does nothing when there is nothing to unban" do
-    with_diagnosis(diagnosis(banned: %w[198.51.100.7])) do
+    with_hold_lifted { with_diagnosis(diagnosis(banned: %w[198.51.100.7])) do
       out = UnbanCloudflareTool.new(user: @user).call("server_id" => @server.id, "confirm" => true)
 
       assert out.success?
       assert_not out.value[:confirmed], "the wrapper must not run when the preview offered nothing"
       assert_match(/Not running the wrapper/, out.value[:message])
       assert_match(/ignoreip/, out.value[:message], "the message should say what it declined to change")
-    end
+    end }
   end
 
   # Acting on a range list that could not be verified is the failure mode the
   # whole design exists to avoid.
   test "unban refuses entirely when the Cloudflare ranges are unknown" do
-    with_diagnosis(diagnosis(banned: %w[173.245.48.12], ranges_known: false)) do
+    with_hold_lifted { with_diagnosis(diagnosis(banned: %w[173.245.48.12], ranges_known: false)) do
       out = UnbanCloudflareTool.new(user: @user).call("server_id" => @server.id, "confirm" => true)
 
       assert_not out.success?
       assert_match(/could not be fetched/, out.error)
-    end
+    end }
+  end
+
+  # The hold itself must be asserted, or it could be lifted by accident.
+  test "unban_cloudflare refuses while it is held pending audit" do
+    out = UnbanCloudflareTool.new(user: @user).call("server_id" => @server.id, "confirm" => true)
+
+    assert_not out.success?
+    assert_match(/held pending an independent security audit/, out.error)
+    assert_match(/net_diagnose/, out.error, "the refusal should name what the operator CAN do")
+    assert_includes ServerSudo::WRAPPERS_PENDING_AUDIT, ServerSudo::UNBAN_CLOUDFLARE
   end
 
   test "both tools fail cleanly when the host cannot be read" do
