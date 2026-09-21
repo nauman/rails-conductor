@@ -4,7 +4,7 @@
 
 Conductor isn't a hosting platform and it doesn't lock you into one deployment style. It connects to servers you already own over SSH, and turns Caddy, Postgres, backups, and provider APIs into one coherent operational layer.
 
-> **Status:** early and honest. The fleet dashboard, SSH execution, Docker deploys, backups, alerts, recurring jobs, and a baseline Caddy client work today. Routing, provider automation, restore, and drift detection are in progress. See [`docs/PILLARS.md`](docs/PILLARS.md) for the real maturity of each area.
+> **Status:** early and honest. The fleet dashboard, SSH execution, Docker deploys, backups, alerts, recurring jobs, and a baseline Caddy client work today. Routing, provider automation, restore, and drift detection are in progress. See [`documents/PILLARS.md`](documents/PILLARS.md) for the real maturity of each area.
 
 ---
 
@@ -14,7 +14,7 @@ If you run a handful of apps across a few VPSs, you've probably SSH'd into each 
 
 - **See the whole fleet in seconds** — health, last deploy, current issues across every server and app.
 - **Deploy your way** — Docker/Kamal *and* native Puma/systemd under one control plane.
-- **Take action, not just observe** — deploy, restart, run scripts, manage routes, and back up databases from the UI, API, or AI chat.
+- **Take action, not just observe** — deploy, restart, run scripts, manage routes, and back up databases from the UI, the API, or an AI agent over MCP.
 - **Own your infrastructure** — your servers, your providers, no per-server platform fees.
 
 ## Features
@@ -28,7 +28,7 @@ If you run a handful of apps across a few VPSs, you've probably SSH'd into each 
 - Dashboard issue detection and fleet summary
 - SSH-backed Caddy route management (add/remove domains)
 - Recurring ops baseline (metrics refresh, container sync, scheduled backups)
-- JSON API, an **MCP server** for AI agents, and a natural-language chat interface
+- JSON API and an **MCP server** for AI agents
 
 ## Quick Start
 
@@ -49,34 +49,32 @@ Run the tests:
 bin/rails test
 ```
 
-See [`docs/USAGE.md`](docs/USAGE.md) for the full walkthrough of the web UI, JSON API, MCP server, and chat.
+See [`documents/USAGE.md`](documents/USAGE.md) for the full walkthrough of the web UI, JSON API and MCP server.
 
 ## How You Use It
 
 | Surface | What it's for |
 |---------|---------------|
-| **Web UI** | Day-to-day operations: dashboard, servers, apps, scripts, backups, chat |
+| **Web UI** | Day-to-day operations: dashboard, servers, apps, scripts, backups |
 | **JSON API** (`/api/v1`) | Scripting and external integrations (Bearer API token) |
 | **MCP server** (`/mcp`) | Let MCP-compatible AI agents drive the fleet |
-| **Chat** (`/conversations`) | Natural-language orchestration over the same tools |
+| **CLI** (`cli/`) | `conductor fleet`, `situation`, `server show` — for terminals, scripts and CI. Exit codes are a contract, and `conductor auth login` reads the token from stdin so it never reaches argv |
 
-> A dedicated `conductor` command-line tool is on the roadmap. For now, the JSON API is the way to drive Conductor from scripts.
 
 ## Documentation
 
-- [`docs/USAGE.md`](docs/USAGE.md) — how to use Conductor
-- [`docs/PILLARS.md`](docs/PILLARS.md) — the seven product pillars and where help is wanted
-- [`docs/scenarios/`](docs/scenarios/) — end-to-end product flows (publish a route, restore a backup, create a server, connect a domain, move an app, detect drift)
-- [`docs/plans/INDEX.md`](docs/plans/INDEX.md) — capability plans grouped by pillar
-- [`docs/VISION.md`](docs/VISION.md) — the longer-term direction
-- [`docs/INDEX.md`](docs/INDEX.md) — full documentation map
+- [`documents/USAGE.md`](documents/USAGE.md) — how to use Conductor
+- [`documents/PILLARS.md`](documents/PILLARS.md) — the seven product pillars and where help is wanted
+- [`documents/roadmap/`](documents/roadmap/) — the delivery sequence and one page per capability
+- [`documents/VISION.md`](documents/VISION.md) — the longer-term direction
+- [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub (guides, roadmap)
 
 ## Contributing
 
 Contributions are welcome. The fastest way in:
 
-1. Read [`docs/PILLARS.md`](docs/PILLARS.md) and pick a pillar — each lists concrete "where help is wanted" entry points.
-2. Skim the relevant plan in [`docs/plans/INDEX.md`](docs/plans/INDEX.md) and any matching scenario.
+1. Read [`documents/PILLARS.md`](documents/PILLARS.md) and pick a pillar — each lists concrete "where help is wanted" entry points.
+2. Skim the matching page in [`documents/roadmap/`](documents/roadmap/).
 3. Open an issue or PR. See [`AGENTS.md`](AGENTS.md) for collaboration and documentation conventions.
 
 ## Tech
