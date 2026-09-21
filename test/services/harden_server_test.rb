@@ -115,7 +115,7 @@ class HardenServerTest < ActiveSupport::TestCase
   end
 
   test "a failing privileged step stops the run and never disables root" do
-    root = FakeSsh.new(fail_on: "ufw") # firewall step fails
+    root = FakeSsh.new(fail_on: "ufw allow") # firewall step fails — "ufw" alone also matches the wrapper install
     result = harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
 
     refute result.ok?
@@ -137,7 +137,8 @@ class HardenServerTest < ActiveSupport::TestCase
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
 
-    fw = root.commands.find { |c| c.include?("fail2ban") && c.include?("ignoreip") }
+    # `ignoreip = ` is jail.local syntax; `ignoreip` alone is also a fail2ban-client subcommand.
+    fw = root.commands.find { |c| c.include?("jail.d/00-conductor-allowlist.local") }
     assert fw, "firewall step must configure a fail2ban allowlist"
     assert_match(/SSH_CLIENT/, fw, "must whitelist the IP Conductor connects from")
     assert_match(/ignoreip = 127\.0\.0\.1/, fw)
@@ -148,7 +149,7 @@ class HardenServerTest < ActiveSupport::TestCase
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
 
-    fw = root.commands.find { |c| c.include?("ignoreip") }
+    fw = root.commands.find { |c| c.include?("ignoreip = ") }
     assert_match(/59\.101\.26\.90/, fw, "operator IP must be whitelisted")
     assert_match(/203\.0\.113\.7/, fw)
   ensure

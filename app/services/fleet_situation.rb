@@ -165,7 +165,9 @@ class FleetSituation
       check = app.latest_site_check
       if check&.status == :down
         detail = [ check.status_code && "HTTP #{check.status_code}", check.error.presence ].compact.join(" — ").presence || "unreachable"
-        items << attn("site_down", app, detail: detail, checked_at: check.checked_at&.iso8601)
+        items << attn("site_down", app, detail: detail, checked_at: check.checked_at&.iso8601,
+                      probed: "through #{app.domain} — the public path, which may cross a CDN",
+                      remedy: site_down_remedy(app))
       elsif (recoveries = app.recent_retry_recoveries) >= FLAPPING_RECOVERIES
         # Serving, so never `site_down` — but a host that keeps failing its first
         # probe and passing the retry is unstable, and suppressing the blip must
@@ -185,7 +187,7 @@ class FleetSituation
       if app.build_host.present? && app.builds_on_a_serving_box? && app.ci_build_workflow.blank?
         items << attn("build_on_serving_host", app,
                       detail: "builds on #{app.build_host} — a machine that also serves traffic, so a deploy competes with what it is serving",
-                      remedy: "add docs/templates/ci-build.yml to the repo and set ci_build_workflow, or point builder.remote at a box opted in with build_role")
+                      remedy: "add documents/templates/ci-build.yml to the repo and set ci_build_workflow, or point builder.remote at a box opted in with build_role")
       end
 
       # A CI refusal is not a failure — the build falls back and the deploy goes
@@ -257,6 +259,24 @@ class FleetSituation
   # one-line summary, but it stops being the whole of what Conductor knows — an
   # agent holding this finding can fetch the recipe and follow it without ever
   # having met the problem. nil when nothing is mapped, never a near-enough guess.
+  # A site_down that says only "unreachable" reads the same whether the app is
+  # gone or whether a CDN edge cannot open a connection to a perfectly healthy
+  # box. Those need opposite responses, and the difference was invisible: during
+  # the 2026-09-21 incident a flickering Kuickr and a genuinely-down slackdigest
+  # produced the identical signal.
+  #
+  # This does NOT claim the origin is healthy — nothing here probed it, and
+  # asserting what was not measured is how a detector sends someone the wrong way.
+  # It names the next command that can tell the two apart.
+  def site_down_remedy(app)
+    return nil unless app.server_id
+
+    "Probe the origin directly (curl --resolve #{app.domain}:443:<server-ip>). If the origin answers " \
+      "but the public URL does not, the failure is between the CDN and this box, not in the app — " \
+      "then conductor_server action=net_diagnose server_id=#{app.server_id} shows whether the host " \
+      "firewall is banning edge addresses."
+  end
+
   def attn(kind, app, **extra)
     base = { kind: kind, app: app.name, app_id: app.id,
              runbook: app.runbook_summary[:runbook].present?,
