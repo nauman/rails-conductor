@@ -26,28 +26,28 @@ tag="cli/v$version"
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
-# The artifact is built ENTIRELY from cli/ — every path in .goreleaser.yaml
-# (./cmd/conductor, completions, the archive contents) resolves inside it, so
-# nothing at the repo root can reach the binary. The check is therefore scoped
-# there: uncommitted work in cli/ means the published binary would not match the
-# tag, which is the property worth protecting.
+# A dirty tree means the tag would not describe what was built.
 #
-# It was originally scoped to the WHOLE repo, which is stricter but wrong here:
-# this is a shared worktree with concurrent agents, so something is almost always
-# dirty somewhere, and a guard that can never pass is a guard people route around.
-# The commit is still pinned (HEAD must equal origin/main, checked below).
-dirty_cli=$(git status --porcelain -- cli)
-[ -z "$dirty_cli" ] || die "cli/ has uncommitted changes — the published binary would not match the tag:
-$dirty_cli
-Commit them first."
+# REPO-WIDE, and it must be. This was narrowed to cli/ on the reasoning that
+# nothing outside it can reach the artifact — true, and irrelevant: GoReleaser
+# enforces its own repo-wide cleanliness downstream (goreleaser.com/errors/dirty).
+# Narrowing did not permit the release, it only moved the refusal PAST the tagging
+# step, so the run pushed cli/v0.1.0 and then failed — leaving exactly the
+# dangling tag this script tries to avoid.
+#
+# Failing here is the whole point: refuse before anything is published.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "working tree has uncommitted changes — commit or stash first.
+GoReleaser refuses a dirty tree too, so releasing anyway would fail after the tag
+was already pushed."
 
-# Said, not enforced: it cannot affect the artifact, but a reader deserves to
-# know the tree was not pristine when the release was cut.
-dirty_rest=$(git status --porcelain --untracked-files=no | grep -v " cli/" || true)
-if [ -n "$dirty_rest" ]; then
-  printf 'Note: %s uncommitted file(s) outside cli/ — they cannot reach the artifact.\n' \
-    "$(printf '%s\n' "$dirty_rest" | wc -l | tr -d ' ')"
-fi
+# Untracked files UNDER cli/ are the dangerous ones: they are compiled into the
+# artifact but are not in the tag, so the published binary would contain source
+# nobody can retrieve from the tag.
+untracked=$(git ls-files --others --exclude-standard -- cli)
+[ -z "$untracked" ] || die "untracked files under cli/ would be built but not tagged:
+$untracked
+Commit them, or add them to .gitignore."
 
 git rev-parse "$tag" >/dev/null 2>&1 && die "tag $tag already exists"
 
@@ -96,8 +96,8 @@ fi
 # The gate and the snapshot ran against the tree as it was minutes ago, and
 # `goreleaser release` rebuilds from the tree as it is NOW. Re-check rather than
 # assume nothing moved: an editor autosave or a concurrent agent is enough.
-[ -z "$(git status --porcelain -- cli)" ] \
-  || die "cli/ changed after the gate ran — refusing to publish something that was not gated.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "the working tree changed after the gate ran — refusing to publish something that was not gated.
 The tag $tag is pushed; delete it if you are not retrying:
   git push --delete origin $tag && git tag -d $tag"
 
