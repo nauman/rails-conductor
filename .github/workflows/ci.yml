@@ -56,7 +56,7 @@ jobs:
       # Ruby stdlib. Previously an out-of-repo auditor, so CI stayed green while
       # the page missed components; this makes the gate visible.
       - name: Validate canonical docs
-        run: ruby docs/scripts/docs-doctor.rb
+        run: ruby documents/scripts/docs-doctor.rb
 
   lint:
     runs-on: ubuntu-latest

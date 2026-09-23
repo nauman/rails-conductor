@@ -1,9 +1,9 @@
 require "test_helper"
 
 class GuideTest < ActiveSupport::TestCase
-  test "loads guides from docs/guides, ordered, with frontmatter" do
+  test "loads guides from documents/guides, ordered, with frontmatter" do
     guides = Guide.all
-    assert guides.any?, "expected guides to load from docs/guides"
+    assert guides.any?, "expected guides to load from documents/guides"
     slugs = guides.map(&:slug)
     assert_includes slugs, "connect-github"
     # ordered by frontmatter `order` (getting-started is order 1)

@@ -15,7 +15,7 @@ module Mcp
     include McpAuthentication
     include McpToolInvocation
 
-    SKILL_DOC = Rails.root.join("docs/skills/conductor/SKILL.md")
+    SKILL_DOC = Rails.root.join("documents/skills/conductor/SKILL.md")
 
     # GET /mcp/list — all available tool definitions.
     def list

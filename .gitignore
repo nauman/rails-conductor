@@ -41,3 +41,7 @@
 .kuickr/
 .worktrees/
 
+
+# Working notes, plans, threads, sessions and learnings are private.
+# Public documentation lives in documents/ and is published to kuickr.
+/docs/

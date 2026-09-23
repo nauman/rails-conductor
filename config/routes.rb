@@ -230,7 +230,7 @@ Rails.application.routes.draw do
 
   mount ActionCable.server => '/cable'
 
-  # Public docs/guides at /docs (rendered from docs/guides/*.md).
+  # Public docs/guides at /docs (rendered from documents/guides/*.md).
   get "/docs", to: "guides#index"
   get "/docs/:slug", to: "guides#show", as: :guide, constraints: { slug: /[a-z0-9][a-z0-9-]*/ }
 

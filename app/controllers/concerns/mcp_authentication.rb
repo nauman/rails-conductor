@@ -1,6 +1,6 @@
 # Shared Bearer-token authentication for the MCP endpoints.
 #
-# Three token kinds, tried in order (see docs/USAGE.md "MCP Server"):
+# Three token kinds, tried in order (see documents/USAGE.md "MCP Server"):
 #   - An OAuth access token minted through the browser connect flow (spec 06):
 #     org-bound, audience-bound (RFC 8707), scope mcp / mcp_read.
 #   - A per-user / per-org ApiToken runs as that user, scoped to the token's

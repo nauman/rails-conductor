@@ -127,7 +127,8 @@ One `ResourceAccessPolicy` should expose independently testable interfaces:
 - `allows?(capability, resource)` — role capability AND boundary AND scope
 - `billing_visibility` — aggregate wallet plus line-item redaction rules
 
-Callers must not recreate grant joins ad hoc.
+Callers must not recreate grant joins ad hoc. Where the three existing joins live
+and how the resolver replaces them: [`docs/architecture/03-access/`](../architecture/03-access/README.md).
 
 ## Managed Services and Pricing
 

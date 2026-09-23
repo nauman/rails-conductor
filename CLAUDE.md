@@ -4,7 +4,7 @@
 
 - Conductor is a Rails 8 app with Turbo, Importmaps, and Tailwind.
 - The UI focuses on fleet monitoring (servers/VMs), Docker deploys, database backups to S3/R2, and Caddy routing. Active Storage introspection is deferred (see `docs/dev/FEATURES.md`).
-- Documentation lives under `docs/` and should stay concise and actionable.
+- Documentation lives under `docs/` (private working notes, gitignored, present on this machine only) and `documents/` (public: guides, roadmap, MCP skill, templates; published to kuickr). Both should stay concise and actionable.
 
 ## Operating on Fleet Servers
 

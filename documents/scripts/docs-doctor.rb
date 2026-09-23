@@ -3,11 +3,11 @@
 
 # Canonical docs doctor.
 #
-# Validates the delivery-sequence artifact against the contract that
-# docs/roadmap/00-delivery-sequence.md advertises ("interactive: foundation-audit
-# donut, wave gantt, per-wave bar chart, dependency graph, filterable table") and
-# that specification.agent.md promises is mirrored to docs/plans/. Previously this
-# gate lived only in an out-of-repo auditor, so CI could stay green while the page
+# Validates the public delivery-sequence page (documents/roadmap/) against the
+# contract that 00-delivery-sequence.md advertises ("interactive: foundation-audit
+# donut, wave gantt, per-wave bar chart, dependency graph, filterable table").
+# The private plans/ mirror is no longer tracked, so it is not checked here.
+# Previously this gate lived only in an out-of-repo auditor, so CI could stay green while the page
 # silently missed required components. Now it runs in CI (see .github/workflows/ci.yml).
 #
 # Exit 0 = all checks pass. Exit 1 = at least one failure (details printed).
@@ -19,14 +19,13 @@
 # decision to bring the gate in-repo, that source is here + CI, not an
 # out-of-repo tool.
 #
-# Usage: ruby docs/scripts/docs-doctor.rb
+# Usage: ruby documents/scripts/docs-doctor.rb
 
 DOCS_ROOT = File.expand_path("..", __dir__)
 
-# The two mirrored copies of the delivery-sequence page.
+# The public delivery-sequence page.
 TARGETS = [
-  "roadmap/00-delivery-sequence.html",
-  "plans/00-delivery-sequence.html"
+  "roadmap/00-delivery-sequence.html"
 ].freeze
 
 # Required interactive components — each is (label => matcher). A matcher is a
@@ -87,24 +86,6 @@ TARGETS.each do |rel|
 
     resolved = File.expand_path(target, dir)
     failures << "#{rel}: broken link -> #{href}" unless File.exist?(resolved)
-  end
-end
-
-# 5. Mirrored copies must be identical once the link-path prefix is normalized.
-#    plans/ sits one directory up from roadmap/, so its intra-doc links carry a
-#    "../roadmap/" prefix; strip that and the two files must be byte-for-byte
-#    equal. This catches ALL drift — title, status, wave, deps, markup, and
-#    script — not just the slot-ID set.
-if TARGETS.all? { |t| File.exist?(File.join(DOCS_ROOT, t)) }
-  roadmap = read("roadmap/00-delivery-sequence.html")
-  plans   = read("plans/00-delivery-sequence.html")
-  normalized_plans = plans.gsub("../roadmap/", "")
-  if normalized_plans != roadmap
-    # Surface the first differing line so drift is actionable, not just flagged.
-    r_lines = roadmap.lines
-    diff_at = normalized_plans.lines.each_with_index.find { |line, i| line != r_lines[i] }
-    where = diff_at ? " (first diff near line #{diff_at[1] + 1})" : ""
-    failures << "mirror drift: plans and roadmap copies differ beyond the link prefix#{where}"
   end
 end
 

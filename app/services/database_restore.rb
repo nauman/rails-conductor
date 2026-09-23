@@ -4,7 +4,7 @@
 # `.sql.gz` object down, then `gunzip -c … | psql <target>`.
 #
 # Slice 1 of roadmap slot 21 (docs/plans/postgres-restore.md;
-# docs/roadmap/21-backup-restore.html). The target is given
+# documents/roadmap/21-backup-restore.html). The target is given
 # explicitly (a fresh / scratch database) — restoring over an existing database
 # is gated separately (slice 4). Streams progress to #log.
 class DatabaseRestore

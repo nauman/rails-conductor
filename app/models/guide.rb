@@ -1,10 +1,10 @@
 require "kramdown"
 require "kramdown-parser-gfm"
 
-# A documentation guide backed by a markdown file in docs/guides/. Rendered at
-# /docs (public). Files carry simple YAML frontmatter (title, description, order).
+# A documentation guide backed by a markdown file in documents/guides/. Published at
+# /docs (public, now a redirect to the kuickr hub). Files carry simple YAML frontmatter (title, description, order).
 class Guide
-  GUIDES_DIR = Rails.root.join("docs", "guides")
+  GUIDES_DIR = Rails.root.join("documents", "guides")
   SLUG = /\A[a-z0-9][a-z0-9-]*\z/
 
   attr_reader :slug, :title, :description, :order, :body

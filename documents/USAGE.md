@@ -154,6 +154,6 @@ The **Conversations** area (`/conversations`) is a natural-language layer over t
 ## Where to Go Next
 
 - `docs/PILLARS.md` — the six areas of the product and where help is wanted.
-- `docs/scenarios/` — end-to-end flows (publish a route, restore a backup, create a server, connect a domain, move an app, detect drift).
-- `docs/plans/INDEX.md` — capability plans (PRDs) grouped by pillar.
+- `documents/roadmap/` — the delivery sequence and one page per capability, with status.
+- [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub.
 - `docs/VISION.md` — the longer-term direction.

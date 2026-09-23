@@ -78,6 +78,6 @@ Pillar 1 (Fleet control) **displays** everything; Pillar 6 (Continuous maintenan
 ## Picking Up Work
 
 1. Skim this page and pick a pillar that interests you.
-2. Open `docs/plans/INDEX.md` for the capability plans (PRDs) grouped by pillar, with current status.
-3. Read `docs/scenarios/` for end-to-end user flows that show how a pillar is meant to feel in practice.
+2. Open `documents/roadmap/` for the capability pages grouped by wave, with current status.
+3. Read the published guides at [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) for how a pillar is meant to feel in practice.
 4. Check `docs/STATUS.md` for current gaps; use dated audits only for historical comparison.
