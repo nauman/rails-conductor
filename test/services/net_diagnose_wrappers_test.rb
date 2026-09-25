@@ -194,12 +194,23 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
     end
   end
 
+  test "unban refuses four spellings of one network" do
+    with_fake_fail2ban do |dir|
+      _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=hostbits sh #{dir}/unban.sh")
+
+      assert_equal 5, status
+      assert_match(/distinct networks per family/, err)
+      assert_not File.exist?("#{dir}/calls.txt"),
+                 "198.51.100.4/30 .. .7/30 is one network containing the attacker, not four prefixes"
+    end
+  end
+
   test "unban refuses a list whose tail is malformed, however good the head is" do
     with_fake_fail2ban do |dir|
       _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=badtail sh #{dir}/unban.sh")
 
       assert_equal 5, status
-      assert_match(/did not parse as CIDRs/, err)
+      assert_match(/distinct networks per family/, err)
       assert_not File.exist?("#{dir}/calls.txt"),
                  "a partly-valid list is not a shorter valid list"
     end
@@ -291,7 +302,26 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
     end
   end
 
+  # The wrapper PINS PATH, so an exported PATH from the test is ignored and the
+  # stubs would never be reached — the suite would silently start exercising the
+  # host's real curl and fail2ban-client. One line is substituted, and the
+  # substitution is asserted rather than assumed: if the pin is ever removed or
+  # reworded, these tests fail loudly instead of quietly testing the wrong thing.
+  test "the unban wrapper pins PATH" do
+    script = wrapper(ServerSudo::UNBAN_CLOUDFLARE)
+
+    assert_match(/^PATH=\/usr\/local\/sbin:/, script,
+                 "a root-owned script must not let its caller choose which binaries it runs")
+    assert_match(/^export PATH$/, script)
+  end
+
   private
+
+  def with_stubbed_path(script, bin)
+    pinned = script[/^PATH=\S+$/]
+    assert pinned, "the wrapper no longer pins PATH - these tests would run the host's own binaries"
+    script.sub(pinned, "PATH=#{bin}:#{pinned.delete_prefix('PATH=')}")
+  end
 
   # A fake fail2ban-client that RECORDS what it was asked to do, and a fake curl
   # whose behaviour is switched by FAKE_CURL_MODE. Recording the calls is what
@@ -361,6 +391,13 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
                *ips-v4) printf '198.51.100.7/32\\n198.51.100.7/32\\n198.51.100.7/32\\n198.51.100.7/32\\n' ;;
                *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;;
              esac; done ;;
+          # FOUR DISTINCT STRINGS, ONE NETWORK. strict=False collapsed .4/30
+          # through .7/30 into 198.51.100.4/30, so a `sort -u` count of four was
+          # satisfied by a list covering a single /30 — and 198.51.100.7 is in it.
+          hostbits) for a in "$@"; do case "$a" in
+               *ips-v4) printf '198.51.100.4/30\\n198.51.100.5/30\\n198.51.100.6/30\\n198.51.100.7/30\\n' ;;
+               *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;;
+             esac; done ;;
           # A real prefix FIRST, malformed lines after. The membership test used a
           # generator and stopped at the first match, so the tail was never parsed.
           badtail) for a in "$@"; do case "$a" in
@@ -387,7 +424,7 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
 
       FileUtils.chmod(0o755, [ File.join(bin, "fail2ban-client"), File.join(bin, "curl") ])
       File.write(File.join(dir, "net.sh"), wrapper(ServerSudo::NET_DIAGNOSE))
-      File.write(File.join(dir, "unban.sh"), wrapper(ServerSudo::UNBAN_CLOUDFLARE))
+      File.write(File.join(dir, "unban.sh"), with_stubbed_path(wrapper(ServerSudo::UNBAN_CLOUDFLARE), bin))
       yield dir
     end
   end

@@ -114,6 +114,16 @@ class HostNetworkDiagnosisTest < ActiveSupport::TestCase
     end
   end
 
+  test "four spellings of one network do not satisfy the minimum" do
+    with_body("198.51.100.4/30\n198.51.100.5/30\n198.51.100.6/30\n198.51.100.7/30\n") do |diagnosis|
+      error = assert_raises(HostNetworkDiagnosis::RangeFetchError) do
+        diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V4)
+      end
+
+      assert_match(/host bits/, error.message, "say why, not just no")
+    end
+  end
+
   test "the wrong address family is refused" do
     with_body("198.51.100.0/24\n198.51.101.0/24\n198.51.102.0/24\n198.51.103.0/24\n") do |diagnosis|
       assert_raises(HostNetworkDiagnosis::RangeFetchError) do

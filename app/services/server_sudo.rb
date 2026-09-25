@@ -191,15 +191,27 @@ module ServerSudo
         # PATH, no loader or Python overrides, and no HOME for a config file to
         # be read from.
         cd / || exit 4
-        # PATH is deliberately NOT overridden. sudo's own secure_path already
-        # resets it for the command, and hardcoding one here would mean the
-        # behaviour tests could no longer put a stub in front of curl or
-        # fail2ban-client — so the wrapper would be less tested in exchange for a
-        # guarantee sudo already makes.
+        # PATH IS PINNED. The previous version left it inherited, reasoning that
+        # sudo's secure_path already resets it and that pinning would stop the
+        # behaviour tests stubbing curl and fail2ban-client. The audit refused
+        # both halves and was right: secure_path is optional configuration a host
+        # may not set and a user may be exempt from, so it is not a guarantee
+        # this script can rely on; and test convenience is not a reason to leave
+        # executable selection to the caller of a root-owned script. The tests
+        # substitute this one line instead, and assert that they did.
+        PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        export PATH
         unset IFS
         unset CDPATH PYTHONPATH PYTHONHOME PYTHONSTARTUP
         unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
+        # -q stops curl reading a config FILE. These are the settings it takes
+        # from the ENVIRONMENT regardless: a caller-chosen CA bundle or proxy
+        # forges the range list this whole wrapper trusts, and SSLKEYLOGFILE
+        # turns the fetch into a root-owned write at a path the caller picks.
         unset CURL_HOME XDG_CONFIG_HOME
+        unset CURL_CA_BUNDLE CURL_SSL_BACKEND SSL_CERT_FILE SSL_CERT_DIR SSLKEYLOGFILE
+        unset http_proxy https_proxy all_proxy no_proxy
+        unset HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY
         # TMPDIR too: mktemp creates securely, but not in a directory the caller
         # chose. A caller-owned TMPDIR puts the range list somewhere they can
         # reach for the whole run.
@@ -223,7 +235,14 @@ module ServerSudo
         # BECAME the range list through `mv`. Both files here are created by
         # mktemp, and neither is replaced by a rename: see the `cat` below.
         clean=$(mktemp) || exit 4
-        trap 'rm -f "$ranges" "$one" "$clean"' EXIT INT TERM
+        # CLEANUP ON EXIT, AND INTERRUPTS EXIT. One trap for all three signals
+        # removed the files and then RESUMED — so an interrupt landing after the
+        # floor checks deleted "$one" while the script carried on reading it, and
+        # the now-free, already-observed pathname could be recreated by someone
+        # else holding whatever they liked. Secure creation protects a file only
+        # for as long as it exists.
+        trap 'rm -f "$ranges" "$one" "$clean"' EXIT
+        trap 'exit 130' INT TERM
 
         # Validate EACH URL separately, then merge. Appending both to one file and
         # checking the union hides a partial fetch: an empty 200 from one of them
@@ -305,15 +324,22 @@ module ServerSudo
 
         cidrs=$(grep -E '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$ranges")
 
-        # PARSE THE WHOLE MERGED LIST ONCE, BEFORE TOUCHING ANY BAN. The shape
+        # PARSE THE WHOLE MERGED LIST ONCE, BEFORE TOUCHING ANY BAN, AND COUNT
+        # NETWORKS RATHER THAN SPELLINGS. `sort -u` per URL counts text:
+        # 198.51.100.4/30 through .7/30 are four distinct strings and ONE network,
+        # so four of those plus four real IPv6 prefixes cleared every check and
+        # authorised unbanning 198.51.100.7. A set of parsed networks counts what
+        # matters; strict=True (the default) rejects a prefix with host bits set,
+        # which the published list never has; and four per family stops one
+        # family padding out the other's shortfall. The shape
         # check is a regex: `999.999.999.999/20` is all digits and dots with a
         # plausible prefix, so it passes. The per-address check below does reject
         # it — but silently, by failing closed on every address and reporting
         # "released 0 ban(s)" with exit 0. That reads as "nothing to do" when what
         # happened is "the range list was not usable", which is the difference
         # between a quiet success and a refusal someone acts on.
-        printf '%s\n' "$cidrs" | python3 -I -c 'import ipaddress,sys; nets=[ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()]; sys.exit(0 if len(nets) >= 8 else 1)' 2>/dev/null || {
-          echo "the merged range list did not parse as CIDRs - refusing to unban anything" >&2
+        printf '%s\n' "$cidrs" | python3 -I -c 'import ipaddress,sys; nets={ipaddress.ip_network(l.strip()) for l in sys.stdin if l.strip()}; v4=[n for n in nets if n.version == 4]; v6=[n for n in nets if n.version == 6]; sys.exit(0 if len(v4) >= 4 and len(v6) >= 4 else 1)' 2>/dev/null || {
+          echo "the merged range list is not four or more distinct networks per family - refusing" >&2
           exit 5
         }
         jails=$(fail2ban-client status 2>/dev/null | sed -n 's/.*Jail list:[[:space:]]*//p' | tr ',' ' ')
@@ -337,7 +363,7 @@ module ServerSudo
             #
             # Any exception exits non-zero, which reads as "not a Cloudflare
             # address" and unbans nothing. Failing closed is the right direction.
-            if printf '%s\n' "$cidrs" | python3 -I -c 'import ipaddress,sys; nets=[ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()]; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if nets and any(a in n for n in nets) else 1)' "$ip" 2>/dev/null; then
+            if printf '%s\n' "$cidrs" | python3 -I -c 'import ipaddress,sys; nets=[ipaddress.ip_network(l.strip()) for l in sys.stdin if l.strip()]; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if nets and any(a in n for n in nets) else 1)' "$ip" 2>/dev/null; then
               if fail2ban-client set "$j" unbanip "$ip" >/dev/null 2>&1; then
                 echo "UNBANNED $j $ip"
                 unbanned=$(( unbanned + 1 ))

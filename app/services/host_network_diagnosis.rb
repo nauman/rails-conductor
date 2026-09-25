@@ -128,16 +128,26 @@ class HostNetworkDiagnosis
     ranges = lines.map do |cidr|
       raise RangeFetchError, "#{url} returned a line that is not a CIDR" unless cidr.match?(CIDR_SHAPE)
 
-      begin
+      range = begin
         IPAddr.new(cidr)
       rescue IPAddr::Error
         raise RangeFetchError, "#{url} returned a line that is not a CIDR"
       end
+
+      # HOST BITS SET IS NOT A PREFIX. IPAddr masks them away silently, so
+      # 198.51.100.4/30 through .7/30 arrive as four lines that are one network.
+      # The published list never does this; a list that does is not it.
+      unless range.to_s == cidr.split("/").first
+        raise RangeFetchError, "#{url} returned #{cidr}, which has host bits set"
+      end
+
+      range
     end
 
-    # Uniqueness before counting. Four copies of one prefix satisfied a
-    # minimum-count check while carrying a single address.
-    ranges.uniq!(&:to_s)
+    # Uniqueness by NETWORK — address and prefix together. Counting spellings
+    # lets four ways of writing one block satisfy a minimum-count check while
+    # carrying a single address.
+    ranges.uniq! { |r| [ r.to_s, r.prefix ] }
 
     if ranges.size < MIN_PREFIXES
       raise RangeFetchError, "#{url} returned only #{ranges.size} distinct prefixes"
