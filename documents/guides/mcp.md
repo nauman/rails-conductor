@@ -152,7 +152,7 @@ The surface is **eight flat tools**, each taking an `action` (fewer tools keeps 
 
 Call `GET /mcp/list` for each tool's exact input schema.
 
-**Cloudflare over MCP.** `conductor_read action=cloudflare` is the discovery entry point — it returns connected accounts, the zones they own, which apps are proxyable, the read-only Cloudflare MCP attach commands, and how to proxy a domain. `conductor_domain action=put_behind_cloudflare` (app_id/app_name, optional ssl_mode) does the cutover through Conductor's audited `CloudflareClient`. See [Cloudflare + MCP](cloudflare-mcp).
+**Cloudflare over MCP.** `conductor_read action=cloudflare` is the discovery entry point — it returns connected accounts, the zones they own, which apps are proxyable, the read-only Cloudflare MCP attach commands, and how to proxy a domain. `conductor_domain action=put_behind_cloudflare` (app_id/app_name, optional ssl_mode) does the cutover through Conductor's audited `CloudflareClient`.
 
 ## Worked example — deploy an app
 

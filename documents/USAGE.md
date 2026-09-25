@@ -156,4 +156,3 @@ The **Conversations** area (`/conversations`) is a natural-language layer over t
 - `docs/PILLARS.md` — the six areas of the product and where help is wanted.
 - `documents/roadmap/` — the delivery sequence and one page per capability, with status.
 - [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub.
-- `docs/VISION.md` — the longer-term direction.

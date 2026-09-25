@@ -2,7 +2,7 @@
 
 Conductor is a control plane for self-hosted Rails operations — one place to run, monitor, and maintain apps across mixed infrastructure (Kamal + Docker, or native Caddy + Puma). The product is organized around **seven pillars**; the seventh — **agent-native control** — is the headline differentiator that leads the moat. This doc is the map for understanding what each area does, how far along it is, and where contributions are most welcome.
 
-> New here? Read `docs/VISION.md` for the why, then pick a pillar below. Each lists what exists today and concrete places to help.
+> New here? Pick a pillar below. Each lists what exists today and concrete places to help.
 
 ## Status at a Glance
 

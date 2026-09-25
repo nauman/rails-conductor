@@ -66,7 +66,6 @@ See [`documents/USAGE.md`](documents/USAGE.md) for the full walkthrough of the w
 - [`documents/USAGE.md`](documents/USAGE.md) — how to use Conductor
 - [`documents/PILLARS.md`](documents/PILLARS.md) — the seven product pillars and where help is wanted
 - [`documents/roadmap/`](documents/roadmap/) — the delivery sequence and one page per capability
-- [`documents/VISION.md`](documents/VISION.md) — the longer-term direction
 - [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub (guides, roadmap)
 
 ## Contributing
