@@ -45,3 +45,6 @@
 # Working notes, plans, threads, sessions and learnings are private.
 # Public documentation lives in documents/ and is published to kuickr.
 /docs/
+
+# Copied in from the repo root by the GoReleaser before-hook, not tracked twice.
+/cli/LICENSE

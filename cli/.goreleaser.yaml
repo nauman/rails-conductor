@@ -19,6 +19,11 @@ project_name: conductor
 before:
   hooks:
     - go mod tidy
+    # The licence is the repo's, and a second tracked copy is a second thing to
+    # keep in step. `src: ../LICENSE` is not an option — GoReleaser globs archive
+    # entries relative to the config, and a parent path fails to stat. So it is
+    # copied in at build time and gitignored.
+    - sh -c 'cp ../LICENSE LICENSE'
     # Shell completions are generated, not committed: a stale checked-in
     # completion is worse than none, because it confidently offers commands
     # that no longer exist.
@@ -53,9 +58,16 @@ archives:
         formats: [zip]
     name_template: >-
       {{ .ProjectName }}_{{ .Env.CLI_VERSION }}_{{ .Os }}_{{ .Arch }}
+    # Named exactly, not globbed. GoReleaser runs from cli/, so `LICENSE*` matched
+    # the repo root's copy not at all and warned five times per platform instead
+    # of failing — a glob that matches nothing is not an error.
+    # Named exactly, not globbed: `LICENSE*` was evaluated relative to cli/, where
+    # it matched nothing, and a glob that matches nothing is a warning rather
+    # than an error — so every archive shipped without a licence and said so five
+    # times per platform in a log nobody read.
     files:
-      - LICENSE*
-      - README*
+      - LICENSE
+      - README.md
       - AGENTS.md
       - src: completions/*
         dst: completions
@@ -71,6 +83,15 @@ nfpms:
     description: CLI for operating a self-hosted Rails fleet through Conductor.
     license: MIT
     bindir: /usr/bin
+    # THE DEFECT THAT FAILED TWO RELEASES. Everything above is templated on
+    # .Env.CLI_VERSION because .Version carries the `cli/` tag prefix — but nfpms
+    # was left on GoReleaser's DEFAULT name template, which uses .Version. So it
+    # wrote `dist/conductor_cli/v0.1.0_linux_amd64.deb`: the slash became a
+    # directory that does not exist, and the release died at the packaging step
+    # with the tag already pushed. It is not that GoReleaser OSS cannot parse a
+    # prefixed tag — it parses it fine; one template was missed.
+    file_name_template: >-
+      {{ .PackageName }}_{{ .Env.CLI_VERSION }}_{{ .Os }}_{{ .Arch }}
     contents:
       - src: completions/conductor.bash
         dst: /usr/share/bash-completion/completions/conductor
@@ -100,7 +121,10 @@ release:
 
     Install with Go:
 
-        go install github.com/nauman/rails-conductor/cli/cmd/conductor@{{ .Tag }}
+        go install github.com/nauman/rails-conductor/cli/cmd/conductor@v{{ .Env.CLI_VERSION }}
+
+    The tag is `cli/v{{ .Env.CLI_VERSION }}` because the CLI is a nested module;
+    Go maps the `@v...` you type onto it. Both name this release.
 
 # Deliberately NOT configured, rather than configured and broken:
 #
