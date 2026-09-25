@@ -64,15 +64,14 @@ See the [product docs](https://kuickr.co/conductor/docs/00-index.md) for the ful
 ## Documentation
 
 - [Product docs](https://kuickr.co/conductor/docs/00-index.md) — usage, the product pillars, and where help is wanted
-- [`documents/roadmap/`](documents/roadmap/) — the delivery sequence and one page per capability
-- [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub (guides, roadmap)
+- [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub: guides, and the [delivery sequence](https://kuickr.co/conductor/roadmap/00-delivery-sequence.html) with one page per capability
 
 ## Contributing
 
 Contributions are welcome. The fastest way in:
 
 1. Read the [product docs](https://kuickr.co/conductor/docs/00-index.md) and pick a pillar — each lists concrete "where help is wanted" entry points.
-2. Skim the matching page in [`documents/roadmap/`](documents/roadmap/).
+2. Skim the matching page in the [delivery sequence](https://kuickr.co/conductor/roadmap/00-delivery-sequence.html).
 3. Open an issue or PR. See [`AGENTS.md`](AGENTS.md) for collaboration and documentation conventions.
 
 ## Tech

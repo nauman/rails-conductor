@@ -16,7 +16,7 @@ require "digest"
 #      still routes BuildKit over SSH to the target, then Kamal SSHes there to
 #      boot the release (build/roll executor separation is the open replacement)
 #
-# Infra prerequisites (see documents/roadmap/plan-kamal-control-machine.html):
+# Infra prerequisites (roadmap slot 01, the Kamal control machine):
 #   - the `kamal` gem in Conductor's bundle
 #   - docker CLI in the image + the host's /var/run/docker.sock mounted in
 #   - the app repo reachable (public, or a deploy key/token — separate backlog item)

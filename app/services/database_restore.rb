@@ -3,8 +3,7 @@
 # inverse of DatabaseBackup (which does `pg_dump | gzip` → upload): pull the
 # `.sql.gz` object down, then `gunzip -c … | psql <target>`.
 #
-# Slice 1 of roadmap slot 21 (docs/plans/postgres-restore.md;
-# documents/roadmap/21-backup-restore.html). The target is given
+# Slice 1 of roadmap slot 21 — backup and restore. The target is given
 # explicitly (a fresh / scratch database) — restoring over an existing database
 # is gated separately (slice 4). Streams progress to #log.
 class DatabaseRestore
