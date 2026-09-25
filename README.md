@@ -58,7 +58,7 @@ See the [product docs](https://kuickr.co/conductor/docs/00-index.md) for the ful
 | **Web UI** | Day-to-day operations: dashboard, servers, apps, scripts, backups |
 | **JSON API** (`/api/v1`) | Scripting and external integrations (Bearer API token) |
 | **MCP server** (`/mcp`) | Let MCP-compatible AI agents drive the fleet |
-| **CLI** (`cli/`) | `conductor fleet`, `situation`, `server show` — for terminals, scripts and CI. Exit codes are a contract, and `conductor auth login` reads the token from stdin so it never reaches argv |
+| **CLI** (`cli/`) | `conductor fleet`, `situation`, `server show` — for terminals, scripts and CI. Exit codes are a contract, and `conductor auth login` reads the token from stdin so it never reaches argv. [Install it](documents/guides/cli.md); [releases](https://github.com/nauman/rails-conductor/releases) |
 
 
 ## Documentation

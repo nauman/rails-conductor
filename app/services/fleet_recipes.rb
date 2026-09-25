@@ -72,15 +72,23 @@ class FleetRecipes
         Conductor's said the CLI "is on the roadmap" after it had shipped, then
         described a CLI with no release to install from.
 
-        **Tags are a Go rule here, not taste.** `cli/` is a nested module, so
-        `go install .../cli/cmd/conductor@v0.1.0` resolves only from a `cli/v0.1.0`
-        tag. A bare `v0.1.0` does not work.
+        **TWO tags are cut, on one commit, and both are load-bearing.** `cli/` is a
+        nested module, so `go install .../cli/cmd/conductor@v0.1.0` resolves only
+        from `cli/v0.1.0`. GoReleaser OSS parses the current tag as semver and
+        REFUSES a prefixed one, so it is pointed at the plain `v0.1.0`. Neither
+        tool will accept the other's shape. `bin/release-cli` cuts and pushes
+        both, and removes both if the publish fails — do not tag by hand.
+
+        Three releases were lost to this, each leaving a dangling tag. One of
+        them was lost twice over, because a `goreleaser release --skip=validate`
+        run was read as proof the prefix parsed — validate is the step that
+        parses the tag.
       MD
       checklist: [
         { id: "app-shipped", text: "Confirm the Rails app deployed: the merge to main ran Deploy Conductor green, and /version matches" },
         { id: "cli-changed", text: "Ask whether anything under cli/ changed since the last cli/v* tag. If yes, the CLI owes a release — `git log $(git describe --tags --match \"cli/v*\" --abbrev=0 2>/dev/null || echo HEAD)..HEAD -- cli/`" },
         { id: "cli-gate", text: "Run the CLI's own gate before tagging: `make -C cli ci` (fmt, vet, lint, unit, e2e, goreleaser check, surface drift)" },
-        { id: "cli-release", text: "Cut it: `bin/release-cli <version>` — it re-runs the gate, builds all five platforms, tags cli/v<version>, pushes and publishes. It refuses on a dirty tree or untracked files under cli/" },
+        { id: "cli-release", text: "Cut it: `bin/release-cli <version>` — it re-runs the gate, builds all five platforms, tags both cli/v<version> and v<version>, pushes and publishes. It refuses on a dirty tree or untracked files under cli/" },
         { id: "cli-installable", text: "Verify the release is installable, not just published: `go install github.com/nauman/rails-conductor/cli/cmd/conductor@v<version>` from a clean directory" },
         { id: "surfaces", text: "Keep surfaces in lockstep — README surfaces table, cli/API-COVERAGE.md, cli/SURFACE.txt and the CLI skill. A README naming a surface nobody can install is the defect this ritual exists to prevent" },
         { id: "coverage-gaps", text: "Re-read cli/API-COVERAGE.md and confirm the named gaps are still the right ones to be missing", required: false }
