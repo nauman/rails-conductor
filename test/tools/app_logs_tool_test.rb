@@ -145,12 +145,19 @@ class AppLogsToolTest < ActiveSupport::TestCase
   # name we guessed. Building this tool on raw docker bypassed the harness.
   class FakeKamalOps
     attr_reader :tails
+    attr_reader :roles
+
     def initialize(available:, output: "kamal line", reason: "no kamal config") =
-      (@available = available; @output = output; @reason = reason; @tails = [])
+      (@available = available; @output = output; @reason = reason; @tails = []; @roles = [])
     def available? = @available
     def unavailable_reason = (@available ? nil : @reason)
-    def logs(tail: nil)
+
+    # Mirrors KamalOps#logs. The double previously took only `tail`, so it would
+    # have gone on passing while the tool silently dropped `role` — recording the
+    # role is what makes that assertable.
+    def logs(tail: nil, role: nil)
       @tails << tail
+      @roles << role
       KamalOps::Result.new(ok: true, output: @output, via: "kamal", error: nil)
     end
   end
@@ -186,5 +193,14 @@ class AppLogsToolTest < ActiveSupport::TestCase
 
     refute_match(/sk-live-abcdef123456/, res.value[:log])
     assert res.value[:redacted]
+  end
+  # The kamal path used to drop `role`, so the MCP schema advertised a capability
+  # that did nothing for every kamal-deployed app.
+  test "a role asked for on a kamal app reaches kamal, not the floor" do
+    ops = FakeKamalOps.new(available: true)
+    AppLogsTool.new(user: @user, runner: ->(_c) { "" }, kamal_ops: ops)
+               .call("app_id" => @app.id, "role" => "queue")
+
+    assert_equal [ "queue" ], ops.roles, "the requested role must reach KamalOps#logs"
   end
 end

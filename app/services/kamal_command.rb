@@ -39,8 +39,12 @@ class KamalCommand
     finish([ "app", "exec", *flags, Shellwords.escape(command) ].join(" "))
   end
 
-  def app_logs(lines:)
-    finish("app logs -n #{lines.to_i}")
+  # --roles is why kamal is worth calling at all here: it is the difference between
+  # "the app's logs" and "the logs of whichever container answered first". Omitted
+  # when no role is asked for, so the default stays kamal's own.
+  def app_logs(lines:, role: nil)
+    suffix = role.present? ? " --roles #{Shellwords.escape(role.to_s)}" : ""
+    finish("app logs -n #{lines.to_i}#{suffix}")
   end
 
   def app_details = finish("app details")

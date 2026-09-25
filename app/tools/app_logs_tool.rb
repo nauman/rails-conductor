@@ -28,7 +28,10 @@ class AppLogsTool
     # which is how an ops read ends up tailing a `_replaced_` leftover.
     ops = kamal_ops_for(app)
     if ops.available?
-      result = ops.logs(tail: tail_for(input))
+      # The kamal path used to drop `role` silently, so the parameter advertised
+      # in the MCP schema did nothing for every kamal app — the schema described a
+      # capability half the fleet did not have.
+      result = ops.logs(tail: tail_for(input), role: input["role"].presence)
       return Result.fail(result.error) unless result.ok?
 
       return Result.ok(payload(app, server, "via kamal", result.output, via: "kamal"))
@@ -37,16 +40,40 @@ class AppLogsTool
     # Carry the reason kamal could not answer. Silence here is what let an agent
     # conclude "kamal cannot be used for this app" from a bare DNS failure.
     kamal_note = ops.unavailable_reason
-    raw = run(server, command_for(app, tail_for(input)))
+    role = input["role"].presence
+    raw = run(server, command_for(app, tail_for(input), role: role))
     return Result.fail("No running container found for #{app.name} on #{server.name}.") if raw.to_s.include?(NO_CONTAINER)
 
-    container, log = split(raw)
-    Result.ok(payload(app, server, container, log, via: "docker").merge(kamal_unavailable: kamal_note).compact)
+    # Asked for a role that is not running: name what IS, rather than silently
+    # falling back to a different container and letting the reader believe they
+    # are looking at the one they asked for.
+    if raw.to_s.include?(NO_MATCH)
+      running = raw.to_s.sub(NO_MATCH, "").split("\n").map(&:strip).reject(&:blank?)
+      return Result.fail("No #{role || 'web'} container is running for #{app.name} on #{server.name}. " \
+                         "Running: #{running.join(', ')}. Re-run with role: one of those.")
+    end
+
+    container, siblings, log = split(raw)
+    payload = payload(app, server, container, log, via: "docker")
+                .merge(kamal_unavailable: kamal_note, containers: siblings).compact
+
+    # Say when there is more to read. A reader shown one container's logs has no
+    # way to know three others exist, which is how "no errors in the logs" gets
+    # concluded from the wrong container.
+    if siblings.size > 1
+      others = siblings - [ container ]
+      payload[:note] = "Showing #{container}. Also running: #{others.join(', ')} — " \
+                       "pass role: to read one of those (this app's containers are not kamal-labelled, " \
+                       "so the role is matched on the container name)."
+    end
+    Result.ok(payload)
   end
 
   private
 
   NO_CONTAINER = "__NO_CONTAINER__".freeze
+  NO_MATCH = "__NO_MATCH__".freeze
+  CONTAINERS = "__CONTAINERS__".freeze
   SEPARATOR = "---".freeze
   REDACTION = "[REDACTED]".freeze
 
@@ -114,22 +141,69 @@ class AppLogsTool
     end
   end
 
-  # One round trip: resolve the container, then tail it. Kamal labels its web
-  # containers `role=web`; a plain-docker deploy may not, so fall back to a
-  # name match on the app's slug.
-  def command_for(app, tail)
+  # One round trip: resolve the container, then tail it.
+  #
+  # THE BUG THIS REPLACES. The old selection was: containers labelled role=web,
+  # else ANY container whose name starts with the slug, `head -1`. Kamal labels
+  # its containers; a plain-docker deploy does not — so for an app deployed by its
+  # own script the first branch matched nothing and the second returned whatever
+  # `docker ps` happened to list first. An operator chasing a failed web request
+  # on a multi-container app got the SCHEDULER container — job output only — with
+  # no way to ask for another, and nothing saying a web container existed at all.
+  #
+  # Three changes: prefer web by NAME as well as by label; let the caller name a
+  # role; and always report every container that matched, so a reader is never
+  # shown one and left to assume it was the only one.
+  def command_for(app, tail, role: nil)
     slug = app.slug.to_s
+    wanted = role.presence
     <<~SH.strip
-      C=$(docker ps --format '{{.Names}}' --filter label=service=#{esc(slug)} --filter label=role=web | head -1)
-      [ -z "$C" ] && C=$(docker ps --format '{{.Names}}' | grep -E '^#{esc(slug)}[-_]' | head -1)
-      [ -z "$C" ] && { echo #{NO_CONTAINER}; exit 0; }
-      echo "$C"; echo #{SEPARATOR}; docker logs --timestamps --tail #{tail} "$C" 2>&1
+      ALL=$(docker ps --format '{{.Names}}' --filter label=service=#{esc(slug)})
+      [ -z "$ALL" ] && ALL=$(docker ps --format '{{.Names}}' | grep -E '^#{esc(slug)}[-_]')
+      [ -z "$ALL" ] && { echo #{NO_CONTAINER}; exit 0; }
+      # A container kamal replaced during a failed or superseded boot can still be
+      # RUNNING, and tailing one is reading a release nobody is served. Drop them
+      # before choosing, not after — the old code chose first and never looked.
+      ALL=$(printf '%s\n' "$ALL" | grep -v '_replaced_' || true)
+      [ -z "$ALL" ] && { echo #{NO_CONTAINER}; exit 0; }
+      #{selection_for(slug, wanted)}
+      [ -z "$C" ] && { echo #{NO_MATCH}; echo "$ALL"; exit 0; }
+      echo "$C"
+      echo #{CONTAINERS}
+      echo "$ALL"
+      echo #{SEPARATOR}
+      docker logs --timestamps --tail #{tail} "$C" 2>&1
     SH
   end
 
+
+  # Label first (kamal sets it), then the conventional `<slug>-<role>` name that a
+  # plain-docker deploy uses. Without a role, web is the default because a person
+  # asking for "the logs" during an incident means the thing serving requests —
+  # but it is a PREFERENCE, not an assumption: if no web container exists the
+  # caller is told what does, rather than being handed an arbitrary one.
+  def selection_for(slug, role)
+    target = role || "web"
+    <<~SH.strip
+      # Intersected with $ALL so the label lookup inherits the _replaced_ filter.
+      # Without that a labelled leftover wins here and the filter above is moot.
+      LABELLED=$(docker ps --format '{{.Names}}' --filter label=service=#{esc(slug)} --filter label=role=#{esc(target)})
+      # POSIX intersection. `grep -Fxf <(...)` reads naturally and is a BASHISM —
+      # remote commands run through `sh -c`, where process substitution is a
+      # syntax error, so it would have failed only in production.
+      C=""
+      for n in $LABELLED; do
+        if printf '%s\n' "$ALL" | grep -qxF "$n"; then C="$n"; break; fi
+      done
+      [ -z "$C" ] && C=$(printf '%s\n' "$ALL" | grep -E '(^|[-_])#{esc_word(target)}$' | head -1)
+    SH
+  end
+
+  # container name, the full container list, then the log body.
   def split(raw)
     head, _, tail = raw.to_s.partition("\n#{SEPARATOR}\n")
-    [ head.strip, tail.to_s ]
+    name, _, listing = head.to_s.partition("\n#{CONTAINERS}\n")
+    [ name.strip, listing.split("\n").map(&:strip).reject(&:blank?), tail.to_s ]
   end
 
   def timestamp_of(line)
@@ -153,4 +227,9 @@ class AppLogsTool
   end
 
   def esc(value) = value.gsub(/[^a-zA-Z0-9_\-.]/, "")
+
+  # esc() keeps `.`, which is a regex metacharacter — harmless in a docker filter
+  # value, not harmless in the grep patterns above, where `role: "a.b"` would match
+  # a container it should not. A role is a word, so a dot is simply not allowed.
+  def esc_word(value) = value.to_s.gsub(/[^a-zA-Z0-9_\-]/, "")
 end

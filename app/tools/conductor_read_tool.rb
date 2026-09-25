@@ -46,6 +46,7 @@ class ConductorReadTool
         deployment_id:   { type: "integer", description: "deployment: a specific deployment" },
         app_id:          { type: "integer", description: "deployment/app_logs: target app by id" },
         app_name:        { type: "string",  description: "deployment/app_logs: target app by name" },
+        role:            { type: "string",  description: "app_logs: which container to read — web (default), queue, scheduler, or any role this app runs. Matched on the kamal role label, then on the container name for apps deployed outside kamal. If that role is not running, the reply names the ones that are rather than quietly reading a different container." },
         tail:            { type: "integer", description: "deployment/app_logs: only the last N log lines" }
       },
       required: %w[action]

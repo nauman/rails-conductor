@@ -84,8 +84,8 @@ class KamalOps
     nil
   end
 
-  def logs(tail: DEFAULT_TAIL)
-    run(gateway.logs(lines: bounded(tail)))
+  def logs(tail: DEFAULT_TAIL, role: nil)
+    run(gateway.logs(lines: bounded(tail), role: role))
   end
 
   # A command in the live release, through kamal rather than a hand-built

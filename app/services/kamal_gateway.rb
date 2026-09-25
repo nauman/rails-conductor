@@ -10,7 +10,7 @@ class KamalGateway
   def exec_live(command, interactive: false, version: nil)
     @commands.app_exec(command, interactive: interactive, version: version)
   end
-  def logs(lines:) = @commands.app_logs(lines: lines)
+  def logs(lines:, role: nil) = @commands.app_logs(lines: lines, role: role)
   def details = @commands.app_details
   def edge_proxy(action) = @commands.proxy(action)
   def maintenance(message: nil) = @commands.app_maintenance(message: message)
