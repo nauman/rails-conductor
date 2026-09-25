@@ -1,14 +1,16 @@
 # GoReleaser for the conductor CLI.
 #
-# This CLI is a nested Go module in a Rails repo, which constrains the tag shape:
-# `go install .../cli/cmd/conductor@v0.1.0` only resolves if the tag is
-# `cli/v0.1.0`. That prefix is a Go module rule, not a preference.
+# This CLI is a nested Go module in a Rails repo, and the two tools disagree
+# about tag shape. Go requires `cli/v0.1.0` — `go install
+# .../cli/cmd/conductor@v0.1.0` resolves from nothing else. GoReleaser OSS
+# parses the current tag as semver and refuses a prefixed one; handling them is
+# the Pro `monorepo:` feature.
 #
-# GoReleaser's `monorepo:` block handles prefixed tags, but it is a Pro feature.
-# So the version travels in CLI_VERSION instead: bin/release derives it from the
-# tag, strips the `cli/v` prefix, and exports it. Every template below uses
-# {{ .Env.CLI_VERSION }} rather than {{ .Version }}, because .Version would carry
-# the slash and put it into archive filenames.
+# So bin/release-cli cuts BOTH tags on the same commit and points GoReleaser at
+# the plain one. The version still travels in CLI_VERSION and every template
+# below still uses {{ .Env.CLI_VERSION }} rather than {{ .Version }}: it is the
+# single place the version is stated, and it stays correct whichever tag a
+# future run is pointed at.
 #
 # Run it through `bin/release`, never by hand and never from a push hook. The
 # gate is local and is the authority; a release is something a person decides.
@@ -123,8 +125,9 @@ release:
 
         go install github.com/nauman/rails-conductor/cli/cmd/conductor@v{{ .Env.CLI_VERSION }}
 
-    The tag is `cli/v{{ .Env.CLI_VERSION }}` because the CLI is a nested module;
-    Go maps the `@v...` you type onto it. Both name this release.
+    This release is tagged twice on one commit — `v{{ .Env.CLI_VERSION }}` and
+    `cli/v{{ .Env.CLI_VERSION }}`. The prefixed one is what Go resolves for a
+    nested module; you never type the prefix yourself.
 
 # Deliberately NOT configured, rather than configured and broken:
 #

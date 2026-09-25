@@ -13,7 +13,7 @@ binary on your `PATH`:
 
 ```sh
 # macOS (Apple silicon)
-curl -fsSL https://github.com/nauman/rails-conductor/releases/latest/download/conductor_0.1.0_Darwin_arm64.tar.gz \
+curl -fsSL https://github.com/nauman/rails-conductor/releases/latest/download/conductor_0.1.0_darwin_arm64.tar.gz \
   | tar -xz -C /usr/local/bin conductor
 ```
 

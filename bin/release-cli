@@ -7,8 +7,9 @@
 # FIRST, and only tags and publishes if it is green — so a broken release is
 # refused before a tag exists, rather than after one is public.
 #
-# Tag shape is fixed by Go, not by taste: a nested module at cli/ resolves
-# `go install .../cli/cmd/conductor@v0.1.0` only from a `cli/v0.1.0` tag.
+# Two tags are cut, on the same commit: `cli/v0.1.0` for Go's nested-module
+# resolution and `v0.1.0` for GoReleaser, which refuses a prefixed tag. See the
+# comment at the tag= line.
 set -eu
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
@@ -22,7 +23,25 @@ version=$(printf '%s' "$1" | sed 's/^v//')
 echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   || die "not a semver version: $1"
 
+# TWO TAGS, ON ONE COMMIT, AND BOTH ARE LOAD-BEARING.
+#
+#   cli/v0.1.0  is what Go requires. A nested module at cli/ resolves
+#               `go install .../cli/cmd/conductor@v0.1.0` only from this tag.
+#   v0.1.0      is what GoReleaser requires. OSS parses the current tag as
+#               semver and REFUSES a prefixed one — `failed to parse tag
+#               'cli/v0.1.0' as semver`. Handling prefixed tags is the Pro
+#               `monorepo:` feature.
+#
+# Neither tool will accept the other's shape, and neither is wrong to insist.
+# Two annotated tags on the same commit satisfies both and costs nothing; the
+# repo releases one artifact, so a bare v0.1.0 is not ambiguous.
+#
+# This is worth spelling out because the first diagnosis was that GoReleaser
+# could not parse the prefix at all, and a `goreleaser release --skip=validate`
+# run appeared to disprove it — validate is the step that parses the tag. The
+# skip that made the check pass was the check.
 tag="cli/v$version"
+release_tag="v$version"
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
@@ -50,6 +69,7 @@ $untracked
 Commit them, or add them to .gitignore."
 
 git rev-parse "$tag" >/dev/null 2>&1 && die "tag $tag already exists"
+git rev-parse "$release_tag" >/dev/null 2>&1 && die "tag $release_tag already exists"
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" = "main" ] || die "releases are cut from main, not $branch"
@@ -83,14 +103,16 @@ printf 'Build check: every platform, publishing nothing\n'
 (cd cli && CLI_VERSION="$version" goreleaser build --snapshot --clean >/dev/null) \
   || die "the release build failed — not tagging. Run: cd cli && CLI_VERSION=$version goreleaser build --snapshot"
 
-printf 'Tagging %s\n' "$tag"
+printf 'Tagging %s and %s\n' "$tag" "$release_tag"
 git tag -a "$tag" -m "conductor CLI v$version"
+git tag -a "$release_tag" -m "conductor CLI v$version"
 
-# Push the tag before publishing: GoReleaser builds the release against it, and
-# a release whose tag never reached the remote is a dead link.
-if ! git push origin "$tag"; then
-  git tag -d "$tag" >/dev/null 2>&1 || true
-  die "could not push $tag — the local tag was removed so you can retry cleanly"
+# Push both before publishing: GoReleaser builds the release against the plain
+# tag, Go resolves the prefixed one, and either of them missing from the remote
+# is a dead link for somebody.
+if ! git push origin "$tag" "$release_tag"; then
+  git tag -d "$tag" "$release_tag" >/dev/null 2>&1 || true
+  die "could not push the tags — both local tags were removed so you can retry cleanly"
 fi
 
 # The gate and the snapshot ran against the tree as it was minutes ago, and
@@ -104,14 +126,15 @@ The tag $tag is pushed; delete it if you are not retrying:
 printf 'Publishing\n'
 CLI_VERSION="$version"
 export CLI_VERSION
-# GORELEASER_CURRENT_TAG tells OSS GoReleaser which tag it is releasing; without
-# it, it looks for the newest plain-semver tag and would not find this one.
-GORELEASER_CURRENT_TAG="$tag"
+# The PLAIN tag: this is the one GoReleaser can parse. Set explicitly rather
+# than left to discovery, so a stray tag elsewhere in the repo cannot become the
+# release GoReleaser thinks it is publishing.
+GORELEASER_CURRENT_TAG="$release_tag"
 export GORELEASER_CURRENT_TAG
 
 if ! (cd cli && goreleaser release --clean); then
-  printf '\nPublish failed. The tag %s is pushed; delete it if you are not retrying:\n' "$tag" >&2
-  printf '  git push --delete origin %s && git tag -d %s\n' "$tag" "$tag" >&2
+  printf '\nPublish failed. Both tags are pushed; delete them if you are not retrying:\n' >&2
+  printf '  git push --delete origin %s %s && git tag -d %s %s\n' "$tag" "$release_tag" "$tag" "$release_tag" >&2
   exit 1
 fi
 
