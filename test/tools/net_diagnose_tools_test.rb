@@ -101,14 +101,26 @@ class NetDiagnoseToolsTest < ActiveSupport::TestCase
     end }
   end
 
-  # The hold itself must be asserted, or it could be lifted by accident.
-  test "unban_cloudflare refuses while it is held pending audit" do
-    out = UnbanCloudflareTool.new(user: @user).call("server_id" => @server.id, "confirm" => true)
+  # THE HOLD, exercised with something held. unban_cloudflare was released on
+  # 2026-09-25 after three adversarial rounds, so the list is empty — and a
+  # refusal path only tested while something happens to be in it is a refusal
+  # path that rots. The tool reads the list rather than naming a wrapper, so
+  # this is the behaviour any future hold will produce.
+  test "a tool whose wrapper is held pending audit refuses, and says what can be done instead" do
+    ServerSudo.stub_const_pending_audit([ ServerSudo::UNBAN_CLOUDFLARE ]) do
+      out = UnbanCloudflareTool.new(user: @user).call("server_id" => @server.id, "confirm" => true)
 
-    assert_not out.success?
-    assert_match(/held pending an independent security audit/, out.error)
-    assert_match(/net_diagnose/, out.error, "the refusal should name what the operator CAN do")
-    assert_includes ServerSudo::WRAPPERS_PENDING_AUDIT, ServerSudo::UNBAN_CLOUDFLARE
+      assert_not out.success?
+      assert_match(/held pending an independent security audit/, out.error)
+      assert_match(/net_diagnose/, out.error, "the refusal should name what the operator CAN do")
+    end
+  end
+
+  # And the release itself, asserted — so reverting it silently is a red test
+  # rather than a capability that quietly stops existing.
+  test "unban_cloudflare is released and installed" do
+    assert_empty ServerSudo::WRAPPERS_PENDING_AUDIT
+    assert_includes ServerSudo::WRAPPERS, ServerSudo::UNBAN_CLOUDFLARE
   end
 
   test "both tools fail cleanly when the host cannot be read" do

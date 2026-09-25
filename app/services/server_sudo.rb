@@ -23,20 +23,24 @@ module ServerSudo
   NET_DIAGNOSE     = "#{WRAPPER_DIR}/conductor-net-diagnose".freeze              # read-only host network state
   UNBAN_CLOUDFLARE = "#{WRAPPER_DIR}/conductor-unban-cloudflare".freeze          # confirm-gated, Cloudflare ranges only
   WRAPPERS         = [ CHECK, SECURITY_UPDATES, ALL_UPDATES, REBOOT, RECLAIM_SWAP,
-                       NET_DIAGNOSE ].freeze
+                       NET_DIAGNOSE, UNBAN_CLOUDFLARE ].freeze
 
-  # HELD PENDING AN INDEPENDENT ADVERSARIAL AUDIT (codex rate-limited until
-  # 2026-09-27). Listed here rather than deleted so the audit has the exact script
-  # to review and the tests keep exercising it.
+  # THE HOLD MECHANISM, currently holding nothing. A wrapper listed here and not
+  # in WRAPPERS is never written to a host and never named in the sudoers grant,
+  # so the capability does not exist on any box — while the script stays in the
+  # tree for an auditor to read and for the tests to keep running it. Hiding only
+  # the MCP action would hold nothing: the wrapper would still be installed
+  # root-owned everywhere the next time anything elevated.
   #
-  # Being in this list and not WRAPPERS means it is NEVER WRITTEN to a host and
-  # never named in the sudoers grant — the capability does not exist on any box.
-  # Hiding the MCP action alone would not hold anything: the wrapper would still
-  # be installed root-owned on every server the next time anything elevated.
+  # unban_cloudflare was held here through three adversarial rounds and twelve
+  # findings — including a Python module the caller could have supplied and had
+  # executed with root privileges, and an IPv6 prefix floor that refused
+  # Cloudflare's real published list. Released 2026-09-25 on a SAFE TO DEPLOY verdict, by the
+  # operator, not by the author.
   #
-  # To release it: move the constant into WRAPPERS and drop the guard in
-  # UnbanCloudflareTool. Two lines, once someone who did not write it has looked.
-  WRAPPERS_PENDING_AUDIT = [ UNBAN_CLOUDFLARE ].freeze
+  # UnbanCloudflareTool reads this list rather than naming a wrapper, so putting
+  # a constant back here is the entire hold. One line, either direction.
+  WRAPPERS_PENDING_AUDIT = [].freeze
   SUDOERS_FILE     = "/etc/sudoers.d/conductor".freeze
 
   # A Unix account name. Validated because #grant_command interpolates it into a
@@ -61,7 +65,7 @@ module ServerSudo
     unless res[:success] && res[:exit_code].to_i.zero?
       stderr = res[:stderr].to_s
       return Probe.new(status: :unreachable, missing: [], detail: stderr.presence || "host did not answer") if unreachable?(stderr)
-      return Probe.new(status: :no_grant, missing: WRAPPERS, detail: stderr.presence || "sudo -n #{CHECK} failed")
+      return Probe.new(status: :no_grant, missing: installed_wrappers, detail: stderr.presence || "sudo -n #{CHECK} failed")
     end
 
     begin
@@ -84,11 +88,11 @@ module ServerSudo
   class InventoryUnavailable < StandardError; end
 
   def missing_wrappers(ssh)
-    listing = ssh.execute_with_status("for w in #{WRAPPERS.join(' ')}; do [ -x \"$w\" ] || echo \"$w\"; done")
+    listing = ssh.execute_with_status("for w in #{installed_wrappers.join(' ')}; do [ -x \"$w\" ] || echo \"$w\"; done")
     raise InventoryUnavailable, listing[:stderr].to_s unless listing[:success]
 
     raw = listing[:stdout].presence || listing[:output]
-    raw.to_s.split("\n").map(&:strip).select { |w| WRAPPERS.include?(w) }
+    raw.to_s.split("\n").map(&:strip).select { |w| installed_wrappers.include?(w) }
   end
 
   def ready?(ssh) = probe(ssh).ready?
@@ -156,9 +160,10 @@ module ServerSudo
     const_set(:WRAPPERS_PENDING_AUDIT, original)
   end
 
-  def pending_wrapper_script(path)
-    raise ArgumentError, "#{path} is not pending audit" unless WRAPPERS_PENDING_AUDIT.include?(path)
-
+  # Its own method rather than inlined into #grant_command: it is the longest
+  # wrapper here by a wide margin, and burying it between two others is how the
+  # last defect in it went unread.
+  def unban_cloudflare_script
     <<~SH
         #!/bin/sh
         # Unban every fail2ban entry that falls inside Cloudflare's published ranges,
@@ -182,7 +187,7 @@ module ServerSudo
         # HARDEN WHAT WAS INHERITED. sudo keeps the CALLER'S working directory,
         # and `python3 -c` puts that directory first on sys.path — so a file named
         # ipaddress.py wherever the deploy user happened to be would be imported
-        # and run AS ROOT, and could exit 0 to make every ban look like
+        # and executed with root privileges, and could exit 0 to make every ban look like
         # Cloudflare's. That needs no crafted fail2ban output and no preserved
         # environment variable; it was the most serious finding in the audit.
         #
@@ -394,39 +399,40 @@ module ServerSudo
     SH
   end
 
-  def grant_command(server, user: nil)
-    user ||= server.ssh_user_or_default
-    raise UnsafeUser, "refusing to build a sudoers grant for #{user.inspect}" unless user.to_s.match?(SAFE_USER)
 
-    <<~SH.strip
-      # Fail-closed. Without this a failed `visudo -cf` did not stop the `mv` that
-      # follows it, so the validation step this file advertises was decorative and
-      # an invalid sudoers file could still be installed.
-      set -e
-      sudo install -d -m 0755 #{WRAPPER_DIR}
-      sudo tee #{CHECK} >/dev/null <<'CONDUCTOR'
+  # THE SCRIPTS, KEYED BY THE PATH THEY ARE INSTALLED AT.
+  #
+  # They used to be seven inline heredocs in #grant_command, and the hold
+  # mechanism was not a mechanism: unban_cloudflare was held only because its
+  # block was absent from that method entirely. Every other wrapper would have
+  # been written and granted however loudly WRAPPERS_PENDING_AUDIT listed it.
+  # Now #wrapper_blocks emits from this table, filtered by WRAPPERS, so holding
+  # any of them is the same one line.
+  def wrapper_scripts
+    {
+      CHECK => <<~SH.strip,
       #!/bin/sh
       exit 0
-      CONDUCTOR
-      sudo tee #{SECURITY_UPDATES} >/dev/null <<'CONDUCTOR'
+      SH
+      SECURITY_UPDATES => <<~SH.strip,
       #!/bin/sh
       set -e
       exec unattended-upgrade -v
-      CONDUCTOR
-      sudo tee #{ALL_UPDATES} >/dev/null <<'CONDUCTOR'
+      SH
+      ALL_UPDATES => <<~SH.strip,
       #!/bin/sh
       set -e
       export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l
       apt-get update -qq
       exec apt-get -y -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef upgrade
-      CONDUCTOR
-      sudo tee #{REBOOT} >/dev/null <<'CONDUCTOR'
+      SH
+      REBOOT => <<~SH.strip,
       #!/bin/sh
       # Schedule a few seconds out so the triggering SSH command returns cleanly
       # instead of dying with the connection as the box goes down.
       exec systemd-run --quiet --on-active=3s --timer-property=AccuracySec=100ms systemctl reboot
-      CONDUCTOR
-      sudo tee #{RECLAIM_SWAP} >/dev/null <<'CONDUCTOR'
+      SH
+      RECLAIM_SWAP => <<~SH.strip,
       #!/bin/sh
       # Force swapped-out pages back into RAM, then put swap back exactly as it was.
       #
@@ -476,8 +482,8 @@ module ServerSudo
         exit 5
       fi
       echo "reclaimed ${used}K; ${active} swap device(s) active"
-      CONDUCTOR
-      sudo tee #{NET_DIAGNOSE} >/dev/null <<'CONDUCTOR'
+      SH
+      NET_DIAGNOSE => <<~SH.strip,
       #!/bin/sh
       # Read-only host network state — the three questions every 522 investigation
       # ends on, which Conductor previously could not ask: who is banned, what is
@@ -581,13 +587,43 @@ module ServerSudo
           || echo "nstat not installed"
       fi
       exit 0
-      CONDUCTOR
-      sudo chmod 0755 #{WRAPPERS.join(' ')}
-      sudo chown root:root #{WRAPPERS.join(' ')}
+      SH
+      UNBAN_CLOUDFLARE => unban_cloudflare_script.strip
+    }
+  end
+
+  # THE ONE DEFINITION OF WHAT A BOX SHOULD HAVE. Every place that writes,
+  # chmods, chowns, grants or probes a wrapper reads this, so a hold cannot be
+  # honoured in one of them and forgotten in another — which is exactly what
+  # happened when the hold lived in a separate method instead of a filter.
+  def installed_wrappers = WRAPPERS - WRAPPERS_PENDING_AUDIT
+
+  # Emitted in installed order, which is also the order sudoers grants them, so
+  # a wrapper cannot be installed without being granted or the reverse.
+  def wrapper_blocks
+    installed_wrappers.map do |path|
+      script = wrapper_scripts.fetch(path)
+      "sudo tee #{path} >/dev/null <<'CONDUCTOR'\n#{script}\nCONDUCTOR"
+    end.join("\n")
+  end
+
+  def grant_command(server, user: nil)
+    user ||= server.ssh_user_or_default
+    raise UnsafeUser, "refusing to build a sudoers grant for #{user.inspect}" unless user.to_s.match?(SAFE_USER)
+
+    <<~SH.strip
+      # Fail-closed. Without this a failed `visudo -cf` did not stop the `mv` that
+      # follows it, so the validation step this file advertises was decorative and
+      # an invalid sudoers file could still be installed.
+      set -e
+      sudo install -d -m 0755 #{WRAPPER_DIR}
+      #{wrapper_blocks}
+      sudo chmod 0755 #{installed_wrappers.join(' ')}
+      sudo chown root:root #{installed_wrappers.join(' ')}
       # Stage, validate, THEN install. An invalid sudoers file written in place locks
       # every privileged op out of the box, and the way back in is the root login
       # this whole design exists to avoid needing.
-      echo '#{user} ALL=(root) NOPASSWD: #{WRAPPERS.join(', ')}' | sudo tee #{SUDOERS_FILE}.new >/dev/null
+      echo '#{user} ALL=(root) NOPASSWD: #{installed_wrappers.join(', ')}' | sudo tee #{SUDOERS_FILE}.new >/dev/null
       sudo chmod 0440 #{SUDOERS_FILE}.new
       sudo visudo -cf #{SUDOERS_FILE}.new >/dev/null
       sudo mv #{SUDOERS_FILE}.new #{SUDOERS_FILE}

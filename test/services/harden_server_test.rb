@@ -137,8 +137,11 @@ class HardenServerTest < ActiveSupport::TestCase
     root = FakeSsh.new
     harden(root: root, deploy: FakeSsh.new(output: "DEPLOY_SUDO_OK"))
 
-    # `ignoreip = ` is jail.local syntax; `ignoreip` alone is also a fail2ban-client subcommand.
-    fw = root.commands.find { |c| c.include?("jail.d/00-conductor-allowlist.local") }
+    # Matched on the WRITE, not on the filename. The unban wrapper's closing note
+    # names this same path when it tells an operator how to persist an ignoreip,
+    # so a filename match now finds the sudoers grant first and asserts against
+    # the wrong command entirely.
+    fw = root.commands.find { |c| c.include?("sudo tee /etc/fail2ban/jail.d/00-conductor-allowlist.local") }
     assert fw, "firewall step must configure a fail2ban allowlist"
     assert_match(/SSH_CLIENT/, fw, "must whitelist the IP Conductor connects from")
     assert_match(/ignoreip = 127\.0\.0\.1/, fw)

@@ -18,12 +18,7 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
 
   def grant = ServerSudo.grant_command(DEPLOY.new("deploy"))
 
-  # A wrapper HELD pending audit is not written by grant_command, so it is fetched
-  # from its own accessor. The tests must keep running it: holding a capability
-  # back is not a reason to stop exercising it, and the audit needs it working.
   def wrapper(name)
-    return ServerSudo.pending_wrapper_script(name) if ServerSudo::WRAPPERS_PENDING_AUDIT.include?(name)
-
     body = grant[/#{Regexp.escape(name)} >\/dev\/null <<.CONDUCTOR.\n(.*?)\nCONDUCTOR\n/m, 1]
     assert body, "could not extract #{name} from the grant command"
     body
@@ -32,16 +27,32 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
   # The heredoc invariant. Ruby's <<~ strips the SMALLEST indentation in the
   # block, so one flush-left line anywhere silently un-indents the terminators and
   # breaks every wrapper at once.
-  # The held wrapper must not reach a host: not written, not named in sudoers.
-  # Hiding only the MCP action would leave it installed root-owned everywhere.
+  # THE HOLD MECHANISM, tested with the list empty. unban_cloudflare was held
+  # through three adversarial rounds and is now released, so nothing is pending —
+  # but the mechanism is what makes a future hold one line instead of a revert,
+  # and a mechanism only exercised while something is in it rots while unused.
   test "a wrapper held pending audit is never installed or granted" do
-    script = grant
-    ServerSudo::WRAPPERS_PENDING_AUDIT.each do |path|
-      assert_not_includes script, path,
-                          "#{path} is held pending audit and must not be written or granted"
+    assert_empty ServerSudo::WRAPPERS_PENDING_AUDIT,
+                 "nothing is held today; update this test deliberately if that changes"
+
+    ServerSudo.stub_const_pending_audit([ ServerSudo::NET_DIAGNOSE ]) do
+      script = ServerSudo.grant_command(DEPLOY.new("deploy"))
+
+      assert_not_includes script, ServerSudo::NET_DIAGNOSE,
+                          "a held wrapper must not be written to a host or named in sudoers"
+      assert_includes script, ServerSudo::UNBAN_CLOUDFLARE,
+                       "and holding one must not withdraw the others"
     end
-    assert ServerSudo.pending_wrapper_script(ServerSudo::UNBAN_CLOUDFLARE).present?,
-           "the held script must still be renderable for the audit and these tests"
+  end
+
+  # The released wrapper is installed and granted like any other. This is the
+  # assertion that would fail if someone reverted the release without saying so.
+  test "unban-cloudflare is installed and granted" do
+    script = grant
+
+    assert_includes script, "sudo tee #{ServerSudo::UNBAN_CLOUDFLARE}"
+    assert_includes script, "NOPASSWD:"
+    assert_match(/NOPASSWD:[^\n]*#{Regexp.escape(ServerSudo::UNBAN_CLOUDFLARE)}/, script)
   end
 
   test "every wrapper heredoc terminator renders flush left" do
