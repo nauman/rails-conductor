@@ -142,6 +142,22 @@ class HardenServerTest < ActiveSupport::TestCase
     assert fw, "firewall step must configure a fail2ban allowlist"
     assert_match(/SSH_CLIENT/, fw, "must whitelist the IP Conductor connects from")
     assert_match(/ignoreip = 127\.0\.0\.1/, fw)
+    # Under [DEFAULT], so it covers every jail. Under [sshd] it covered one, and
+    # the first web or proxy jail added anywhere would have left the management
+    # IP bannable by it.
+    assert_match(/\[DEFAULT\]\\nignoreip = /, fw,
+                 "the allowlist must apply to every jail, not only sshd")
+  end
+
+  # The follow-up from the Cloudflare 522 work: `fail2ban-client set ... addignoreip`
+  # is RUNTIME only and does not survive a restart. This file is what persists, and
+  # it has to accept a CIDR for that to be usable.
+  test "the persistent allowlist accepts CIDR ranges, not only bare addresses" do
+    ENV["CONDUCTOR_FAIL2BAN_ALLOWLIST"] = "173.245.48.0/20, 2400:cb00::/32"
+
+    assert_equal "173.245.48.0/20 2400:cb00::/32", HardenServer.operator_allowlist
+  ensure
+    ENV.delete("CONDUCTOR_FAIL2BAN_ALLOWLIST")
   end
 
   test "includes the operator's configured trusted IPs in the fail2ban allowlist" do

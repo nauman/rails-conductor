@@ -359,7 +359,11 @@ module ServerSudo
         # address released from three jails is three bans — reporting that as
         # "3 addresses" tells the reader the box was in worse shape than it was.
         echo "released ${unbanned} ban(s) inside Cloudflare ranges"
-        echo "NOTE: ignoreip changes are RUNTIME only - add them to jail.local to survive a restart"
+        # Say WHERE, not just "somewhere". "Add them to jail.local" is an instruction
+        # nobody can follow without already knowing the answer.
+        echo "NOTE: these ignoreip changes are RUNTIME only and are lost on a fail2ban restart."
+        echo "      To persist them, set CONDUCTOR_FAIL2BAN_ALLOWLIST (addresses or CIDRs) and"
+        echo "      re-run harden, which writes /etc/fail2ban/jail.d/00-conductor-allowlist.local."
         exit 0
     SH
   end

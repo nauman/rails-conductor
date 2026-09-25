@@ -108,8 +108,20 @@ class HardenServer
       # a box Conductor owns. $SSH_CLIENT's first field is Conductor's source IP;
       # the operator's trusted IPs come from CONDUCTOR_FAIL2BAN_ALLOWLIST.
       client_ip="${SSH_CLIENT%% *}"
+      #
+      # [DEFAULT], NOT [sshd]. Today sshd is the only jail this script configures,
+      # so the distinction looks academic — but ignoreip under [sshd] protects
+      # exactly one jail, and the moment a web or proxy jail is added anywhere the
+      # allowlist silently stops covering the management IP it exists to protect.
+      # [DEFAULT] applies to every jail, present and future.
+      #
+      # This file is also the ANSWER to "ignoreip set through fail2ban-client is
+      # runtime only". Anything that must survive a restart — including Cloudflare
+      # ranges, if an operator decides they want them exempt — belongs in
+      # CONDUCTOR_FAIL2BAN_ALLOWLIST, which is written here and persists.
+      # CIDRs are accepted, not just bare addresses.
       sudo mkdir -p /etc/fail2ban/jail.d
-      printf '[sshd]\\nignoreip = 127.0.0.1/8 ::1 %s #{self.class.operator_allowlist}\\nbantime = 1h\\n' "$client_ip" | sudo tee /etc/fail2ban/jail.d/00-conductor-allowlist.local >/dev/null
+      printf '[DEFAULT]\\nignoreip = 127.0.0.1/8 ::1 %s #{self.class.operator_allowlist}\\n\\n[sshd]\\nbantime = 1h\\n' "$client_ip" | sudo tee /etc/fail2ban/jail.d/00-conductor-allowlist.local >/dev/null
       sudo ufw --force enable >/dev/null
       sudo systemctl enable fail2ban >/dev/null 2>&1 || true
       sudo systemctl restart fail2ban >/dev/null 2>&1 || sudo systemctl start fail2ban >/dev/null 2>&1 || true
