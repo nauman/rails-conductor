@@ -4,7 +4,7 @@
 
 Conductor isn't a hosting platform and it doesn't lock you into one deployment style. It connects to servers you already own over SSH, and turns Caddy, Postgres, backups, and provider APIs into one coherent operational layer.
 
-> **Status:** early and honest. The fleet dashboard, SSH execution, Docker deploys, backups, alerts, recurring jobs, and a baseline Caddy client work today. Routing, provider automation, restore, and drift detection are in progress. See [`documents/PILLARS.md`](documents/PILLARS.md) for the real maturity of each area.
+> **Status:** early and honest. The fleet dashboard, SSH execution, Docker deploys, backups, alerts, recurring jobs, and a baseline Caddy client work today. Routing, provider automation, restore, and drift detection are in progress. See the [product docs](https://kuickr.co/conductor/docs/00-index.md) for the real maturity of each area.
 
 ---
 
@@ -49,7 +49,7 @@ Run the tests:
 bin/rails test
 ```
 
-See [`documents/USAGE.md`](documents/USAGE.md) for the full walkthrough of the web UI, JSON API and MCP server.
+See the [product docs](https://kuickr.co/conductor/docs/00-index.md) for the full walkthrough of the web UI, JSON API and MCP server.
 
 ## How You Use It
 
@@ -63,8 +63,7 @@ See [`documents/USAGE.md`](documents/USAGE.md) for the full walkthrough of the w
 
 ## Documentation
 
-- [`documents/USAGE.md`](documents/USAGE.md) — how to use Conductor
-- [`documents/PILLARS.md`](documents/PILLARS.md) — the seven product pillars and where help is wanted
+- [Product docs](https://kuickr.co/conductor/docs/00-index.md) — usage, the product pillars, and where help is wanted
 - [`documents/roadmap/`](documents/roadmap/) — the delivery sequence and one page per capability
 - [kuickr.co/conductor](https://kuickr.co/conductor/docs/00-index.md) — the published docs hub (guides, roadmap)
 
@@ -72,7 +71,7 @@ See [`documents/USAGE.md`](documents/USAGE.md) for the full walkthrough of the w
 
 Contributions are welcome. The fastest way in:
 
-1. Read [`documents/PILLARS.md`](documents/PILLARS.md) and pick a pillar — each lists concrete "where help is wanted" entry points.
+1. Read the [product docs](https://kuickr.co/conductor/docs/00-index.md) and pick a pillar — each lists concrete "where help is wanted" entry points.
 2. Skim the matching page in [`documents/roadmap/`](documents/roadmap/).
 3. Open an issue or PR. See [`AGENTS.md`](AGENTS.md) for collaboration and documentation conventions.
 
