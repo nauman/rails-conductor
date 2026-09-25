@@ -124,6 +124,14 @@ class HostNetworkDiagnosisTest < ActiveSupport::TestCase
     end
   end
 
+  test "uppercase and expanded IPv6 spellings are accepted" do
+    with_body("2400:CB00:0000::/32\n2606:4700::/32\n2803:F800::/32\n2405:b500::/32\n") do |diagnosis|
+      ranges = diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V6)
+
+      assert_equal 4, ranges.size, "a host-bits check must not become a spelling check"
+    end
+  end
+
   test "the wrong address family is refused" do
     with_body("198.51.100.0/24\n198.51.101.0/24\n198.51.102.0/24\n198.51.103.0/24\n") do |diagnosis|
       assert_raises(HostNetworkDiagnosis::RangeFetchError) do

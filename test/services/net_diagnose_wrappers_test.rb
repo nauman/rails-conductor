@@ -294,7 +294,14 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
 
   test "unban refuses when fail2ban is absent rather than reporting success" do
     in_a_sandbox do |dir|
-      File.write(File.join(dir, "unban.sh"), wrapper(ServerSudo::UNBAN_CLOUDFLARE))
+      # POINTED AT AN EMPTY DIRECTORY, not left to the pin. `run_shell_with_empty_path`
+      # used to be the whole isolation, and the pinned PATH overrides it — so on a
+      # host with a working fail2ban this test would have reached the REAL one,
+      # and as root it would have fetched real ranges and changed real bans.
+      empty = File.join(dir, "nothing")
+      FileUtils.mkdir_p(empty)
+      File.write(File.join(dir, "unban.sh"), with_stubbed_path(wrapper(ServerSudo::UNBAN_CLOUDFLARE), empty)
+                                               .sub(%r{^PATH=.*$}, "PATH=#{empty}"))
       _out, err, status = run_shell_with_empty_path("/bin/sh #{dir}/unban.sh")
 
       assert_equal 4, status

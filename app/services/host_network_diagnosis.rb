@@ -137,7 +137,12 @@ class HostNetworkDiagnosis
       # HOST BITS SET IS NOT A PREFIX. IPAddr masks them away silently, so
       # 198.51.100.4/30 through .7/30 arrive as four lines that are one network.
       # The published list never does this; a list that does is not it.
-      unless range.to_s == cidr.split("/").first
+      #
+      # Compared as ADDRESSES, not as strings. String comparison rejected
+      # `2400:CB00::/32` and every other legitimate uppercase or expanded IPv6
+      # spelling, which fails closed but would have refused a genuine list the
+      # day the endpoint changed how it writes one.
+      unless IPAddr.new(cidr.split("/").first) == range
         raise RangeFetchError, "#{url} returned #{cidr}, which has host bits set"
       end
 
