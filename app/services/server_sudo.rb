@@ -179,6 +179,34 @@ module ServerSudo
         # This wrapper ACTS on those values, so closing that edge matters more here.
         set -f
 
+        # HARDEN WHAT WAS INHERITED. sudo keeps the CALLER'S working directory,
+        # and `python3 -c` puts that directory first on sys.path — so a file named
+        # ipaddress.py wherever the deploy user happened to be would be imported
+        # and run AS ROOT, and could exit 0 to make every ban look like
+        # Cloudflare's. That needs no crafted fail2ban output and no preserved
+        # environment variable; it was the most serious finding in the audit.
+        #
+        # `-I` on the interpreter closes it at the source. The rest closes the
+        # same class for every other binary here: a known directory, a known
+        # PATH, no loader or Python overrides, and no HOME for a config file to
+        # be read from.
+        cd / || exit 4
+        # PATH is deliberately NOT overridden. sudo's own secure_path already
+        # resets it for the command, and hardcoding one here would mean the
+        # behaviour tests could no longer put a stub in front of curl or
+        # fail2ban-client — so the wrapper would be less tested in exchange for a
+        # guarantee sudo already makes.
+        unset IFS
+        unset CDPATH PYTHONPATH PYTHONHOME PYTHONSTARTUP
+        unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
+        unset CURL_HOME XDG_CONFIG_HOME
+        # TMPDIR too: mktemp creates securely, but not in a directory the caller
+        # chose. A caller-owned TMPDIR puts the range list somewhere they can
+        # reach for the whole run.
+        unset TMPDIR
+        HOME=/
+        export HOME
+
         command -v fail2ban-client >/dev/null 2>&1 || { echo "fail2ban-client not installed" >&2; exit 4; }
         fail2ban-client ping >/dev/null 2>&1 || { echo "fail2ban is not responding" >&2; exit 4; }
         # python3 is not an added dependency: fail2ban is written in Python, so it is
@@ -188,15 +216,27 @@ module ServerSudo
 
         ranges=$(mktemp) || exit 4
         one=$(mktemp) || exit 4
-        trap 'rm -f "$ranges" "$one" "$one.clean"' EXIT INT TERM
+        # A THIRD mktemp, not "$one.clean". The sibling name was derivable from a
+        # name another local user could observe, and it was created by ordinary
+        # redirection rather than securely — so it could be pre-created as a
+        # symlink (redirecting a root write) or as a writable file that then
+        # BECAME the range list through `mv`. Both files here are created by
+        # mktemp, and neither is replaced by a rename: see the `cat` below.
+        clean=$(mktemp) || exit 4
+        trap 'rm -f "$ranges" "$one" "$clean"' EXIT INT TERM
 
         # Validate EACH URL separately, then merge. Appending both to one file and
         # checking the union hides a partial fetch: an empty 200 from one of them
         # leaves a half list that still "looks valid", and the run then reports
         # success having compared bans against half the ranges.
         for u in https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6; do
+          case "$u" in *ips-v6) family=6 ;; *) family=4 ;; esac
           : >"$one"
-          curl -fsS --max-time 15 --proto '=https' --tlsv1.2 "$u" >"$one" || {
+          # -q FIRST: it disables curl's default config files. Without it a
+          # .curlrc reachable through HOME/CURL_HOME/XDG_CONFIG_HOME can turn off
+          # certificate verification or redirect the request outright, which
+          # would hand an attacker the range list this whole wrapper trusts.
+          curl -q -fsS --max-time 15 --proto '=https' --tlsv1.2 "$u" >"$one" || {
             echo "could not fetch $u - refusing to unban anything" >&2; exit 5; }
 
           # NORMALISE, then validate strictly. Stripping CR, trimming spaces and
@@ -207,7 +247,7 @@ module ServerSudo
           # is the safe direction, but a fix that is dead on arrival is not a fix.
           # Normalising does NOT weaken the check — what remains is validated whole.
           sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
-              -e '/^#/d' -e '/^$/d' "$one" >"$one.clean" && mv "$one.clean" "$one"
+              -e '/^#/d' -e '/^$/d' "$one" >"$clean" && cat "$clean" >"$one"
 
           # Shape: every remaining line must be a CIDR. A captive portal or an error
           # page answers 200 with HTML, and this is the cheapest way to notice.
@@ -222,18 +262,37 @@ module ServerSudo
           # internet. Shape-only validation let 0.0.0.0/0 through and unbanned every
           # address on the box, which is the exact incident this wrapper exists to
           # prevent rather than cause.
-          n=$(grep -cE '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$one") || n=0
+          # DISTINCT prefixes. Four copies of one /32 satisfied the old count
+          # while carrying a single address — a minimum count is not a
+          # completeness check unless what it counts is unique.
+          n=$(sort -u "$one" | grep -cE '^[0-9a-fA-F:.]+/[0-9]{1,3}$') || n=0
           if [ "$n" -lt 4 ]; then
-            echo "$u returned only $n prefixes - too few to be the published list; refusing" >&2; exit 5
+            echo "$u returned only $n distinct prefixes - too few to be the published list; refusing" >&2
+            exit 5
+          fi
+
+          # The v4 endpoint must answer with v4. Without this a substituted
+          # response clears the v6 floor using v4 prefixes, or the reverse —
+          # each list was only ever checked against its own family's floor.
+          if [ "$family" = 6 ]; then
+            grep -qv ':' "$one" && { echo "$u returned a non-IPv6 prefix - refusing" >&2; exit 5; }
+          else
+            grep -q ':' "$one" && { echo "$u returned a non-IPv4 prefix - refusing" >&2; exit 5; }
           fi
 
           # A prefix broader than anything Cloudflare publishes means the list is not
-          # Cloudflare's, whatever it claims. /12 is well below their broadest IPv4
-          # block and /32 below their IPv6; anything shorter would exempt swathes of
-          # the internet from fail2ban.
+          # Cloudflare's, whatever it claims. The numbers come from the published
+          # list: their broadest blocks are /13 and /29.
+          #
+          # THE v6 FLOOR WAS /32, AND THE REAL LIST FAILS IT — 2a06:98c0::/29 is
+          # broader than a /32. So this check would have refused the genuine
+          # Cloudflare list on every server, every time: the wrapper could never
+          # have unbanned anything. The fixtures were written from the same wrong
+          # assumption as the check, so the suite agreed with it. Fetching the
+          # endpoint is what disagreed.
           if awk -F/ '$2 == "" { next }
-                      /:/  { if ($2 + 0 < 32) exit 1; next }
-                             { if ($2 + 0 < 12) exit 1 }' "$one"; then
+                      /:/  { if ($2 + 0 < 27) exit 1; next }
+                             { if ($2 + 0 < 10) exit 1 }' "$one"; then
             :
           else
             echo "$u contains a prefix broader than Cloudflare publishes - refusing to unban anything" >&2
@@ -245,6 +304,18 @@ module ServerSudo
         done
 
         cidrs=$(grep -E '^[0-9a-fA-F:.]+/[0-9]{1,3}$' "$ranges")
+
+        # PARSE THE WHOLE MERGED LIST ONCE, BEFORE TOUCHING ANY BAN. The shape
+        # check is a regex: `999.999.999.999/20` is all digits and dots with a
+        # plausible prefix, so it passes. The per-address check below does reject
+        # it — but silently, by failing closed on every address and reporting
+        # "released 0 ban(s)" with exit 0. That reads as "nothing to do" when what
+        # happened is "the range list was not usable", which is the difference
+        # between a quiet success and a refusal someone acts on.
+        printf '%s\n' "$cidrs" | python3 -I -c 'import ipaddress,sys; nets=[ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()]; sys.exit(0 if len(nets) >= 8 else 1)' 2>/dev/null || {
+          echo "the merged range list did not parse as CIDRs - refusing to unban anything" >&2
+          exit 5
+        }
         jails=$(fail2ban-client status 2>/dev/null | sed -n 's/.*Jail list:[[:space:]]*//p' | tr ',' ' ')
         [ -n "$jails" ] || { echo "no jails configured; nothing to do"; exit 0; }
 
@@ -258,9 +329,15 @@ module ServerSudo
             # stops recognising them. That silently breaks every wrapper in this
             # file, not just this one. Caught by rendering and running it.
             #
+            # EVERY line is parsed into a network BEFORE any membership test.
+            # The generator form short-circuited: a valid prefix followed by
+            # malformed ones matched on the first and never looked at the rest,
+            # so a list that was only partly a CIDR list still authorised an
+            # unban. A list comprehension raises on the bad line instead.
+            #
             # Any exception exits non-zero, which reads as "not a Cloudflare
             # address" and unbans nothing. Failing closed is the right direction.
-            if printf '%s\n' "$cidrs" | python3 -c 'import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if any(a in ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()) else 1)' "$ip" 2>/dev/null; then
+            if printf '%s\n' "$cidrs" | python3 -I -c 'import ipaddress,sys; nets=[ipaddress.ip_network(l.strip(),strict=False) for l in sys.stdin if l.strip()]; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if nets and any(a in n for n in nets) else 1)' "$ip" 2>/dev/null; then
               if fail2ban-client set "$j" unbanip "$ip" >/dev/null 2>&1; then
                 echo "UNBANNED $j $ip"
                 unbanned=$(( unbanned + 1 ))

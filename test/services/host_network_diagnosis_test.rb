@@ -61,6 +61,75 @@ class HostNetworkDiagnosisTest < ActiveSupport::TestCase
     assert result.banned.none?(&:cloudflare?), "nothing may be claimed as Cloudflare without the ranges"
   end
 
+  # THE PUBLISHED LIST MUST PASS. Every check below refuses something; this is
+  # the one that proves they do not refuse Cloudflare. It is pinned to the real
+  # response, /29 and all, because a fixture written from the same assumption as
+  # the check cannot contradict it — which is exactly how the v6 floor shipped
+  # set to /32, a value the genuine list fails.
+  PUBLISHED_V6 = <<~TXT.freeze
+    2400:cb00::/32
+    2606:4700::/32
+    2803:f800::/32
+    2405:b500::/32
+    2405:8100::/32
+    2a06:98c0::/29
+    2c0f:f248::/32
+  TXT
+
+  test "the real published IPv6 list is accepted" do
+    with_body(PUBLISHED_V6) do |diagnosis|
+      ranges = diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V6)
+
+      assert_equal 7, ranges.size
+      assert ranges.any? { |r| r.prefix == 29 }, "the /29 is the whole point of this test"
+    end
+  end
+
+  # A CORRUPTED RESPONSE IS NOT A SHORTER LIST. The old parser dropped
+  # unparseable lines one at a time, so a body of "error / 198.51.100.7/32 /
+  # malformed" became an authoritative one-entry range list — and that address,
+  # which this suite treats as the attacker, was then reported to the operator as
+  # Cloudflare.
+  test "a corrupted range response is refused rather than salvaged" do
+    with_body("error\n198.51.100.7/32\nmalformed\n") do |diagnosis|
+      assert_raises(HostNetworkDiagnosis::RangeFetchError) do
+        diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V4)
+      end
+    end
+  end
+
+  test "a non-200 response is refused even when the body parses" do
+    with_body(PUBLISHED_V6, code: "503") do |diagnosis|
+      assert_raises(HostNetworkDiagnosis::RangeFetchError) do
+        diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V6)
+      end
+    end
+  end
+
+  test "duplicates do not satisfy the minimum prefix count" do
+    with_body(([ "198.51.100.7/32" ] * 6).join("\n")) do |diagnosis|
+      assert_raises(HostNetworkDiagnosis::RangeFetchError) do
+        diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V4)
+      end
+    end
+  end
+
+  test "the wrong address family is refused" do
+    with_body("198.51.100.0/24\n198.51.101.0/24\n198.51.102.0/24\n198.51.103.0/24\n") do |diagnosis|
+      assert_raises(HostNetworkDiagnosis::RangeFetchError) do
+        diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V6)
+      end
+    end
+  end
+
+  test "a prefix broader than Cloudflare publishes is refused" do
+    with_body("0.0.0.0/0\n10.0.0.0/8\n172.16.0.0/12\n192.168.0.0/16\n") do |diagnosis|
+      assert_raises(HostNetworkDiagnosis::RangeFetchError) do
+        diagnosis.send(:fetch_ranges, HostNetworkDiagnosis::IPS_V4)
+      end
+    end
+  end
+
   test "an unusable elevation fails rather than reporting an empty diagnosis" do
     ssh = Object.new
     def ssh.execute_with_status(_cmd) = { success: false, exit_code: 1, output: "", stderr: "no sudo" }
@@ -74,9 +143,20 @@ class HostNetworkDiagnosisTest < ActiveSupport::TestCase
 
   private
 
+  # STUBBED, NOT CACHED. The test cache is a NullStore, so `Rails.cache.write`
+  # here was a no-op and `Rails.cache.fetch` ran its block — meaning this helper
+  # quietly made a LIVE request to cloudflare.com on every run, and the tests
+  # passed or failed on whatever the internet said that day. That is also why the
+  # /32 floor bug survived: the one test that could have caught it was not using
+  # the fixture it appeared to be using.
   def diagnosis_with_ranges(cidrs)
-    Rails.cache.write("cloudflare_ip_ranges", cidrs&.map { |c| IPAddr.new(c) })
+    ranges = cidrs&.map { |c| IPAddr.new(c) }
+    diagnosis = build_diagnosis
+    diagnosis.define_singleton_method(:cloudflare_ranges) { ranges }
+    diagnosis
+  end
 
+  def build_diagnosis
     ssh = Object.new
     report = REPORT
     ssh.define_singleton_method(:execute_with_status) do |cmd|
@@ -89,5 +169,14 @@ class HostNetworkDiagnosisTest < ActiveSupport::TestCase
       end
     end
     HostNetworkDiagnosis.new(@server, ssh: ssh)
+  end
+
+  # A stand-in for the endpoint. Net::HTTP.get_response is what fetch_ranges
+  # calls, so that is what is replaced — the parsing and the status check both
+  # stay in the test.
+  def with_body(body, code: "200")
+    response = Struct.new(:code, :body).new(code, body)
+    response.define_singleton_method(:is_a?) { |k| k == Net::HTTPSuccess ? code == "200" : super(k) }
+    Net::HTTP.stub(:get_response, response) { yield build_diagnosis }
   end
 end

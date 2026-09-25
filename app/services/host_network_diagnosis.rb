@@ -15,6 +15,26 @@
 class HostNetworkDiagnosis
   IPS_V4 = "https://www.cloudflare.com/ips-v4".freeze
   IPS_V6 = "https://www.cloudflare.com/ips-v6".freeze
+
+  # Raised when a range response is not the published list. Rescued by
+  # #cloudflare_ranges into nil, which reads as "ranges unknown" — never as
+  # "no ranges", which would report every ban as not-Cloudflare.
+  RangeFetchError = Class.new(StandardError)
+
+  CIDR_SHAPE   = /\A[0-9a-fA-F:.]+\/[0-9]{1,3}\z/
+  MIN_PREFIXES = 4      # Cloudflare publishes 15 v4 and 7 v6; fewer is a truncated transfer
+
+  # TAKEN FROM THE PUBLISHED LIST, not from an intuition about it. Their broadest
+  # blocks today are /13 (104.16.0.0/13) and /29 (2a06:98c0::/29). The v6 floor
+  # was /32 — which the REAL list fails, because a /29 is broader than a /32. So
+  # the check that exists to refuse an implausible list would have refused the
+  # genuine one, every time, on every server. Found by running it against the
+  # endpoint rather than against a fixture written from the same assumption.
+  #
+  # A couple of steps of headroom, so a new Cloudflare block does not break this
+  # again, and still far from anything that would exempt swathes of the internet.
+  BROADEST_V4  = 10
+  BROADEST_V6  = 27
   RANGE_TTL = 12.hours
 
   Result = Struct.new(:ok, :report, :banned, :cloudflare_banned, :ranges_known, :error, keyword_init: true) do
@@ -83,18 +103,59 @@ class HostNetworkDiagnosis
     nil
   end
 
+  # WHOLE-LIST, NOT LINE-BY-LINE, and the status code is read.
+  #
+  # The old version called `Net::HTTP.get` (which discards the status) and
+  # dropped unparseable lines individually. An audit fed it a body of
+  # "error\n198.51.100.7/32\nmalformed" and got back a one-entry range list that
+  # was then treated as authoritative — so a non-Cloudflare address was reported
+  # to the operator as Cloudflare, which is the address they would then release.
+  # A salvaged fragment of a bad response is not a shorter published list; it is
+  # evidence the response is not the published list at all.
+  #
+  # These thresholds mirror the wrapper's deliberately. Two places decide what
+  # counts as Cloudflare — the privileged script and this report — and they have
+  # to fail on the same inputs, or the preview stops describing the action.
   def fetch_ranges(url)
-    body = Net::HTTP.get(URI(url))
-    body.to_s.split("\n").filter_map do |line|
-      cidr = line.strip
-      next if cidr.empty?
+    response = Net::HTTP.get_response(URI(url))
+    unless response.is_a?(Net::HTTPSuccess)
+      raise RangeFetchError, "#{url} answered #{response.code}"
+    end
+
+    lines = response.body.to_s.delete("\uFEFF").split("\n")
+                     .map(&:strip).reject { |l| l.empty? || l.start_with?("#") }
+
+    ranges = lines.map do |cidr|
+      raise RangeFetchError, "#{url} returned a line that is not a CIDR" unless cidr.match?(CIDR_SHAPE)
 
       begin
         IPAddr.new(cidr)
       rescue IPAddr::Error
-        nil
+        raise RangeFetchError, "#{url} returned a line that is not a CIDR"
       end
     end
+
+    # Uniqueness before counting. Four copies of one prefix satisfied a
+    # minimum-count check while carrying a single address.
+    ranges.uniq!(&:to_s)
+
+    if ranges.size < MIN_PREFIXES
+      raise RangeFetchError, "#{url} returned only #{ranges.size} distinct prefixes"
+    end
+
+    # The v4 endpoint must answer with v4. Without this, a substituted response
+    # satisfies the v6 floor with v4 prefixes, or the reverse.
+    want = url == IPS_V6 ? Socket::AF_INET6 : Socket::AF_INET
+    unless ranges.all? { |r| r.family == want }
+      raise RangeFetchError, "#{url} returned prefixes of the wrong address family"
+    end
+
+    floor = want == Socket::AF_INET6 ? BROADEST_V6 : BROADEST_V4
+    if ranges.any? { |r| r.prefix < floor }
+      raise RangeFetchError, "#{url} contains a prefix broader than Cloudflare publishes"
+    end
+
+    ranges
   end
 
   def failure(detail) = Result.new(ok: false, error: detail, banned: [], cloudflare_banned: [], ranges_known: false)

@@ -100,11 +100,11 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
       calls = File.read("#{dir}/calls.txt")
 
       assert_equal 0, status
-      assert_includes calls, "UNBAN 173.245.48.12", "a Cloudflare IPv4 ban should be released"
-      assert_includes calls, "UNBAN 2400:cb00::5", "a Cloudflare IPv6 ban should be released"
-      assert_not_includes calls, "UNBAN 198.51.100.7",
+      assert_includes calls, "UNBAN set sshd unbanip 173.245.48.12\n", "a Cloudflare IPv4 ban should be released"
+      assert_includes calls, "UNBAN set sshd unbanip 2400:cb00::5\n", "a Cloudflare IPv6 ban should be released"
+      assert_not_includes calls, "UNBAN set sshd unbanip 198.51.100.7\n",
                           "198.51.100.7 is not Cloudflare — releasing it would unban an actual attacker"
-      assert_includes calls, "IGNORE 173.245.48.0/20", "the ranges should be added to ignoreip"
+      assert_includes calls, "IGNORE set sshd addignoreip 173.245.48.0/20\n", "the ranges should be added to ignoreip"
     end
   end
 
@@ -144,8 +144,8 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
 
         assert_equal 0, status, "#{mode} formatting should be accepted, got: #{err}"
         calls = File.read("#{dir}/calls.txt")
-        assert_includes calls, "UNBAN 173.245.48.12"
-        assert_not_includes calls, "UNBAN 198.51.100.7",
+        assert_includes calls, "UNBAN set sshd unbanip 173.245.48.12\n"
+        assert_not_includes calls, "UNBAN set sshd unbanip 198.51.100.7\n",
                             "normalising formatting must not widen what is unbanned"
       end
     end
@@ -156,12 +156,88 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
   # every address on the box, including the one this suite calls an attacker,
   # then told fail2ban to ignore all of IPv4. Shape is not plausibility.
   test "unban refuses a range list broad enough to cover the internet" do
+    %w[wildcard_v4 wildcard_v6].each do |mode|
+      with_fake_fail2ban do |dir|
+        _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=#{mode} sh #{dir}/unban.sh")
+
+        assert_equal 5, status, "#{mode} should refuse"
+        assert_match(/broader than Cloudflare publishes/, err)
+        assert_not File.exist?("#{dir}/calls.txt"), "#{mode} must unban nothing"
+      end
+    end
+  end
+
+  # THE ONE TEST THAT PROVES THE CHECKS DO NOT REFUSE CLOUDFLARE. Note the v6
+  # body deliberately ends WITHOUT a trailing newline, because the endpoint does.
+  test "unban accepts the range lists Cloudflare actually publishes" do
     with_fake_fail2ban do |dir|
-      _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=wildcard sh #{dir}/unban.sh")
+      _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=published sh #{dir}/unban.sh")
+
+      assert_equal 0, status, "the genuine list must be accepted, got: #{err}"
+      calls = File.read("#{dir}/calls.txt")
+      assert_includes calls, "unbanip 173.245.48.12"
+      assert_includes calls, "unbanip 2400:cb00::5"
+      assert_not_includes calls, "unbanip 198.51.100.7"
+    end
+  end
+
+  # AUDIT ROUND 2. Each of these passed every check the wrapper had, and each
+  # ends with a non-Cloudflare address being released or the list being trusted.
+  test "unban refuses a range list padded out with duplicates" do
+    with_fake_fail2ban do |dir|
+      _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=duplicates sh #{dir}/unban.sh")
 
       assert_equal 5, status
-      assert_match(/broader than Cloudflare publishes/, err)
-      assert_not File.exist?("#{dir}/calls.txt"), "0.0.0.0/0 must unban nothing"
+      assert_match(/distinct prefixes/, err)
+      assert_not File.exist?("#{dir}/calls.txt"),
+                 "four copies of one prefix is one prefix, and 198.51.100.7 is the attacker"
+    end
+  end
+
+  test "unban refuses a list whose tail is malformed, however good the head is" do
+    with_fake_fail2ban do |dir|
+      _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=badtail sh #{dir}/unban.sh")
+
+      assert_equal 5, status
+      assert_match(/did not parse as CIDRs/, err)
+      assert_not File.exist?("#{dir}/calls.txt"),
+                 "a partly-valid list is not a shorter valid list"
+    end
+  end
+
+  test "unban refuses prefixes served from the wrong family's endpoint" do
+    with_fake_fail2ban do |dir|
+      _out, err, status = run_shell("PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=crossfamily sh #{dir}/unban.sh")
+
+      assert_equal 5, status
+      assert_match(/non-IPv6 prefix/, err)
+      assert_not File.exist?("#{dir}/calls.txt")
+    end
+  end
+
+  # THE MOST SERIOUS FINDING OF THE AUDIT. `python3 -c` puts the CALLER'S working
+  # directory first on sys.path, and sudo keeps that directory — so an
+  # ipaddress.py sitting wherever the deploy user happened to be would be
+  # imported and executed as root, and needed only to exit 0 to make every ban
+  # on the box look like Cloudflare's. No crafted fail2ban output required.
+  test "unban cannot be steered by a python module in the calling directory" do
+    with_fake_fail2ban do |dir|
+      File.write(File.join(dir, "ipaddress.py"), <<~PY)
+        import sys
+        # What an attacker would write: agree with everything, say nothing.
+        def ip_address(x): return x
+        def ip_network(x, strict=False): return x
+        sys.exit(0)
+      PY
+
+      _out, _err, status = run_shell("cd #{dir} && PATH=#{dir}/bin:$PATH FAKE_CURL_MODE=ok sh #{dir}/unban.sh")
+      calls = File.exist?("#{dir}/calls.txt") ? File.read("#{dir}/calls.txt") : ""
+
+      assert_equal 0, status
+      assert_not_includes calls, "unbanip 198.51.100.7",
+                          "a module in the caller's directory must not decide what counts as Cloudflare"
+      assert_includes calls, "unbanip 173.245.48.12",
+                      "and the real check must still be the one running"
     end
   end
 
@@ -237,8 +313,11 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
         if [ "$1" = "status" ] && [ "$2" = "empty-jail" ]; then
           printf 'Status for jail: empty-jail\\n |- Currently banned:\\t0\\n `- Banned IP list:\\t\\n'; exit 0
         fi
-        if [ "$1" = "set" ] && [ "$3" = "unbanip" ]; then echo "UNBAN $4" >> #{dir}/calls.txt; exit 0; fi
-        if [ "$1" = "set" ] && [ "$3" = "addignoreip" ]; then echo "IGNORE $4" >> #{dir}/calls.txt; exit 0; fi
+        # THE WHOLE ARGV, not just $4. Recording one field meant a call against
+        # the wrong jail, or with extra arguments appended, matched the same
+        # assertion as a correct one — the test could not tell them apart.
+        if [ "$1" = "set" ] && [ "$3" = "unbanip" ]; then echo "UNBAN $*" >> #{dir}/calls.txt; exit 0; fi
+        if [ "$1" = "set" ] && [ "$3" = "addignoreip" ]; then echo "IGNORE $*" >> #{dir}/calls.txt; exit 0; fi
         [ "$1" = "get" ] && { echo "127.0.0.1/8"; exit 0; }
         exit 0
       SH
@@ -256,9 +335,43 @@ class NetDiagnoseWrappersTest < ActiveSupport::TestCase
                *ips-v4) printf '# Cloudflare IPv4\\n\\n173.245.48.0/20\\n103.21.244.0/22\\n103.22.200.0/22\\n141.101.64.0/18\\n' ;;
                *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;;
              esac; done ;;
-          wildcard) for a in "$@"; do case "$a" in
+          # ONE FAMILY AT A TIME. The old fixture put a forbidden prefix in BOTH
+          # lists, so deleting either family's floor check still left the test
+          # passing — it proved only that at least one of the two existed.
+          wildcard_v4) for a in "$@"; do case "$a" in
                *ips-v4) printf '0.0.0.0/0\\n10.0.0.0/8\\n172.16.0.0/12\\n192.168.0.0/16\\n' ;;
+               *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;;
+             esac; done ;;
+          wildcard_v6) for a in "$@"; do case "$a" in
+               *ips-v4) printf '173.245.48.0/20\\n103.21.244.0/22\\n103.22.200.0/22\\n141.101.64.0/18\\n' ;;
                *ips-v6) printf '::/0\\n2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n' ;;
+             esac; done ;;
+          # THE REAL PUBLISHED LISTS, verbatim — 15 v4 prefixes and 7 v6, including
+          # 2a06:98c0::/29, which the wrapper's v6 floor of /32 REFUSED. Every
+          # other fixture here was written from the same assumption as the check,
+          # so none of them could contradict it, and the wrapper would have
+          # refused the genuine list on every server it was ever installed on.
+          published) for a in "$@"; do case "$a" in
+               *ips-v4) printf '173.245.48.0/20\\n103.21.244.0/22\\n103.22.200.0/22\\n103.31.4.0/22\\n141.101.64.0/18\\n108.162.192.0/18\\n190.93.240.0/20\\n188.114.96.0/20\\n197.234.240.0/22\\n198.41.128.0/17\\n162.158.0.0/15\\n104.16.0.0/13\\n104.24.0.0/14\\n172.64.0.0/13\\n131.0.72.0/22\\n' ;;
+               *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n2405:8100::/32\\n2a06:98c0::/29\\n2c0f:f248::/32' ;;
+             esac; done ;;
+          # Four copies of one prefix: shape, count and floor all passed while the
+          # list carried a single address, which the wrapper would then release.
+          duplicates) for a in "$@"; do case "$a" in
+               *ips-v4) printf '198.51.100.7/32\\n198.51.100.7/32\\n198.51.100.7/32\\n198.51.100.7/32\\n' ;;
+               *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;;
+             esac; done ;;
+          # A real prefix FIRST, malformed lines after. The membership test used a
+          # generator and stopped at the first match, so the tail was never parsed.
+          badtail) for a in "$@"; do case "$a" in
+               *ips-v4) printf '173.245.48.0/20\\n103.21.244.0/22\\n103.22.200.0/22\\n999.999.999.999/20\\n' ;;
+               *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;;
+             esac; done ;;
+          # v4 prefixes served from the v6 endpoint: each list was only ever
+          # checked against its own family's floor, so this cleared /32 easily.
+          crossfamily) for a in "$@"; do case "$a" in
+               *ips-v4) printf '173.245.48.0/20\\n103.21.244.0/22\\n103.22.200.0/22\\n141.101.64.0/18\\n' ;;
+               *ips-v6) printf '198.51.100.0/24\\n198.51.101.0/24\\n198.51.102.0/24\\n198.51.103.0/24\\n' ;;
              esac; done ;;
           truncated) for a in "$@"; do case "$a" in *ips-v4) printf '173.245.48.0/2\\n' ;; *ips-v6) printf '2400:cb00::/32\\n' ;; esac; done ;;
           v6only) for a in "$@"; do case "$a" in *ips-v4) : ;; *ips-v6) printf '2400:cb00::/32\\n2606:4700::/32\\n2803:f800::/32\\n2405:b500::/32\\n' ;; esac; done ;;
