@@ -8,7 +8,7 @@ class KamalConfigTest < ActiveSupport::TestCase
     @server = @org.servers.create!(name: "fleet", status: "online", ip_address: "192.0.2.10",
                                    ssh_key: @key, ssh_user: "deploy")
     @app = @org.apps.create!(name: "Appone", slug: "appone", server: @server, deploy_method: "kamal",
-                             repository_url: "https://github.com/pavelabs/appone.git", branch: "main",
+                             repository_url: "https://github.com/acme-org/appone.git", branch: "main",
                              domain: "appone.example.com", port: 3000, ssl_enabled: true)
     @app.env_variables.create!(key: "SECRET_KEY_BASE", value: "skb_raw_value", secret: true)
     @app.env_variables.create!(key: "DATABASE_URL", value: "postgres://raw", secret: true)
@@ -59,6 +59,12 @@ class KamalConfigTest < ActiveSupport::TestCase
     assert_equal "docker.io", o["registry"]["server"], "defaults to Kamal's default registry"
     assert_equal "nauman", o["registry"]["username"]
     assert_equal [ "KAMAL_REGISTRY_PASSWORD" ], o["registry"]["password"]
+  end
+
+  test "an image namespace pushes to an organisation with a member's login" do
+    @app.env_variables.create!(key: "KAMAL_IMAGE_NAMESPACE", value: "acme-org", secret: false)
+
+    assert_equal [ "acme-org/appone", "nauman" ], [ overlay["image"], overlay["registry"]["username"] ]
   end
 
   test "Caddy edge disables kamal-proxy and adds a loopback port plus healthcheck" do

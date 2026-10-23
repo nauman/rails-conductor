@@ -49,6 +49,15 @@ class RegistryImageTest < ActiveSupport::TestCase
       "must query acme/regapp, got: #{http.requested.inspect}"
   end
 
+  test "an image namespace is looked up where the image was pushed" do
+    @app.env_variables.create!(key: "KAMAL_IMAGE_NAMESPACE", value: "acme-org")
+    http = FakeHttp.new { |_req, host| host == "ghcr.io" ? res(Net::HTTPOK, { "token" => "t" }) : res(Net::HTTPOK) }
+
+    RegistryImage.new(@app, http: http).check("abc123")
+
+    assert http.requested.any? { |u| u.include?("/v2/acme-org/regapp/manifests/abc123") }, http.requested.inspect
+  end
+
   test "a private image is checked with the app's own registry credential" do
     seen_auth = nil
     http = FakeHttp.new do |req, host|

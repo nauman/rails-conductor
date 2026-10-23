@@ -73,7 +73,7 @@ class KamalConfig
   def deploy_overlay_yaml
     overlay = {
       "service" => service_name,
-      "image"   => "#{registry_username}/#{app.slug}",
+      "image"   => "#{image_namespace}/#{app.slug}",
       "servers" => servers_block,
       "ssh"     => { "user" => @server&.ssh_user_or_default || "deploy" },
       "proxy"   => proxy_block,
@@ -199,5 +199,12 @@ class KamalConfig
 
   def registry_username
     app.env_hash["KAMAL_REGISTRY_USERNAME"].presence || "REGISTRY_USERNAME"
+  end
+
+  # Where the image lives. Usually the account that logs in, but an organisation
+  # repository (acme/app) is pushed by a member's credential, so the namespace
+  # can be named apart from the username.
+  def image_namespace
+    app.env_hash["KAMAL_IMAGE_NAMESPACE"].presence || registry_username
   end
 end

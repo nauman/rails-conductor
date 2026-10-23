@@ -55,7 +55,7 @@ class RegistryImage
   def registry_host = env["KAMAL_REGISTRY_SERVER"].presence || "ghcr.io"
 
   def repository_path
-    namespace = env["KAMAL_REGISTRY_USERNAME"].to_s.strip
+    namespace = (env["KAMAL_IMAGE_NAMESPACE"].presence || env["KAMAL_REGISTRY_USERNAME"]).to_s.strip
     [ namespace, image_name.to_s.split("/").last ].reject(&:blank?).join("/")
   end
 
