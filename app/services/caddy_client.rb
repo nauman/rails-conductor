@@ -7,6 +7,17 @@ class CaddyClient
   ROUTE_ID_PREFIX = "conductor-route-".freeze
   DEFAULT_HTTP_SERVER = "srv0".freeze
 
+  # A fixed-port release stops the incumbent before the new container listens,
+  # so for the length of a boot nothing accepts on the upstream port and Caddy
+  # answered every request with 502 (inventlist.com, 2026-11-14, deployment
+  # 629). Inside this window Caddy holds the request and redials instead. A
+  # dial failure means the request was never sent, so the retry is safe for
+  # every method. 60s stays under Cloudflare's 100s origin timeout; a boot
+  # longer than that still fails, and the gap itself is closed only by a
+  # start-before-stop cutover.
+  UPSTREAM_TRY_DURATION = "60s".freeze
+  UPSTREAM_TRY_INTERVAL = "500ms".freeze
+
   attr_reader :server
 
   def initialize(server, ssh_connection: nil)
@@ -342,7 +353,11 @@ class CaddyClient
     proxy_handler = {
       "@id" => "#{route_definition[:route_id]}-proxy",
       "handler" => "reverse_proxy",
-      "upstreams" => [ { "dial" => upstream } ]
+      "upstreams" => [ { "dial" => upstream } ],
+      "load_balancing" => {
+        "try_duration" => UPSTREAM_TRY_DURATION,
+        "try_interval" => UPSTREAM_TRY_INTERVAL
+      }
     }
 
     if upstream.start_with?("unix//")

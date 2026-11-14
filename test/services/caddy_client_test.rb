@@ -96,6 +96,24 @@ class CaddyClientTest < ActiveSupport::TestCase
     assert_equal "127.0.0.1:3000", routes.first.dig("handle", 0, "upstreams", 0, "dial")
   end
 
+  # A fixed-port release frees its port before the next one listens. Without a
+  # try window Caddy answers 502 for every request in that gap; with one it
+  # holds the request and redials until the new container accepts.
+  def test_proxy_routes_redial_the_upstream_while_it_is_not_listening
+    loaded = nil
+    client = CaddyClient.new(build_server)
+    client.stub(:fetch_config, {}) do
+      client.stub(:load_config, ->(value) { loaded = value }) do
+        client.live(domain: "example.com", upstream: "127.0.0.1:3000", server_name: "srv0")
+      end
+    end
+
+    handler = loaded.dig("apps", "http", "servers", "srv0", "routes").first.dig("handle", 0)
+    assert_equal "reverse_proxy", handler["handler"]
+    assert_equal CaddyClient::UPSTREAM_TRY_DURATION, handler.dig("load_balancing", "try_duration")
+    assert_equal CaddyClient::UPSTREAM_TRY_INTERVAL, handler.dig("load_balancing", "try_interval")
+  end
+
   def test_maintenance_route_returns_503_without_an_upstream
     ssh = FakeSsh.new([ { stdout: "{}" }, { stdout: "" } ])
     client = CaddyClient.new(build_server, ssh_connection: ssh)
