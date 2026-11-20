@@ -109,16 +109,32 @@ class SshConnectionTenantGateTest < ActiveSupport::TestCase
     end
   end
 
-  test "20 SSH attempts an hour, then refused" do
-    @server.update_columns(ownership_verified_at: Time.current)
+  test "20 verification dials an hour, then refused" do
     TenantLimits.store = ActiveSupport::Cache::MemoryStore.new
     freeze_time do
-      attempts = dial_attempts { 21.times { SshConnection.new(@server).execute("true") } }
+      attempts = dial_attempts { 21.times { SshConnection.new(@server, ownership_probe: true).execute("true") } }
       assert_equal 20, attempts.size
     end
     assert_equal [ "ssh_attempts" ], @org.abuse_flags.pluck(:kind)
   ensure
     TenantLimits.store = nil
+  end
+
+  test "routine traffic to a verified server is not capped and never flags the org" do
+    @server.update_columns(ownership_verified_at: Time.current)
+    TenantLimits.store = ActiveSupport::Cache::MemoryStore.new
+    freeze_time do
+      assert_equal 60, dial_attempts { 60.times { SshConnection.new(@server).execute("true") } }.size
+    end
+    assert_empty @org.abuse_flags
+  ensure
+    TenantLimits.store = nil
+  end
+
+  test "repeated refusals record one abuse flag per hour, not one per attempt" do
+    @server.update_columns(ownership_verified_at: Time.current, ip_address: "10.0.0.7")
+    dial_attempts { 5.times { SshConnection.new(@server).execute("true") } }
+    assert_equal 1, @org.abuse_flags.count
   end
 
   test "tenant connections never offer the control plane's agent or ssh config" do

@@ -33,6 +33,16 @@ class DatabasePull < ApplicationRecord
   validates :restore_target, format: { with: DB_NAME, message: "must be a plain database name" },
             allow_blank: true
   validate :restore_target_is_allowed
+  validate :control_plane_permitted, on: :create
+
+  # A pull copies a dump from the org's server ONTO the Conductor host and may
+  # pg_restore it there (plan 02 § 5.3): control-plane work, so an org the
+  # operator did not vet never gets it — at any trust level.
+  def control_plane_permitted
+    return if organization.nil? || organization.control_plane_execution_allowed?
+
+    errors.add(:base, "Database pulls copy data onto Conductor's own host and are not available to this organization")
+  end
 
   # The databases a restore may overwrite. Configured explicitly, because the
   # safe answer is not derivable: this host's Postgres may hold anything.

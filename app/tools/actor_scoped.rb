@@ -58,6 +58,7 @@ module ActorScoped
   # alone; otherwise fall back to all of the user's orgs.
   def actor_org_ids
     return [ Current.organization.id ] if Current.organization
-    @user ? @user.organizations.ids : []
+    # An org-less token reaches all the user's orgs — except suspended ones.
+    @user ? @user.organizations.where.not(trust_level: "suspended").ids : []
   end
 end

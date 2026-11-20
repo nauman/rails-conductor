@@ -223,6 +223,21 @@ class TenantTrustTest < ActionDispatch::IntegrationTest
     assert_match(/suspended/, conn.error)
   end
 
+  test "an org-less token never reaches a suspended org's servers" do
+    raw, = ApiToken.generate(user: @owner, name: "global", organization: nil)
+    @org.suspend!(by: nil)
+    post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } },
+         headers: { "Authorization" => "Bearer #{raw}" }, as: :json
+    refute_includes response.body, "web-1"
+  end
+
+  test "a signed-up org cannot pull a database onto the Conductor host, even when trusted" do
+    @org.change_trust!("trusted", reason: "test")
+    pull = DatabasePull.new(organization: @org, server: @server, status: "pending")
+    refute pull.valid?
+    assert_match(/Conductor's own host/, pull.errors.full_messages.join)
+  end
+
   test "admin suspend and reinstate from the admin page" do
     admin = User.create!(email: "root@example.com", admin: true)
     Organization.create_for(admin, name: "ops").update!(onboarded_at: Time.current)

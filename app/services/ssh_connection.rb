@@ -284,7 +284,9 @@ class SshConnection
     unless @ownership_probe || server.ownership_verified?
       raise Refused, "#{server.name} has not proved ownership yet — finish the verification step first"
     end
-    raise Refused, "too many SSH connection attempts this hour — try again later" unless TenantLimits.ssh_attempt!(org)
+    if !server.ownership_verified? && !TenantLimits.ssh_attempt!(org)
+      raise Refused, "too many verification attempts this hour — try again later"
+    end
 
     EgressGuard.resolve!(server.ip_address, organization: org)
   rescue EgressGuard::Refused => e

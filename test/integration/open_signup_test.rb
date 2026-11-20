@@ -88,7 +88,7 @@ class OpenSignupTest < ActionDispatch::IntegrationTest
       perform_enqueued_jobs { submit("Founder@Example.com") }
       assert_nil User.find_by(email: "founder@example.com")
 
-      get verify_signup_path(token: signup_link_token)
+      post verify_signup_path(token: signup_link_token)
       assert_redirected_to card_check_path
 
       user = User.find_by!(email: "founder@example.com")
@@ -105,13 +105,43 @@ class OpenSignupTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "opening the link only shows a confirm page; a mail scanner's GET creates nothing" do
+    with_signup_env(@env) do
+      perform_enqueued_jobs { submit("scanned@example.com") }
+      token = signup_link_token
+      get verify_signup_path(token: token)
+      assert_response :success
+      assert_match "Create my account", response.body
+      assert_nil User.find_by(email: "scanned@example.com")
+      post verify_signup_path(token: token)
+      assert_redirected_to card_check_path
+    end
+  end
+
+  test "without a card: no server registration, no MCP, no API, no OAuth grant" do
+    user, org = sign_up_and_sign_in!
+    get onboarding_server_path
+    assert_redirected_to card_check_path
+    post onboarding_server_path, params: { server: { name: "x", ip_address: "8.8.8.8" } }
+    assert_redirected_to card_check_path
+    assert_equal 0, org.servers.count
+
+    raw, = ApiToken.generate(user: user, name: "t", organization: org)
+    post "/mcp/call", params: { name: "conductor_read", input: { action: "fleet_status" } },
+         headers: { "Authorization" => "Bearer #{raw}" }, as: :json
+    assert_match(/card check/, response.body)
+    get "/api/v1/servers", headers: { "Authorization" => "Bearer #{raw}" }
+    assert_response :forbidden
+    assert_match(/card check/, response.body)
+  end
+
   test "a link works once" do
     with_signup_env(@env) do
       perform_enqueued_jobs { submit("once@example.com") }
       token = signup_link_token
-      get verify_signup_path(token: token)
+      post verify_signup_path(token: token)
       delete user_sign_out_path
-      get verify_signup_path(token: token)
+      post verify_signup_path(token: token)
       assert_response :unprocessable_entity
       assert_equal 1, User.where(email: "once@example.com").count
     end
@@ -122,7 +152,7 @@ class OpenSignupTest < ActionDispatch::IntegrationTest
       perform_enqueued_jobs { submit("late@example.com") }
       token = signup_link_token
       travel 25.hours do
-        get verify_signup_path(token: token)
+        post verify_signup_path(token: token)
         assert_response :unprocessable_entity
       end
       assert_nil User.find_by(email: "late@example.com")
@@ -200,10 +230,12 @@ class OpenSignupTest < ActionDispatch::IntegrationTest
         post card_check_intent_path, as: :json
         get complete_card_check_path(setup_intent: "seti_test1")
         assert_redirected_to card_check_path
+        get card_check_path
+        assert_response :success # only the card step itself is reachable…
         get onboarding_path
-        assert_response :success # the card page itself and onboarding paths are exempt…
+        assert_redirected_to card_check_path # …not onboarding…
         get servers_path
-        assert_redirected_to card_check_path # …everything else is not
+        assert_redirected_to card_check_path # …and not anything else
       end
     end
     refute org.reload.card_verified?
@@ -239,7 +271,7 @@ class OpenSignupTest < ActionDispatch::IntegrationTest
     Organization.create_for(existing, name: "m").update!(onboarded_at: Time.current)
 
     with_signup_env("SIGNUP_MODE" => "invite_only") do
-      get verify_signup_path(token: token)
+      post verify_signup_path(token: token)
       assert_response :not_found
       assert_nil User.find_by(email: "pending@example.com")
 

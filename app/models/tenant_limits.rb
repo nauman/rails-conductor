@@ -14,8 +14,11 @@ module TenantLimits
     ssh_attempts_per_hour: 20
   }.freeze
 
-  # SSH attempts are capped for every org the operator did not vet, trusted or
-  # not (§ 5.4 is an egress control, not a trial limit).
+  # Proof-of-control dials (connections to a server that has NOT yet proved
+  # ownership) are capped per org per hour (§ 5.4). Routine traffic to verified
+  # servers — status syncs, metrics, deploys — is not counted: one server with
+  # one app already makes ~40 connections an hour, and counting it would both
+  # break deploys and flag every real tenant out of promotion.
   SSH_ATTEMPTS_PER_HOUR = 20
 
   module_function
@@ -71,7 +74,7 @@ module TenantLimits
     false
   end
 
-  # Count one SSH connection attempt for an org the operator did not vet.
+  # Count one proof-of-control dial for an org the operator did not vet.
   def ssh_attempt!(organization, now: Time.current)
     return true unless organization&.untrusted_network_origin?
 

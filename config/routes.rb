@@ -90,7 +90,8 @@ Rails.application.routes.draw do
   get  "/signup", to: "signups#new", as: :signup
   post "/signup", to: "signups#create"
   get  "/signup/sent", to: "signups#sent", as: :signup_sent
-  get  "/signup/verify/:token", to: "signups#verify", as: :verify_signup
+  get  "/signup/verify/:token", to: "signups#confirm", as: :verify_signup
+  post "/signup/verify/:token", to: "signups#verify"
 
   # Card check before onboarding (verified, never charged)
   get  "/onboarding/card", to: "card_checks#show", as: :card_check

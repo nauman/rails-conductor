@@ -67,6 +67,15 @@ class Organization < ApplicationRecord
     self_signed_up? && !card_verified?
   end
 
+  # May this org act through a token or OAuth grant (API, MCP) at all? Same gate
+  # as the web: not suspended, and past the card check.
+  def tenant_access_refusal
+    return "This organization is suspended." if suspended?
+    return "Finish the card check in the browser before using the API or MCP." if card_check_required?
+
+    nil
+  end
+
   def change_trust!(to, reason:, by: nil)
     to = to.to_s
     raise ArgumentError, "unknown trust level #{to}" unless TRUST_LEVELS.include?(to)
@@ -102,7 +111,11 @@ class Organization < ApplicationRecord
     true
   end
 
+  # One flag per kind per hour: a scheduled job hitting the same refusal every
+  # two minutes is one event, not thirty rows.
   def flag_abuse!(kind, detail = nil)
+    return if abuse_flags.where(kind: kind.to_s, created_at: 1.hour.ago..).exists?
+
     abuse_flags.create!(kind: kind.to_s, detail: detail.to_s.first(500))
   end
 

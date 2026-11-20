@@ -13,6 +13,12 @@ class DatabasePullService
   end
 
   def run
+    org = @pull.organization || @server.organization
+    if org && !org.control_plane_execution_allowed?
+      @pull.start!
+      return fail!("Refused: database pulls copy data onto Conductor's own host, which this organization cannot use.")
+    end
+
     @pull.start!
     log("=== Pulling database from #{@server.name} (#{@server.ip_address}) ===\n")
 

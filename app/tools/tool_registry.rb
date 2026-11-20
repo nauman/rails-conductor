@@ -32,8 +32,8 @@ class ToolRegistry
     read_only_call = ToolAuthorization.read_only?(name, action)
 
     org = Current.organization
-    if org&.suspended? && !user&.admin?
-      return Result.fail("This organization is suspended.")
+    if org && !user&.admin? && (refusal = org.tenant_access_refusal)
+      return Result.fail(refusal)
     end
     unless TenantLimits.api_call!(org)
       return Result.fail("Rate limit exceeded for this organization (#{TenantLimits.limit(org, :api_calls_per_minute)} calls/minute). Try again shortly.")

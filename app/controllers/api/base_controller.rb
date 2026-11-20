@@ -46,8 +46,8 @@ module Api
     # bucket is small. Same TenantLimits counter the MCP surface uses.
     def enforce_tenant_limits!
       org = current_organization
-      if org&.suspended? && !current_admin?
-        return render json: { error: "This organization is suspended" }, status: :forbidden
+      if org && !current_admin? && (refusal = org.tenant_access_refusal)
+        return render json: { error: refusal }, status: :forbidden
       end
       return if TenantLimits.api_call!(org)
 

@@ -37,7 +37,18 @@ class SignupsController < ApplicationController
 
   def sent; end
 
-  # The emailed link. The account is created here, never earlier.
+  # The emailed link shows a confirm button; nothing happens on GET. Mail
+  # scanners follow links, and a GET that consumed the intent and signed in would
+  # let a scanner burn the link — or an attacker sign a victim into the
+  # attacker's account by sending them the attacker's own link.
+  def confirm
+    @intent = SignupIntent.find_by_raw_token(params[:token])
+    return render(:invalid, status: :not_found) unless @intent&.usable?
+
+    @token = params[:token]
+  end
+
+  # The account is created here, never earlier.
   def verify
     intent = SignupIntent.find_by_raw_token(params[:token])
     return render(:invalid, status: :not_found) unless intent
