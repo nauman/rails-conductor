@@ -51,7 +51,14 @@ class OauthBaseController < ApplicationController
     return unless authorizable_client?
 
     if request.post?
-      return if params[:organization_id].present? && organizations.exists?(id: params[:organization_id])
+      chosen = organizations.find_by(id: params[:organization_id]) if params[:organization_id].present?
+      # Plan 02: a suspended org, or one that has not passed its card check,
+      # cannot be bound to a new token.
+      if chosen && !current_user.admin? && (refusal = chosen.tenant_access_refusal)
+        render plain: refusal, status: :forbidden
+        return
+      end
+      return if chosen
 
       render "oauth/organization_forbidden", status: :forbidden, locals: { organizations: organizations }
       return

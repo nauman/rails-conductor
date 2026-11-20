@@ -51,6 +51,7 @@ class KamalDeployer
   def deploy!
     deployment.start!
     log "Deploying #{app.name} via Kamal (control machine: Conductor)"
+    return fail_with("Refused: #{app.control_plane_refusal}") if app.control_plane_refusal
 
     return fail_with("App has no repository_url") if app.repository_url.blank?
     return fail_with("App has no target host") if deploy_server&.ip_address.blank?
@@ -139,6 +140,7 @@ class KamalDeployer
   def rollback!(version)
     deployment.start!
     log "Rolling back #{app.name} to release #{version} via Kamal (control machine: Conductor)"
+    return fail_with("Refused: #{app.control_plane_refusal}") if app.control_plane_refusal
 
     return fail_with("App has no repository_url") if app.repository_url.blank?
     return fail_with("App has no target host") if deploy_server&.ip_address.blank?
@@ -1396,7 +1398,7 @@ class KamalDeployer
     timestamp = Time.current.strftime("%H:%M:%S")
     ActionCable.server.broadcast(
       "deployment_#{deployment.id}",
-      { type: "log", line: "[#{timestamp}] #{message}\n", status: deployment.status }
+      { type: "log", line: "[#{timestamp}] #{ControlPlaneRedactor.redact(message, app.organization)}\n", status: deployment.status }
     )
   end
 

@@ -1,0 +1,52 @@
+<% content_for :title, "Create your account · Conductor" %>
+
+<section class="min-h-[80vh] flex items-center justify-center px-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <div class="inline-flex h-12 w-12 rounded-card bg-ink text-white items-center justify-center text-lg font-semibold mb-4">C</div>
+      <h1 class="font-display text-2xl text-ink tracking-display">Create your Conductor account</h1>
+      <p class="mt-2 text-sm text-muted">Bring your own servers and Cloudflare. Free while we launch.</p>
+    </div>
+
+    <div class="rounded-large border border-border bg-surface p-6 shadow-soft">
+      <% if @error %>
+        <%= rui_alert(type: :danger) { @error } %>
+      <% end %>
+
+      <%= form_tag signup_path, method: :post, class: "space-y-4", data: { turbo: false }, id: "signup-form" do %>
+        <div>
+          <label for="signup_email" class="block text-sm font-medium text-body">Email address</label>
+          <input type="email" name="email" id="signup_email" value="<%= @email %>"
+                 required autofocus autocomplete="email" placeholder="you@example.com"
+                 class="mt-1 block w-full rounded-control border-border-strong shadow-soft focus:border-primary focus:ring-primary sm:text-sm">
+        </div>
+
+        <label class="flex items-start gap-2 text-sm text-body">
+          <input type="checkbox" name="terms" value="1" required class="mt-1 rounded border-border-strong">
+          <span>
+            I accept the
+            <% if (terms_url = ENV["SIGNUP_TERMS_URL"].presence) %>
+              <%= link_to "terms of service", terms_url, class: "underline", target: "_blank", rel: "noopener" %>
+            <% else %>
+              terms of service
+            <% end %>
+            and understand a valid card is required (it is checked, not charged).
+          </span>
+        </label>
+
+        <% if Turnstile.site_key %>
+          <div class="cf-turnstile" data-sitekey="<%= Turnstile.site_key %>"></div>
+          <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+        <% end %>
+
+        <button type="submit" class="w-full inline-flex justify-center items-center rounded-control bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-body cursor-pointer">
+          Email me a sign-up link
+        </button>
+      <% end %>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-muted">
+      Already have an account? <%= link_to "Sign in", user_sign_in_path, class: "underline" %>.
+    </p>
+  </div>
+</section>

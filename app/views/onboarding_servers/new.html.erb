@@ -1,0 +1,39 @@
+<% content_for :title, "Register a server · Conductor" %>
+
+<div class="mx-auto max-w-md py-12">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft">
+    <p class="text-xs uppercase tracking-label text-faint">Step 2 of 4</p>
+    <h1 class="font-display text-xl text-ink">Register your server</h1>
+    <p class="mt-1 text-sm text-muted">
+      Any Linux box you control with a public IP. Conductor connects to it over SSH with a key it
+      generates for your organization — you install one line, then we verify it.
+    </p>
+
+    <%= form_with model: @server, url: onboarding_server_path, method: :post, class: "mt-6 space-y-4" do |f| %>
+      <% if @server.errors.any? %>
+        <%= rui_alert(type: :danger) { @server.errors.full_messages.to_sentence } %>
+      <% end %>
+      <div>
+        <%= f.label :name, "Name", class: "block text-sm font-medium text-body" %>
+        <%= f.text_field :name, required: true, placeholder: "web-1", class: "mt-1 block w-full rounded-control border-border-strong sm:text-sm" %>
+      </div>
+      <div>
+        <%= f.label :ip_address, "Public IP or hostname", class: "block text-sm font-medium text-body" %>
+        <%= f.text_field :ip_address, required: true, placeholder: "203.0.113.10", class: "mt-1 block w-full rounded-control border-border-strong sm:text-sm" %>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <%= f.label :ssh_user, "SSH user", class: "block text-sm font-medium text-body" %>
+          <%= f.text_field :ssh_user, class: "mt-1 block w-full rounded-control border-border-strong sm:text-sm" %>
+        </div>
+        <div>
+          <%= f.label :ssh_port, "SSH port", class: "block text-sm font-medium text-body" %>
+          <%= f.number_field :ssh_port, min: 1, max: 65535, class: "mt-1 block w-full rounded-control border-border-strong sm:text-sm" %>
+        </div>
+      </div>
+      <p class="text-xs text-faint">Use a non-root user with sudo (for example <code>deploy</code>). Conductor never needs root after setup.</p>
+      <%= f.submit "Generate key", class: "w-full cursor-pointer rounded-control bg-primary px-4 py-2.5 text-sm font-medium text-white" %>
+    <% end %>
+    <p class="mt-4 text-center text-xs"><%= link_to "Skip for now", onboarding_agent_path, class: "underline text-muted" %></p>
+  </div>
+</div>

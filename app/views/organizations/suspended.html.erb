@@ -1,0 +1,12 @@
+<% content_for :title, "Organization suspended · Conductor" %>
+
+<div class="mx-auto max-w-md py-12">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft text-center">
+    <h1 class="font-display text-xl text-ink">This organization is suspended</h1>
+    <p class="mt-2 text-sm text-muted">
+      Its tokens are revoked and Conductor has stopped connecting to its servers.
+      Contact the operator of this instance if you think this is a mistake.
+    </p>
+    <p class="mt-6"><%= button_to "Sign out", user_sign_out_path, method: :delete, class: "underline text-sm" %></p>
+  </div>
+</div>

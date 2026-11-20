@@ -31,6 +31,14 @@ class ToolRegistry
     action = input["action"].to_s
     read_only_call = ToolAuthorization.read_only?(name, action)
 
+    org = Current.organization
+    if org && !user&.admin? && (refusal = org.tenant_access_refusal)
+      return Result.fail(refusal)
+    end
+    unless TenantLimits.api_call!(org)
+      return Result.fail("Rate limit exceeded for this organization (#{TenantLimits.limit(org, :api_calls_per_minute)} calls/minute). Try again shortly.")
+    end
+
     if Current.read_only && !read_only_call
       return Result.fail("This token is read-only; '#{name}' action '#{action}' requires a deploy-scoped token.")
     end

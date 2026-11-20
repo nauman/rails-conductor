@@ -1,0 +1,31 @@
+<% content_for :title, "Verify a card · Conductor" %>
+
+<div class="mx-auto max-w-md py-12">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft">
+    <h1 class="font-display text-xl text-ink text-center">Add a card</h1>
+    <p class="mt-1 text-sm text-muted text-center">
+      Conductor is free while we launch. We check that the card is valid and save it —
+      <strong>we do not charge it</strong>.
+    </p>
+
+    <% if StripeCardCheck.configured? %>
+      <script src="https://js.stripe.com/v3/"></script>
+      <form class="mt-6 space-y-4"
+            data-controller="card-check"
+            data-action="submit->card-check#submit"
+            data-card-check-publishable-key-value="<%= StripeCardCheck.publishable_key %>"
+            data-card-check-intent-url-value="<%= card_check_intent_path %>"
+            data-card-check-return-url-value="<%= complete_card_check_url %>"
+            data-card-check-csrf-value="<%= form_authenticity_token %>">
+        <div data-card-check-target="card" class="rounded-control border border-border-strong p-3"></div>
+        <p data-card-check-target="error" class="text-sm text-danger" hidden></p>
+        <button type="submit" data-card-check-target="submit"
+                class="w-full cursor-pointer rounded-control bg-primary px-4 py-2.5 text-sm font-medium text-white">
+          Verify card
+        </button>
+      </form>
+    <% else %>
+      <%= rui_alert(type: :danger, class: "mt-6") { "Card checks are not configured on this instance." } %>
+    <% end %>
+  </div>
+</div>

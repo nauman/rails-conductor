@@ -63,9 +63,26 @@ class SiteMonitor
   def curl(url, timeout = TIMEOUT)
     # -D - dumps response headers to stdout (so we can detect a CDN in front); the
     # -w metrics line is appended last on its own line for a clean split in parse().
-    out, = Open3.capture2e("curl", "-sSL", "-o", "/dev/null", "-D", "-",
+    out, = Open3.capture2e("curl", *curl_target_args(url), "-sS", "-o", "/dev/null", "-D", "-",
                            "--max-time", timeout.to_s, "-w", "\n#{FORMAT}", url)
     out
+  rescue EgressGuard::Refused => e
+    "probe refused: #{e.message}\n000 0 0 0 0 0"
+  end
+
+  # The probe runs FROM the control plane, so for an org the operator did not vet
+  # it is an egress like any SSH connection (plan 02 § 5.4): the domain is resolved
+  # through EgressGuard and curl is pinned to that checked address, and redirects
+  # are not followed (a redirect could point anywhere, including 169.254.169.254).
+  # Vetted orgs keep the old behaviour, redirects included.
+  def curl_target_args(url)
+    org = @app.organization
+    return [ "-L" ] unless org&.untrusted_network_origin?
+
+    uri = URI(url)
+    ip = EgressGuard.resolve!(uri.host, organization: org)
+    pinned = ip.include?(":") ? "[#{ip}]" : ip
+    [ "--proto", "=http,https", "--max-redirs", "0", "--resolve", "#{uri.host}:#{uri.port}:#{pinned}" ]
   end
 
   def parse(raw)

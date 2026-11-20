@@ -32,5 +32,8 @@
       We'll email you a secure link to sign in.<br>
       No password required.
     </p>
+    <% if SignupMode.open? %>
+      <p class="mt-3 text-center text-xs text-muted">New here? <%= link_to "Create an account", signup_path, class: "underline" %>.</p>
+    <% end %>
   </div>
 </section>

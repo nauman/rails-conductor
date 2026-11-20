@@ -178,7 +178,24 @@ class App < ApplicationRecord
   # Chosen for new apps so the venue is explicit from the start; existing apps are
   # left alone (see build_venue_inherited?).
   def adopt_build_venue
-    self.build_venue = DEFAULT_BUILD_VENUE if new_record? && build_venue.blank?
+    return unless new_record? && build_venue.blank?
+
+    self.build_venue = control_plane_permitted? ? DEFAULT_BUILD_VENUE : "target"
+  end
+
+  # Plan 02 § 5.3: an org the operator did not vet never builds on, or drives
+  # Kamal from, Conductor's own host. nil org = legacy row, admin-only, unchanged.
+  def control_plane_permitted?
+    organization.nil? || organization.control_plane_execution_allowed?
+  end
+
+  # The reason Conductor will not run this app's Kamal or build on its host, or nil.
+  def control_plane_refusal
+    return nil if control_plane_permitted?
+
+    "#{organization.self_signed_up? ? 'self-signed-up' : organization.trust_level} organizations never run " \
+      "builds or Kamal on Conductor's own host — deploy with the docker or native method " \
+      "(built on your server), or run Kamal from your own CI"
   end
 
   def adopt_kamal_contract
@@ -266,14 +283,6 @@ class App < ApplicationRecord
   # Distinct slugs collapse to one base — `foo-bar`, `foo_bar` and `foo.bar` all
   # become `foo_bar`. The older app keeps the plain name so its database never moves
   # under it; the newcomer is the one that gives way.
-  # Set rather than demanded: a caller should not have to know the rule to satisfy
-  # it. The validation exists for the case someone turns it off on purpose.
-  # Chosen for new apps so the venue is explicit from the start; existing apps are
-  # left alone (see build_venue_inherited?).
-  def adopt_build_venue
-    self.build_venue = DEFAULT_BUILD_VENUE if new_record? && build_venue.blank?
-  end
-
   def adopt_kamal_contract
     self.self_describing = true if kamal? && (new_record? || will_save_change_to_deploy_method?)
   end
@@ -415,6 +424,14 @@ class App < ApplicationRecord
   validates :status, inclusion: { in: STATUSES }
   validates :deploy_method, inclusion: { in: DEPLOY_METHODS }
   validates :build_venue, inclusion: { in: BUILD_VENUES }, allow_blank: true
+  validate :build_venue_respects_control_plane_policy
+
+  def build_venue_respects_control_plane_policy
+    return if control_plane_permitted?
+    return if build_venue == "target"
+
+    errors.add(:build_venue, "must be target: #{control_plane_refusal}")
+  end
   # ADR 0003: one deploy path, and Kamal is the contract. A kamal app that is not
   # self-describing does not honour it — Conductor writes `.kamal/secrets` with raw
   # values instead of the generated overlay and git-safe pointers, so marking a
@@ -664,6 +681,18 @@ class App < ApplicationRecord
 
     existing = deployments.in_progress.order(created_at: :desc).first
     return [ existing, :already_running, nil ] if existing
+
+    # Tenant policy (plan 02 § 5.3–5.4). NOT a preflight row: `force` overrides
+    # preflight, and none of these may be overridden by the tenant that hit them.
+    if (refusal = TenantLimits.deploy_refusal(self))
+      policy = DeployPreflight::Result.new(checks: [
+        DeployPreflight::Check.new(key: :tenant_policy, label: "Tenant policy", status: :fail, detail: refusal)
+      ])
+      blocked = deployments.create!(user: user, commit_sha: commit_sha,
+                                    deploy_method: deploy_method, infra_revision: infra_revision,
+                                    status: "blocked", preflight_snapshot: preflight_blockers_json(policy))
+      return [ blocked, :blocked, policy ]
+    end
 
     preflight = DeployPreflight.new(self).check
     blockers_json = preflight.blocked? ? preflight_blockers_json(preflight) : nil
