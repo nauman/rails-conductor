@@ -472,6 +472,7 @@ class KamalDeployer
   # A short-lived GitHub App installation token for cloning, or nil.
   def resolve_clone_token
     return nil unless app.github_repo
+    return nil unless GithubApp.serves?(app.organization)
 
     gh = GithubApp.from_config
     return nil unless gh

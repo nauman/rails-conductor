@@ -40,4 +40,19 @@ class GithubAppTest < ActiveSupport::TestCase
 
     assert_equal "ghs_token_for_99", gh.clone_token_for("myvault/appone")
   end
+
+  test "serves only organizations a platform admin owns" do
+    admin = User.create!(email: "op@example.com", admin: true)
+    operator_org = Organization.create_for(admin, name: "Operator")
+    tenant = User.create!(email: "t@example.com")
+    tenant_org = Organization.create_for(tenant, name: "Tenant")
+
+    assert GithubApp.serves?(operator_org)
+    refute GithubApp.serves?(tenant_org)
+    refute GithubApp.serves?(nil)
+
+    # An admin who is merely a member of a tenant org does not extend the App to it.
+    tenant_org.add_member(admin, role: :member)
+    refute GithubApp.serves?(tenant_org)
+  end
 end

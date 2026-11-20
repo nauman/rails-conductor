@@ -6,7 +6,7 @@
 #   - A per-user / per-org ApiToken runs as that user, scoped to the token's
 #     organization and read/write scope (multi-tenant).
 #   - The shared CONDUCTOR_MCP_TOKEN env var runs as the first admin with global
-#     scope (legacy single-tenant).
+#     scope (legacy single-tenant). Refused when SIGNUP_MODE=open.
 #
 # Whichever kind authenticates, it lands on the same request state: @mcp_user plus
 # Current.organization / org_scoped / read_only. Tools scope off that and cannot
@@ -80,7 +80,12 @@ module McpAuthentication
     true
   end
 
+  # Global scope across every org is tolerable only while every org was invited.
+  # With open sign-up it is a skeleton key over tenants nobody vetted, so it is
+  # refused outright; operators use an org-bound ApiToken or OAuth instead.
   def authenticate_shared_token(token)
+    return false if SignupMode.open?
+
     expected = ENV["CONDUCTOR_MCP_TOKEN"]
     return false unless expected.present? && ActiveSupport::SecurityUtils.secure_compare(token.to_s, expected)
 

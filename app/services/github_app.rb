@@ -14,6 +14,19 @@ class GithubApp
 
   BASE = "https://api.github.com".freeze
 
+  # The App is configured instance-wide and installed on the OPERATOR's GitHub
+  # orgs, so its installation tokens reach the operator's repos. It serves only
+  # organizations a platform admin owns. A tenant org (anyone who signed up)
+  # never has one, so pointing a tenant app at an operator repo yields no token;
+  # that tenant deploys with its own deploy key or GitHub token instead.
+  # Owner, not member: an admin invited into a tenant org to help does not lend
+  # it the platform App.
+  def self.serves?(organization)
+    return false if organization.nil?
+
+    organization.memberships.owner.joins(:user).where(users: { admin: true }).exists?
+  end
+
   def self.from_config
     cred = Credential.for_provider("github_app").active.first
     return nil unless cred&.api_key.present? && cred.api_secret.present?
