@@ -16,6 +16,7 @@ class ScriptRun < ApplicationRecord
   def done?     = success? || failed?
 
   def append_log(line)
+    line = ControlPlaneRedactor.redact(line, server&.organization)
     self.log = "#{log}#{line}"
     update_columns(log: self.log)
     ActionCable.server.broadcast("script_run_#{id}", { line: line })

@@ -115,7 +115,7 @@ class NativeDeployer
     timestamp = Time.current.strftime("%H:%M:%S")
     ActionCable.server.broadcast(
       "deployment_#{deployment.id}",
-      { type: "log", line: "[#{timestamp}] #{message}\n", status: deployment.status }
+      { type: "log", line: "[#{timestamp}] #{ControlPlaneRedactor.redact(message, app.organization)}\n", status: deployment.status }
     )
   end
 

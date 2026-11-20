@@ -154,6 +154,7 @@ class Deployment < ApplicationRecord
 
   def append_log(message)
     timestamp = Time.current.strftime("%H:%M:%S")
+    message = ControlPlaneRedactor.redact(message, app&.organization)
     new_line = "[#{timestamp}] #{message}\n"
     update!(log: (log || "") + new_line)
   end

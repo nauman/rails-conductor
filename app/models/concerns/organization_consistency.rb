@@ -4,8 +4,10 @@
 # should already scope by org; this closes the gap when a raw foreign id slips
 # through strong params.
 #
-# Skipped when either side has no organization (legacy / global records) so it
-# never breaks existing data.
+# Skipped when this record has no organization (legacy / global records), and when
+# the related record has none but this org is one the operator vetted — so it
+# never breaks existing data. An org the operator did not vet (open sign-up) never
+# gets an org-less, i.e. operator-owned, record.
 module OrganizationConsistency
   extend ActiveSupport::Concern
 
@@ -14,7 +16,8 @@ module OrganizationConsistency
       validate do
         associations.each do |assoc|
           related = public_send(assoc)
-          next if related.nil? || organization_id.nil? || related.organization_id.nil?
+          next if related.nil? || organization_id.nil?
+          next if related.organization_id.nil? && !Organization.find_by(id: organization_id)&.untrusted_network_origin?
           next if related.organization_id == organization_id
 
           errors.add(assoc, "must belong to the same organization")

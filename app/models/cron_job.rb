@@ -1,4 +1,7 @@
 class CronJob < ApplicationRecord
+  include OrganizationConsistency
+  validate_same_organization :server, :app
+
   STATUSES = %w[enabled disabled].freeze
 
   belongs_to :organization

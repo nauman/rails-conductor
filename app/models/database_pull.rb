@@ -2,6 +2,9 @@
 # (a `pg_dump` over SSH, downloaded via SCP) and optionally restores it into a
 # local Postgres database. Mirrors the streaming-run pattern of ScriptRun.
 class DatabasePull < ApplicationRecord
+  include OrganizationConsistency
+  validate_same_organization :server, :app
+
   STATUSES = %w[pending running success failed].freeze
 
   belongs_to :server

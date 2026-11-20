@@ -1,4 +1,7 @@
 class Database < ApplicationRecord
+  include OrganizationConsistency
+  validate_same_organization :database_cluster, :app
+
   STATUSES = %w[pending active error].freeze
 
   belongs_to :organization
