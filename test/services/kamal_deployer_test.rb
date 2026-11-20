@@ -851,7 +851,7 @@ class KamalDeployerTest < ActiveSupport::TestCase
   end
 
   test "clones via a GitHub App installation token (https + GIT_ASKPASS) when configured" do
-    @org.users.first.update!(admin: true) # the instance App serves orgs a platform admin owns
+    @org.update!(github_app_granted_at: Time.current)
     fake_app = Object.new
     def fake_app.clone_token_for(repo) = "ghs_installtoken"
     shell = FakeShell.new(success: true)
@@ -866,10 +866,12 @@ class KamalDeployerTest < ActiveSupport::TestCase
     refute_includes sync[:command].last, "ghs_installtoken" # token never in the command
   end
 
-  # The GitHub App is instance-wide and installed on the OPERATOR's GitHub orgs. A
-  # tenant org that points an app at one of those repos must not get a clone token
-  # minted from the platform's installation — that is the operator's source code.
-  test "never mints a platform GitHub App clone token for an org no platform admin owns" do
+  # The GitHub App is instance-wide and installed on the OPERATOR's GitHub orgs. With
+  # open sign-up, a tenant org that points an app at one of those repos must not get
+  # a clone token minted from the platform's installation — that is the operator's
+  # source code.
+  test "never mints a platform GitHub App clone token for an ungranted org" do
+    # @org was created by a non-admin, so it holds no grant.
     asked = []
     fake_app = Object.new
     fake_app.define_singleton_method(:clone_token_for) { |repo| asked << repo; "ghs_platformtoken" }
@@ -883,6 +885,23 @@ class KamalDeployerTest < ActiveSupport::TestCase
     sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
     refute_includes sync[:command].last, "x-access-token"
     assert_nil sync[:env]["GIT_ASKPASS"]
+  end
+
+  test "with open sign-up, an admin-granted org still clones via the GitHub App" do
+    ENV["SIGNUP_MODE"] = "open"
+    @org.update!(github_app_granted_at: Time.current)
+    fake_app = Object.new
+    def fake_app.clone_token_for(repo) = "ghs_installtoken"
+    shell = FakeShell.new(success: true)
+
+    GithubApp.stub(:from_config, fake_app) do
+      KamalDeployer.new(@app, @deployment, shell: shell, allow_self_deploy: true).deploy!
+    end
+
+    sync = shell.runs.find { |r| r[:command].last.include?("git clone") }
+    assert_includes sync[:command].last, "https://x-access-token@github.com/"
+  ensure
+    ENV.delete("SIGNUP_MODE")
   end
 
   test "uses the https url and no GIT_SSH_COMMAND when there is no deploy key" do

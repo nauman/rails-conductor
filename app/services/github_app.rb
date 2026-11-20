@@ -15,16 +15,27 @@ class GithubApp
   BASE = "https://api.github.com".freeze
 
   # The App is configured instance-wide and installed on the OPERATOR's GitHub
-  # orgs, so its installation tokens reach the operator's repos. It serves only
-  # organizations a platform admin owns. A tenant org (anyone who signed up)
-  # never has one, so pointing a tenant app at an operator repo yields no token;
-  # that tenant deploys with its own deploy key or GitHub token instead.
-  # Owner, not member: an admin invited into a tenant org to help does not lend
-  # it the platform App.
+  # orgs, so its installation tokens reach the operator's repos. An org may use it
+  # only if it holds a grant (`github_app_granted_at`).
+  #
+  # The grant is recorded per org and never derived from the sign-up mode or
+  # from roles:
+  #   - Every org that existed before the grant was introduced was backfilled
+  #     (all were admitted by the operator on an invite-only instance).
+  #   - A new org is granted only when a platform admin creates it
+  #     (Organization.create_for). Orgs anyone else creates, in any mode, start
+  #     ungranted and use their own deploy key or GitHub token.
+  #   - Roles do not count: a tenant owner can promote any member, an admin
+  #     included, to owner, so "an admin owns it" is something a tenant can
+  #     arrange.
+  #   - Granting an existing org is an admin act (console/runner today).
+  #
+  # An app with no organization is reachable only by platform admins (every
+  # tenant surface is org-scoped), so it keeps the App while sign-up is closed.
   def self.serves?(organization)
-    return false if organization.nil?
+    return !SignupMode.open? if organization.nil?
 
-    organization.memberships.owner.joins(:user).where(users: { admin: true }).exists?
+    organization.github_app_granted_at.present?
   end
 
   def self.from_config
