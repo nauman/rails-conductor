@@ -335,7 +335,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_090000) do
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.index ["app_id", "deploy_method", "status"], name: "index_deployments_on_app_id_and_deploy_method_and_status"
-    t.index ["app_id"], name: "idx_one_active_deploy_per_app", unique: true, where: "((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('building'::character varying)::text, ('deploying'::character varying)::text]))"
+    t.index ["app_id"], name: "idx_one_active_deploy_per_app", unique: true, where: "((status)::text = ANY ((ARRAY['pending'::character varying, 'building'::character varying, 'deploying'::character varying])::text[]))"
     t.index ["app_id"], name: "index_deployments_on_app_id"
     t.index ["script_id"], name: "index_deployments_on_script_id"
     t.index ["server_id"], name: "index_deployments_on_server_id"
@@ -400,7 +400,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_090000) do
     t.datetime "updated_at", null: false
     t.integer "version", default: 1, null: false
     t.index ["recipe_id"], name: "index_jazari_recipes_on_recipe_id", unique: true
-    t.check_constraint "run_policy::text = ANY (ARRAY['unrestricted'::character varying::text, 'once_per_calendar_day'::character varying::text])", name: "jazari_recipes_run_policy_chk"
+    t.check_constraint "run_policy::text = ANY (ARRAY['unrestricted'::character varying, 'once_per_calendar_day'::character varying]::text[])", name: "jazari_recipes_run_policy_chk"
   end
 
   create_table "jazari_runbooks", force: :cascade do |t|
@@ -438,7 +438,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_090000) do
     t.index "recipe_id, COALESCE(subject_type, ''::character varying), COALESCE(subject_id, (0)::bigint), started_on", name: "jazari_runs_once_per_day_idx", unique: true, where: "((idempotency_policy)::text = 'once_per_calendar_day'::text)"
     t.index ["recipe_id", "started_at"], name: "index_jazari_runs_on_recipe_id_and_started_at"
     t.index ["subject_type", "subject_id", "started_at"], name: "idx_on_subject_type_subject_id_started_at_528a3eaaa5"
-    t.check_constraint "idempotency_policy::text = ANY (ARRAY['unrestricted'::character varying::text, 'once_per_calendar_day'::character varying::text])", name: "jazari_runs_idempotency_policy_chk"
+    t.check_constraint "idempotency_policy::text = ANY (ARRAY['unrestricted'::character varying, 'once_per_calendar_day'::character varying]::text[])", name: "jazari_runs_idempotency_policy_chk"
     t.check_constraint "started_on = (started_at AT TIME ZONE 'UTC'::text)::date", name: "jazari_runs_started_on_utc_chk"
     t.check_constraint "subject_type IS NULL AND subject_id IS NULL OR subject_type IS NOT NULL AND subject_id IS NOT NULL", name: "jazari_runs_subject_pair_chk"
   end

@@ -139,3 +139,43 @@ class SshConnectionTenantGateTest < ActiveSupport::TestCase
     assert_equal [ "10.0.0.4" ], dial_attempts { SshConnection.new(server).execute("true") }
   end
 end
+
+# Site checks run curl FROM the control plane; for a tenant they are an egress.
+class SiteMonitorEgressTest < ActiveSupport::TestCase
+  setup do
+    _user, @org = signed_up_tenant
+    @app = @org.apps.create!(name: "a", slug: "tenant-site", deploy_method: "docker", domain: "site.example.com",
+                             repository_url: "https://github.com/x/y.git")
+  end
+
+  def curl_args
+    captured = nil
+    Open3.stub(:capture2e, ->(*args) { captured = args; [ "200 0 0 0 0 0", nil ] }) do
+      SiteMonitor.new(@app, retry_delay: 0).check!
+    end
+    captured
+  end
+
+  test "a tenant domain resolving to a private address is never probed" do
+    Resolv.stub(:getaddresses, [ "127.0.0.1" ]) do
+      check = SiteMonitor.new(@app, retry_delay: 0).check!
+      refute check.up
+    end
+  end
+
+  test "a tenant probe is pinned to the checked address and does not follow redirects" do
+    args = Resolv.stub(:getaddresses, [ "1.1.1.1" ]) { curl_args }
+    assert_includes args.each_cons(2).to_a, [ "--resolve", "site.example.com:#{@app.ssl_enabled? ? 443 : 80}:1.1.1.1" ]
+    assert_includes args.each_cons(2).to_a, [ "--max-redirs", "0" ]
+    refute_includes args, "-L"
+  end
+
+  test "a vetted org's probe is unchanged" do
+    user = User.create!(email: "invited@example.com")
+    org = Organization.create_for(user, name: "invited")
+    @app.update_columns(organization_id: org.id)
+    args = curl_args
+    assert_includes args, "-L"
+    refute_includes args, "--resolve"
+  end
+end
