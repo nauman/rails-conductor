@@ -23,9 +23,13 @@ class Organization < ApplicationRecord
   validates :name, presence: true
 
   # Create an org and make the given user its owner, atomically.
+  #
+  # The instance GitHub App grant (see GithubApp.serves?) comes with the org only
+  # when a platform admin creates it — never from the sign-up mode or from params,
+  # so no tenant can mint a granted org for itself, in any mode.
   def self.create_for(user, name:)
     transaction do
-      org = create!(name: name)
+      org = create!(name: name, github_app_granted_at: (Time.current if user.admin?))
       org.add_member(user, role: :owner)
       org
     end

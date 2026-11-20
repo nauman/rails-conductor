@@ -85,4 +85,28 @@ class MultiTenantMcpTest < ActionDispatch::IntegrationTest
   ensure
     ENV["CONDUCTOR_MCP_TOKEN"] = original
   end
+
+  # Open sign-up (plan 02): the legacy shared token acts as the first admin across
+  # EVERY org. Once strangers can create orgs, that is a skeleton key over tenants
+  # nobody vetted, so open mode refuses it for reads and writes alike.
+  test "the legacy shared token is refused when sign-up is open" do
+    admin = User.create!(email: "admin@example.com", admin: true)
+    admin.ensure_personal_organization!
+    original = ENV.to_h.slice("CONDUCTOR_MCP_TOKEN", "SIGNUP_MODE")
+    ENV["CONDUCTOR_MCP_TOKEN"] = "legacy-shared"
+    ENV["SIGNUP_MODE"] = "open"
+
+    call_tool("conductor_read", { action: "fleet_status" }, token: "legacy-shared")
+    assert_response :unauthorized
+
+    call_tool("conductor_app", { action: "deploy", app_name: "app-b" }, token: "legacy-shared")
+    assert_response :unauthorized
+    assert_equal 0, @app_b.deployments.count
+
+    # Per-user org-bound tokens keep working in open mode.
+    call_tool("conductor_read", { action: "fleet_status" }, token: @token_a)
+    assert_response :success
+  ensure
+    %w[CONDUCTOR_MCP_TOKEN SIGNUP_MODE].each { |k| original.key?(k) ? ENV[k] = original[k] : ENV.delete(k) }
+  end
 end

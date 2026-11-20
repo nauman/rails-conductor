@@ -40,4 +40,44 @@ class GithubAppTest < ActiveSupport::TestCase
 
     assert_equal "ghs_token_for_99", gh.clone_token_for("myvault/appone")
   end
+
+  test "an org a platform admin creates is granted; one anyone else creates is not" do
+    operator_org = Organization.create_for(User.create!(email: "op@example.com", admin: true), name: "Operator")
+    tenant_org = Organization.create_for(User.create!(email: "t@example.com"), name: "Tenant")
+
+    assert GithubApp.serves?(operator_org)
+    refute GithubApp.serves?(tenant_org)
+  end
+
+  test "the grant does not depend on the sign-up mode, in either direction" do
+    operator_org = Organization.create_for(User.create!(email: "op@example.com", admin: true), name: "Operator")
+    ENV["SIGNUP_MODE"] = "open"
+    tenant_org = Organization.create_for(User.create!(email: "t@example.com"), name: "Tenant")
+    assert GithubApp.serves?(operator_org.reload), "operator org keeps the App once sign-up opens"
+    refute GithubApp.serves?(tenant_org)
+
+    ENV.delete("SIGNUP_MODE")
+    later_org = Organization.create_for(User.find_by!(email: "t@example.com"), name: "Later")
+    refute GithubApp.serves?(tenant_org.reload), "closing sign-up does not grant open-era orgs"
+    refute GithubApp.serves?(later_org), "a non-admin cannot mint a granted org after sign-up closes"
+  ensure
+    ENV.delete("SIGNUP_MODE")
+  end
+
+  test "a role change never grants the App" do
+    admin = User.create!(email: "op@example.com", admin: true)
+    tenant_org = Organization.create_for(User.create!(email: "t@example.com"), name: "Tenant")
+    tenant_org.add_member(admin, role: :member)
+    tenant_org.memberships.find_by!(user: admin).update!(role: :owner)
+
+    refute GithubApp.serves?(tenant_org.reload)
+  end
+
+  test "org-less apps keep the App only while sign-up is closed" do
+    assert GithubApp.serves?(nil)
+    ENV["SIGNUP_MODE"] = "open"
+    refute GithubApp.serves?(nil)
+  ensure
+    ENV.delete("SIGNUP_MODE")
+  end
 end
