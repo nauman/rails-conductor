@@ -1,4 +1,6 @@
 class MessagesController < ApplicationController
+  # In-app chat spends operator-paid model calls (plan 02 § 5.5): trusted orgs only.
+  before_action :require_chat!
   before_action :set_conversation
 
   def create
@@ -38,5 +40,13 @@ class MessagesController < ApplicationController
     @conversation = current_user.conversations.find(params[:conversation_id])
   rescue ActiveRecord::RecordNotFound
     redirect_to conversations_path, alert: 'Conversation not found.'
+  end
+
+  private
+
+  def require_chat!
+    return if current_can?(:chat)
+
+    redirect_to root_path, alert: "Chat opens once your organization is trusted."
   end
 end

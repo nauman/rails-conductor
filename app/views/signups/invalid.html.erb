@@ -1,0 +1,9 @@
+<% content_for :title, "Sign-up link · Conductor" %>
+
+<section class="min-h-[60vh] flex items-center justify-center px-4">
+  <div class="w-full max-w-md rounded-large border border-border bg-surface p-8 shadow-soft text-center">
+    <h1 class="font-display text-xl text-ink">This link can't be used</h1>
+    <p class="mt-2 text-sm text-muted"><%= @error || "This sign-up link has expired or was already used. Start again." %></p>
+    <p class="mt-6"><%= link_to "Start again", signup_path, class: "underline text-sm" %></p>
+  </div>
+</section>

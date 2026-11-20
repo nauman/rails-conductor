@@ -3,6 +3,7 @@ module Api
     before_action :authenticate_api_token!
     before_action :require_organization!
     before_action :enforce_token_scope!
+    before_action :enforce_tenant_limits!
 
     rescue_from ActiveRecord::RecordNotFound do |exception|
       render json: { error: "#{exception.model || 'Record'} not found" }, status: :not_found
@@ -39,6 +40,18 @@ module Api
       unless OperatorPolicy.operator?(current_user, current_organization)
         render json: { error: "This action requires an organization owner or editor" }, status: :forbidden
       end
+    end
+
+    # Plan 02 § 5.3: a suspended org's API does nothing; a `new` org's minute
+    # bucket is small. Same TenantLimits counter the MCP surface uses.
+    def enforce_tenant_limits!
+      org = current_organization
+      if org&.suspended? && !current_admin?
+        return render json: { error: "This organization is suspended" }, status: :forbidden
+      end
+      return if TenantLimits.api_call!(org)
+
+      render json: { error: "Rate limit exceeded for this organization" }, status: :too_many_requests
     end
 
     # Owner-only bands (see OperatorPolicy). Controllers whose actions execute

@@ -109,6 +109,18 @@ development:
     queue: ops
     schedule: every day at 6am
 
+  # Plan 02: unclicked sign-up links are purged after 24 hours, and a `new`
+  # org is promoted 7 days after its card check if its record is clean.
+  purge_signup_intents:
+    class: PurgeSignupIntentsJob
+    queue: ops
+    schedule: every day at 3am
+
+  promote_trusted_organizations:
+    class: PromoteTrustedOrganizationsJob
+    queue: ops
+    schedule: every day at 4am
+
 production:
   refresh_server_metrics:
     class: RefreshServerMetricsJob
@@ -208,6 +220,18 @@ production:
     class: OwnerlessOrganizationCheckJob
     queue: ops
     schedule: every day at 6am
+
+  # Plan 02: unclicked sign-up links are purged after 24 hours, and a `new`
+  # org is promoted 7 days after its card check if its record is clean.
+  purge_signup_intents:
+    class: PurgeSignupIntentsJob
+    queue: ops
+    schedule: every day at 3am
+
+  promote_trusted_organizations:
+    class: PromoteTrustedOrganizationsJob
+    queue: ops
+    schedule: every day at 4am
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"

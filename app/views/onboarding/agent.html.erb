@@ -1,0 +1,20 @@
+<% content_for :title, "Connect an agent · Conductor" %>
+
+<div class="mx-auto max-w-xl py-12">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft">
+    <p class="text-xs uppercase tracking-label text-faint">Step 3 of 4 · optional</p>
+    <h1 class="font-display text-xl text-ink">Connect an agent</h1>
+    <p class="mt-1 text-sm text-muted">
+      Conductor speaks MCP. Add this URL as a connector in your agent; it signs in with OAuth
+      as you, scoped to this organization.
+    </p>
+    <pre class="mt-4 rounded-control bg-fill p-3 text-xs"><%= "#{request.base_url}/mcp" %></pre>
+    <p class="mt-2 text-xs text-faint">Prefer a token? <%= link_to "Create an MCP token", mcp_tokens_path, class: "underline" %>.</p>
+
+    <p class="mt-8 text-xs uppercase tracking-label text-faint">Step 4 of 4</p>
+    <h2 class="font-display text-lg text-ink">Add your first app</h2>
+    <p class="mt-1 text-sm text-muted">Point Conductor at a repository and the server you just verified.</p>
+    <%= link_to "Add an app", new_app_path, class: "mt-4 inline-flex rounded-control bg-primary px-4 py-2.5 text-sm font-medium text-white" %>
+    <%= link_to "Go to the dashboard", root_path, class: "ml-3 text-sm underline text-muted" %>
+  </div>
+</div>

@@ -9,10 +9,17 @@ class SshConnection
   # `user:` overrides the login user (defaults to the server's ssh_user). Used by
   # provisioning orchestrations that must verify a freshly-created identity
   # (e.g. deploy) over SSH before committing to it.
-  def initialize(server, user: nil)
+  # The connection was refused before dialling, by tenant policy (plan 02 § 5.4):
+  # a suspended org, an unverified server, a private/operator address, or the
+  # org's SSH attempt cap. Rescued like any other connect failure by each caller.
+  class Refused < StandardError; end
+
+  def initialize(server, user: nil, ownership_probe: false)
     @server = server
     @login_user = user
     @error = nil
+    # Only ServerOwnership's nonce check may dial an unverified server.
+    @ownership_probe = ownership_probe
   end
 
   def login_user
@@ -57,7 +64,7 @@ class SshConnection
 
     begin
       Net::SSH.start(
-        server.ip_address,
+        connect_address,
         login_user,
         **ssh_options
       ) do |ssh|
@@ -89,7 +96,7 @@ class SshConnection
     exit_code = nil
 
     Net::SSH.start(
-      server.ip_address,
+      connect_address,
       login_user,
       **ssh_options
     ) do |ssh|
@@ -141,7 +148,7 @@ class SshConnection
     end
 
     outputs = []
-    Net::SSH.start(server.ip_address, login_user, **ssh_options) do |ssh|
+    Net::SSH.start(connect_address, login_user, **ssh_options) do |ssh|
       commands.each { |c| outputs << self.class.utf8(ssh.exec!(c)) }
     end
     outputs
@@ -161,7 +168,7 @@ class SshConnection
     return failure("No IP address configured") unless server.ip_address.present?
 
     Net::SSH.start(
-      server.ip_address,
+      connect_address,
       login_user,
       **ssh_options
     ) do |ssh|
@@ -205,7 +212,7 @@ class SshConnection
     end
 
     Net::SSH.start(
-      server.ip_address,
+      connect_address,
       login_user,
       **ssh_options
     ) do |ssh|
@@ -242,7 +249,7 @@ class SshConnection
     @error = nil
     return false unless server.ssh_key.present? && server.ip_address.present?
 
-    Net::SSH.start(server.ip_address, login_user, **ssh_options) do |ssh|
+    Net::SSH.start(connect_address, login_user, **ssh_options) do |ssh|
       ssh.scp.upload!(StringIO.new(content.to_s), remote_path, mode: mode)
     end
     true
@@ -263,6 +270,31 @@ class SshConnection
   end
 
   private
+
+  # Where Net::SSH actually dials. For an org the operator vetted this is the
+  # stored address, exactly as before. For any other org it is gated here, at
+  # connect time, on every connection — not at save — so a hostname that
+  # re-resolves to a private or operator address (DNS rebinding) is caught, and
+  # the RESOLVED address is what we dial, so the check and the connect agree.
+  def connect_address
+    org = server.organization
+    return server.ip_address if org.nil? || !org.untrusted_network_origin?
+
+    raise Refused, "the organization is suspended" if org.suspended?
+    unless @ownership_probe || server.ownership_verified?
+      raise Refused, "#{server.name} has not proved ownership yet — finish the verification step first"
+    end
+    raise Refused, "too many SSH connection attempts this hour — try again later" unless TenantLimits.ssh_attempt!(org)
+
+    EgressGuard.resolve!(server.ip_address, organization: org)
+  rescue EgressGuard::Refused => e
+    org.flag_abuse!(:egress_refused, "#{server.ip_address}: #{e.message}")
+    raise Refused, e.message
+  end
+
+  def untrusted_origin?
+    server.organization&.untrusted_network_origin?
+  end
 
   def ssh_options
     options = {
@@ -294,7 +326,7 @@ class SshConnection
     options.merge!(
       keys: [], keys_only: true, use_agent: false, config: false,
       auth_methods: [ "publickey" ]
-    ) if @strict_identity
+    ) if @strict_identity || untrusted_origin?
 
     options
   end

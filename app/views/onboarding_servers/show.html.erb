@@ -1,0 +1,24 @@
+<% content_for :title, "Verify #{@server.name} · Conductor" %>
+
+<div class="mx-auto max-w-xl py-12">
+  <div class="rounded-large border border-border bg-surface p-8 shadow-soft">
+    <p class="text-xs uppercase tracking-label text-faint">Step 2 of 4</p>
+    <h1 class="font-display text-xl text-ink">Install Conductor's key on <%= @server.name %></h1>
+    <p class="mt-1 text-sm text-muted">
+      As <code><%= @server.ssh_user_or_default %></code> on <code><%= @server.ip_address %></code>, append this one line to
+      <code>~/.ssh/authorized_keys</code>. Its comment is this registration's verification code.
+    </p>
+
+    <pre id="authorized-keys-line" class="mt-4 whitespace-pre-wrap break-all rounded-control bg-fill p-3 text-xs"><%= @authorized_keys_line %></pre>
+
+    <% if @verification_error %>
+      <%= rui_alert(type: :danger, class: "mt-4") { "Not verified yet: #{@verification_error}" } %>
+    <% end %>
+
+    <%= button_to "Verify server", verify_onboarding_server_path(@server), class: "mt-6 w-full cursor-pointer rounded-control bg-primary px-4 py-2.5 text-sm font-medium text-white" %>
+    <p class="mt-3 text-xs text-faint">
+      Until it is verified, Conductor will not run anything on this server.
+      <%= link_to "View server", server_path(@server), class: "underline" %>
+    </p>
+  </div>
+</div>

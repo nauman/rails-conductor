@@ -34,6 +34,7 @@ class UsersController < ApplicationController
       redirect_to users_path, alert: "You cannot change your own admin status."
     else
       @user.update(admin: !@user.admin?)
+      Rails.logger.warn("[audit] toggle_admin user=#{@user.id} admin=#{@user.admin?} by=#{current_user.id}")
       redirect_to users_path, notice: "#{@user.email} is now #{@user.admin? ? 'an admin' : 'a member'}."
     end
   end

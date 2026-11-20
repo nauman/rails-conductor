@@ -29,7 +29,22 @@ class Server < ApplicationRecord
   has_many :database_pulls, dependent: :destroy
   has_many :cron_jobs, dependent: :destroy
 
-  validates :name, presence: true, uniqueness: true
+  # Unique per organization, not per instance: a global rule let one tenant learn
+  # another's server names by collision (plan 02 § 6 item 2). A name is a display
+  # identity; nothing on the control plane is keyed by it.
+  validates :name, presence: true, uniqueness: { scope: :organization_id }
+  validate :within_tenant_server_limit, on: :create
+  validate :address_is_public_for_unvetted_org, if: -> { will_save_change_to_ip_address? || will_save_change_to_organization_id? }
+
+  # Early feedback only. The binding check is SshConnection#connect_address,
+  # which re-resolves on every connect (DNS rebinding).
+  def address_is_public_for_unvetted_org
+    return unless organization&.untrusted_network_origin? && ip_address.present?
+
+    EgressGuard.resolve!(ip_address, organization: organization)
+  rescue EgressGuard::Refused => e
+    errors.add(:ip_address, "cannot be used: #{e.message}")
+  end
   validates :status, inclusion: { in: STATUSES }
   validates :provider, inclusion: { in: PROVIDERS }, allow_blank: true
   # Defense in depth against cross-tenant key assignment: an attached key must
@@ -37,10 +52,25 @@ class Server < ApplicationRecord
   validate :ssh_key_matches_organization
 
   def ssh_key_matches_organization
-    return if ssh_key.nil? || organization_id.nil? || ssh_key.organization_id.nil?
+    return if ssh_key.nil? || organization_id.nil?
+    # A legacy org-less key is the operator's. An org it did not vet never gets one.
+    return if ssh_key.organization_id.nil? && !organization&.untrusted_network_origin?
     return if ssh_key.organization_id == organization_id
 
     errors.add(:ssh_key, "must belong to the same organization as the server")
+  end
+
+  def within_tenant_server_limit
+    return unless organization && TenantLimits.server_limit_reached?(organization)
+
+    errors.add(:base, "New organizations can register up to #{TenantLimits.limit(organization, :servers)} servers")
+  end
+
+  # Proof of control (§ 5.4). Servers of orgs the operator vetted never needed it.
+  def ownership_verified?
+    return true unless organization&.untrusted_network_origin?
+
+    ownership_verified_at.present?
   end
 
   scope :online, -> { where(status: "online") }

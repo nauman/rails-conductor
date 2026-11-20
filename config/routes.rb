@@ -86,6 +86,25 @@ Rails.application.routes.draw do
     end
   end
 
+  # Open hosted sign-up (plan 02). Every action 404s unless SIGNUP_MODE=open.
+  get  "/signup", to: "signups#new", as: :signup
+  post "/signup", to: "signups#create"
+  get  "/signup/sent", to: "signups#sent", as: :signup_sent
+  get  "/signup/verify/:token", to: "signups#verify", as: :verify_signup
+
+  # Card check before onboarding (verified, never charged)
+  get  "/onboarding/card", to: "card_checks#show", as: :card_check
+  post "/onboarding/card/intent", to: "card_checks#create", as: :card_check_intent
+  get  "/onboarding/card/complete", to: "card_checks#complete", as: :complete_card_check
+
+  # Onboarding steps 2-4: register a server (with proof of control), connect an
+  # agent, first app.
+  get  "/onboarding/server", to: "onboarding_servers#new", as: :onboarding_server
+  post "/onboarding/server", to: "onboarding_servers#create"
+  get  "/onboarding/server/:id", to: "onboarding_servers#show", as: :onboarding_server_verification
+  post "/onboarding/server/:id/verify", to: "onboarding_servers#verify", as: :verify_onboarding_server
+  get  "/onboarding/agent", to: "onboarding#agent", as: :onboarding_agent
+
   # First-run onboarding (name your organization)
   resource :onboarding, only: [:show, :update], controller: "onboarding"
 
@@ -103,7 +122,12 @@ Rails.application.routes.draw do
   # Platform admin (webmaster) — cross-org administration
   namespace :admin do
     root to: "organizations#index"
-    resources :organizations, only: [:index, :show]
+    resources :organizations, only: [:index, :show] do
+      member do
+        post :suspend
+        post :reinstate
+      end
+    end
     resources :users, only: [:index]
     resources :mcp_calls, only: [:index]
   end

@@ -68,11 +68,22 @@ class ApplicationController < ActionController::Base
       current_user.organizations.first
   end
 
-  # Route users with an un-onboarded org through the first-run flow.
+  # Route users with an un-onboarded org through the first-run flow. For a
+  # self-signed-up org the card check comes first (plan 02 § 3 step 3a), and a
+  # suspended org reaches nothing at all.
+  ONBOARDING_EXEMPT = %r{\A/(onboarding|users/sign|signup)(/|\z)}
+
   def require_onboarding
     return unless current_user && current_organization
+
+    if current_organization.suspended? && !current_admin?
+      return if request.path.start_with?("/users/sign")
+
+      return render(template: "organizations/suspended", status: :forbidden)
+    end
+    return if request.path.match?(ONBOARDING_EXEMPT)
+    return redirect_to(card_check_path) if current_organization.card_check_required?
     return if current_organization.onboarded?
-    return if request.path == onboarding_path || request.path.start_with?("/users/sign")
 
     redirect_to onboarding_path
   end

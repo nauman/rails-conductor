@@ -61,6 +61,9 @@ class KamalOps
     # meant attempting kamal anyway, waiting out a DNS failure against a host that
     # was never meant to resolve, and reporting THAT — while the operator's actual
     # question, "then what does deploy it", went unanswered.
+    # Every kamal verb parses the repo's deploy.yml (ERB) on this host.
+    return @app.control_plane_refusal if @app.control_plane_refusal
+
     if FleetCanon.shape_for(@app)[:driver] == "external"
       return "#{@app.name} does not deploy via kamal — Conductor is not its driver. " \
              "Its recorded path: #{@app.deploy_hold_reason.to_s.strip.presence || 'see the app notes'}"

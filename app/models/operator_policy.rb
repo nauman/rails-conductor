@@ -35,12 +35,31 @@ module OperatorPolicy
   # Capabilities an editor holds. Anything outside OWNER_ONLY + EDITOR is
   # unrecognized and denied to non-owners (see `can?`).
   EDITOR = %i[deploy configure read].freeze
-  KNOWN = (OWNER_ONLY + EDITOR).freeze
+
+  # Capabilities any member holds, gated only by the org's trust.
+  #
+  #   :chat — in-app chat spends operator-paid model calls (§ 5.5)
+  MEMBER = %i[chat].freeze
+
+  # Capabilities that run code on the CONTROL PLANE rather than the org's own
+  # servers. Granted to operators of an org the operator vetted — never to a
+  # self-signed-up org, at any trust level (Organization#control_plane_execution_allowed?).
+  #
+  #   :control_build — build on Conductor's host, or drive Kamal from it (Kamal
+  #                    evaluates the repo's deploy.yml ERB, secrets and hooks there)
+  CONTROL_PLANE = %i[control_build].freeze
+
+  KNOWN = (OWNER_ONLY + EDITOR + MEMBER + CONTROL_PLANE).freeze
+
+  # Trust gates, applied on top of the role bands (plan 02 § 5.3). A `new` org's
+  # owner still holds every owner band EXCEPT these until promotion.
+  TRUSTED_ONLY = %i[execute chat].freeze
 
   # May this user perform ordinary (non-owner-only) infrastructure operations?
   def operator?(user, organization)
     return false if user.nil?
     return true if user.admin?
+    return false if organization&.suspended?
 
     !!organization&.operator?(user)
   end
@@ -51,13 +70,28 @@ module OperatorPolicy
   def can?(user, organization, capability)
     return false if user.nil?
     return true if user.admin?
+    return false unless trust_permits?(organization, capability)
 
     # Fail CLOSED on anything unrecognized. A typo (`:credential`) or a string
     # instead of a symbol must not silently widen access to editors — an
     # authorization API whose default is "grant" is a bug waiting to be typed.
     return !!organization&.owner?(user) unless KNOWN.include?(capability)
     return !!organization&.owner?(user) if OWNER_ONLY.include?(capability)
+    return organization.present? && organization.memberships.exists?(user: user) if MEMBER.include?(capability)
 
     operator?(user, organization)
+  end
+
+  # Does the org's trust level allow this capability at all, whoever asks?
+  # Suspended allows nothing; control-plane work needs a vetted org; the
+  # TRUSTED_ONLY bands need `trusted`. Unknown orgs (nil) are left to the role
+  # check, which already denies them.
+  def trust_permits?(organization, capability)
+    return true if organization.nil?
+    return false if organization.suspended?
+    return organization.control_plane_execution_allowed? if CONTROL_PLANE.include?(capability)
+    return organization.trusted? if TRUSTED_ONLY.include?(capability)
+
+    true
   end
 end

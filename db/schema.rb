@@ -10,9 +10,18 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_21_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "abuse_flags", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "detail"
+    t.string "kind", null: false
+    t.bigint "organization_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["organization_id"], name: "index_abuse_flags_on_organization_id"
+  end
 
   create_table "api_tokens", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -326,7 +335,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.index ["app_id", "deploy_method", "status"], name: "index_deployments_on_app_id_and_deploy_method_and_status"
-    t.index ["app_id"], name: "idx_one_active_deploy_per_app", unique: true, where: "((status)::text = ANY ((ARRAY['pending'::character varying, 'building'::character varying, 'deploying'::character varying])::text[]))"
+    t.index ["app_id"], name: "idx_one_active_deploy_per_app", unique: true, where: "((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('building'::character varying)::text, ('deploying'::character varying)::text]))"
     t.index ["app_id"], name: "index_deployments_on_app_id"
     t.index ["script_id"], name: "index_deployments_on_script_id"
     t.index ["server_id"], name: "index_deployments_on_server_id"
@@ -391,7 +400,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
     t.datetime "updated_at", null: false
     t.integer "version", default: 1, null: false
     t.index ["recipe_id"], name: "index_jazari_recipes_on_recipe_id", unique: true
-    t.check_constraint "run_policy::text = ANY (ARRAY['unrestricted'::character varying, 'once_per_calendar_day'::character varying]::text[])", name: "jazari_recipes_run_policy_chk"
+    t.check_constraint "run_policy::text = ANY (ARRAY['unrestricted'::character varying::text, 'once_per_calendar_day'::character varying::text])", name: "jazari_recipes_run_policy_chk"
   end
 
   create_table "jazari_runbooks", force: :cascade do |t|
@@ -429,7 +438,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
     t.index "recipe_id, COALESCE(subject_type, ''::character varying), COALESCE(subject_id, (0)::bigint), started_on", name: "jazari_runs_once_per_day_idx", unique: true, where: "((idempotency_policy)::text = 'once_per_calendar_day'::text)"
     t.index ["recipe_id", "started_at"], name: "index_jazari_runs_on_recipe_id_and_started_at"
     t.index ["subject_type", "subject_id", "started_at"], name: "idx_on_subject_type_subject_id_started_at_528a3eaaa5"
-    t.check_constraint "idempotency_policy::text = ANY (ARRAY['unrestricted'::character varying, 'once_per_calendar_day'::character varying]::text[])", name: "jazari_runs_idempotency_policy_chk"
+    t.check_constraint "idempotency_policy::text = ANY (ARRAY['unrestricted'::character varying::text, 'once_per_calendar_day'::character varying::text])", name: "jazari_runs_idempotency_policy_chk"
     t.check_constraint "started_on = (started_at AT TIME ZONE 'UTC'::text)::date", name: "jazari_runs_started_on_utc_chk"
     t.check_constraint "subject_type IS NULL AND subject_id IS NULL OR subject_type IS NOT NULL AND subject_id IS NOT NULL", name: "jazari_runs_subject_pair_chk"
   end
@@ -524,11 +533,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
   end
 
   create_table "organizations", force: :cascade do |t|
+    t.datetime "card_verified_at"
     t.datetime "created_at", null: false
     t.datetime "github_app_granted_at"
     t.string "name", null: false
     t.datetime "onboarded_at"
+    t.string "signup_source"
+    t.string "stripe_customer_id"
+    t.string "stripe_setup_intent_id"
+    t.string "trust_level", default: "trusted", null: false
     t.datetime "updated_at", null: false
+    t.index ["trust_level"], name: "index_organizations_on_trust_level"
   end
 
   create_table "passwordless_sessions", force: :cascade do |t|
@@ -626,6 +641,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
     t.datetime "metrics_updated_at"
     t.string "name", null: false
     t.bigint "organization_id"
+    t.string "ownership_nonce"
+    t.datetime "ownership_verified_at"
     t.string "provider"
     t.datetime "rebooting_at"
     t.string "region"
@@ -637,9 +654,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
     t.integer "uptime_seconds", default: 0, null: false
     t.bigint "user_id"
     t.index ["ask_token"], name: "index_servers_on_ask_token", unique: true
+    t.index ["organization_id", "name"], name: "index_servers_on_organization_id_and_name", unique: true
     t.index ["organization_id"], name: "index_servers_on_organization_id"
     t.index ["ssh_key_id"], name: "index_servers_on_ssh_key_id"
     t.index ["status"], name: "index_servers_on_status"
+  end
+
+  create_table "signup_intents", force: :cascade do |t|
+    t.datetime "consumed_at"
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.string "email_digest", null: false
+    t.datetime "expires_at", null: false
+    t.string "ip"
+    t.string "ip_prefix"
+    t.datetime "terms_accepted_at", null: false
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.index ["email_digest"], name: "index_signup_intents_on_email_digest"
+    t.index ["ip_prefix", "consumed_at"], name: "index_signup_intents_on_ip_prefix_and_consumed_at"
+    t.index ["token_digest"], name: "index_signup_intents_on_token_digest", unique: true
   end
 
   create_table "site_checks", force: :cascade do |t|
@@ -702,15 +736,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
     t.index ["tool_name"], name: "index_tool_executions_on_tool_name"
   end
 
+  create_table "trust_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "from_level", null: false
+    t.bigint "organization_id", null: false
+    t.string "reason", null: false
+    t.string "to_level", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["organization_id"], name: "index_trust_events_on_organization_id"
+    t.index ["user_id"], name: "index_trust_events_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.datetime "created_at", null: false
     t.string "email", null: false
+    t.datetime "email_verified_at"
     t.string "name"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "abuse_flags", "organizations"
   add_foreign_key "api_tokens", "organizations"
   add_foreign_key "api_tokens", "users"
   add_foreign_key "app_transfers", "apps"
@@ -772,4 +820,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_20_090000) do
   add_foreign_key "storage_buckets", "apps"
   add_foreign_key "storage_buckets", "organizations"
   add_foreign_key "tool_executions", "messages"
+  add_foreign_key "trust_events", "organizations"
+  add_foreign_key "trust_events", "users"
 end

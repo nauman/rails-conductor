@@ -5,16 +5,63 @@ class User < ApplicationRecord
 
   scope :admins, -> { where(admin: true) }
 
-  # Sign-in is invite-only. The very first user bootstraps as the platform
-  # admin (webmaster); after that, only existing users can request a magic link
-  # — unknown emails get nothing (no auto-signup, no user enumeration).
-  def self.fetch_resource_for_passwordless(email)
-    normalized_email = email.downcase.strip
+  class BootstrapRefused < StandardError; end
 
-    if User.count.zero?
-      create!(email: normalized_email, admin: true).tap(&:ensure_personal_organization!)
+  # Sign-in is invite-only unless SIGNUP_MODE=open, and even then this method
+  # never creates an account for a stranger: open sign-up goes through
+  # SignupIntent, which creates the user only after the emailed link is clicked.
+  #
+  # The first admin:
+  #   invite-only — the very first email on an empty database (self-host install);
+  #   open        — only BOOTSTRAP_ADMIN_EMAIL, and only while no admin exists.
+  # Unknown emails get nil (no auto-signup, no user enumeration).
+  def self.fetch_resource_for_passwordless(email)
+    normalized_email = email.to_s.downcase.strip
+
+    existing = find_by(email: normalized_email)
+    return existing if existing
+
+    if bootstrap_candidate?(normalized_email)
+      begin
+        return bootstrap_admin!(normalized_email)
+      rescue BootstrapRefused
+        # Lost the race to another first request; fall through as an unknown email.
+      end
+    end
+
+    accept_pending_invitation(normalized_email)
+  end
+
+  def self.bootstrap_candidate?(email)
+    if SignupMode.open?
+      SignupMode.bootstrap_admin_email == email && !admins.exists?
     else
-      find_by(email: normalized_email) || accept_pending_invitation(normalized_email)
+      User.none? || (SignupMode.bootstrap_admin_email == email && !admins.exists?)
+    end
+  end
+
+  # Create the platform admin, at most once. A transaction-scoped advisory lock
+  # serialises concurrent first requests, so two of them cannot both see "no
+  # admin yet" and both become admin. Re-checks under the lock and refuses when
+  # someone else won.
+  BOOTSTRAP_LOCK_KEY = 0x0C0D_0001
+
+  #
+  # `operator:` is true only for the rake task, run by someone with a shell on the
+  # host. Every web path passes false, and then the seat is claimable only on an
+  # empty database or by the configured BOOTSTRAP_ADMIN_EMAIL.
+  def self.bootstrap_admin!(email, operator: false)
+    normalized = email.to_s.downcase.strip
+    transaction do
+      connection.execute("SELECT pg_advisory_xact_lock(#{BOOTSTRAP_LOCK_KEY})")
+      raise BootstrapRefused, "a platform admin already exists" if admins.exists?
+      raise BootstrapRefused, "#{normalized} already has an account" if exists?(email: normalized)
+
+      claimable = operator || User.none? || SignupMode.bootstrap_admin_email == normalized
+      claimable = false if SignupMode.open? && !operator && SignupMode.bootstrap_admin_email != normalized
+      raise BootstrapRefused, "set BOOTSTRAP_ADMIN_EMAIL to bootstrap an admin" unless claimable
+
+      create!(email: normalized, admin: true, email_verified_at: Time.current).tap(&:ensure_personal_organization!)
     end
   end
 
