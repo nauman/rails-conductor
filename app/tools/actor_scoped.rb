@@ -58,7 +58,14 @@ module ActorScoped
   # alone; otherwise fall back to all of the user's orgs.
   def actor_org_ids
     return [ Current.organization.id ] if Current.organization
-    # An org-less token reaches all the user's orgs — except suspended ones.
-    @user ? @user.organizations.where.not(trust_level: "suspended").ids : []
+    # An org-less token reaches all the user's orgs — except suspended ones and
+    # sign-ups that have not passed their card check.
+    return [] unless @user
+
+    # Explicit SQL: signup_source is NULL for every invited org, and a plain
+    # where.not over two columns would turn that NULL into "excluded".
+    @user.organizations.where.not(trust_level: "suspended")
+         .where("organizations.signup_source IS DISTINCT FROM ? OR organizations.card_verified_at IS NOT NULL",
+                Organization::OPEN_SIGNUP).ids
   end
 end
