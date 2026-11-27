@@ -665,7 +665,9 @@ class App < ApplicationRecord
     existing = deployments.in_progress.order(created_at: :desc).first
     return [ existing, :already_running, nil ] if existing
 
-    preflight = DeployPreflight.new(self).check
+    # The deploy is the moment the image gets pushed, so it is the moment worth
+    # paying a registry round trip to ask who will be able to read it.
+    preflight = DeployPreflight.new(self, visibility: RegistryVisibility.new(self)).check
     blockers_json = preflight.blocked? ? preflight_blockers_json(preflight) : nil
 
     if preflight.blocked? && !force

@@ -70,10 +70,17 @@ class KamalConfig
     { "arch" => BUILD_ARCH }
   end
 
+  # The repository and registry this deploy pushes to, public so that anything
+  # asking a question ABOUT the image asks about the one that actually ships.
+  # A second derivation elsewhere answers truthfully about a repository nobody
+  # pushes to, which is worse than not asking.
+  def image_repository = "#{image_namespace}/#{app.slug}"
+  def image_registry   = registry_server
+
   def deploy_overlay_yaml
     overlay = {
       "service" => service_name,
-      "image"   => "#{image_namespace}/#{app.slug}",
+      "image"   => image_repository,
       "servers" => servers_block,
       "ssh"     => { "user" => @server&.ssh_user_or_default || "deploy" },
       "proxy"   => proxy_block,

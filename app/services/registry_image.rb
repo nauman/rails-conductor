@@ -60,18 +60,10 @@ class RegistryImage
   end
 
   # Docker Hub's API host differs from its registry name, and its token service is a
-  # separate host again. Everything else follows the OCI distribution spec.
-  def api_host
-    %w[docker.io index.docker.io].include?(registry_host) ? "registry-1.docker.io" : registry_host
-  end
-
-  def token_endpoint
-    if api_host == "registry-1.docker.io"
-      "https://auth.docker.io/token?service=registry.docker.io&scope=repository:#{repository_path}:pull"
-    else
-      "https://#{registry_host}/token?service=#{registry_host}&scope=repository:#{repository_path}:pull"
-    end
-  end
+  # separate host again. Everything else follows the OCI distribution spec. Shared
+  # with RegistryVisibility, which asks the same registries a different question.
+  def api_host       = RegistryEndpoints.api_host(registry_host)
+  def token_endpoint = RegistryEndpoints.token_url(registry_host, repository_path)
 
   def manifest_present?(sha)
     uri = URI("https://#{api_host}/v2/#{repository_path}/manifests/#{sha}")
