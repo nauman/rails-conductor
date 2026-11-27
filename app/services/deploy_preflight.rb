@@ -11,6 +11,10 @@
 # A :fail row blocks the deploy (callers pass force: to override); :warn is
 # surfaced but does not block. Pure read — no SSH, no side effects.
 class DeployPreflight
+  # How an operator declares that a readable image is deliberate (see
+  # image_visibility_check). An env key, not a code change, and not a silent default.
+  PUBLIC_ACK = "IMAGE_MAY_BE_PUBLIC".freeze
+
   Check  = Struct.new(:key, :label, :status, :detail, keyword_init: true)
   Result = Struct.new(:checks, keyword_init: true) do
     def blocked? = checks.any? { |c| c.status == :fail }
@@ -25,11 +29,21 @@ class DeployPreflight
   end
 
   # Order fixed for a stable UI table: gates first, informational last.
-  def initialize(app) = @app = app
+  #
+  # `visibility` is an OPT-IN collaborator (RegistryVisibility) because asking a
+  # registry anything is a network call, and this class also renders on an app
+  # page — where two round trips per view, and a timeout, would be paid by every
+  # reader. The deploy path passes one; a page render does not, and the row then
+  # says it was not probed rather than reporting a green it did not earn.
+  def initialize(app, visibility: nil)
+    @app = app
+    @visibility = visibility
+  end
 
   def check
     Result.new(checks: [ published_port_check, migrations_check, seeds_check, build_check,
-                         contract_check, venue_check, audit_check, threads_check, residue_check ])
+                         contract_check, venue_check, image_visibility_check, audit_check,
+                         threads_check, residue_check ])
   end
 
   private
@@ -230,6 +244,78 @@ class DeployPreflight
       warn(:audit, "Server audit",
            "#{server.name} audit state '#{server.last_audit_status}' is unrecognized — re-run the audit (not assuming secure)")
     end
+  end
+
+  # An image carries the source. Pushing it to a readable repository publishes
+  # that source, and the deploy log looks identical either way — which is how a
+  # public image stayed live without anyone choosing it.
+  #
+  # BLOCKS only on a positive read, and only a read of the repository this deploy
+  # actually pushes to. "Unknown" warns: the sole override is Force, which skips
+  # every other gate here, so a probe that blocks on an unreachable registry
+  # would quietly turn the audit and seed gates off too.
+  def image_visibility_check
+    unless @app.kamal?
+      return skip(:image_visibility, "Image visibility",
+                  "#{@app.deploy_method} app — Conductor pushes no image to a registry for this shape")
+    end
+    if @visibility.nil?
+      return skip(:image_visibility, "Image visibility",
+                  "not probed here — the deploy path asks the registry directly")
+    end
+
+    result = @visibility.check
+
+    # An image MEANT to be public (an open-source distribution) would otherwise be
+    # blocked on every deploy, and the only override is Force — which skips the
+    # audit and seed gates too. So there is a way to say "on purpose", and it still
+    # never goes quiet: a published source is worth seeing on every deploy.
+    if result.public? && public_image_declared?
+      return warn(:image_visibility, "Image visibility",
+                  "#{result.repository} on #{result.registry} is public, and #{PUBLIC_ACK} declares " \
+                  "that deliberate — anyone can read this image and the source inside it")
+    end
+
+    case result.status
+    when :public
+      # Names the repository itself rather than relying on the prober's prose to
+      # mention it: "make the repository private" is an instruction someone
+      # follows blind, and it is useless without saying WHICH one.
+      fail_row(:image_visibility, "Image visibility",
+               "#{result.repository} on #{result.registry} is PUBLIC — #{result.detail}. Make that " \
+               "repository private, or set KAMAL_IMAGE_NAMESPACE to a private namespace, before " \
+               "deploying. Rotate anything the image already exposed — it has been readable for as " \
+               "long as it has been pushed.")
+    when :not_public
+      first_push_caveat(result) || ok(:image_visibility, "Image visibility", result.detail)
+    else
+      warn(:image_visibility, "Image visibility", result.detail)
+    end
+  end
+
+  # THE ONE CASE "NOT PUBLIC" DOES NOT MEAN SAFE.
+  #
+  # Anonymously, a private repository and a repository that does not exist are the
+  # same answer. Before an app's first push there is nothing there to read — so a
+  # clean probe is describing an absence, not a setting. Docker Hub then CREATES
+  # the repository on that push, and a personal namespace creates it PUBLIC unless
+  # the account defaults otherwise, which is how an image gets published without
+  # anyone choosing it. The gate cannot see that coming, so it must not claim to.
+  def first_push_caveat(result)
+    return nil if @app.ever_deployed?
+
+    warn(:image_visibility, "Image visibility",
+         "#{result.repository} is not readable yet, but this app has never deployed — so that is " \
+         "an empty repository, not a private one. The registry CREATES it on this push, and a " \
+         "personal namespace creates it public unless the account defaults to private. Check it " \
+         "immediately after this deploy, or push to a namespace you know defaults to private.")
+  end
+
+  # An explicit, auditable operator statement that a readable image is the intent.
+  # Kept in the app's own env beside KAMAL_IMAGE_NAMESPACE, so the declaration
+  # lives with the thing it describes rather than in a flag nobody can see.
+  def public_image_declared?
+    @app.env_hash[PUBLIC_ACK].to_s.strip.downcase.in?(%w[true 1 yes])
   end
 
   def threads_check
